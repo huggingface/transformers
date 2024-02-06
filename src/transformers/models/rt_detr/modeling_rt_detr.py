@@ -395,7 +395,7 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
     return output.permute(0, 2, 1)
 
 
-class RTDetrTransformerEncoderLayer(nn.Module):
+class RTDetrEncoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
         self.normalize_before = config.normalize_before
@@ -439,11 +439,11 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         return src
 
 
-class RTDetrTransformerEncoder(nn.Module):
+class RTDetrEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList([RTDetrTransformerEncoderLayer(config) for _ in range(config.num_encoder_layers)])
+        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
     def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
         output = src
@@ -564,7 +564,7 @@ class RTDetrMSDeformableAttention(nn.Module):
         return output
 
 
-class RTDetrTransformerDecoderLayer(nn.Module):
+class RTDetrDecoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
@@ -623,10 +623,10 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         return target
 
 
-class RTDetrTransformerDecoder(nn.Module):
+class RTDetrDecoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.layers = nn.ModuleList([RTDetrTransformerDecoderLayer(config) for _ in range(config.num_decoder_layers)])
+        self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.num_decoder_layers)])
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.num_decoder_layers + config.eval_idx
 
     def forward(
@@ -643,7 +643,7 @@ class RTDetrTransformerDecoder(nn.Module):
         memory_mask=None,
     ):
         """
-        Forward pass for the RTDetrTransformerDecoder.
+        Forward pass for the RTDetrDecoder.
 
         Args:
             target (`torch.FloatTensor`): the input tensor for the target sequences.
@@ -769,7 +769,7 @@ class RTDetrTransformer(nn.Module):
             in_channels = self.hidden_dim
 
         # transformer module
-        self.decoder = RTDetrTransformerDecoder(config)
+        self.decoder = RTDetrDecoder(config)
 
         # denoising part
         if self.num_denoising > 0:
@@ -1304,7 +1304,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
 class RTDetrHybridEncoder(RTDetrPreTrainedModel):
     """
-    Decoder consists of a projection layer, a set of `RTDetrTransformerEncoder`, a top-down Feature Pyramid Network
+    Decoder consists of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
     (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
 
     Args:
@@ -1333,7 +1333,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             )
 
         # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrTransformerEncoder(config) for _ in range(len(self.encode_proj_layers))])
+        self.encoder = nn.ModuleList([RTDetrEncoder(config) for _ in range(len(self.encode_proj_layers))])
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
