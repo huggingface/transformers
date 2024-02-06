@@ -29,6 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseTSModelOutputWithPast,
@@ -42,6 +43,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -66,33 +68,35 @@ _CONFIG_FOR_DOC = "LagLlamaConfig"
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->LagLlama,TimeSeries->LagLlama
 class LagLlamaStdScaler(nn.Module):
     """
-    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
-    by subtracting from the mean and dividing by the standard deviation.
-
-    Args:
-        dim (`int`):
-            Dimension along which to calculate the mean and standard deviation.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        minimum_scale (`float`, *optional*, defaults to 1e-5):
-            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it by
+    subtracting from the mean and dividing by the standard deviation.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+    def __init__(self, config: LagLlamaConfig):
         super().__init__()
-        if not dim > 0:
-            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
-        self.dim = dim
-        self.keepdim = keepdim
-        self.minimum_scale = minimum_scale
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
 
-    @torch.no_grad()
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
+        denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
 
-        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
@@ -100,34 +104,31 @@ class LagLlamaStdScaler(nn.Module):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->LagLlama,TimeSeries->LagLlama
 class LagLlamaMeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
     accordingly.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        default_scale (`float`, *optional*, defaults to `None`):
-            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
-        minimum_scale (`float`, *optional*, defaults to 1e-10):
-            Default minimum possible scale that is used for any item.
     """
 
-    def __init__(
-        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
-    ):
+    def __init__(self, config: LagLlamaConfig):
         super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
-        self.minimum_scale = minimum_scale
-        self.default_scale = default_scale
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
 
-    @torch.no_grad()
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # shape: (N, [C], T=1)
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
 
@@ -158,23 +159,26 @@ class LagLlamaMeanScaler(nn.Module):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->LagLlama,TimeSeries->LagLlama
 class LagLlamaNOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False):
+    def __init__(self, config: LagLlamaConfig):
         super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
+        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
         scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
@@ -252,7 +256,7 @@ class LagLlamaRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -262,9 +266,9 @@ class LagLlamaRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
@@ -291,10 +295,10 @@ class LagLlamaLinearScalingRotaryEmbedding(LagLlamaRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
         t = t / self.scaling_factor
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
@@ -316,12 +320,12 @@ class LagLlamaDynamicNTKScalingRotaryEmbedding(LagLlamaRotaryEmbedding):
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
@@ -417,9 +421,17 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LagLlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LagLlamaConfig):
+    def __init__(self, config: LagLlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -477,7 +489,7 @@ class LagLlamaAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         **kwargs,
@@ -517,16 +529,19 @@ class LagLlamaAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        past_key_value = (key_states, value_states) if use_cache else None
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -582,12 +597,20 @@ class LagLlamaFlashAttention2(LagLlamaAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         **kwargs,
@@ -618,24 +641,21 @@ class LagLlamaFlashAttention2(LagLlamaAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        past_key_value = (key_states, value_states) if use_cache else None
-
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+        dropout_rate = self.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -645,8 +665,10 @@ class LagLlamaFlashAttention2(LagLlamaAttention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
@@ -695,6 +717,12 @@ class LagLlamaFlashAttention2(LagLlamaAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LagLlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -715,13 +743,13 @@ class LagLlamaFlashAttention2(LagLlamaAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal,
+                causal=causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
@@ -765,16 +793,109 @@ class LagLlamaFlashAttention2(LagLlamaAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->LagLlama
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->LagLlama
+class LagLlamaSdpaAttention(LagLlamaAttention):
+    """
+    LagLlama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `LagLlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from LagLlamaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "LagLlamaModel is using LagLlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                )
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and attention_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
+LAGLLAMA_ATTENTION_CLASSES = {
+    "eager": LagLlamaAttention,
+    "flash_attention_2": LagLlamaFlashAttention2,
+    "sdpa": LagLlamaSdpaAttention,
+}
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->LagLlama,LLAMA->LAGLLAMA
 class LagLlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LagLlamaConfig):
+    def __init__(self, config: LagLlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = (
-            LagLlamaAttention(config=config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else LagLlamaFlashAttention2(config=config)
-        )
+
+        self.self_attn = LAGLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+
         self.mlp = LagLlamaMLP(config)
         self.input_layernorm = LagLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LagLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -870,6 +991,8 @@ class LagLlamaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LagLlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

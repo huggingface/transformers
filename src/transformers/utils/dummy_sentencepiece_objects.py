@@ -184,13 +184,6 @@ class SeamlessM4TTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class SiglipTokenizer(metaclass=DummyObject):
-    _backends = ["sentencepiece"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
 class Speech2TextTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
