@@ -18,7 +18,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import set_seed
-from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch
+from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch, require_torch_gpu
 
 
 if is_torch_available():
