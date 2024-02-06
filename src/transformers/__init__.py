@@ -523,6 +523,7 @@ _import_structure = {
         "Kosmos2Config",
         "Kosmos2Processor",
     ],
+    "models.lagllama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
     "models.layoutlm": [
         "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMConfig",
@@ -549,7 +550,6 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "models.lagllama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
@@ -2421,6 +2421,14 @@ else:
             "Kosmos2PreTrainedModel",
         ]
     )
+    _import_structure["models.lagllama"].extend(
+        [
+            "LagLlamaForPrediction",
+            "LagLlamaForSequenceClassification",
+            "LagLlamaModel",
+            "LagLlamaPreTrainedModel",
+        ]
+    )
     _import_structure["models.layoutlm"].extend(
         [
             "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2488,14 +2496,6 @@ else:
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.lagllama"].extend(
-        [
-            "LagLlamaForPrediction",
-            "LagLlamaForSequenceClassification",
-            "LagLlamaModel",
-            "LagLlamaPreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(

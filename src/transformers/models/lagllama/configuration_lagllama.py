@@ -42,9 +42,11 @@ class LagLlamaConfig(PretrainedConfig):
         distribution_output (`str`, *optional*, defaults to `"student_t"`): <fill_docstring>
         loss (`str`, *optional*, defaults to `"nll"`): <fill_docstring>
         input_size (`int`, *optional*, defaults to 1):
-            Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LlamaModel`]
+            The number of input variates. For univariate time series, this should be 1. For multivariate time series,
+            this should be the number of variates.
         lags_sequence (`List`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`): <fill_docstring>
+        num_time_features (`int`, *optional*, defaults to 0):
+            The number of date-time features for the time series.
         scaling (`str`, *optional*, defaults to `"mean"`): <fill_docstring>
         num_parallel_samples (`int`, *optional*, defaults to 100): <fill_docstring>
         hidden_size (`int`, *optional*, defaults to 256):
@@ -117,6 +119,7 @@ class LagLlamaConfig(PretrainedConfig):
         loss: str = "nll",
         input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
+        num_time_features: int = 0,
         scaling: str = "mean",
         num_parallel_samples: int = 100,
         hidden_size=256,
@@ -139,6 +142,7 @@ class LagLlamaConfig(PretrainedConfig):
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
+        self.num_time_features = num_time_features
         self.scaling = scaling
         self.num_parallel_samples = num_parallel_samples
         self.lags_sequence = lags_sequence
@@ -167,8 +171,8 @@ class LagLlamaConfig(PretrainedConfig):
 
     @property
     def _number_of_features(self) -> int:
-        # the log1p(abs(loc)) and log(scale) features of the context window
-        return self.input_size * 2
+        # the log1p(abs(loc)) and log(scale) features of the context window and the time features
+        return self.input_size * 2 + self.num_time_features
 
     # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):

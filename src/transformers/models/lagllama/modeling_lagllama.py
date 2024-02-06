@@ -1198,6 +1198,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         self,
         past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
+        past_time_features: Optional[torch.Tensor] = None,
     ):
         # calculate loc and scale
         scaled_past_target, loc, scale = self.scaler(past_target, past_observed_values)
@@ -1209,13 +1210,18 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         static_feat = torch.cat((loc.abs().log1p(), scale.log()), dim=-1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, lags.shape[-2], -1)
 
-        return torch.cat((lags, expanded_static_feat), dim=-1), loc, scale
+        if past_time_features is not None:
+            inputs = torch.cat((lags, expanded_static_feat, past_time_features[..., -lags.shape[-2] :, :]), dim=-1)
+        else:
+            inputs = torch.cat((lags, expanded_static_feat), dim=-1)
+        return inputs, loc, scale
 
     @add_start_docstrings_to_model_forward(LAGLLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
-        past_values: torch.Tensor = None,
-        past_observed_values: torch.Tensor = None,
+        past_values: torch.Tensor,
+        past_observed_values: Optional[torch.Tensor] = None,
+        past_time_features: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1263,7 +1269,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
                 past_observed_values = torch.ones(
                     (batch_size, past_values_seq_length), dtype=torch.bool, device=device
                 )
-            transformer_inputs, loc, scale = self.prepare_input(past_values, past_observed_values)
+            transformer_inputs, loc, scale = self.prepare_input(past_values, past_observed_values, past_time_features)
             inputs_embeds = self.embed_inputs(transformer_inputs)
 
         if getattr(self.config, "_flash_attn_2_enabled", False):
@@ -1396,6 +1402,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor = None,
+        past_time_features: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1448,6 +1455,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             past_values=past_values,
+            past_time_features=past_time_features,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1500,9 +1508,17 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, past_values, past_observed_values, past_key_values=None, attention_mask=None, **kwargs
+        self,
+        past_values,
+        past_observed_values,
+        past_time_features,
+        past_key_values=None,
+        attention_mask=None,
+        **kwargs,
     ):
-        transformer_inputs, loc, scale = self.model.prepare_input(past_values, past_observed_values)
+        transformer_inputs, loc, scale = self.model.prepare_input(
+            past_values, past_observed_values, past_time_features
+        )
         inputs_embeds = self.model.embed_inputs(transformer_inputs)
 
         if past_key_values is not None:
@@ -1547,11 +1563,19 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         self,
         past_values: torch.Tensor,
         prediction_length: int,
+        past_time_features: Optional[torch.Tensor] = None,
         past_observed_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
         **model_kwargs,
     ):
         batch_size, past_values_seq_length = past_values.shape
         repeated_past_values = past_values.repeat_interleave(self.config.num_parallel_samples, 0)
+        if self.config.num_time_features > 0:
+            repeated_past_time_features = past_time_features.repeat_interleave(self.config.num_parallel_samples, 0)
+            repeated_future_time_features = future_time_features.repeat_interleave(self.config.num_parallel_samples, 0)
+        else:
+            repeated_past_time_features = None
+            repeated_future_time_features = None
         device = past_values.device
         if past_observed_values is None:
             past_observed_values = torch.ones((batch_size, past_values_seq_length), dtype=torch.bool, device=device)
@@ -1559,10 +1583,13 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
 
         # greedy decoding
         future_samples = []
-        for _ in range(prediction_length):
+        for t in range(prediction_length):
             # prepare model inputs
             model_inputs, loc, scale = self.prepare_inputs_for_generation(
-                repeated_past_values, past_observed_values=repeated_past_observed_values, **model_kwargs
+                repeated_past_values,
+                past_observed_values=repeated_past_observed_values,
+                past_time_features=repeated_past_time_features,
+                **model_kwargs,
             )
 
             outputs = self(**model_inputs, return_dict=True)
@@ -1575,6 +1602,10 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
 
             repeated_past_values = torch.cat((repeated_past_values, sample), dim=1)
             repeated_past_observed_values = torch.cat((repeated_past_observed_values, torch.ones_like(sample)), dim=1)
+            if repeated_past_time_features is not None:
+                repeated_past_time_features = torch.cat(
+                    (repeated_past_time_features, repeated_future_time_features[..., : t + 1, :]), dim=1
+                )
 
         concat_future_samples = torch.cat(future_samples, dim=1)
 
