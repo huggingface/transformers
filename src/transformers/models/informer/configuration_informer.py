@@ -14,11 +14,12 @@
 # limitations under the License.
 """Informer model configuration"""
 
-from typing import List, Optional, Union
+from typing import Optional, Union, List, Callable
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+import torch
 
 logger = logging.get_logger(__name__)
 
@@ -29,6 +30,7 @@ INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all Informer models at https://huggingface.co/models?filter=informer
 }
 
+InformerCustomLossFunctionTypeSignature = Callable[[torch.distributions.Distribution, torch.Tensor, float], torch.Tensor]
 
 class InformerConfig(PretrainedConfig):
     r"""
@@ -49,9 +51,9 @@ class InformerConfig(PretrainedConfig):
             `prediction_length`.
         distribution_output (`string`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
-        loss (`string`, *optional*, defaults to `"nll"`):
+        loss (`string` or `InformerCustomLossFunctionTypeSignature`, *optional*, defaults to `"nll"`):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood (nll) - which currently is the only supported one.
+            distributions it is the negative log likelihood (nll) - which currently is the only builtin supported one.
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
@@ -146,7 +148,7 @@ class InformerConfig(PretrainedConfig):
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
-        loss: str = "nll",
+        loss: Optional[Union[str, InformerCustomLossFunctionTypeSignature]] = "nll",
         input_size: int = 1,
         lags_sequence: List[int] = None,
         scaling: Optional[Union[str, bool]] = "mean",

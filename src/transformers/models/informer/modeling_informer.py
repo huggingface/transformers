@@ -32,7 +32,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_informer import InformerConfig
+from .configuration_informer import InformerConfig, InformerCustomLossFunctionTypeSignature
 
 
 logger = logging.get_logger(__name__)
@@ -1722,10 +1722,13 @@ class InformerForPrediction(InformerPreTrainedModel):
         self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
         self.target_shape = self.distribution_output.event_shape
 
-        if config.loss == "nll":
-            self.loss = nll
+        if isinstance(config.loss, str):
+            if config.loss == "nll":
+                self.loss = nll
+            else:
+                raise ValueError(f"Unknown loss function {config.loss}")
         else:
-            raise ValueError(f"Unknown loss function {config.loss}")
+            self.loss = config.loss
 
         # Initialize weights of distribution_output and apply final processing
         self.post_init()
