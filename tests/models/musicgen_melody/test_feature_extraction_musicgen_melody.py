@@ -160,28 +160,28 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
-        input_values = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_values
-        self.assertTrue(input_values.ndim == 3)
-        self.assertTrue(input_values.shape[0] == 3)
+        input_features = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_features
+        self.assertTrue(input_features.ndim == 3)
+        self.assertTrue(input_features.shape[0] == 3)
         # Ignore copy
-        self.assertTrue(input_values.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size)
 
         # Test not batched input
-        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_values
+        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_features
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
         # Test 2-D numpy arrays are batched.
         speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
         np_speech_inputs = np.asarray(speech_inputs)
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
@@ -194,16 +194,16 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         inputs = torch.rand([4, 5, 2, 44000])
 
         # Test feature size
-        input_values = feature_extractor(inputs, padding=True, return_tensors="np").input_values
-        self.assertTrue(input_values.ndim == 3)
-        self.assertTrue(input_values.shape[0] == 4)
-        self.assertTrue(input_values.shape[-1] == feature_extractor.feature_size)
+        input_features = feature_extractor(inputs, padding=True, return_tensors="np").input_features
+        self.assertTrue(input_features.ndim == 3)
+        self.assertTrue(input_features.shape[0] == 4)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size)
 
         # Test single input
-        encoded_sequences_1 = feature_extractor(inputs[[0]], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1[0], input_values[0], atol=1e-3))
+        encoded_sequences_1 = feature_extractor(inputs[[0]], return_tensors="np").input_features
+        self.assertTrue(np.allclose(encoded_sequences_1[0], input_features[0], atol=1e-3))
 
-    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad with input_features->input_values
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad with input_features->input_features
     def test_double_precision_pad(self):
         import torch
 
@@ -212,10 +212,10 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         py_speech_inputs = np_speech_inputs.tolist()
 
         for inputs in [py_speech_inputs, np_speech_inputs]:
-            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.input_values.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.input_values.dtype == torch.float32)
+            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_features.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     def test_integration(self):
         EXPECTED_INPUT_FEATURES = torch.zeros([2, 8, 12])
@@ -225,7 +225,7 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
 
         input_speech = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
         feature_extractor = MusicgenMelodyFeatureExtractor()
-        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
 
-        self.assertEqual(input_values.shape, (2, 8, 12))
-        self.assertTrue((input_values == EXPECTED_INPUT_FEATURES).all())
+        self.assertEqual(input_features.shape, (2, 8, 12))
+        self.assertTrue((input_features == EXPECTED_INPUT_FEATURES).all())

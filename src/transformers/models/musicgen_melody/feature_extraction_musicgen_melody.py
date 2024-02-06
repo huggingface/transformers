@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for Whisper
+Feature extractor class for Musicgen Melody
 """
 import copy
 from typing import Any, Dict, List, Optional, Union
@@ -76,7 +76,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             Stem channels to extract if demucs outputs are passed.
     """
 
-    model_input_names = ["input_values"]
+    model_input_names = ["input_features"]
 
     def __init__(
         self,
@@ -282,7 +282,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             audio = [audio]
 
-        batched_speech = BatchFeature({"input_values": audio})
+        batched_speech = BatchFeature({"input_features": audio})
 
         # convert into correct format for padding
 
@@ -296,9 +296,9 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             return_tensors="pt",
         )
 
-        input_values = self._torch_extract_fbank_features(padded_inputs["input_values"].squeeze(-1))
+        input_features = self._torch_extract_fbank_features(padded_inputs["input_features"].squeeze(-1))
 
-        padded_inputs["input_values"] = input_values
+        padded_inputs["input_features"] = input_features
 
         if return_attention_mask:
             # rescale from raw audio length to spectrogram length

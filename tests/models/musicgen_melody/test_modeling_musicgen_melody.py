@@ -530,7 +530,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_pruning = False  # training is not supported yet for MusicGen
     test_headmasking = False
     test_resize_embeddings = False
-    # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
+    # not to test torchscript as the model tester doesn't prepare `input_features` and `padding_mask`
     # (and `torchscript` hates `None` values).
     test_torchscript = False
 
@@ -645,7 +645,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             expected_arg_names = [
                 "input_ids",
                 "attention_mask",
-                "input_values",
+                "input_features",
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
@@ -1193,7 +1193,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         # prepare the audio encoder inputs
-        input_values = inputs.input_values.to(torch_device)
+        input_features = inputs.input_features.to(torch_device)
 
         # prepare the decoder inputs
         pad_token_id = model.generation_config.pad_token_id
@@ -1206,7 +1206,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
             logits = model(
                 input_ids,
                 attention_mask=attention_mask,
-                input_values=input_values,
+                input_features=input_features,
                 decoder_input_ids=decoder_input_ids,
             ).logits
 

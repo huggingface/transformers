@@ -1708,7 +1708,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
-        input_values: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
@@ -1783,16 +1783,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 encoder_hidden_states = encoder_hidden_states * attention_mask[..., None]
 
             # set a default audio conditional hidden states if text is not None
-            if encoder_hidden_states is not None and input_values is None:
-                input_values = torch.zeros(
+            if encoder_hidden_states is not None and input_features is None:
+                input_features = torch.zeros(
                     (encoder_hidden_states.shape[0], 1, self.config.num_chroma),
                     device=self.device,
                     dtype=self.dtype,
                 )
-                input_values[:, :, 0] = 1
+                input_features[:, :, 0] = 1
 
-            if input_values is not None:
-                audio_hidden_states = input_values
+            if input_features is not None:
+                audio_hidden_states = input_features
 
                 # optionally project audio_hidden_states ->
                 # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
@@ -2021,7 +2021,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 encoder_hidden_states = encoder_hidden_states * encoder_attention_mask[..., None]
 
         # 2. condition on audio
-        audio_hidden_states = model_kwargs.get("input_values", None)
+        audio_hidden_states = model_kwargs.get("input_features", None)
 
         if inputs_tensor is not None:
             if audio_hidden_states is not None:

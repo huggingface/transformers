@@ -69,7 +69,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **input_values** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
+            - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
             - **attention_mask** -- List of token indices specifying which tokens should be attended to by the model when `text` is not `None`.
             When only `audio` is specified, returns the timestamps attention mask.
         """
@@ -89,7 +89,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         elif audio is None:
             return inputs
         else:
-            inputs["input_values"] = audio_inputs["input_values"]
+            inputs["input_features"] = audio_inputs["input_features"]
             return inputs
 
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.batch_decode with padding_mask->attention_mask
