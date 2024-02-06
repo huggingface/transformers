@@ -403,7 +403,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
         self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
         self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
-        self.drop_path = tf.keras.layers.Dropout(name="drop_path")
+        self.drop_path = tf.keras.layers.Identity(name="drop_path")
 
     def build(self, input_shape=None):
         self.layer_scale = self.add_weight(
