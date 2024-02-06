@@ -252,7 +252,7 @@ class GenerationConfig(PushToHubMixin):
 
         > Parameters specific to the caching mechanism:
 
-        cache_implementation (`str`, *optional*, default to `"dynamic"`):
+        cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
 
         > Wild card
@@ -327,7 +327,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
 
         # Cache implementation
-        self.cache_implementation = kwargs.pop("cache_implementation", "dynamic")
+        self.cache_implementation = kwargs.pop("cache_implementation", None)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)

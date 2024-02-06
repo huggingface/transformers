@@ -352,14 +352,17 @@ class LlamaAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            kv_seq_len += past_seen_tokens
+        else:
+            past_seen_tokens = 0
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        past_seen_tokens = kv_seq_len - key_states.shape[-2]
         new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -638,15 +641,18 @@ class LlamaSdpaAttention(LlamaAttention):
         kv_seq_len = key_states.shape[-2]
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            kv_seq_len += past_seen_tokens
+        else:
+            past_seen_tokens = 0
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        past_seen_tokens = kv_seq_len - key_states.shape[-2]
         new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -804,11 +810,11 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        if max_cache_len > self.model.causal_mask.shape[-1]:
+        if max_cache_len > self.model.causal_mask.shape[-1] or self.dtype != self.model.causal_mask.dtype:
             causal_mask = torch.full(
                 (max_cache_len, max_cache_len),
-                fill_value=torch.finfo(self.config.torch_dtype).min,
-                dtype=self.config.torch_dtype,
+                fill_value=torch.finfo(self.dtype).min,
+                dtype=self.dtype,
             )
             causal_mask = torch.triu(causal_mask, diagonal=1)
             self.model.register_buffer("causal_mask", causal_mask, persistent=False)

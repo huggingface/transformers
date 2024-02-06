@@ -238,11 +238,12 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(decoded[0].endswith(last_output))
 
+    @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
     def test_static_cache_greedy_sampling(self, attn_implementation):
-        tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", padding_side="left", pad_token="<s>")
+        tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>")
         model = AutoModelForCausalLM.from_pretrained(
-            "codellama/CodeLlama-7b-hf",
+            "NousResearch/Llama-2-7b-chat-hf",
             device_map="auto",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
@@ -251,6 +252,16 @@ class CacheIntegrationTest(unittest.TestCase):
             ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
         ).to(model.device)
 
+        # Set the generation config to use static cache
+        model.generation_config.cache_implementation = None
+        gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = [
+            "The best color is the one that makes you feel good.\nThe",
+            "We should not undermind the issues at hand.\nI think the issue is that the people",
+        ]
+        self.assertListEqual(decoded, expected_text)
+        
         # Set the generation config to use static cache
         model.generation_config.cache_implementation = "static"
         gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
@@ -272,5 +283,6 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_text)
 
+    @unittest.skip("TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):
-        raise NotImplementedError("TODO @gante static cache's does not support beam search yet")
+        pass
