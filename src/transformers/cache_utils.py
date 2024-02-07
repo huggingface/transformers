@@ -329,7 +329,7 @@ class SinkCache(Cache):
 class StaticCache(Cache):
     """
     Static Cache class to be used with `torch.compile(model)`.
-    
+
     Parameters:
         config (`PretrainedConfig):
             The configuration file defining the `max_position_embeddings`, `hidden_size` and `num_attention_heads`
@@ -343,7 +343,10 @@ class StaticCache(Cache):
         dtype (*optional*, `torch.dtype`, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
     """
-    def __init__(self, config: PretrainedConfig, max_batch_size:int, max_cache_len:int, device, dtype=torch.float32) -> None:
+
+    def __init__(
+        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=torch.float32
+    ) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len

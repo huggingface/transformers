@@ -510,7 +510,11 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
             with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(res_eager, res_sdpa, msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}")
+                torch.testing.assert_close(
+                    res_eager,
+                    res_sdpa,
+                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
+                )
 
 
 @require_torch
