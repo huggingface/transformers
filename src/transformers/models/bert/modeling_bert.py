@@ -1098,7 +1098,7 @@ class BertForPreTraining(BertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, BertForPreTraining
+        >>> from transformers import AutoTokenizer, BertForPreTraining, AutoModel
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
