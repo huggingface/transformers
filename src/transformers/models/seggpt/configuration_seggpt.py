@@ -73,7 +73,7 @@ class SegGptConfig(PretrainedConfig):
             Whether to use relative position encoding in the Attention
         merge_index (`int`, *optional*, defaults to 2):
             The index of the encoder layer to merge the embeddings.
-        output_indicies (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
+        intermediate_feature_indices (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
             The indices of the encoder layers which we store as features for the decoder.
         beta (`float`, *optional*, defaults to 0.01):
             Regularization factor for SegGptLoss (smooth-l1 loss).
@@ -114,15 +114,15 @@ class SegGptConfig(PretrainedConfig):
         decoder_hidden_size=64,
         use_relative_position_embeddings=True,
         merge_index=2,
-        output_indicies=[5, 11, 17, 23],
+        intermediate_feature_indices=[5, 11, 17, 23],
         beta=0.01,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        if merge_index > min(output_indicies):
+        if merge_index > min(intermediate_feature_indices):
             raise ValueError(
-                f"Merge index must be less than the minimum encoder output index, but got {merge_index=} and {output_indicies=}"
+                f"Merge index must be less than the minimum encoder output index, but got {merge_index=} and {intermediate_feature_indices=}"
             )
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -140,6 +140,6 @@ class SegGptConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.use_relative_position_embeddings = use_relative_position_embeddings
         self.merge_index = merge_index
-        self.output_indicies = output_indicies
+        self.intermediate_feature_indices = intermediate_feature_indices
         self.beta = beta
         self.mlp_dim = int(hidden_size * 4) if mlp_dim is None else mlp_dim
