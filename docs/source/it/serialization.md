@@ -474,8 +474,7 @@ _<model_name>.py`
 * Includere l'architettura del modello e le funzioni corrispondenti in [`~onnx.features.FeatureManager`]
 * Aggiungere la tua architettura del modello ai test in `test_onnx_v2.py`
 
-Scopri come stato contribuito la configurazione per [IBERT]
-(https://github.com/huggingface/transformers/pull/14868/files) per
+Scopri come stato contribuito la configurazione per [IBERT](https://github.com/huggingface/transformers/pull/14868/files) per
 avere un'idea di cosa è coinvolto.
 
 ## TorchScript
