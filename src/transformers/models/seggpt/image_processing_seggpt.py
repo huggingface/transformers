@@ -482,7 +482,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         # batch_size x num_channels x height x width
         masks = masks[:, :, masks.shape[2] // 2 :, :]
 
-        # To unnormalize since we have channel first we need to permute to channel last and then unnormalize
+        # To unnormalize we need to permute to channel last
         # batch_size x height x width x num_channels
         std = torch.tensor(self.image_std).to(masks.device)
         mean = torch.tensor(self.image_mean).to(masks.device)
