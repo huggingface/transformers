@@ -119,10 +119,10 @@ class SegGptImageSegmentationOutput(ModelOutput):
             `(batch_size, num_heads, seq_len, seq_len)`.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     pred_masks: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGpt
@@ -982,7 +982,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
                 output = output + (outputs[idx],)
 
             if loss is not None:
-                output = output + (loss,)
+                output = (loss,) + output
             return output
 
         return SegGptImageSegmentationOutput(
