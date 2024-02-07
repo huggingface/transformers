@@ -269,10 +269,6 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Grounding DINO is not a generative model")
-    def test_generate_without_input_ids(self):
-        pass
-
     @unittest.skip(reason="Grounding DINO does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass

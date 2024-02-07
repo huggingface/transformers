@@ -703,13 +703,14 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        if reference_points.shape[-1] == 2:
+        num_coordinates = reference_points.shape[-1]
+        if num_coordinates == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
-        elif reference_points.shape[-1] == 4:
+        elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
                 + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
@@ -744,9 +745,9 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        mha_config = copy.deepcopy(config)
-        mha_config.num_attention_heads = config.encoder_attention_heads // 2
-        self.self_attn = GroundingDinoMultiheadAttention(mha_config)
+        self.self_attn = GroundingDinoMultiheadAttention(
+            config, num_attention_heads=config.encoder_attention_heads // 2
+        )
 
         # Implementation of Feedforward model
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
@@ -1271,16 +1272,16 @@ class GroundingDinoEncoderLayer(nn.Module):
 class GroundingDinoMultiheadAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
-    def __init__(self, config):
+    def __init__(self, config, num_attention_heads=None):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
+                f"heads ({num_attention_heads})"
             )
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(config.hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
@@ -1342,9 +1343,7 @@ class GroundingDinoDecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         # self-attention
-        mha_config = copy.deepcopy(config)
-        mha_config.num_attention_heads = config.decoder_attention_heads
-        self.self_attn = GroundingDinoMultiheadAttention(mha_config)
+        self.self_attn = GroundingDinoMultiheadAttention(config, num_attention_heads=config.decoder_attention_heads)
 
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1352,7 +1351,9 @@ class GroundingDinoDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # cross-attention text
-        self.encoder_attn_text = GroundingDinoMultiheadAttention(mha_config)
+        self.encoder_attn_text = GroundingDinoMultiheadAttention(
+            config, num_attention_heads=config.decoder_attention_heads
+        )
         self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = GroundingDinoMultiscaleDeformableAttention(
@@ -1974,14 +1975,15 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         intermediate_reference_points = ()
 
         for idx, decoder_layer in enumerate(self.layers):
-            if reference_points.shape[-1] == 4:
+            num_coordinates = reference_points.shape[-1]
+            if num_coordinates == 4:
                 reference_points_input = (
                     reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
-            elif reference_points.shape[-1] != 2:
-                raise ValueError("Reference points' last dimension must be of size 2")
-            else:
+            elif num_coordinates == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+            else:
+                raise ValueError("Reference points' last dimension must be of size 2")
             query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
             query_pos = self.reference_points_head(query_pos)
 
@@ -2645,11 +2647,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # index for encoder_last_hidden_state_text
         idx = 5 + (1 if output_attentions else 0) + (1 if output_hidden_states else 0)
-
-        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
         enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
+        hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
         init_reference_points = outputs.init_reference_points if return_dict else outputs[1]
         inter_references_points = outputs.intermediate_reference_points if return_dict else outputs[3]
 
