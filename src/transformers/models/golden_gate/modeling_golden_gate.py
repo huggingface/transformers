@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GoldenGate model."""
+""" PyTorch Gemma model."""
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -46,7 +46,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_fx_available
-from .configuration_golden_gate import GoldenGateConfig
+from .configuration_gemma import GemmaConfig
 
 
 if is_flash_attn_2_available():
@@ -65,7 +65,7 @@ if is_torch_fx_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "GoldenGateConfig"
+_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 def _get_unpad_data(attention_mask):
@@ -80,7 +80,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class GoldenGateRMSNorm(nn.Module):
+class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
@@ -94,10 +94,10 @@ class GoldenGateRMSNorm(nn.Module):
         return output * (1 + self.weight)
 
 
-ALL_LAYERNORM_LAYERS.append(GoldenGateRMSNorm)
+ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
 
 
-class GoldenGateRotaryEmbedding(nn.Module):
+class GemmaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -132,9 +132,9 @@ class GoldenGateRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->GoldenGate
-class GoldenGateLinearScalingRotaryEmbedding(GoldenGateRotaryEmbedding):
-    """GoldenGateRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Gemma
+class GemmaLinearScalingRotaryEmbedding(GemmaRotaryEmbedding):
+    """GemmaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -152,9 +152,9 @@ class GoldenGateLinearScalingRotaryEmbedding(GoldenGateRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->GoldenGate
-class GoldenGateDynamicNTKScalingRotaryEmbedding(GoldenGateRotaryEmbedding):
-    """GoldenGateRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Gemma
+class GemmaDynamicNTKScalingRotaryEmbedding(GemmaRotaryEmbedding):
+    """GemmaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -216,8 +216,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->GoldenGate
-class GoldenGateMLP(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Gemma
+class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -245,12 +245,12 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->GoldenGate
-class GoldenGateAttention(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Gemma
+class GemmaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # Ignore Copy
-    def __init__(self, config: GoldenGateConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: GemmaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -285,7 +285,7 @@ class GoldenGateAttention(nn.Module):
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
-            self.rotary_emb = GoldenGateRotaryEmbedding(
+            self.rotary_emb = GemmaRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -294,14 +294,14 @@ class GoldenGateAttention(nn.Module):
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
-                self.rotary_emb = GoldenGateLinearScalingRotaryEmbedding(
+                self.rotary_emb = GemmaLinearScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
-                self.rotary_emb = GoldenGateDynamicNTKScalingRotaryEmbedding(
+                self.rotary_emb = GemmaDynamicNTKScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
@@ -343,9 +343,13 @@ class GoldenGateAttention(nn.Module):
                     "with a layer index."
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        self.rotary_emb.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.head_dim, 2) [: (self.head_dim // 2)].to(hidden_states.device) / self.head_dim))
+        self.rotary_emb._set_cos_sin_cache(kv_seq_len, dtype = torch.float32, device=hidden_states.device)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states = query_states.to(hidden_states.dtype)
+        key_states = key_states.to(hidden_states.dtype)
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -390,10 +394,10 @@ class GoldenGateAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->GoldenGate
-class GoldenGateFlashAttention2(GoldenGateAttention):
+# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Gemma
+class GemmaFlashAttention2(GemmaAttention):
     """
-    GoldenGate flash attention module. This module inherits from `GoldenGateAttention` as the weights of the module stays
+    Gemma flash attention module. This module inherits from `GemmaAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -416,7 +420,7 @@ class GoldenGateFlashAttention2(GoldenGateAttention):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # GoldenGateFlashAttention2 attention does not support output_attentions
+        # GemmaFlashAttention2 attention does not support output_attentions
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
@@ -462,7 +466,7 @@ class GoldenGateFlashAttention2(GoldenGateAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (GoldenGateRMSNorm handles it correctly)
+        # in fp32. (GemmaRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -521,7 +525,7 @@ class GoldenGateFlashAttention2(GoldenGateAttention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in GoldenGateFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in GemmaFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -594,15 +598,15 @@ class GoldenGateFlashAttention2(GoldenGateAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->GoldenGate
-class GoldenGateSdpaAttention(GoldenGateAttention):
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Gemma
+class GemmaSdpaAttention(GemmaAttention):
     """
-    GoldenGate attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `GoldenGateAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    Gemma attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `GemmaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from GoldenGateAttention.forward
+    # Adapted from GemmaAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -615,7 +619,7 @@ class GoldenGateSdpaAttention(GoldenGateAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "GoldenGateModel is using GoldenGateSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "GemmaModel is using GemmaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -645,10 +649,7 @@ class GoldenGateSdpaAttention(GoldenGateAttention):
         self.rotary_emb.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.head_dim, 2) [: (self.head_dim // 2)].to(hidden_states.device) / self.head_dim))
         self.rotary_emb._set_cos_sin_cache(kv_seq_len, dtype = torch.float32, device=hidden_states.device)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        
-        # t2 = apply_rotary_pos_emb(query_states, key_states, cos.to(torch.bfloat16), sin.to(torch.bfloat16), position_ids)[0].transpose(1,2)
-        # t1 = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin, position_ids)[0].transpose(1,2)
-        # torch.testing.assert_allclose(t2,t1)
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         query_states = query_states.to(hidden_states.dtype)
         key_states = key_states.to(hidden_states.dtype)
@@ -690,24 +691,24 @@ class GoldenGateSdpaAttention(GoldenGateAttention):
         return attn_output, None, past_key_value
 
 
-GOLDEN_GATE_ATTENTION_CLASSES = {
-    "eager": GoldenGateAttention,
-    "flash_attention_2": GoldenGateFlashAttention2,
-    "sdpa": GoldenGateSdpaAttention,
+GEMMA_ATTENTION_CLASSES = {
+    "eager": GemmaAttention,
+    "flash_attention_2": GemmaFlashAttention2,
+    "sdpa": GemmaSdpaAttention,
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GOLDEN_GATE,Llama->GoldenGate
-class GoldenGateDecoderLayer(nn.Module):
-    def __init__(self, config: GoldenGateConfig, layer_idx: int):
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->Gemma
+class GemmaDecoderLayer(nn.Module):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = GOLDEN_GATE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
-        self.mlp = GoldenGateMLP(config)
-        self.input_layernorm = GoldenGateRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GoldenGateRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = GemmaMLP(config)
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -771,7 +772,7 @@ class GoldenGateDecoderLayer(nn.Module):
         return outputs
 
 
-GOLDEN_GATE_START_DOCSTRING = r"""
+GEMMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -781,7 +782,7 @@ GOLDEN_GATE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`GoldenGateConfig`]):
+        config ([`GemmaConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -789,16 +790,16 @@ GOLDEN_GATE_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare GoldenGate Model outputting raw hidden-states without any specific head on top.",
-    GOLDEN_GATE_START_DOCSTRING,
+    "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
+    GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->GoldenGate
-class GoldenGatePreTrainedModel(PreTrainedModel):
-    config_class = GoldenGateConfig
+# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Gemma
+class GemmaPreTrainedModel(PreTrainedModel):
+    config_class = GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
-    _no_split_modules = ["GoldenGateDecoderLayer"]
+    _no_split_modules = ["GemmaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -816,7 +817,7 @@ class GoldenGatePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-GOLDEN_GATE_INPUTS_DOCSTRING = r"""
+GEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -887,30 +888,30 @@ GOLDEN_GATE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare GoldenGate Model outputting raw hidden-states without any specific head on top.",
-    GOLDEN_GATE_START_DOCSTRING,
+    "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
+    GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GOLDEN_GATE,Llama->GoldenGate
-class GoldenGateModel(GoldenGatePreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->Gemma
+class GemmaModel(GemmaPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GoldenGateDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
 
     Args:
-        config: GoldenGateConfig
+        config: GemmaConfig
     """
 
-    def __init__(self, config: GoldenGateConfig):
+    def __init__(self, config: GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [GoldenGateDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._use_sdpa = config._attn_implementation == "sdpa"
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self.norm = GoldenGateRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -923,7 +924,7 @@ class GoldenGateModel(GoldenGatePreTrainedModel):
         self.embed_tokens = value
 
     # Ignore Copy
-    @add_start_docstrings_to_model_forward(GOLDEN_GATE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1057,13 +1058,13 @@ class GoldenGateModel(GoldenGatePreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GOLDEN_GATE,Llama->GoldenGate,llama->golden_gate
-class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GEMMA,Llama->Gemma,llama->gemma
+class GemmaForCausalLM(GemmaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = GoldenGateModel(config)
+        self.model = GemmaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1089,7 +1090,7 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
         return self.model
 
     # Ignore Copy
-    @add_start_docstrings_to_model_forward(GOLDEN_GATE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1116,10 +1117,10 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, GoldenGateForCausalLM
+        >>> from transformers import AutoTokenizer, GemmaForCausalLM
 
-        >>> model = GoldenGateForCausalLM.from_pretrained("meta-golden_gate/GoldenGate-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-golden_gate/GoldenGate-2-7b-hf")
+        >>> model = GemmaForCausalLM.from_pretrained("meta-gemma/Gemma-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-gemma/Gemma-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1149,9 +1150,7 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
         )
 
         hidden_states = outputs[0]
-
         logits = self.lm_head(hidden_states)
-        # logits = logits.float()
 
         loss = None
         if labels is not None:
@@ -1248,7 +1247,7 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
     """
     The LLaMa Model transformer with a sequence classification head on top (linear layer).
 
-    [`GoldenGateForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`GemmaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1257,14 +1256,14 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    GOLDEN_GATE_START_DOCSTRING,
+    GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->GOLDEN_GATE,Llama->GoldenGate
-class GoldenGateForSequenceClassification(GoldenGatePreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->GEMMA,Llama->Gemma
+class GemmaForSequenceClassification(GemmaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = GoldenGateModel(config)
+        self.model = GemmaModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1276,7 +1275,7 @@ class GoldenGateForSequenceClassification(GoldenGatePreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(GOLDEN_GATE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

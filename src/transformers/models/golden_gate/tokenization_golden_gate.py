@@ -62,9 +62,9 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class GoldenGateTokenizer(PreTrainedTokenizer):
+class GemmaTokenizer(PreTrainedTokenizer):
     """
-    Construct a GoldenGate tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
+    Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
     no padding token in the original model.
 
     Args:
@@ -104,7 +104,7 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for GoldenGate should be used.
+            Whether or not the default system prompt for Gemma should be used.
         spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not to add spaces between special tokens.
         legacy (`bool`, *optional*):

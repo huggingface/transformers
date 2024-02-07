@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Flax GoldenGate model."""
+"""Flax Gemma model."""
 from typing import Optional, Tuple
 
 import flax.linen as nn
@@ -33,16 +33,16 @@ from jax import lax
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_golden_gate import GoldenGateConfig
+from .configuration_gemma import GemmaConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "GoldenGateConfig"
-_CHECKPOINT_FOR_DOC = "google/golden-gate-2b"
+_CONFIG_FOR_DOC = "GemmaConfig"
+_CHECKPOINT_FOR_DOC = "google/gemma-2b"
 _REAL_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2"
 
-GOLDEN_GATE_START_DOCSTRING = r"""
+GEMMA_START_DOCSTRING = r"""
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -60,7 +60,7 @@ GOLDEN_GATE_START_DOCSTRING = r"""
     - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config ([`GoldenGateConfig`]): Model configuration class with all the parameters of the model.
+        config ([`GemmaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
@@ -77,7 +77,7 @@ GOLDEN_GATE_START_DOCSTRING = r"""
             [`~FlaxPreTrainedModel.to_bf16`].
 """
 
-GOLDEN_GATE_INPUTS_DOCSTRING = r"""
+GEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -147,8 +147,8 @@ def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
-class FlaxGoldenGateRMSNorm(nn.Module):
-    config: GoldenGateConfig
+class FlaxGemmaRMSNorm(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -165,9 +165,9 @@ class FlaxGoldenGateRMSNorm(nn.Module):
         return (1 + self.weight) * jnp.asarray(hidden_states, dtype=self.dtype)
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->GoldenGate
-class FlaxGoldenGateRotaryEmbedding(nn.Module):
-    config: GoldenGateConfig
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->Gemma
+class FlaxGemmaRotaryEmbedding(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -187,8 +187,8 @@ class FlaxGoldenGateRotaryEmbedding(nn.Module):
         return key, query
 
 
-class FlaxGoldenGateAttention(nn.Module):
-    config: GoldenGateConfig
+class FlaxGemmaAttention(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
     causal: bool = True
     is_cross_attention: bool = False
@@ -224,7 +224,7 @@ class FlaxGoldenGateAttention(nn.Module):
         )
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-        self.rotary_emb = FlaxGoldenGateRotaryEmbedding(config, dtype=self.dtype)
+        self.rotary_emb = FlaxGemmaRotaryEmbedding(config, dtype=self.dtype)
 
     def _split_heads(self, hidden_states, num_heads):
         return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
@@ -342,9 +342,9 @@ class FlaxGoldenGateAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->GoldenGate
-class FlaxGoldenGateMLP(nn.Module):
-    config: GoldenGateConfig
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->Gemma
+class FlaxGemmaMLP(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -366,16 +366,16 @@ class FlaxGoldenGateMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaDecoderLayer with Llama->GoldenGate
-class FlaxGoldenGateDecoderLayer(nn.Module):
-    config: GoldenGateConfig
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaDecoderLayer with Llama->Gemma
+class FlaxGemmaDecoderLayer(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.input_layernorm = FlaxGoldenGateRMSNorm(self.config, dtype=self.dtype)
-        self.self_attn = FlaxGoldenGateAttention(self.config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxGoldenGateRMSNorm(self.config, dtype=self.dtype)
-        self.mlp = FlaxGoldenGateMLP(self.config, dtype=self.dtype)
+        self.input_layernorm = FlaxGemmaRMSNorm(self.config, dtype=self.dtype)
+        self.self_attn = FlaxGemmaAttention(self.config, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxGemmaRMSNorm(self.config, dtype=self.dtype)
+        self.mlp = FlaxGemmaMLP(self.config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -409,20 +409,20 @@ class FlaxGoldenGateDecoderLayer(nn.Module):
         return (hidden_states,) + outputs[1:]
 
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->GoldenGate, GPT_NEO->GOLDEN_GATE, transformer->model
-class FlaxGoldenGatePreTrainedModel(FlaxPreTrainedModel):
+# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Gemma, GPT_NEO->GEMMA, transformer->model
+class FlaxGemmaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = GoldenGateConfig
+    config_class = GemmaConfig
     base_model_prefix = "model"
     module_class: nn.Module = None
 
     def __init__(
         self,
-        config: GoldenGateConfig,
+        config: GemmaConfig,
         input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
@@ -471,7 +471,7 @@ class FlaxGoldenGatePreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(GOLDEN_GATE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
@@ -509,7 +509,7 @@ class FlaxGoldenGatePreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGoldenGateAttention module
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGemmaAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -542,14 +542,14 @@ class FlaxGoldenGatePreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaLayerCollection with Llama->GoldenGate
-class FlaxGoldenGateLayerCollection(nn.Module):
-    config: GoldenGateConfig
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaLayerCollection with Llama->Gemma
+class FlaxGemmaLayerCollection(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.blocks = [
-            FlaxGoldenGateDecoderLayer(self.config, dtype=self.dtype, name=str(i))
+            FlaxGemmaDecoderLayer(self.config, dtype=self.dtype, name=str(i))
             for i in range(self.config.num_hidden_layers)
         ]
 
@@ -583,15 +583,15 @@ class FlaxGoldenGateLayerCollection(nn.Module):
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
 
-        # this contains possible `None` values - `FlaxGoldenGateModule` will filter them out
+        # this contains possible `None` values - `FlaxGemmaModule` will filter them out
         outputs = (hidden_states, all_hidden_states, all_attentions)
 
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaModule with Llama->GoldenGate
-class FlaxGoldenGateModule(nn.Module):
-    config: GoldenGateConfig
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaModule with Llama->Gemma
+class FlaxGemmaModule(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -603,8 +603,8 @@ class FlaxGoldenGateModule(nn.Module):
             embedding_init=embedding_init,
             dtype=self.dtype,
         )
-        self.layers = FlaxGoldenGateLayerCollection(self.config, dtype=self.dtype)
-        self.norm = FlaxGoldenGateRMSNorm(self.config, dtype=self.dtype)
+        self.layers = FlaxGemmaLayerCollection(self.config, dtype=self.dtype)
+        self.norm = FlaxGemmaRMSNorm(self.config, dtype=self.dtype)
 
     # Ignore copy
     def __call__(
@@ -653,16 +653,16 @@ class FlaxGoldenGateModule(nn.Module):
 
 
 @add_start_docstrings(
-    "The bare GoldenGate Model transformer outputting raw hidden-states without any specific head on top.",
-    GOLDEN_GATE_START_DOCSTRING,
+    "The bare Gemma Model transformer outputting raw hidden-states without any specific head on top.",
+    GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaModel with Llama->GoldenGate
-class FlaxGoldenGateModel(FlaxGoldenGatePreTrainedModel):
-    module_class = FlaxGoldenGateModule
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaModel with Llama->Gemma
+class FlaxGemmaModel(FlaxGemmaPreTrainedModel):
+    module_class = FlaxGemmaModule
 
 
 append_call_sample_docstring(
-    FlaxGoldenGateModel,
+    FlaxGemmaModel,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutput,
     _CONFIG_FOR_DOC,
@@ -670,13 +670,13 @@ append_call_sample_docstring(
 )
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaForCausalLMModule with Llama->GoldenGate
-class FlaxGoldenGateForCausalLMModule(nn.Module):
-    config: GoldenGateConfig
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaForCausalLMModule with Llama->Gemma
+class FlaxGemmaForCausalLMModule(nn.Module):
+    config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.model = FlaxGoldenGateModule(self.config, dtype=self.dtype)
+        self.model = FlaxGemmaModule(self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
@@ -722,13 +722,13 @@ class FlaxGoldenGateForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    The GoldenGate Model transformer with a language modeling head (linear layer) on top.
+    The Gemma Model transformer with a language modeling head (linear layer) on top.
     """,
-    GOLDEN_GATE_START_DOCSTRING,
+    GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->GoldenGate
-class FlaxGoldenGateForCausalLM(FlaxGoldenGatePreTrainedModel):
-    module_class = FlaxGoldenGateForCausalLMModule
+# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Gemma
+class FlaxGemmaForCausalLM(FlaxGemmaPreTrainedModel):
+    module_class = FlaxGemmaForCausalLMModule
 
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
@@ -736,7 +736,7 @@ class FlaxGoldenGateForCausalLM(FlaxGoldenGatePreTrainedModel):
 
         past_key_values = self.init_cache(batch_size, max_length)
         # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
-        # But since GoldenGate uses a causal mask, those positions are masked anyways.
+        # But since Gemma uses a causal mask, those positions are masked anyways.
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
@@ -758,7 +758,7 @@ class FlaxGoldenGateForCausalLM(FlaxGoldenGatePreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxGoldenGateForCausalLM,
+    FlaxGemmaForCausalLM,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,

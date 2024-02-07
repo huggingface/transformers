@@ -1192,7 +1192,7 @@ class XGLMConverter(SpmConverter):
         )
 
 
-class GoldenGateConvert(SpmConverter):
+class GemmaConvert(SpmConverter):
     handle_byte_fallback = True
 
     """"
@@ -1444,7 +1444,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "XGLMTokenizer": XGLMConverter,
     "LlamaTokenizer": LlamaConverter,
     "CodeLlamaTokenizer": LlamaConverter,
-    "GoldenGateTokenizer": GoldenGateConvert,
+    "GemmaTokenizer": GemmaConvert,
 }
 
 

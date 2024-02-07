@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_golden_gate": ["GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GoldenGateConfig"],
+    "configuration_gemma": ["GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "GemmaConfig"],
 }
 
 try:
@@ -33,7 +33,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_golden_gate"] = ["GoldenGateTokenizer"]
+    _import_structure["tokenization_gemma"] = ["GemmaTokenizer"]
 
 try:
     if not is_tokenizers_available():
@@ -41,7 +41,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_golden_gate_fast"] = ["GoldenGateTokenizerFast"]
+    _import_structure["tokenization_gemma_fast"] = ["GemmaTokenizerFast"]
 
 
 try:
@@ -50,11 +50,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_golden_gate"] = [
-        "GoldenGateForCausalLM",
-        "GoldenGateModel",
-        "GoldenGatePreTrainedModel",
-        "GoldenGateForSequenceClassification",
+    _import_structure["modeling_gemma"] = [
+        "GemmaForCausalLM",
+        "GemmaModel",
+        "GemmaPreTrainedModel",
+        "GemmaForSequenceClassification",
     ]
 
 try:
@@ -63,15 +63,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_golden_gate"] = [
-        "FlaxGoldenGateForCausalLM",
-        "FlaxGoldenGateModel",
-        "FlaxGoldenGatePreTrainedModel",
+    _import_structure["modeling_flax_gemma"] = [
+        "FlaxGemmaForCausalLM",
+        "FlaxGemmaModel",
+        "FlaxGemmaPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_golden_gate import GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP, GoldenGateConfig
+    from .configuration_gemma import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, GemmaConfig
 
     try:
         if not is_sentencepiece_available():
@@ -79,7 +79,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_golden_gate import GoldenGateTokenizer
+        from .tokenization_gemma import GemmaTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -87,7 +87,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_golden_gate_fast import GoldenGateTokenizerFast
+        from .tokenization_gemma_fast import GemmaTokenizerFast
 
     try:
         if not is_torch_available():
@@ -95,11 +95,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_golden_gate import (
-            GoldenGateForCausalLM,
-            GoldenGateForSequenceClassification,
-            GoldenGateModel,
-            GoldenGatePreTrainedModel,
+        from .modeling_gemma import (
+            GemmaForCausalLM,
+            GemmaForSequenceClassification,
+            GemmaModel,
+            GemmaPreTrainedModel,
         )
 
     try:
@@ -108,10 +108,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_golden_gate import (
-            FlaxGoldenGateForCausalLM,
-            FlaxGoldenGateModel,
-            FlaxGoldenGatePreTrainedModel,
+        from .modeling_flax_gemma import (
+            FlaxGemmaForCausalLM,
+            FlaxGemmaModel,
+            FlaxGemmaPreTrainedModel,
         )
 
 

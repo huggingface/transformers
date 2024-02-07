@@ -17,40 +17,40 @@ import warnings
 
 import torch
 
-from transformers import FlaxGoldenGateForCausalLM, GoldenGateConfig, GoldenGateForCausalLM, GoldenGateTokenizer
+from transformers import FlaxGemmaForCausalLM, GemmaConfig, GemmaForCausalLM, GemmaTokenizer
 
 
 try:
-    from transformers import GoldenGateTokenizerFast
+    from transformers import GemmaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    GoldenGateTokenizerFast = None
+    GemmaTokenizerFast = None
 
 """
 Sample usage:
 
 ```
-python src/transformers/models/golden_gate/convert_golden_gate_weights_to_hf.py \
-    --input_dir /path/to/downloaded/golden_gate/weights --model_size 7B --output_dir /output/path
+python src/transformers/models/gemma/convert_gemma_weights_to_hf.py \
+    --input_dir /path/to/downloaded/gemma/weights --model_size 7B --output_dir /output/path
 ```
 
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import GoldenGateForCausalLM, GoldenGateTokenizerFast
+from transformers import GemmaForCausalLM, GemmaTokenizerFast
 
-model = GoldenGateForCausalLM.from_pretrained("/output/path")
-tokenizer = GoldenGateTokenizerFast.from_pretrained("/output/path")
+model = GemmaForCausalLM.from_pretrained("/output/path")
+tokenizer = GemmaTokenizerFast.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
 
-golden_gate_2b_config = GoldenGateConfig(
+gemma_2b_config = GemmaConfig(
     num_hidden_layers=18,
     num_attention_heads=8,
     num_key_value_heads=1,
@@ -58,9 +58,9 @@ golden_gate_2b_config = GoldenGateConfig(
     intermediate_size=16384,
 )
 
-golden_gate_7b_config = GoldenGateConfig()
+gemma_7b_config = GemmaConfig()
 
-CONFIG_MAPPING = {"2B": golden_gate_2b_config, "7B": golden_gate_7b_config}
+CONFIG_MAPPING = {"2B": gemma_2b_config, "7B": gemma_7b_config}
 
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
@@ -99,9 +99,9 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
         else:
             state_dict[k] = v
 
-    print("Loading the checkpoint in a GoldenGate model.")
+    print("Loading the checkpoint in a Gemma model.")
     with torch.device("meta"):
-        model = GoldenGateForCausalLM(config)
+        model = GemmaForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=False)
 
     model.config.torch_dtype = torch.float32
@@ -112,7 +112,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
 def write_tokenizer(input_tokenizer_path, save_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GoldenGateTokenizer  # if GoldenGateTokenizerFast is None else GoldenGateTokenizerFast
+    tokenizer_class = GemmaTokenizer  # if GemmaTokenizerFast is None else GemmaTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(save_path)
@@ -122,23 +122,23 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/Users/arthurzucker/Work/golden_gate/ckpt/7b.ckpt",
-        help="Location of GoldenGate weights, which contains tokenizer.model and model folders",
+        default="/Users/arthurzucker/Work/gemma/ckpt/7b.ckpt",
+        help="Location of Gemma weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--model_size",
         default="7B",
         choices=["2B", "7B", "tokenizer_only"],
-        help="'f' models correspond to the finetuned versions, and are specific to the GoldenGate2 official release. For more details on GoldenGate2, checkout the original repo: https://huggingface.co/meta-golden_gate",
+        help="'f' models correspond to the finetuned versions, and are specific to the Gemma2 official release. For more details on Gemma2, checkout the original repo: https://huggingface.co/meta-gemma",
     )
     parser.add_argument(
         "--output_dir",
-        default="golden_gate_7b",
+        default="gemma_7b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
-    spm_path = os.path.join("/Users/arthurzucker/Work/golden_gate/code/tokenizer.model")
+    spm_path = os.path.join("/Users/arthurzucker/Work/gemma/code/tokenizer.model")
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
@@ -150,6 +150,7 @@ def main():
     write_tokenizer(spm_path, args.output_dir)
 
     import random
+    import jax.numpy as jnp
 
     import numpy as np
 
@@ -157,26 +158,34 @@ def main():
     np.random.seed(12345)
     torch.manual_seed(12345)
 
-    tokenizer = GoldenGateTokenizerFast.from_pretrained(
+    tokenizer = GemmaTokenizerFast.from_pretrained(
         args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens="<bos>"
     )
     tokenizer.padding_side = "left"
-    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, torch_dtype = torch.bfloat16) #, low_cpu_mem_usage = True)
+    model = GemmaForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, torch_dtype = torch.float32) #, low_cpu_mem_usage = True)
+    
+    model.push_to_hub("gg-hf/gemma-7b", safe_serialization = True, max_shard_size = "2GB")
+    # del model 
+    # model = FlaxGemmaForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, from_pt=True, dtype=jnp.float32)
+    
+    # model.push_to_hub("gg-hf/gemma-7b", safe_serialization = False, max_shard_size = "2GB")
+    
+    exit(0)
+    
     device = "cpu"
     model = model.to(device)
-    model.generation_config.temperature = 1
-    model.generation_config.top_p = 1
+    # model.generation_config.temperature = 1
+    # model.generation_config.top_p = 1
 
-    outputs = model.generate(
-        torch.tensor([[2, 651, 6037, 576, 6081, 603]], device=device), do_sample=False, max_new_tokens=100
-    )
+    inputs = torch.tensor([[2, 651, 6037, 576, 6081, 603]])
+    
+
+    outputs = model.generate(inputs, do_sample=False, max_new_tokens=100)
     print(outputs)
     print(tokenizer.batch_decode(outputs))
     import jax.numpy as jnp
 
-    model = FlaxGoldenGateForCausalLM.from_pretrained(
-        args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, from_pt=True, dtype=jnp.bfloat16
-    )
+    model = FlaxGemmaForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, from_pt=True, dtype=jnp.float32)
 
     inputs = jnp.array([[2, 651, 6037, 576, 6081, 603]])
     outputs = model.generate(inputs, do_sample=True, max_new_tokens=20)

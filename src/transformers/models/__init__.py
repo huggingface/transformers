@@ -93,7 +93,7 @@ from . import (
     fuyu,
     git,
     glpn,
-    golden_gate,
+    gemma,
     gpt2,
     gpt_bigcode,
     gpt_neo,

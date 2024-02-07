@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GoldenGate model configuration"""
+""" Gemma model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,16 +25,16 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/golden-gate-2b": "https://huggingface.co/google/golden-gate-2b/resolve/main/config.json",
+GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "google/gemma-2b": "https://huggingface.co/google/gemma-2b/resolve/main/config.json",
 }
 
 
-class GoldenGateConfig(PretrainedConfig):
+class GemmaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GoldenGateModel`]. It is used to instantiate an GoldenGate
+    This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the GoldenGate-7B.
+    defaults will yield a similar configuration to that of the Gemma-7B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -42,8 +42,8 @@ class GoldenGateConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the GoldenGate model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GoldenGateModel`]
+            Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`GemmaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -63,8 +63,8 @@ class GoldenGateConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. GoldenGate 1 supports up to 2048 tokens,
-            GoldenGate 2 up to 4096, CodeGoldenGate up to 16384.
+            The maximum sequence length that this model might ever be used with. Gemma 1 supports up to 2048 tokens,
+            Gemma 2 up to 4096, CodeGemma up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -93,7 +93,7 @@ class GoldenGateConfig(PretrainedConfig):
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
-            https://www.reddit.com/r/LocalGoldenGate/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
+            https://www.reddit.com/r/LocalGemma/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
@@ -101,19 +101,19 @@ class GoldenGateConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import GoldenGateModel, GoldenGateConfig
+    >>> from transformers import GemmaModel, GemmaConfig
 
-    >>> # Initializing a GoldenGate golden_gate-7b style configuration
-    >>> configuration = GoldenGateConfig()
+    >>> # Initializing a Gemma gemma-7b style configuration
+    >>> configuration = GemmaConfig()
 
-    >>> # Initializing a model from the golden_gate-7b style configuration
-    >>> model = GoldenGateModel(configuration)
+    >>> # Initializing a model from the gemma-7b style configuration
+    >>> model = GemmaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "golden_gate"
+    model_type = "gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

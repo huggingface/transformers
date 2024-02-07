@@ -26,9 +26,9 @@ from ...utils.versions import require_version
 require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
-    from .tokenization_golden_gate import GoldenGateTokenizer
+    from .tokenization_gemma import GemmaTokenizer
 else:
-    GoldenGateTokenizer = None
+    GemmaTokenizer = None
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
@@ -54,16 +54,16 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class GoldenGateTokenizerFast(PreTrainedTokenizerFast):
+class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a GoldenGate tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     This uses notably ByteFallback and no normalization.
 
     ```python
-    >>> from transformers import GoldenGateTokenizerFast
+    >>> from transformers import GemmaTokenizerFast
 
-    >>> tokenizer = GoldenGateTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
     >>> tokenizer.encode("Hello this is a test")
     [1, 15043, 445, 338, 263, 1243]
     ```
@@ -99,12 +99,12 @@ class GoldenGateTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for GoldenGate should be used.
+            Whether or not the default system prompt for Gemma should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    slow_tokenizer_class = GoldenGateTokenizer
+    slow_tokenizer_class = GemmaTokenizer
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -209,12 +209,12 @@ class GoldenGateTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
     @property
-    # Copied from transformers.models.llama.tokenization_llama.GoldenGateTokenizer.default_chat_template
+    # Copied from transformers.models.llama.tokenization_llama.GemmaTokenizer.default_chat_template
     def default_chat_template(self):
         raise NotImplementedError
 
     # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
-    # Copied from transformers.models.llama.tokenization_llama.GoldenGateTokenizer.build_inputs_with_special_tokens
+    # Copied from transformers.models.llama.tokenization_llama.GemmaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []

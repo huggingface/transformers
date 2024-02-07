@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import jax
 
-from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available, FlaxGoldenGateForCausalLM, AutoTokenizer
+from transformers import GemmaConfig, is_flax_available, is_tokenizers_available, FlaxGemmaForCausalLM, AutoTokenizer
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -28,9 +28,9 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers.models.golden_gate.modeling_flax_golden_gate import (
-        FlaxGoldenGateForCausalLM,
-        FlaxGoldenGateModel,
+    from transformers.models.gemma.modeling_flax_gemma import (
+        FlaxGemmaForCausalLM,
+        FlaxGemmaModel,
     )
 
 
@@ -38,7 +38,7 @@ if is_tokenizers_available():
     from transformers import LlamaTokenizerFast
 
 
-class FlaxGoldenGateModelTester:
+class FlaxGemmaModelTester:
     def __init__(
         self,
         parent,
@@ -90,7 +90,7 @@ class FlaxGoldenGateModelTester:
         if self.use_input_mask:
             input_mask = np.tril(np.ones((self.batch_size, self.seq_length)))
 
-        config = GoldenGateConfig(
+        config = GemmaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -178,12 +178,12 @@ class FlaxGoldenGateModelTester:
 
 
 @require_flax
-class FlaxGoldenGateModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxGoldenGateModel, FlaxGoldenGateForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxGoldenGateForCausalLM,) if is_flax_available() else ()
+class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (FlaxGemmaModel, FlaxGemmaForCausalLM) if is_flax_available() else ()
+    all_generative_model_classes = (FlaxGemmaForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
-        self.model_tester = FlaxGoldenGateModelTester(self)
+        self.model_tester = FlaxGemmaModelTester(self)
 
     def test_use_cache_forward(self):
         for model_class_name in self.all_model_classes:
@@ -200,24 +200,24 @@ class FlaxGoldenGateModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, u
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("openlm-research/open_golden_gate_3b_v2", from_pt=True)
+            model = model_class_name.from_pretrained("openlm-research/open_gemma_3b_v2", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
 
 # @slow
 @require_flax
-class FlaxGoldenGateIntegrationTest(unittest.TestCase):
+class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello my name is", "Hi"]
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -234,13 +234,13 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_2b_fp16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype = jnp.float16)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype = jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -257,13 +257,13 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_2b_bf16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
             "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -281,13 +281,13 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
     @unittest.skip("The test will not fit our CI runners")
     def test_model_7b_fp32(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -304,13 +304,13 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_7b_fp16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear about",
             "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -327,13 +327,13 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_7b_bf16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is***** and I am a licensed veterinarian with Just Answer. I am so sorry to hear that you are",
             'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)

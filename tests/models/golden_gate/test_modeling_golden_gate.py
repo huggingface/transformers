@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GoldenGate model. """
+""" Testing suite for the PyTorch Gemma model. """
 
 import tempfile
 import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GoldenGateConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -38,10 +38,10 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GoldenGateForCausalLM, GoldenGateForSequenceClassification, GoldenGateModel
+    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel
 
 
-class GoldenGateModelTester:
+class GemmaModelTester:
     # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
     def __init__(
         self,
@@ -121,7 +121,7 @@ class GoldenGateModelTester:
 
     # Ignore copy
     def get_config(self):
-        return GoldenGateConfig(
+        return GemmaConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -138,18 +138,18 @@ class GoldenGateModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->GoldenGate
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Gemma
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = GoldenGateModel(config=config)
+        model = GemmaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->GoldenGate
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Gemma
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -163,7 +163,7 @@ class GoldenGateModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = GoldenGateModel(config)
+        model = GemmaModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -180,7 +180,7 @@ class GoldenGateModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->GoldenGate
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Gemma
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -193,13 +193,13 @@ class GoldenGateModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = GoldenGateForCausalLM(config=config)
+        model = GemmaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->GoldenGate
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Gemma
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -214,7 +214,7 @@ class GoldenGateModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = GoldenGateForCausalLM(config=config)
+        model = GemmaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -262,7 +262,7 @@ class GoldenGateModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->GoldenGate
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->Gemma
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -279,18 +279,18 @@ class GoldenGateModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->GoldenGate
-class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Gemma
+class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GoldenGateModel, GoldenGateForCausalLM, GoldenGateForSequenceClassification) if is_torch_available() else ()
+        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (GoldenGateForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": GoldenGateModel,
-            "text-classification": GoldenGateForSequenceClassification,
-            "text-generation": GoldenGateForCausalLM,
-            "zero-shot": GoldenGateForSequenceClassification,
+            "feature-extraction": GemmaModel,
+            "text-classification": GemmaForSequenceClassification,
+            "text-generation": GemmaForCausalLM,
+            "zero-shot": GemmaForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -305,8 +305,8 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         return True
 
     def setUp(self):
-        self.model_tester = GoldenGateModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GoldenGateConfig, hidden_size=37)
+        self.model_tester = GemmaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GemmaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -321,33 +321,33 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_GoldenGate_sequence_classification_model(self):
+    def test_Gemma_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GoldenGateForSequenceClassification(config)
+        model = GemmaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_GoldenGate_sequence_classification_model_for_single_label(self):
+    def test_Gemma_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = GoldenGateForSequenceClassification(config)
+        model = GemmaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_GoldenGate_sequence_classification_model_for_multi_label(self):
+    def test_Gemma_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
@@ -356,17 +356,17 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = GoldenGateForSequenceClassification(config)
+        model = GemmaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("GoldenGate buffers include complex numbers, which breaks this test")
+    @unittest.skip("Gemma buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("GoldenGate uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip("Gemma uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -430,7 +430,7 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 model.save_pretrained(tmpdirname)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: GoldenGate apparently does not support right padding + use_cache with FA2.
+                # NOTE: Gemma apparently does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -454,17 +454,17 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):
-        self.skipTest("GoldenGate flash attention does not support right padding")
+        self.skipTest("Gemma flash attention does not support right padding")
 
 
 @require_torch_gpu
 @slow
-class GoldenGateIntegrationTest(unittest.TestCase):
+class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello my name is", "Hi"]
 
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
@@ -482,7 +482,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_2b_fp16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
@@ -502,7 +502,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_2b_bf16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
             "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
@@ -523,7 +523,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_model_2b_4bit(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-2b"
+        model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1",
             "Hi,\n\nI have a 2007 335i with the 6 speed",
@@ -542,7 +542,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     @unittest.skip("The test will not fit our CI runners")
     def test_model_7b_fp32(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
@@ -560,7 +560,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_7b_fp16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear about",
             "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
@@ -580,7 +580,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     def test_model_7b_bf16(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is***** and I am a licensed veterinarian with Just Answer. I am so sorry to hear that you are",
             'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
@@ -601,7 +601,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_model_7b_4bit(self):
         # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
+        model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
             'Hello my name is***** and I will be helping you with Bumblebee. I am not a fan of the new "',
             "Hiệu của 2 số là:\n\n1001x2=2002\n\n",

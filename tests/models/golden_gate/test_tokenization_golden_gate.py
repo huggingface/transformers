@@ -21,8 +21,8 @@ from datasets import load_dataset
 
 from transformers import (
     AddedToken,
-    GoldenGateTokenizer,
-    GoldenGateTokenizerFast,
+    GemmaTokenizer,
+    GemmaTokenizerFast,
     is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
@@ -48,9 +48,9 @@ if is_torch_available():
 
 @require_sentencepiece
 @require_tokenizers
-class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = GoldenGateTokenizer
-    rust_tokenizer_class = GoldenGateTokenizerFast
+class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = GemmaTokenizer
+    rust_tokenizer_class = GemmaTokenizerFast
 
     test_rust_tokenizer = False
     test_sentencepiece = True
@@ -59,7 +59,7 @@ class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         # We have a SentencePiece fixture for testing
-        tokenizer = GoldenGateTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
@@ -140,7 +140,7 @@ class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="gg-hf/golden-gate-7b",
+            model_name="gg-hf/gemma-7b",
             revision="",
             padding=False,
         )
@@ -157,14 +157,14 @@ class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-class GoldenGateIntegrationTest(unittest.TestCase):
+class GemmaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "gg-hf/golden-gate-7b"
-        cls.tokenizer: GoldenGateTokenizer = GoldenGateTokenizer.from_pretrained(
+        checkpoint_name = "gg-hf/gemma-7b"
+        cls.tokenizer: GemmaTokenizer = GemmaTokenizer.from_pretrained(
             checkpoint_name, eos_token="<s>"
         )  # add this token
-        cls.rust_tokenizer = GoldenGateTokenizerFast.from_pretrained(
+        cls.rust_tokenizer = GemmaTokenizerFast.from_pretrained(
             checkpoint_name, eos_token="<s>", from_slow=True
         )  # add this token
         return cls
@@ -336,7 +336,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b", legacy=False)
+        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b", legacy=False)
         tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -375,7 +375,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_some_edge_cases(self):
-        tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b")
+        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
 
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<s>", ">"])
@@ -404,7 +404,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b", legacy=False)
+        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b", legacy=False)
 
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
@@ -437,8 +437,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     """
 
     def test_edge_case_tabulation(self):
-        fast_tokenizer = GoldenGateTokenizerFast.from_pretrained("gg-hf/golden-gate-7b")
-        slow_tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b")
+        fast_tokenizer = GemmaTokenizerFast.from_pretrained("gg-hf/gemma-7b")
+        slow_tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
         EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
         EXPECTED_TOKENS = [

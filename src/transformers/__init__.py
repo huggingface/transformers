@@ -462,7 +462,7 @@ _import_structure = {
         "GitVisionConfig",
     ],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
-    "models.golden_gate": ["GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GoldenGateConfig"],
+    "models.gemma": ["GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "GemmaConfig"],
     "models.gpt2": [
         "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPT2Config",
@@ -1110,7 +1110,7 @@ else:
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
     _import_structure["models.fnet"].append("FNetTokenizer")
-    _import_structure["models.golden_gate"].append("GoldenGateTokenizer")
+    _import_structure["models.gemma"].append("GemmaTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
@@ -1174,7 +1174,7 @@ else:
     _import_structure["models.electra"].append("ElectraTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
-    _import_structure["models.golden_gate"].append("GoldenGateTokenizerFast")
+    _import_structure["models.gemma"].append("GemmaTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
@@ -2248,12 +2248,12 @@ else:
             "GLPNPreTrainedModel",
         ]
     )
-    _import_structure["models.golden_gate"].extend(
+    _import_structure["models.gemma"].extend(
         [
-            "GoldenGateForCausalLM",
-            "GoldenGateForSequenceClassification",
-            "GoldenGateModel",
-            "GoldenGatePreTrainedModel",
+            "GemmaForCausalLM",
+            "GemmaForSequenceClassification",
+            "GemmaModel",
+            "GemmaPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -4657,8 +4657,8 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
-    _import_structure["models.golden_gate"].extend(
-        ["FlaxGoldenGateForCausalLM", "FlaxGoldenGateModel", "FlaxGoldenGatePreTrainedModel"]
+    _import_structure["models.gemma"].extend(
+        ["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"]
     )
     _import_structure["models.longt5"].extend(
         [
@@ -5195,7 +5195,7 @@ if TYPE_CHECKING:
         GitVisionConfig,
     )
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
-    from .models.golden_gate import GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP, GoldenGateConfig
+    from .models.gemma import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, GemmaConfig
     from .models.gpt2 import (
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2Config,
@@ -5844,7 +5844,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.ernie_m import ErnieMTokenizer
         from .models.fnet import FNetTokenizer
-        from .models.golden_gate import GoldenGateTokenizer
+        from .models.gemma import GemmaTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.llama import LlamaTokenizer
@@ -5900,7 +5900,7 @@ if TYPE_CHECKING:
         from .models.electra import ElectraTokenizerFast
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
-        from .models.golden_gate import GoldenGateTokenizerFast
+        from .models.gemma import GemmaTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
@@ -6836,11 +6836,11 @@ if TYPE_CHECKING:
             GLPNModel,
             GLPNPreTrainedModel,
         )
-        from .models.golden_gate import (
-            GoldenGateForCausalLM,
-            GoldenGateForSequenceClassification,
-            GoldenGateModel,
-            GoldenGatePreTrainedModel,
+        from .models.gemma import (
+            GemmaForCausalLM,
+            GemmaForSequenceClassification,
+            GemmaModel,
+            GemmaPreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -8801,10 +8801,10 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.encoder_decoder import FlaxEncoderDecoderModel
-        from .models.golden_gate import (
-            FlaxGoldenGateForCausalLM,
-            FlaxGoldenGateModel,
-            FlaxGoldenGatePreTrainedModel,
+        from .models.gemma import (
+            FlaxGemmaForCausalLM,
+            FlaxGemmaModel,
+            FlaxGemmaPreTrainedModel,
         )
         from .models.gpt2 import (
             FlaxGPT2LMHeadModel,

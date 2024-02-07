@@ -180,10 +180,10 @@ else:
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
             ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
-                "golden_gate",
+                "gemma",
                 (
-                    "GoldenGateTokenizer" if is_sentencepiece_available() else None,
-                    "GoldenGateTokenizerFast" if is_tokenizers_available() else None,
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
