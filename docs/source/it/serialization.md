@@ -611,7 +611,7 @@ Usare il modello tracciato per l'inferenza è semplice come usare il suo metodo 
 traced_model(tokens_tensor, segments_tensors)
 ```
 
-###Implementare modelli HuggingFace TorchScript su AWS utilizzando Neuron SDK
+### Implementare modelli HuggingFace TorchScript su AWS utilizzando Neuron SDK
 
 AWS ha introdotto [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/)
 famiglia di istanze per l'inferenza di machine learning a basso costo e ad alte prestazioni nel cloud.
