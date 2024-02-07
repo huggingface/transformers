@@ -827,10 +827,8 @@ class SegGptModel(SegGptPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         feature_ensemble = feature_ensemble if feature_ensemble is not None else False
 
-        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
+        pixel_values = pixel_values.to(expected_dtype)
 
         if prompt_pixel_values.dtype != expected_dtype:
             prompt_pixel_values = prompt_pixel_values.to(expected_dtype)
