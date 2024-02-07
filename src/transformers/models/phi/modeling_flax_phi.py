@@ -162,7 +162,7 @@ class FlaxPhiRMSNorm(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.epsilon = self.config.rms_norm_eps
+        self.epsilon = self.config.layer_norm_eps
         self.weight = self.param("weight", lambda _, shape: jnp.ones(shape), self.config.hidden_size)
 
     def __call__(self, hidden_states):
@@ -388,52 +388,22 @@ class FlaxPhiMLP(nn.Module):
         return hidden_states
 
 
-
-def main():
-    from transformers.models.phi.convert import jax2pt, pt2jax
-    config = PhiConfig()
-    batch_size = 1; seq_len = 10; hidden_size = config.hidden_size
-    n_heads = config.num_attention_heads; head_size = hidden_size // n_heads
-    rng = jax.random.PRNGKey(0)
-    # x = jax.random.normal(rng, (batch_size, config.num_attention_heads, seq_len, head_size))
-    hidden_states = jax.random.normal(rng, (batch_size, seq_len, hidden_size))
-    self = FlaxPhiMLP(config)
-    variables = self.init(rng, hidden_states)
-    self = self.bind(variables)
-    out = self.apply(variables, hidden_states)[0]
-
-    # debug
-    from transformers.models.phi.modeling_phi import PhiMLP
-    self = PhiMLP(config)
-    self.fc1.weight.data = jax2pt(variables["params"]["fc1"]["kernel"].T)
-    self.fc1.bias.data = jax2pt(variables["params"]["fc1"]["bias"])
-    self.fc2.weight.data = jax2pt(variables["params"]["fc2"]["kernel"].T)
-    self.fc2.bias.data = jax2pt(variables["params"]["fc2"]["bias"])
-
-    hidden_states = jax2pt(hidden_states)
-
-    pt_out = self(hidden_states)[0]
-
-    # TODO: test with cache
-    assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
-
-
-
-class FlaxLlamaDecoderLayer(nn.Module):
+class FlaxPhiDecoderLayer(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.input_layernorm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
-        self.self_attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
+        self.self_attn = FlaxPhiAttention(self.config, dtype=self.dtype)
         self.mlp = FlaxPhiMLP(self.config, dtype=self.dtype)
+        self.input_layernorm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
+        self.resid_dropout = nn.Dropout(self.config.resid_pdrop)
+
 
     def __call__(
         self,
         hidden_states,
-        attention_mask=None,
-        position_ids=None,
+        attention_mask,
+        position_ids,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -448,17 +418,49 @@ class FlaxLlamaDecoderLayer(nn.Module):
             init_cache=init_cache,
             output_attentions=output_attentions,
         )
-        # residual connection
         attn_output = outputs[0]
-        hidden_states = residual + attn_output
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        attn_output = self.resid_dropout(attn_output, deterministic=deterministic)
         # residual connection
-        hidden_states = residual + hidden_states
-
+        feed_forward_hidden_states = self.resid_dropout(
+            self.mlp(hidden_states), deterministic=deterministic
+        )
+        hidden_states = attn_output + feed_forward_hidden_states + residual
         return (hidden_states,) + outputs[1:]
+
+
+def main():
+    from transformers.models.phi.convert import jax2pt, pt2jax
+    config = PhiConfig()
+    batch_size = 1; seq_len = 10; hidden_size = config.hidden_size
+    n_heads = config.num_attention_heads; head_size = hidden_size // n_heads
+    rng = jax.random.PRNGKey(0)
+    # x = jax.random.normal(rng, (batch_size, config.num_attention_heads, seq_len, head_size))
+    hidden_states = jax.random.normal(rng, (batch_size, seq_len, hidden_size))
+    self = FlaxPhiDecoderLayer(config)
+    attn_mask = jnp.ones((batch_size, seq_len))
+    position_ids = jnp.broadcast_to(jnp.arange(seq_len), (batch_size, seq_len))
+    variables = self.init(rng, hidden_states, attn_mask, position_ids)
+    self = self.bind(variables)
+    out = self.apply(variables, hidden_states, attn_mask, position_ids)[0]
+
+    # TODO: bring converter from gendo and test decoderlayer
+
+    # debug
+    from transformers.models.phi.modeling_phi import PhiMLP
+    self = PhiMLP(config)
+    self.fc1.weight.data = jax2pt(variables["params"]["fc1"]["kernel"].T)
+    self.fc1.bias.data = jax2pt(variables["params"]["fc1"]["bias"])
+    self.fc2.weight.data = jax2pt(variables["params"]["fc2"]["kernel"].T)
+    self.fc2.bias.data = jax2pt(variables["params"]["fc2"]["bias"])
+
+    hidden_states, attn_mask, position_ids = map(jax2pt, (hidden_states, attn_mask, position_ids))
+
+    pt_out = self(hidden_states)[0]
+
+    # TODO: test with cache
+    assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
+
+
 
 
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Llama, GPT_NEO->LLAMA, transformer->model
@@ -600,7 +602,7 @@ class FlaxLlamaLayerCollection(nn.Module):
 
     def setup(self):
         self.blocks = [
-            FlaxLlamaDecoderLayer(self.config, dtype=self.dtype, name=str(i))
+            FlaxPhiDecoderLayer(self.config, dtype=self.dtype, name=str(i))
             for i in range(self.config.num_hidden_layers)
         ]
 

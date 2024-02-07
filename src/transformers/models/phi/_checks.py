@@ -38,3 +38,32 @@ def check_attention():
 
     # TODO: test with cache
     assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
+
+
+def check_mlp():
+    from transformers.models.phi.convert import jax2pt, pt2jax
+    config = PhiConfig()
+    batch_size = 1; seq_len = 10; hidden_size = config.hidden_size
+    n_heads = config.num_attention_heads; head_size = hidden_size // n_heads
+    rng = jax.random.PRNGKey(0)
+    # x = jax.random.normal(rng, (batch_size, config.num_attention_heads, seq_len, head_size))
+    hidden_states = jax.random.normal(rng, (batch_size, seq_len, hidden_size))
+    self = FlaxPhiMLP(config)
+    variables = self.init(rng, hidden_states)
+    self = self.bind(variables)
+    out = self.apply(variables, hidden_states)[0]
+
+    # debug
+    from transformers.models.phi.modeling_phi import PhiMLP
+    self = PhiMLP(config)
+    self.fc1.weight.data = jax2pt(variables["params"]["fc1"]["kernel"].T)
+    self.fc1.bias.data = jax2pt(variables["params"]["fc1"]["bias"])
+    self.fc2.weight.data = jax2pt(variables["params"]["fc2"]["kernel"].T)
+    self.fc2.bias.data = jax2pt(variables["params"]["fc2"]["bias"])
+
+    hidden_states = jax2pt(hidden_states)
+
+    pt_out = self(hidden_states)[0]
+
+    # TODO: test with cache
+    assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
