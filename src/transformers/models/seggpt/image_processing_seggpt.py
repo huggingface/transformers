@@ -496,7 +496,11 @@ class SegGptImageProcessor(BaseImageProcessor):
         masks = torch.clip(masks * 255, 0, 255)
 
         semantic_segmentation = []
-        palette_tensor = torch.tensor(self.palette).float().to(masks.device) if self.palette is not None else None
+        palette_tensor = None
+        if self.palette is not None:
+                palette_tensor = torch.tensor(self.palette).float().to(masks.device)
+                _, num_channels, _, _ = masks.shape
+                palette_tensor = palette_tensor.view(1, 1, self.num_labels + 1, num_channels)
 
         for idx, mask in enumerate(masks):
             if target_sizes is not None:
@@ -508,9 +512,8 @@ class SegGptImageProcessor(BaseImageProcessor):
 
             if self.num_labels is not None:
                 channels, height, width = mask.shape
-                dist = mask.permute(1, 2, 0).view(height, width, 1, channels) - palette_tensor.view(
-                    1, 1, self.num_labels + 1, channels
-                )
+                dist = mask.permute(1, 2, 0).view(height, width, 1, channels)
+                dist = dist - palette_tensor
                 dist = torch.pow(dist, 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
