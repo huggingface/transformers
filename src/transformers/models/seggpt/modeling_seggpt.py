@@ -145,7 +145,6 @@ class SegGptEmbeddings(nn.Module):
         num_positions = (config.pretrain_image_size // config.patch_size) ** 2 + 1
         self.position_embeddings = nn.Parameter(torch.randn(1, num_positions, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
 
     def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         patch_pos_embed = self.position_embeddings[:, 1:]
