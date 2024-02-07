@@ -979,6 +979,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
@@ -2488,6 +2489,7 @@ else:
     _import_structure["models.llama"].extend(
         [
             "LlamaForCausalLM",
+            "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
@@ -5744,6 +5746,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageFeatureExtractionPipeline,
         ImageSegmentationPipeline,
         ImageToImagePipeline,
         ImageToTextPipeline,
@@ -7058,7 +7061,13 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
