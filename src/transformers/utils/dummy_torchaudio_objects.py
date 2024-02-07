@@ -7,3 +7,10 @@ class MusicgenMelodyFeatureExtractor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torchaudio"])
+
+
+class MusicgenMelodyProcessor(metaclass=DummyObject):
+    _backends = ["torchaudio"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchaudio"])

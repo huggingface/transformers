@@ -27,7 +27,6 @@ _import_structure = {
         "MusicgenMelodyConfig",
         "MusicgenMelodyDecoderConfig",
     ],
-    "processing_musicgen_melody": ["MusicgenMelodyProcessor"],
 }
 
 try:
@@ -51,6 +50,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
+    _import_structure["processing_musicgen_melody"] = ["MusicgenMelodyProcessor"]
 
 
 if TYPE_CHECKING:
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
         MusicgenMelodyConfig,
         MusicgenMelodyDecoderConfig,
     )
-    from .processing_musicgen_melody import MusicgenMelodyProcessor
 
     try:
         if not is_torch_available():
@@ -82,6 +81,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
+        from .processing_musicgen_melody import MusicgenMelodyProcessor
 
 
 else:

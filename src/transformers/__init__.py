@@ -2759,7 +2759,6 @@ else:
             "MusicgenMelodyForConditionalGeneration",
             "MusicgenMelodyModel",
             "MusicgenMelodyPreTrainedModel",
-            "MusicgenMelodyProcessor",
         ]
     )
     _import_structure["models.mvp"].extend(
@@ -4498,6 +4497,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyProcessor")
 
 
 # FLAX-backed objects
@@ -7279,7 +7279,6 @@ if TYPE_CHECKING:
             MusicgenMelodyForConditionalGeneration,
             MusicgenMelodyModel,
             MusicgenMelodyPreTrainedModel,
-            MusicgenMelodyProcessor,
         )
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -8704,9 +8703,9 @@ if TYPE_CHECKING:
         if not is_torchaudio_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        from .utils.torchaudio_objects import *
+        from .utils.dummy_torchaudio_objects import *
     else:
-        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor
+        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
