@@ -529,7 +529,7 @@ class GenerationMixin:
             pass
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
-        if (
+        elif (
             isinstance(decoder_start_token_id, int)
             and (decoder_input_ids[:, 0] != decoder_start_token_id).all().item()
         ) or (
