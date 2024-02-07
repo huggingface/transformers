@@ -83,7 +83,7 @@ Sie sich nicht auf eine bestimmte Architektur festgelegt haben, ist es eine gute
 Wir werden Sie zu den wichtigsten Architekturen führen, die auf der TensorFlow-Seite noch fehlen.
 Seite fehlen. Wenn das spezifische Modell, das Sie mit TensorFlow verwenden möchten, bereits eine Implementierung der TensorFlow-Architektur in
 🤗 Transformers, aber es fehlen Gewichte, können Sie direkt in den
-Abschnitt [Gewichtskonvertierung](#adding-tensorflow-weights-to-hub)
+Abschnitt [Gewichtskonvertierung](#hinzufügen-von-tensorflow-gewichten-zum--hub)
 auf dieser Seite.
 
 Der Einfachheit halber wird im Rest dieser Anleitung davon ausgegangen, dass Sie sich entschieden haben, mit der TensorFlow-Version von

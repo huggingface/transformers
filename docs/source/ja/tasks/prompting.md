@@ -35,7 +35,7 @@ Falcon、LLaMA などの大規模言語モデルは、事前にトレーニン�
 このガイドでは、より優れた LLM プロンプトを作成し、さまざまな NLP タスクを解決するのに役立つプロンプト エンジニアリングのベスト プラクティスについて説明します。
 次のことを学びます:
 
-- [プロンプトの基本](#basic-prompts)
+- [プロンプトの基本](#basics-of-prompting)
 - [LLM プロンプトのベスト プラクティス](#best-practices-of-llm-prompting)
 - [高度なプロンプト テクニック: 数回のプロンプトと思考の連鎖](#advanced-prompting-techniques)
 - [プロンプトを表示する代わりに微調整する場合](#prompting-vs-fine-tuning)
