@@ -209,7 +209,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_head_masking = False
     test_missing_keys = False
     pipeline_model_mapping = (
-        {"feature-extraction": GroundingDinoModel, "object-detection": GroundingDinoForObjectDetection}
+        {"image-feature-extraction": GroundingDinoModel, "object-detection": GroundingDinoForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -356,13 +356,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 3
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+            self.assertEqual(out_len + 3, len(outputs))
 
             self_attentions = outputs.encoder_attentions[-1]
 
@@ -483,18 +477,17 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 [seq_len, self.model_tester.hidden_size],
             )
 
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
+            hidden_states = outputs.decoder_hidden_states
 
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+            self.assertIsInstance(hidden_states, (list, tuple))
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            seq_len = getattr(self.model_tester, "seq_length", None)
+            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [decoder_seq_length, self.model_tester.hidden_size],
+            )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

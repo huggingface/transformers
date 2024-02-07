@@ -2035,17 +2035,18 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                if reference_points.shape[-1] == 4:
+                num_coordinates = reference_points.shape[-1]
+                if num_coordinates == 4:
                     new_reference_points = tmp + torch.special.logit(reference_points, eps=1e-5)
                     new_reference_points = new_reference_points.sigmoid()
-                else:
-                    if reference_points.shape[-1] != 2:
-                        raise ValueError(
-                            f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
-                        )
+                elif num_coordinates == 2:
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(reference_points, eps=1e-5)
                     new_reference_points = new_reference_points.sigmoid()
+                else:
+                    raise ValueError(
+                        f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
+                    )
                 reference_points = new_reference_points.detach()
 
             intermediate += (self.layer_norm(hidden_states),)
@@ -2240,7 +2241,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
 
-    def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
+    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
 
         Args:
@@ -2259,9 +2260,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         proposals = []
         current_position = 0
         for level, (height, width) in enumerate(spatial_shapes):
-            mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)].view(
-                batch_size, height, width, 1
-            )
+            mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)]
+            mask_flatten_ = mask_flatten_.view(batch_size, height, width, 1)
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
@@ -2457,7 +2457,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         enc_outputs_class = None
         enc_outputs_coord_logits = None
         if self.config.two_stage:
-            object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+            object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
                 encoder_outputs[0], ~mask_flatten, spatial_shapes
             )
 
