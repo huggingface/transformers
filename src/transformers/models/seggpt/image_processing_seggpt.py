@@ -282,6 +282,9 @@ class SegGptImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
+        if do_normalize and (image_mean is None or image_std is None):
+            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
