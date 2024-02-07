@@ -3727,16 +3727,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 if param.device == torch.device("meta"):
                     value = torch.empty(*param.size(), dtype=target_dtype)
-                    if getattr(
-                        hf_quantizer, "requires_parameters_quantization", False
-                    ) or not hf_quantizer.check_quantized_param(
-                        model, param_value=value, param_name=key, state_dict={}
+                    if (
+                        hf_quantizer is None
+                        or getattr(hf_quantizer, "requires_parameters_quantization", False)
+                        or not hf_quantizer.check_quantized_param(
+                            model, param_value=value, param_name=key, state_dict={}
+                        )
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
                         hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
 
-        # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
+        # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
             if not ignore_mismatched_sizes:
                 if remove_prefix_from_model:

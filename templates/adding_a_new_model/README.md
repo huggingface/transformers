@@ -217,7 +217,7 @@ Next the questionnaire will ask
 Should we add # Copied from statements when creating the new modeling file?
 ```
 
-This is the intenal mechanism used in the library to make sure code copied from various modeling files stay consistent.
+This is the internal mechanism used in the library to make sure code copied from various modeling files stay consistent.
 If you plan to completely rewrite the modeling file, you should answer no, whereas if you just want to tweak one part
 of the model, you should answer yes.
 

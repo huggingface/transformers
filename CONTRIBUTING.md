@@ -40,8 +40,7 @@ There are several ways you can contribute to 🤗 Transformers:
 
 If you don't know where to start, there is a special [Good First
 Issue](https://github.com/huggingface/transformers/contribute) listing. It will give you a list of
-open issues that are beginner-friendly and help you start contributing to open-source. Just comment on the issue that you'd like to work
-on. 
+open issues that are beginner-friendly and help you start contributing to open-source. The best way to do that is to open a Pull Request and link it to the issue that you'd like to work on. We try to give priority to opened PRs as we can easily track the progress of the fix, and if the contributor does not have time anymore, someone else can take the PR over.
 
 For something slightly more challenging, you can also take a look at the [Good Second Issue](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue) list. In general though, if you feel like you know what you're doing, go for it and we'll help you get there! 🚀
 
@@ -49,7 +48,7 @@ For something slightly more challenging, you can also take a look at the [Good S
 
 ## Fixing outstanding issues
 
-If you notice an issue with the existing code and have a fix in mind, feel free to [start contributing](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#create-a-pull-request) and open a Pull Request!
+If you notice an issue with the existing code and have a fix in mind, feel free to [start contributing](#create-a-pull-request) and open a Pull Request!
 
 ## Submitting a bug-related issue or feature request
 
@@ -261,7 +260,7 @@ You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/mai
 
    If you've already opened a pull request, you'll need to force push with the `--force` flag. Otherwise, if the pull request hasn't been opened yet, you can just push your changes normally.
 
-6. Now you can go to your fork of the repository on GitHub and click on **Pull Request** to open a pull request. Make sure you tick off all the boxes on our [checklist](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#pull-request-checklist) below. When you're ready, you can send your changes to the project maintainers for review.
+6. Now you can go to your fork of the repository on GitHub and click on **Pull Request** to open a pull request. Make sure you tick off all the boxes on our [checklist](#pull-request-checklist) below. When you're ready, you can send your changes to the project maintainers for review.
 
 7. It's ok if maintainers request changes, it happens to our core contributors
    too! So everyone can see the changes in the pull request, work in your local
@@ -295,7 +294,7 @@ repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-te
 to host these files and reference them by URL. We recommend placing documentation
 related images in the following repository:
 [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
-You can open a PR on this dataset repostitory and ask a Hugging Face member to merge it.
+You can open a PR on this dataset repository and ask a Hugging Face member to merge it.
 
 For more information about the checks run on a pull request, take a look at our [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 
