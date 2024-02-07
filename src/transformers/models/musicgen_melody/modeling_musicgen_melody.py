@@ -1448,8 +1448,17 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 f"The encoder {self.text_encoder} should not have a LM Head. Please use a model without and LM Head"
             )
 
-        # tie text encoder, decoder weights if config set accordingly
-        self.tie_weights()
+        # Initialize projection layers weights and tie text encoder and decoder weights if set accordingly
+        self.post_init()
+
+    def _init_weights(self, module):
+        # MusicgenMelodyForConditionalGeneration is made of PreTrainedModels that have already been initialized
+        # Projection layers still need to be initialized.
+        std = self.decoder.config.initializer_factor
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def tie_weights(self):
         # tie text encoder & decoder if needed
