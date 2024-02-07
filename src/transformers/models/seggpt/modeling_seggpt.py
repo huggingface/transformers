@@ -247,7 +247,6 @@ class SegGptPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Modified from transformers.models.sam.modeling_sam.SamVisionAttention
 class SegGptAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
