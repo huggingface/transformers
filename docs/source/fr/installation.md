@@ -186,7 +186,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path t5-s
 
 Le script devrait maintenant s'exécuter sans rester en attente ou attendre une expiration, car il n'essaiera pas de télécharger des modèle sur le Hub.
 
-Vous pouvez aussi éviter de télécharger un modèle à chaque appel de la fonction [~PreTrainedModel.from_pretrained] en utilisant le paramètre [local_files_only]. Seuls les fichiers locaux sont chargés lorsque ce paramètre est activé (c.-à-d. `local_files_only=True`) :
+Vous pouvez aussi éviter de télécharger un modèle à chaque appel de la fonction [`~PreTrainedModel.from_pretrained`] en utilisant le paramètre [local_files_only]. Seuls les fichiers locaux sont chargés lorsque ce paramètre est activé (c.-à-d. `local_files_only=True`) :
 
 ```py
 from transformers import T5Model
