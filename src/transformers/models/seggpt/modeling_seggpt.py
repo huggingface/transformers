@@ -829,9 +829,7 @@ class SegGptModel(SegGptPreTrainedModel):
 
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         pixel_values = pixel_values.to(expected_dtype)
-
-        if prompt_pixel_values.dtype != expected_dtype:
-            prompt_pixel_values = prompt_pixel_values.to(expected_dtype)
+        prompt_pixel_values = prompt_pixel_values.to(expected_dtype)
 
         # Prepera inputs
         pixel_values = torch.cat((prompt_pixel_values, pixel_values), dim=2)
