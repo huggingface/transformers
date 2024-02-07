@@ -478,7 +478,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         # batch_size x num_channels x 2*height x width
         masks = outputs.pred_masks
 
-        # Take predicted mask as input and prompt are concatenated in the height dimension
+        # Predicted mask and prompt are concatenated in the height dimension
         # batch_size x num_channels x height x width
         masks = masks[:, :, masks.shape[2] // 2 :, :]
 
