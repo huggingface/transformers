@@ -498,9 +498,9 @@ class SegGptImageProcessor(BaseImageProcessor):
         semantic_segmentation = []
         palette_tensor = None
         if self.palette is not None:
-                palette_tensor = torch.tensor(self.palette).float().to(masks.device)
-                _, num_channels, _, _ = masks.shape
-                palette_tensor = palette_tensor.view(1, 1, self.num_labels + 1, num_channels)
+            palette_tensor = torch.tensor(self.palette).float().to(masks.device)
+            _, num_channels, _, _ = masks.shape
+            palette_tensor = palette_tensor.view(1, 1, self.num_labels + 1, num_channels)
 
         for idx, mask in enumerate(masks):
             if target_sizes is not None:
