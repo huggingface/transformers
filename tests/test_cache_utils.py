@@ -120,8 +120,8 @@ class CacheTest(unittest.TestCase):
                 )
 
 
-# @require_torch_gpu
-# @slow
+@require_torch_gpu
+@slow
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
@@ -284,7 +284,7 @@ class CacheIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    # @require_torch_gpu
+    @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
     def test_static_cache_greedy_sampling_pad_right(self, attn_implementation):
         EXPECTED_GENERATION = [
