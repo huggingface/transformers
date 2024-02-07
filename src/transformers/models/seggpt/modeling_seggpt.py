@@ -211,11 +211,10 @@ class SegGptEmbeddings(nn.Module):
 
         batch_size, patch_height, patch_width, _ = input_embeddings.shape
 
-        if bool_masked_pos is not None:
-            mask_token = self.mask_token.expand(batch_size, patch_height, patch_width, -1)
-            # replace the masked visual tokens by mask_token
-            w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, patch_height, patch_width, 1)
-            prompt_embeddings = prompt_embeddings * (1 - w) + mask_token * w
+        mask_token = self.mask_token.expand(batch_size, patch_height, patch_width, -1)
+        # replace the masked visual tokens by mask_token
+        w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, patch_height, patch_width, 1)
+        prompt_embeddings = prompt_embeddings * (1 - w) + mask_token * w
 
         embedding_type = embedding_type if embedding_type is not None else "instance"
 
