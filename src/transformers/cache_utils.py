@@ -385,11 +385,10 @@ class StaticCache(Cache):
         k_out = self.key_cache
         v_out = self.value_cache
 
-        key_shape = key_states.shape[-2]
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
 
-        self.seen_tokens += key_shape
+        self.seen_tokens += key_states.shape[-2]
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
