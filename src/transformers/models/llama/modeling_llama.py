@@ -96,31 +96,13 @@ class LlamaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
-        )
 
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
-
-    def forward(self, x, seq_len=None):
+    def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
-        )
-
+        freqs = torch.einsum('bn,pb->np', position_ids.float(), self.inv_freq[:, None].expand(-1,position_ids.shape[0]))
+        # freqs = (self.inv_freq[:,None].expand(-1,x.shape[0]).mul(position_ids.bfloat16())).t()
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
@@ -195,8 +177,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
-    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -355,10 +335,10 @@ class LlamaAttention(nn.Module):
         if past_key_value is not None:
             past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
             kv_seq_len += past_seen_tokens
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
+            
         new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -444,13 +424,19 @@ class LlamaFlashAttention2(LlamaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        past_seen_tokens = 0
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            kv_seq_len += past_seen_tokens
+        
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len,dtype=torch.long, device=key_states.device)
+        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        cos, sin = self.rotary_emb(value_states,position_ids, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids":new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -645,10 +631,10 @@ class LlamaSdpaAttention(LlamaAttention):
         if past_key_value is not None:
             past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
             kv_seq_len += past_seen_tokens
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -661,7 +647,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         causal_mask = None
         if attention_mask is not None:
-            causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]].contiguous()
+            causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -1026,7 +1012,12 @@ class LlamaModel(LlamaPreTrainedModel):
     def _update_causal_mask(self, attention_mask, input_tensor):
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
-        
+
+        # support going beyond cached `max_position_embedding`
+        if seq_length > self.causal_mask.shape[-1]:
+            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]),fill_value=1)
+            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+
         if hasattr(self, "causal_mask"):
             causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
         else:
@@ -1221,13 +1212,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             input_ids = input_ids[:,seen_tokens:]
             position_ids = position_ids[:, seen_tokens:]
 
-        # support going beyond `max_position_embedding`
-        if past_key_value is not None and past_key_value.get_seq_length() > self.causal_mask.shape[-1]:
-            causal_mask = torch.full(
-                (2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]),
-                fill_value=torch.finfo(inputs_embeds.dtype).min,
-            )
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

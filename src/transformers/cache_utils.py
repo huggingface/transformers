@@ -381,15 +381,15 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        position_ids = cache_kwargs.get("position_ids")
-
+        new_cache_positions = cache_kwargs.get("position_ids")
         k_out = self.key_cache
         v_out = self.value_cache
 
-        k_out[:, :, position_ids] = key_states
-        v_out[:, :, position_ids] = value_states
+        key_shape = key_states.shape[-2]
+        k_out[:, :, new_cache_positions] = key_states
+        v_out[:, :, new_cache_positions] = value_states
 
-        self.seen_tokens += key_states.shape[-2]
+        self.seen_tokens += key_shape
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
