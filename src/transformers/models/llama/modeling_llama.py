@@ -203,44 +203,41 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin().to(dtype=dtype, device=device), persistent=False)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+# def rotate_half(x):
+#     """Rotates half the hidden dims of the input."""
+#     x1 = x[..., : x.shape[-1] // 2]
+#     x2 = x[..., x.shape[-1] // 2 :]
+#     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
+# def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+#     """Applies Rotary Position Embedding to the query and key tensors.
 
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
-    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
-    # q_embed = (q * cos) + (rotate_half(q) * sin)
-    # k_embed = (k * cos) + (rotate_half(k) * sin)
-    # return q_embed, k_embed
-    q_fp32 = q.float()
-    k_fp32 = q.float()
-    q_embed = (q_fp32 * cos) + (rotate_half(q_fp32) * sin)
-    k_embed = (k_fp32 * cos) + (rotate_half(k_fp32) * sin)
-    return q_embed.type_as(q), k_embed.type_as(k)
+#     Args:
+#         q (`torch.Tensor`): The query tensor.
+#         k (`torch.Tensor`): The key tensor.
+#         cos (`torch.Tensor`): The cosine part of the rotary embedding.
+#         sin (`torch.Tensor`): The sine part of the rotary embedding.
+#         position_ids (`torch.Tensor`):
+#             The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+#             used to pass offsetted position ids when working with a KV-cache.
+#         unsqueeze_dim (`int`, *optional*, defaults to 1):
+#             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+#             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+#             that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+#             k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+#             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+#             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+#     Returns:
+#         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+#     """
+#     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+#     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
+#     q_fp32 = q.float()
+#     k_fp32 = q.float()
+#     q_embed = (q_fp32 * cos) + (rotate_half(q_fp32) * sin)
+#     k_embed = (k_fp32 * cos) + (rotate_half(k_fp32) * sin)
+#     return q_embed.type_as(q), k_embed.type_as(k)
 
 
 class LlamaMLP(nn.Module):
@@ -273,8 +270,6 @@ class LlamaMLP(nn.Module):
             down_proj = sum(down_proj)
         else:
             down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-            if down_proj.isinf().any():
-                breakpoint()
 
         return down_proj
 
@@ -291,12 +286,12 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
+# def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+#     ndim = x.ndim
+#     assert 0 <= 1 < ndim
+#     assert freqs_cis.shape == (x.shape[0], x.shape[1], x.shape[-1])
+#     shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+#     return freqs_cis.view(*shape)
 
 
 def apply_rotary_emb(
@@ -306,7 +301,7 @@ def apply_rotary_emb(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
+    freqs_cis = freqs_cis[:, :, None, :]
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
@@ -394,8 +389,6 @@ class LlamaAttention(nn.Module):
             )
 
         bsz, q_len, _ = hidden_states.size()
-        if hidden_states.isnan().any() or hidden_states.isinf().any():
-            breakpoint()
 
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
@@ -437,12 +430,12 @@ class LlamaAttention(nn.Module):
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         query_states = torch.stack((query_states[..., :64], query_states[..., 64:]), dim=-1).flatten(3)
         key_states = torch.stack((key_states[..., :64], key_states[..., 64:]), dim=-1).flatten(3)
-        freqs_cis = torch.complex(cos[:, :64], sin[:, :64])
+        freqs_cis = torch.complex(cos[position_ids, :64], sin[position_ids, :64])
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         query_states, key_states = apply_rotary_emb(query_states, key_states, freqs_cis)
-        # query_states = query_states.transpose(1, 2)
-        # key_states = key_states.transpose(1, 2)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
         # query_states = torch.cat((query_states[..., torch.arange(0, 128, 2)], query_states[..., torch.arange(1, 128, 2)]), dim=3)
         # key_states = torch.cat((key_states[..., torch.arange(0, 128, 2)], key_states[..., torch.arange(1, 128, 2)]), dim=3)
 
@@ -454,8 +447,8 @@ class LlamaAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-        query_states = query_states.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-        key_states = key_states.transpose(1, 2) # (bs, n_local_heads, cache_len + seqlen, head_dim)
+        # query_states = query_states.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        # key_states = key_states.transpose(1, 2) # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -496,9 +489,6 @@ class LlamaAttention(nn.Module):
 
         if not output_attentions:
             attn_weights = None
-
-        if attn_output.isnan().any() or attn_output.isinf().any():
-            breakpoint()
 
         return attn_output, attn_weights, past_key_value
 
@@ -854,9 +844,6 @@ class LlamaDecoderLayer(nn.Module):
             )
 
         residual = hidden_states
-        if residual.isnan().any() or residual.isinf().any():
-            breakpoint()
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -878,9 +865,6 @@ class LlamaDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
-
-        if hidden_states.isnan().any() or hidden_states.isinf().any():
-            breakpoint()
 
         if output_attentions:
             outputs += (self_attn_weights,)
