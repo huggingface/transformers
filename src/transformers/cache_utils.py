@@ -340,7 +340,7 @@ class StaticCache(Cache):
             The maximum sequence length with which the model will be used.
         device (`torch.device`):
             The device on which the cache should be initialized. Should be the same as the layer.
-        dtype (*optional*, `torch.dtype`, defaults to `torch.float32`):
+        dtype (*optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
     """
 
