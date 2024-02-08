@@ -597,6 +597,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_two_stage_training with DeformableDetr->GroundingDino
     def test_two_stage_training(self):
         model_class = GroundingDinoForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -734,7 +735,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # 2. run model on GPU
         model.to("cuda")
-        encoding = {key: value.to("cuda") for key, value in encoding.items()}
+        encoding = encoding.to("cuda")
         with torch.no_grad():
             gpu_outputs = model(**encoding)
 
