@@ -596,8 +596,9 @@ class SudachiTokenizer:
         )
         if is_sudachi_projection_available():
             self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
+        elif self.projection is not None:
+            raise ImportError("You need to install sudachipy>=0.6.8 to specify `projection` field in sudachi_kwargs.")
         else:
-            Raise ImportError("You need to install sudachipy>=0.6.8 to specify `projection` field in sudachi_kwargs."
             self.sudachi = sudachi_dictionary.create(self.split_mode)
 
     def tokenize(self, text, never_split=None, **kwargs):
