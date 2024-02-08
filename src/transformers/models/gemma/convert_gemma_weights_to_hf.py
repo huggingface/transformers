@@ -122,7 +122,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/Users/arthurzucker/Work/gemma/ckpt/7b.ckpt",
         help="Location of Gemma weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
@@ -138,7 +137,7 @@ def main():
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
-    spm_path = os.path.join("/Users/arthurzucker/Work/gemma/code/tokenizer.model")
+    spm_path = os.path.join(args.input_dir,"tokenizer.model")
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
