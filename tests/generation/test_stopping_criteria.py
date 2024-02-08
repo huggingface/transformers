@@ -122,11 +122,12 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "<|im_start|><|im_end|",
             "<|im_start|><|im_end|<|im_end|",
             "<|im_end|><|im_start|>",
-            "<|im_end|><|im_start|",
+            "<|im_end|<><|im_end|",
             ]
         tokenizer.pad_token_id = tokenizer.eos_token_id
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", padding_side="left")
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", padding_side="left")
+        tokenizer.padding_side = "left"
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest")
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest")
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
         self.assertTrue(criteria(true_input_ids["input_ids"], scores))
@@ -134,8 +135,10 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # Now try it with a tokenizer where those are actually special tokens
         tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", padding_side="left")
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", padding_side="left")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "left"
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest")
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest")
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
         self.assertTrue(criteria(true_input_ids["input_ids"], scores))
         self.assertFalse(criteria(false_input_ids["input_ids"], scores))
