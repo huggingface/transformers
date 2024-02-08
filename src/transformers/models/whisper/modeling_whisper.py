@@ -1258,7 +1258,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
-        self.layers = nn.ModuleList([WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
+        )
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
@@ -1368,10 +1370,17 @@ class WhisperDecoder(WhisperPreTrainedModel):
         # past_key_values_length
         past_key_values_length = 0
         if use_cache:
-            use_legacy_cache = not (past_key_values is not None and isinstance(past_key_values, Cache))
+            use_legacy_cache = not (past_key_values is not None and isinstance(past_key_values[0], Cache))
             if use_legacy_cache:
-                past_key_values = 2 * (past_key_values,) if past_key_values is None else past_key_values
-                past_key_values = [DynamicCache.from_legacy_cache(past_key_values[0]), DynamicCache.from_legacy_cache(past_key_values[1])]
+                if past_key_values is None:
+                    self_attn = cross_attn = None
+                else:
+                    self_attn = [key_values[:2] for key_values in past_key_values]
+                    cross_attn = [key_values[2:] for key_values in past_key_values]
+                past_key_values = (
+                    DynamicCache.from_legacy_cache(self_attn),
+                    DynamicCache.from_legacy_cache(cross_attn),
+                )
             past_key_values_length = past_key_values[0].get_seq_length()
 
         if inputs_embeds is None:
@@ -1476,7 +1485,12 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = (next_decoder_cache[0].to_legacy_cache(), next_decoder_cache[1].to_legacy_cache()) if use_legacy_cache else next_decoder_cache
+            if use_legacy_cache:
+                next_cache = ()
+                for self_attn, cross_attn in zip(
+                    next_decoder_cache[0].to_legacy_cache(), next_decoder_cache[1].to_legacy_cache()
+                ):
+                    next_cache += (self_attn + cross_attn,)
         if not return_dict:
             return tuple(
                 v
@@ -1814,10 +1828,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         if decoder_attention_mask is not None:
             decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
         if past_key_values is not None:
-            if isinstance(past_key_values[0], tuple):
-                past_length = past_key_values[0][0][0].shape[2]
-            else:
+            if isinstance(past_key_values[0], Cache):
                 past_length = past_key_values[0].get_seq_length
+            else:
+                past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:
