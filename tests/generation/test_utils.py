@@ -3500,3 +3500,4 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model.generate(**inputs, **generation_kwargs)
         # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
         self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)
+        
