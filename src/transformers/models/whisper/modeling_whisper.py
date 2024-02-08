@@ -1484,13 +1484,12 @@ class WhisperDecoder(WhisperPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
-        if use_cache:
-            if use_legacy_cache:
-                next_cache = ()
-                for self_attn, cross_attn in zip(
-                    next_decoder_cache[0].to_legacy_cache(), next_decoder_cache[1].to_legacy_cache()
-                ):
-                    next_cache += (self_attn + cross_attn,)
+        if use_cache and use_legacy_cache:
+            next_cache = ()
+            for self_attn, cross_attn in zip(
+                next_decoder_cache[0].to_legacy_cache(), next_decoder_cache[1].to_legacy_cache()
+            ):
+                next_cache += (self_attn + cross_attn,)
         if not return_dict:
             return tuple(
                 v
