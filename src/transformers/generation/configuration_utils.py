@@ -233,8 +233,11 @@ class GenerationConfig(PushToHubMixin):
         encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+        decoder_start_token_id (`Union[int, List[int]]`, *optional*):
+            If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token or a list of length
+            `batch_size`. Indicating a list enables different start ids for each element in the batch
+            (e.g. multilingual models with different target languages in one batch)
+
 
         > Generation parameters exclusive to [assistant generation](https://arxiv.org/abs/2211.17192)
 
