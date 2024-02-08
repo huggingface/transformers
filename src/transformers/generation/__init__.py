@@ -86,6 +86,7 @@ else:
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
+        "StopStringCriteria",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -225,6 +226,7 @@ if TYPE_CHECKING:
             StoppingCriteria,
             StoppingCriteriaList,
             validate_stopping_criteria,
+            StopStringCriteria,
         )
         from .utils import (
             BeamSampleDecoderOnlyOutput,
