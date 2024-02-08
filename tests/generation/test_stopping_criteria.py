@@ -110,9 +110,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(len(stopping_criteria), 1)
 
     def test_stop_string_criteria(self):
-        # Use a tokenizer that won't actually have special tokens for these
-        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-
         true_strings = [
             "<|im_start|><|im_end|>",
             "<|im_start|><|im_end|<|im_end|>",
@@ -125,6 +122,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "<|im_end|<><|im_end|",
         ]
         too_short_strings = ["<|im_end|", "|im_end|>"]
+
+        # Use a tokenizer that won't actually have special tokens for these
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
         true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
