@@ -1363,6 +1363,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 return_pixel_mask=True,
                 data_format=data_format,
                 input_data_format=input_data_format,
+                return_tensors=return_tensors,
             )
         else:
             images = [

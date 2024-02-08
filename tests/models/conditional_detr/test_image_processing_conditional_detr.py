@@ -248,3 +248,76 @@ class ConditionalDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcess
         # verify size
         expected_size = torch.tensor([800, 1066])
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
+
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr->ConditionalDetr
+    def test_batched_coco_detection_annotations(self):
+        image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        w_0, h_0 = image_0.size
+        image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
+
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        annotations_0 = {"image_id": 39769, "annotations": target}
+        annotations_1 = {"image_id": 39769, "annotations": target}
+        for i in range(len(annotations_1["annotations"])):
+            coords = annotations_1["annotations"][i]["bbox"]
+            new_bbox = [
+                coords[0] * 800 / w_0,
+                coords[1] * 800 / h_0,
+                coords[2] * 800 / w_0,
+                coords[3] * 800 / h_0,
+            ]
+            print(coords, new_bbox)
+            annotations_1["annotations"][i]["bbox"] = new_bbox
+
+        images = [image_0, image_1]
+        annotations = [annotations_0, annotations_1]
+
+        image_processing = ConditionalDetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+        encoding = image_processing(
+            images=images, annotations=annotations, return_segmentation_masks=True, return_tensors="pt"
+        )
+
+        # Check the pixel values have been padded
+        expected_shape = torch.Size([2, 3, 800, 1066])
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+
+        # Check the masks have also been padded
+        self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
+        self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
+
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->ConditionalDetr
+    def test_batched_coco_panoptic_annotations(self):
+        # prepare image, target and masks_path
+        image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
+
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+        annotation_1 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+
+        masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
+
+        images = [image_0, image_1]
+        annotations = [annotation_0, annotation_1]
+
+        # encode them
+        image_processing = ConditionalDetrImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
+        encoding = image_processing(
+            images=images,
+            annotations=annotations,
+            masks_path=masks_path,
+            return_tensors="pt",
+            return_segmentation_masks=True,
+        )
+
+        # Check the pixel values have been padded
+        expected_shape = torch.Size([2, 3, 800, 1066])
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+
+        # Check the masks have also been padded
+        self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
+        self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
