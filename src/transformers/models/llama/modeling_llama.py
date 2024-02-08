@@ -1026,18 +1026,21 @@ class LlamaModel(LlamaPreTrainedModel):
 
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
-        
+
         # support going beyond cached `max_position_embedding`
         if seq_length > self.causal_mask.shape[-1]:
             causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
-        if hasattr(self, "causal_mask"): # we use the current dtype to avoid any overflows
+        if hasattr(self, "causal_mask"):  # we use the current dtype to avoid any overflows
             causal_mask = (
                 self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
             )
         else:
-            mask = torch.full((self.config.max_position_embeddings, self.config.max_position_embeddings),fill_value=torch.finfo(dtype).min)
+            mask = torch.full(
+                (self.config.max_position_embeddings, self.config.max_position_embeddings),
+                fill_value=torch.finfo(dtype).min,
+            )
             causal_mask = torch.triu(mask, diagonal=1).to(dtype)
 
         if attention_mask is not None and attention_mask.dim() == 2:

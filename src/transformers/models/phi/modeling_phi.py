@@ -77,6 +77,7 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Phi
 class PhiRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
