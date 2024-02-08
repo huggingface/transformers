@@ -2,12 +2,13 @@ import time
 import warnings
 from abc import ABC
 from copy import deepcopy
-from typing import Optional, List, Union
+from typing import List, Optional, Union
+
+import numpy as np
+import torch
+from torch.nn import functional as F
 
 from ..tokenization_utils_base import PreTrainedTokenizerBase
-
-import torch
-
 from ..utils import add_start_docstrings, logging
 
 
@@ -130,10 +131,8 @@ class MaxTimeCriteria(StoppingCriteria):
 
 class StopStringCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever specific string sequences are encountered. Because the same
-    substring can be tokenized in different ways depending on context, this class expands strings up into every possible
-    token sequence that could contain them in a preprocessing step, then does a vectorized comparison against
-    `input_ids` during generation. This is much faster than doing detokenization inside the generation loop.
+    This class can be used to stop generation whenever specific string sequences are encountered. It preprocesses
+    the strings together with the tokenizer vocab to find positions where tokens can validly complete the stop strings.
 
     Args:
         tokenizer (`PreTrainedTokenizer`):
@@ -144,38 +143,139 @@ class StopStringCriteria(StoppingCriteria):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):
-        vocab = tokenizer.get_vocab()
-        tok_list = list(vocab.keys())
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
+
+        self.tokenizer = tokenizer
+        self.stop_strings: List[str] = stop_strings
+        self.strings_to_valid_positions, self.strings_to_end_lengths = self.get_matching_positions(
+            tokenizer, stop_strings
+        )
+
+        self.max_valid_positions = {
+            stop_string: max([len(val) for val in self.strings_to_valid_positions[stop_string].values()])
+            for stop_string in stop_strings
+        }
+        self.global_max_position = max(self.max_valid_positions.values())
+        self.max_valid_end_lens = {
+            stop_string: max([len(val) for val in self.strings_to_end_lengths[stop_string].values()])
+            for stop_string in stop_strings
+        }
+        self.embedding_vecs = self.create_embedding_vecs()
+
+    @staticmethod
+    def get_matching_positions(tokenizer, stop_strings):
+        """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
+        validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
+        valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
+        end of the stop string."""
+        vocab = tokenizer.get_vocab()
+        tok_list = list(vocab.keys())
+        strings_to_valid_positions = {}
+        strings_to_end_lengths = {}
         for stop_string in stop_strings:
+            strings_to_valid_positions[stop_string] = {}
+            strings_to_end_lengths[stop_string] = {}
             for token in tok_list:
                 matching_positions = []
+                possible_end_lengths = []
                 for i in range(1 - len(token), len(stop_string)):
+                    tok = token[::-1].replace("▁", " ")
+                    stop = stop_string[::-1]
                     if i < 0:
-                        token = token[:i]
-                        if not token:
-                            raise ValueError("Token is null - this is a bug!")
+                        tok = tok[-i:]
+                        if not tok:
+                            raise ValueError("Tok is null - this is a bug!")
                         i = 0
-                    stop_string = stop_string[i: i + len(token)]
-                    if not stop_string:
-                        raise ValueError("Stop string is null - this is a bug!")
-                    if len(token) > len(stop_string):
-                        token = token[-len(stop_string):]
-                        if not token:
-                            raise ValueError("Token is null after stop string truncation - this is a bug!")
-                    if token == stop_string:
-                        matching_positions.append((i, len(token)))
+                    stop = stop[i : i + len(tok)]
+                    if not stop:
+                        raise ValueError("Stop is null - this is a bug!")
+                    if len(tok) > len(stop):
+                        tok = tok[: len(stop)]
+                        if not tok:
+                            raise ValueError("Tok is null after stop string truncation - this is a bug!")
+                    if len(tok) != len(stop):
+                        raise ValueError("Truncated token and stop string have different lengths - this is a bug!")
+                    if tok == stop:
+                        if i == 0:
+                            possible_end_lengths.append(len(tok))
+                        else:
+                            matching_positions.append(i)
+                if matching_positions:
+                    strings_to_valid_positions[stop_string][token] = matching_positions
+                if possible_end_lengths:
+                    strings_to_end_lengths[stop_string][token] = possible_end_lengths
+        return strings_to_valid_positions, strings_to_end_lengths
 
+    def create_embedding_vecs(self):
+        """
+        This function builds an embedding matrix for each stop string, consisting of possible valid positions
+        and possible end lengths for each token, and the total length of the token string. When tokens have
+        fewer valid positions or end lengths than the maximum, we pad the vectors with -1000.
+        The value of -1000 is chosen to be very negative and thus overwhelm any positive values
+        in the cumsum() calls later.
+        """
+        vocab = self.tokenizer.get_vocab()
+        embedding_vecs = {}
+        for stop_string in self.stop_strings:
+            positions = self.strings_to_valid_positions[stop_string]
+            end_lens = self.strings_to_end_lengths[stop_string]
+            # TODO Matt: Merge the embeddings across all stop strings to save space and reduce gather calls?
 
-
-
-
-
+            # Since this is lots of very small assignments of lists, we build it with numpy rather
+            # than torch for speed + simplicity, then convert to torch at the end
+            max_valid_positions = self.max_valid_positions[stop_string]
+            max_valid_end_lens = self.max_valid_end_lens[stop_string]
+            vec_size = max_valid_positions + max_valid_end_lens + 1
+            gather_vec = np.full((len(self.tokenizer), vec_size), dtype=np.int32, fill_value=-1000)
+            for token, valid_positions in positions.items():
+                token_idx = vocab[token]
+                gather_vec[token_idx, : len(valid_positions)] = valid_positions
+            for token, possible_end_lens in end_lens.items():
+                token_idx = vocab[token]
+                gather_vec[
+                    token_idx, max_valid_positions : max_valid_positions + len(possible_end_lens)
+                ] = possible_end_lens
+            for token, token_idx in vocab.items():
+                gather_vec[token_idx, -1] = len(token)
+            embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32)
+        return embedding_vecs
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        return time.time() - self.initial_timestamp > self.max_time
+        # TODO Joao - I'm not using the scores at all and just checking the most recent tokens in input_ids
+        #      Is this correct? Should I be sampling from scores?
+        # Note that input_ids can also be *shorter* than the global max position, and the code below should be
+        # ready for that
+        input_ids = input_ids[:, -self.global_max_position :]
+        flipped_ids = torch.flip(input_ids, (1,))
+        string_matches = []
+        for stop_string in self.stop_strings:
+            target_len = len(stop_string)
+            max_valid_positions = self.max_valid_positions[stop_string]
+            max_valid_end_lens = self.max_valid_end_lens[stop_string]
+            embedding_vec = self.embedding_vecs[stop_string]
+            embedded = F.embedding(flipped_ids, embedding_vec)
+
+            starts = embedded[:, :1, max_valid_positions : max_valid_positions + max_valid_end_lens]
+            lengths = embedded[:, 1:, -1:]
+            lengths = lengths.expand((-1, -1, starts.shape[-1]))
+            lengths_with_starts = torch.cat([starts, lengths], dim=1)
+            cumsum = lengths_with_starts.cumsum(dim=1)
+            valid_positions = embedded[:, 1:, :max_valid_positions]
+
+            initial_match = torch.any(starts > 0, dim=-1, keepdim=True)
+            later_match = torch.isin(cumsum[:, :-1], valid_positions)
+            match = torch.cat([initial_match, later_match], dim=1)
+
+            mask = (~match).cumsum(dim=1, dtype=torch.int32)
+            mask = mask == 0
+
+            string_matches.append(torch.max(cumsum * mask, dim=1).values.squeeze() >= target_len)
+
+        # Now we concatenate matches across all strings and check if any are True
+        string_matches = torch.cat(string_matches, dim=0)
+        return torch.any(string_matches).item()
 
 
 class StoppingCriteriaList(list):
