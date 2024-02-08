@@ -527,7 +527,7 @@ def attention_mask_func(attention_scores, ltor_mask):
 
 
 class GPTNeoXRotaryEmbedding(nn.Module):
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.__init__
+    # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -566,7 +566,7 @@ class GPTNeoXRotaryEmbedding(nn.Module):
 class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """GPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralLinearScalingRotaryEmbedding.__init__
+    # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
