@@ -17,7 +17,7 @@ import warnings
 
 import torch
 
-from transformers import FlaxGemmaForCausalLM, GemmaConfig, GemmaForCausalLM, GemmaTokenizer
+from transformers import GemmaConfig, GemmaForCausalLM, GemmaTokenizer
 
 
 try:
@@ -61,7 +61,6 @@ gemma_2b_config = GemmaConfig(
 gemma_7b_config = GemmaConfig()
 
 CONFIG_MAPPING = {"2B": gemma_2b_config, "7B": gemma_7b_config}
-
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 
@@ -71,7 +70,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_kv_heads = config.num_key_value_heads
     head_dim = config.head_dim
 
-    print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
+    print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
     model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
     model_state_dict.pop("freqs_cis")
 
@@ -107,7 +106,27 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     model.config.torch_dtype = torch.float32
     del model.config._name_or_path
     print("Saving in the Transformers format.")
-    model.save_pretrained(save_path, safe_serialization=safe_serialization)
+    push_to_hub = True
+    if push_to_hub:
+        print(f"pushing the model to {save_path}")
+        response = input("Please enter yes or no: ").lower().strip()
+        result = response == "yes"
+        if result:
+            model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
+            print(f"Pushed float32")
+            
+            fp16_model = model.to(torch.float16)
+            fp16_model.push_to_hub(save_path, safe_serialization=safe_serialization, revision="float16", private=True)
+            del fp16_model
+            print(f"Pushed float16")
+            
+            bf16_model = model.to(torch.bfloat16)
+            bf16_model.push_to_hub(save_path, safe_serialization=safe_serialization, revision="bfloat16", private=True)
+            print(f"Pushed bfloat16")
+    else:
+        model.save_pretrained(save_path, safe_serialization=safe_serialization)
+    
+            
 
 
 def write_tokenizer(input_tokenizer_path, save_path):
@@ -137,7 +156,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="gemma_7b",
+        default="gg-hf/gemma-7b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(

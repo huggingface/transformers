@@ -41,7 +41,7 @@ class GemmaConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GemmaModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
@@ -118,7 +118,7 @@ class GemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256128,
+        vocab_size=256000,
         hidden_size=3072,
         intermediate_size=24576,
         num_hidden_layers=28,
