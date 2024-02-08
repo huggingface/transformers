@@ -128,7 +128,7 @@ class MaxTimeCriteria(StoppingCriteria):
         return time.time() - self.initial_timestamp > self.max_time
 
 
-class TerminationSequenceCriteria(StoppingCriteria):
+class StopStringCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever specific string sequences are encountered. Because the same
     substring can be tokenized in different ways depending on context, this class expands strings up into every possible
@@ -138,39 +138,39 @@ class TerminationSequenceCriteria(StoppingCriteria):
     Args:
         tokenizer (`PreTrainedTokenizer`):
             The model's associated tokenizer (necessary to extract vocab and tokenize the termination sequences)
-        termination_sequences (`Union[str, List[str]]`):
-            The sequences that should end generation. If a string is passed, it will be treated like a
+        stop_strings (`Union[str, List[str]]`):
+            A list of strings that should end generation. If a string is passed, it will be treated like a
             list with a single element.
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, termination_sequences: Union[str, List[str]]):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):
         vocab = tokenizer.get_vocab()
         tok_list = list(vocab.keys())
-        if isinstance(termination_sequences, str):
-            termination_sequences = [termination_sequences]
-        termination_tokens = []
-        for seq in termination_sequences:
-            if seq in tokenizer.special_tokens_map.values():
-                # If it's a special token it won't be split, so we can just use it directly
-                termination_tokens.append(vocab[seq])
-                continue
-            # If it isn't a special token, we need to figure out all sequences of tokens which contain this string.
-            # This is horribly inefficient, but it'll do to start.
-            bridging_seqs = []
-            for prefix_len in range(1, len(seq) + 1):
-                for suffix_len in range(len(seq), len(seq) - prefix_len, -1):
-                    prefix = seq[:prefix_len]
-                    suffix = seq[-suffix_len:]
-                    middle = seq[prefix_len:-suffix_len]
-                    possible_starts = [token for token in tok_list if token.endswith(prefix)]
-                    possible_ends = [token for token in tok_list if token.startswith(suffix)]
-                    if not possible_starts or not possible_ends:
-                        continue
-                    bridging_seqs.extend([start + middle + end for start in possible_starts for end in possible_ends])
-            if not bridging_seqs:
-                raise ValueError("Couldn't find any set of tokens spanning the termination sequence " + seq)
-            bridging_seqs = list(set(bridging_seqs))  # Uniquify just in case
-            termination_tokens.extend(tokenizer(bridging_seqs, add_special_tokens=False)['input_ids'])
+        if isinstance(stop_strings, str):
+            stop_strings = [stop_strings]
+        for stop_string in stop_strings:
+            for token in tok_list:
+                matching_positions = []
+                for i in range(1 - len(token), len(stop_string)):
+                    if i < 0:
+                        token = token[:i]
+                        if not token:
+                            raise ValueError("Token is null - this is a bug!")
+                        i = 0
+                    stop_string = stop_string[i: i + len(token)]
+                    if not stop_string:
+                        raise ValueError("Stop string is null - this is a bug!")
+                    if len(token) > len(stop_string):
+                        token = token[-len(stop_string):]
+                        if not token:
+                            raise ValueError("Token is null after stop string truncation - this is a bug!")
+                    if token == stop_string:
+                        matching_positions.append((i, len(token)))
+
+
+
+
+
 
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
