@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Meta AI, EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Google Inc., EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -127,7 +127,7 @@ GEMMA_INPUTS_DOCSTRING = r"""
 
 
 def create_sinusoidal_positions(num_pos, dim):
-    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) [: (dim // 2)] / dim))
+    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2)[: (dim // 2)] / dim))
     freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
 
     emb = np.concatenate((freqs, freqs), axis=-1)
@@ -135,6 +135,7 @@ def create_sinusoidal_positions(num_pos, dim):
     return jnp.array(out[:, :, :num_pos])
 
 
+# Copied from transformers.models.llama.modeling_flax_llama.rotate_half
 def rotate_half(tensor):
     """Rotates half the hidden dims of the input."""
     rotate_half_tensor = jnp.concatenate(
@@ -143,6 +144,7 @@ def rotate_half(tensor):
     return rotate_half_tensor
 
 
+# Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
@@ -170,6 +172,7 @@ class FlaxGemmaRotaryEmbedding(nn.Module):
     config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
 
+    # Ignore copy
     def setup(self):
         head_dim = self.config.head_dim
         self.sincos = create_sinusoidal_positions(self.config.max_position_embeddings, head_dim)
@@ -219,9 +222,7 @@ class FlaxGemmaAttention(nn.Module):
             dtype=self.dtype,
             kernel_init=kernel,
         )
-        self.o_proj = nn.Dense(
-            self.embed_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel
-        )
+        self.o_proj = nn.Dense(self.embed_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel)
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxGemmaRotaryEmbedding(config, dtype=self.dtype)
@@ -233,6 +234,7 @@ class FlaxGemmaAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads * self.head_dim,))
 
     @nn.compact
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached

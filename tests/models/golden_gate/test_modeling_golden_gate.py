@@ -477,7 +477,6 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
-
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_fp16(self):
@@ -504,8 +503,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
-            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
+            "Hello my name is <strong><em><u>A.J.</u></em></strong> and I am a <strong><em><u>Certified",
+            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public void OnClick(",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -562,8 +561,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear about",
-            "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
+            "Hello my name is ***** ***** I will be assisting you today.\n\nI am sorry to hear you are having issues with",
+            "Hi,\n\nI have a 2006 320d with 100",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -578,12 +577,42 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    def test_model_7b_fp16_logits(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_LOGITS = (
+            torch.Tensor(
+                [
+                    [[-194.0000, -187.8750, -169.8750], [70.3750, 86.1875, -18.5312], [-58.9062, -45.7188, -115.8750]],
+                    [
+                        [-272.2500, -271.0000, -293.2500],
+                        [-275.5000, -272.7500, -258.2500],
+                        [-280.2500, -276.0000, -280.5000],
+                    ],
+                ]
+            )
+            .half()
+            .to(torch_device)
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        with torch.no_grad():
+            output = model(**inputs).logits[:, :3, :3]
+
+        self.assertTrue(torch.allclose(output, EXPECTED_LOGITS, rtol=1e-3, atol=1e-3))
+
     def test_model_7b_bf16(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is***** and I am a licensed veterinarian with Just Answer. I am so sorry to hear that you are",
-            'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
+            "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear you",
+            'Hi,\n\nI have a problem with the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -603,8 +632,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            'Hello my name is***** and I will be helping you with Bumblebee. I am not a fan of the new "',
-            "Hiệu của 2 số là:\n\n1001x2=2002\n\n",
+            "Hello my name is***** will be glad to help you with this. The first thing I would do is to make sure",
+            "Hiệu của 2 số là 1memcmp(1000000000",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)

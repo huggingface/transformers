@@ -15,10 +15,10 @@
 
 import unittest
 
-import numpy as np
 import jax
+import numpy as np
 
-from transformers import GemmaConfig, is_flax_available, is_tokenizers_available, FlaxGemmaForCausalLM, AutoTokenizer
+from transformers import GemmaConfig, is_flax_available, is_tokenizers_available, AutoTokenizer
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -35,7 +35,7 @@ if is_flax_available():
 
 
 if is_tokenizers_available():
-    from transformers import LlamaTokenizerFast
+    pass
 
 
 class FlaxGemmaModelTester:
@@ -209,6 +209,7 @@ class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 @require_flax
 class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello my name is", "Hi"]
+
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
@@ -226,7 +227,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -249,7 +250,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -272,7 +273,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -296,7 +297,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -319,7 +320,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -342,7 +343,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
