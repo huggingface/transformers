@@ -70,15 +70,15 @@ class GroundingDinoModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        num_queries=12,
+        num_queries=2,
         num_channels=3,
-        image_size=64,
+        image_size=10,
         n_targets=8,
-        num_labels=91,
+        num_labels=3,
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
-        max_text_len=256,
+        max_text_len=7,
     ):
         self.parent = parent
         self.batch_size = batch_size

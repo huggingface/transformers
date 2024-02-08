@@ -2377,8 +2377,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         masks = []
         for level, (source, mask) in enumerate(vision_features):
             sources.append(self.input_proj_vision[level](source))
-            if mask is None:
-                raise ValueError("No attention mask was provided")
             masks.append(mask)
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
