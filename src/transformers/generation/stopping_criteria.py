@@ -210,9 +210,7 @@ class StopStringCriteria(StoppingCriteria):
         """
         This function builds an embedding matrix for each stop string, consisting of possible valid positions
         and possible end lengths for each token, and the total length of the token string. When tokens have
-        fewer valid positions or end lengths than the maximum, we pad the vectors with -1000.
-        The value of -1000 is chosen to be very negative and thus overwhelm any positive values
-        in the cumsum() calls later.
+        fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
         """
         vocab = self.tokenizer.get_vocab()
         embedding_vecs = {}
@@ -226,7 +224,7 @@ class StopStringCriteria(StoppingCriteria):
             max_valid_positions = self.max_valid_positions[stop_string]
             max_valid_end_lens = self.max_valid_end_lens[stop_string]
             vec_size = max_valid_positions + max_valid_end_lens + 1
-            gather_vec = np.full((len(self.tokenizer), vec_size), dtype=np.int32, fill_value=-1000)
+            gather_vec = np.full((len(self.tokenizer), vec_size), dtype=np.int32, fill_value=-1)
             for token, valid_positions in positions.items():
                 token_idx = vocab[token]
                 gather_vec[token_idx, : len(valid_positions)] = valid_positions
@@ -248,32 +246,47 @@ class StopStringCriteria(StoppingCriteria):
         # *shorter* than the global max, and the code below should be ready for that
         maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         input_ids = input_ids[:, -maximum_token_len:]
+        # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
         string_matches = []
         for stop_string in self.stop_strings:
             target_len = len(stop_string)
             max_valid_positions = self.max_valid_positions[stop_string]
             max_valid_end_lens = self.max_valid_end_lens[stop_string]
+            # The embedding vec contains the valid positions, end_lengths and total lengths for each token
             embedding_vec = self.embedding_vecs[stop_string]
             embedded = F.embedding(flipped_ids, embedding_vec)
 
+            # Starts contains the number of characters from the string, counting from the end, that the token contains
+            # It can have multiple values if the same token can overlap different slices of the end of the string
             starts = embedded[:, :1, max_valid_positions : max_valid_positions + max_valid_end_lens]
+            # Lengths is the total length of each token. Unlike starts, it always has a single value
             lengths = embedded[:, 1:, -1:]
             lengths = lengths.expand((-1, -1, starts.shape[-1]))
             lengths_with_starts = torch.cat([starts, lengths], dim=1)
+            # We concatenate each possible starting length with the lengths of the remaining tokens in input_ids
+            # Then we cumsum() to get the total length of the string after each token
             cumsum = lengths_with_starts.cumsum(dim=1)
-            valid_positions = embedded[:, 1:, :max_valid_positions]
 
+            # Valid positions are the positions in the string that the token can validly appear after
+            valid_positions = embedded[:, 1:, :max_valid_positions]
+            # Tokens can match the start of the string if they have any valid value in the starts vector
             initial_match = torch.any(starts > 0, dim=-1, keepdim=True)
+            # Tokens can continue the string if the cumsum() so far is one of the valid positions for that token
+            # Note that we're actually tracking one cumsum() for the list for each possible start overhang length
             later_match = torch.isin(cumsum[:, :-1], valid_positions)
+            # The match vector is a boolean vector that indicates which positions have valid tokens
             match = torch.cat([initial_match, later_match], dim=1)
 
+            # Once a single position does not match, all positions following that position are masked
             mask = (~match).cumsum(dim=1, dtype=torch.int32)
             mask = mask == 0
 
+            # The string is matched if we reached a cumsum equal to or greater than the length of the string
+            # before hitting the masked run
             string_matches.append(torch.max(cumsum * mask, dim=1).values.squeeze() >= target_len)
 
-        # Now we concatenate matches across all strings and check if any are True
+        # Now we concatenate the match booleans across all strings and check if any are True
         string_matches = torch.cat(string_matches, dim=0)
         return torch.any(string_matches).item()
 
