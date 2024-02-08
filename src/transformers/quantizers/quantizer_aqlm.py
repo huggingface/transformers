@@ -35,7 +35,7 @@ class AqlmHfQuantizer(HfQuantizer):
     Quantizer of the AQLM method. Enables the loading of prequantized models.
     """
 
-    requires_calibration = False
+    requires_calibration = True
     required_packages = ["aqlm"]
     optimum_quantizer = None
 
@@ -49,11 +49,16 @@ class AqlmHfQuantizer(HfQuantizer):
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            torch_dtype = torch.float16
-        elif torch_dtype != torch.float16:
-            raise RuntimeError(
-                "AQLM only supports float16 for now. Please set `torch_dtype=torch.float16` when loading the model."
-            )
+            if torch.cuda.is_available():
+                torch_dtype = torch.float16
+                logger.info(
+                    "CUDA available. Assuming AQLM inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
+                )
+            else:
+                torch_dtype = torch.float32
+                logger.info(
+                    "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `torch_dtype` manually."
+                )
         return torch_dtype
 
     def _process_model_before_weight_loading(
