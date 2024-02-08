@@ -16,7 +16,7 @@
 import time
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, AutoTokenizer
 from transformers.testing_utils import require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
@@ -29,6 +29,7 @@ if is_torch_available():
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,
+        StopStringCriteria,
         StoppingCriteriaList,
         validate_stopping_criteria,
     )
@@ -107,3 +108,34 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         stopping_criteria = validate_stopping_criteria(StoppingCriteriaList(), 11)
 
         self.assertEqual(len(stopping_criteria), 1)
+
+    def test_stop_string_criteria(self):
+        # Use a tokenizer that won't actually have special tokens for these
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        true_strings = [
+            "<|im_start|><|im_end|>",
+            "<|im_start|><|im_end|<|im_end|>",
+            ">><|im_start|>><|im_end|>",
+        ]
+        false_strings = [
+            "<|im_start|><|im_end|",
+            "<|im_start|><|im_end|<|im_end|",
+            "<|im_end|><|im_start|>",
+            "<|im_end|><|im_start|",
+            ]
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", padding_side="left")
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", padding_side="left")
+        scores = None
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
+        self.assertTrue(criteria(true_input_ids["input_ids"], scores))
+        self.assertFalse(criteria(false_input_ids["input_ids"], scores))
+
+        # Now try it with a tokenizer where those are actually special tokens
+        tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", padding_side="left")
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", padding_side="left")
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
+        self.assertTrue(criteria(true_input_ids["input_ids"], scores))
+        self.assertFalse(criteria(false_input_ids["input_ids"], scores))
