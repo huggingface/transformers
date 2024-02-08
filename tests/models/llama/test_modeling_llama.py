@@ -49,6 +49,7 @@ if is_torch_available():
         LlamaModel,
         LlamaTokenizer,
     )
+    from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 
 class LlamaModelTester:
@@ -510,6 +511,120 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
             self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
+    @require_torch_gpu
+    def test_rope_cast_strategy_invariant(self):
+        """
+        Test exclusive to models with RoPE embeddings: tests that the RoPE embeddings are invariant with respect to the
+        model cast strategy (`.to()` or `torch_dtype`).
+        """
+        for dtype in (torch.float32, torch.float16, torch.bfloat16):
+            model_1 = LlamaForCausalLM.from_pretrained(
+                "HuggingFaceM4/tiny-random-LlamaForCausalLM",
+                device_map="auto",
+                torch_dtype=dtype,
+            )
+            model_2 = LlamaForCausalLM.from_pretrained(
+                "HuggingFaceM4/tiny-random-LlamaForCausalLM",
+                device_map="auto",
+            ).to(dtype)
+            config = model_1.config
+
+            # Tests that a forward pass with inputs *smaller* than the initialized length work as expected.
+            input_ids = torch.randint(0, config.vocab_size, (1, 1)).to(model_1.device)
+            model_1_out = model_1(input_ids)
+            model_2_out = model_2(input_ids)
+            self.assertTrue(torch.allclose(model_1_out.logits, model_2_out.logits))
+            self.assertTrue(
+                torch.allclose(
+                    model_1.model.layers[0].self_attn.rotary_emb.sin_cached,
+                    model_2.model.layers[0].self_attn.rotary_emb.sin_cached,
+                )
+            )
+            self.assertTrue(
+                torch.allclose(
+                    model_1.model.layers[0].self_attn.rotary_emb.cos_cached,
+                    model_2.model.layers[0].self_attn.rotary_emb.cos_cached,
+                )
+            )
+
+            # Tests that a forward pass with inputs *larger* than the initialized length work correctly.
+            input_ids = torch.randint(0, config.vocab_size, (1, config.max_position_embeddings + 1)).to(model_1.device)
+            model_1_out = model_1(input_ids)
+            model_2_out = model_2(input_ids)
+            self.assertTrue(torch.allclose(model_1_out.logits, model_2_out.logits))
+            self.assertTrue(
+                torch.allclose(
+                    model_1.model.layers[0].self_attn.rotary_emb.sin_cached,
+                    model_2.model.layers[0].self_attn.rotary_emb.sin_cached,
+                )
+            )
+            self.assertTrue(
+                torch.allclose(
+                    model_1.model.layers[0].self_attn.rotary_emb.cos_cached,
+                    model_2.model.layers[0].self_attn.rotary_emb.cos_cached,
+                )
+            )
+
+    @require_torch_gpu
+    def test_rope_initialization_invariant(self):
+        """
+        Test exclusive to models with RoPE embeddings: tests that the RoPE embeddings are unnafected by the
+        initialization device and dtype.
+        """
+
+        def compare_rope(test_dtype, dim, max_position_embeddings, base):
+            # gpu init in test_dtype
+            torch.set_default_dtype(test_dtype)
+            rope_dtype_gpu_init = LlamaRotaryEmbedding(
+                dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cuda"
+            )
+            self.assertTrue(rope_dtype_gpu_init.sin_cached.device.type == "cuda")
+            self.assertTrue(rope_dtype_gpu_init.sin_cached.dtype == test_dtype)
+
+            # gpu init in fp32, casted to test_dtype
+            torch.set_default_dtype(torch.float32)
+            rope_fp32_gpu_init = LlamaRotaryEmbedding(
+                dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cuda"
+            )
+            self.assertTrue(rope_fp32_gpu_init.sin_cached.device.type == "cuda")
+            self.assertTrue(rope_fp32_gpu_init.sin_cached.dtype == torch.float32)
+            rope_fp32_gpu_init = rope_fp32_gpu_init.to(dtype=test_dtype)
+            self.assertTrue(rope_fp32_gpu_init.sin_cached.device.type == "cuda")
+            self.assertTrue(rope_fp32_gpu_init.sin_cached.dtype == test_dtype)
+
+            # cpu init in float32, casted to test_dtype and moved to the gpu
+            rope_fp32_cpu_init = LlamaRotaryEmbedding(
+                dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cpu"
+            )
+            self.assertTrue(rope_fp32_cpu_init.sin_cached.device.type == "cpu")
+            self.assertTrue(rope_fp32_cpu_init.sin_cached.dtype == torch.float32)
+            rope_fp32_cpu_init = rope_fp32_cpu_init.to(dtype=test_dtype, device="cuda")
+            self.assertTrue(rope_fp32_cpu_init.sin_cached.device.type == "cuda")
+            self.assertTrue(rope_fp32_cpu_init.sin_cached.dtype == test_dtype)
+
+            # Sanity check 1: the sin/cos tensors should be the same for all initializations (after casting to
+            # test_dtype)
+            self.assertTrue(torch.allclose(rope_dtype_gpu_init.sin_cached, rope_fp32_gpu_init.sin_cached))
+            self.assertTrue(torch.allclose(rope_dtype_gpu_init.sin_cached, rope_fp32_cpu_init.sin_cached))
+            self.assertTrue(torch.allclose(rope_dtype_gpu_init.cos_cached, rope_fp32_gpu_init.cos_cached))
+            self.assertTrue(torch.allclose(rope_dtype_gpu_init.cos_cached, rope_fp32_cpu_init.cos_cached))
+
+            # Sanity check 2: the output of the forward pass is also the same
+            test_input = torch.rand((1, 1), device="cuda", dtype=test_dtype)
+            fwd_cos_dtype_gpu, fwd_sin_dtype_gpu = rope_dtype_gpu_init(test_input, seq_len=max_position_embeddings)
+            fwd_cos_fp32_gpu, fwd_sin_fp32_gpu = rope_fp32_gpu_init(test_input, seq_len=max_position_embeddings)
+            fwd_cos_fp32_cpu, fwd_sin_fp32_cpu = rope_fp32_cpu_init(test_input, seq_len=max_position_embeddings)
+            self.assertTrue(torch.allclose(fwd_cos_dtype_gpu, fwd_cos_fp32_gpu))
+            self.assertTrue(torch.allclose(fwd_cos_dtype_gpu, fwd_cos_fp32_cpu))
+            self.assertTrue(torch.allclose(fwd_sin_dtype_gpu, fwd_sin_fp32_gpu))
+            self.assertTrue(torch.allclose(fwd_sin_dtype_gpu, fwd_sin_fp32_cpu))
+
+        for test_dtype in (torch.float32, torch.float16, torch.bfloat16):
+            for dim in (64, 256, 1024):
+                for max_position_embeddings in (1024, 2048, 4096):
+                    for base in (10000, 100000, 1000000):
+                        compare_rope(test_dtype, dim, max_position_embeddings, base)
 
 
 @require_torch
