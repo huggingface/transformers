@@ -501,7 +501,7 @@ class GenerationMixin:
         batch_size: int,
         model_input_name: str,
         model_kwargs: Dict[str, torch.Tensor],
-        decoder_start_token_id: int = None,
+        decoder_start_token_id: Union[int, List[int]] = None,
         bos_token_id: int = None,
         device: torch.device = None,
     ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
@@ -519,7 +519,17 @@ class GenerationMixin:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         if device is None:
             device = self.device
-        decoder_input_ids_start = torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
+        if isinstance(decoder_start_token_id, list):
+            if len(decoder_start_token_id) != batch_size:
+                raise ValueError(
+                    f"`decoder_start_token_id` expcted to have length {batch_size} but got {len(decoder_start_token_id)}"
+                )
+            decoder_input_ids_start = torch.tensor(decoder_start_token_id, dtype=torch.long, device=device)
+            decoder_input_ids_start = decoder_input_ids_start.view(-1, 1)
+        else:
+            decoder_input_ids_start = (
+                torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
+            )
 
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
@@ -531,7 +541,13 @@ class GenerationMixin:
             pass
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
-        elif (decoder_input_ids[:, 0] != decoder_start_token_id).all().item():
+        elif (
+            isinstance(decoder_start_token_id, int)
+            and (decoder_input_ids[:, 0] != decoder_start_token_id).all().item()
+        ) or (
+            isinstance(decoder_start_token_id, torch.Tensor)
+            and (decoder_input_ids[:, 0] != decoder_start_token_id[:, 0]).all().item()
+        ):
             decoder_input_ids = torch.cat([decoder_input_ids_start, decoder_input_ids], dim=-1)
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
@@ -543,7 +559,9 @@ class GenerationMixin:
 
         return decoder_input_ids, model_kwargs
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+    ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id
             if decoder_start_token_id is not None
