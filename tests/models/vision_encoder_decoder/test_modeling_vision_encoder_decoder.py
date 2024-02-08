@@ -23,7 +23,6 @@ from packaging import version
 
 from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
 from transformers.testing_utils import (
-    is_flaky,
     require_levenshtein,
     require_nltk,
     require_sentencepiece,
