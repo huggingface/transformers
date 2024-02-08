@@ -51,6 +51,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_fr.md">Français</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_de.md">Deutsch</a> |
     </p>
 </h4>
 
@@ -82,7 +83,7 @@ Puedes probar la mayoría de nuestros modelos directamente en sus páginas desde
 
 Aquí hay algunos ejemplos:
 
- En procesamiento del lenguaje natural:
+En procesamiento del lenguaje natural:
 - [Terminación de palabras enmascaradas con BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [Reconocimiento del nombre de la entidad con Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [Generación de texto con GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
