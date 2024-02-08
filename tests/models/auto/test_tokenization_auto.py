@@ -483,13 +483,18 @@ class NopConfig(PretrainedConfig):
             with open(tokenizer_config_file, "w") as wfp:
                 json.dump(tokenizer_config, wfp, indent=2)
 
-            os.chdir(tmp_dir)  # it looks like subdir= is broken in the from_pretrained also, so this is necessary
-
-            # this should work because we trust the code
-            _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
+            prev_dir = os.getcwd()
             try:
-                # this should fail because we don't trust and we're not at a terminal for interactive response
-                _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=False)
-                self.fail("AutoTokenizer.from_pretrained with trust_remote_code=False should raise ValueException")
-            except ValueError:
-                pass
+                # it looks like subdir= is broken in the from_pretrained also, so this is necessary
+                os.chdir(tmp_dir)  
+
+                # this should work because we trust the code
+                _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
+                try:
+                    # this should fail because we don't trust and we're not at a terminal for interactive response
+                    _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=False)
+                    self.fail("AutoTokenizer.from_pretrained with trust_remote_code=False should raise ValueException")
+                except ValueError:
+                    pass
+            finally:
+                os.chdir(prev_dir)
