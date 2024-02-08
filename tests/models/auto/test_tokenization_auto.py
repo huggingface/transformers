@@ -486,7 +486,7 @@ class NopConfig(PretrainedConfig):
             prev_dir = os.getcwd()
             try:
                 # it looks like subdir= is broken in the from_pretrained also, so this is necessary
-                os.chdir(tmp_dir)  
+                os.chdir(tmp_dir)
 
                 # this should work because we trust the code
                 _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
