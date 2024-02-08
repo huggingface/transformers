@@ -434,9 +434,7 @@ class LlamaFlashAttention2(LlamaAttention):
             past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
             kv_seq_len += past_seen_tokens
 
-        new_cache_positions = torch.arange(
-            past_seen_tokens, past_seen_tokens + q_len, dtype=torch.long, device=key_states.device
-        )
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -1022,9 +1020,13 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
     def _update_causal_mask(self, attention_mask, input_tensor):
+        if self.config._attn_implementation == "flash_attention_2":
+            causal_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            return causal_mask
+
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
-
+        
         # support going beyond cached `max_position_embedding`
         if seq_length > self.causal_mask.shape[-1]:
             causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
@@ -1041,9 +1043,6 @@ class LlamaModel(LlamaPreTrainedModel):
                     fill_value=torch.finfo(dtype).min,
                 )
             )
-
-        if self.config._attn_implementation == "flash_attention":
-            causal_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
 
         if attention_mask is not None and attention_mask.dim() == 2:
             mask_length = attention_mask.shape[-1]
