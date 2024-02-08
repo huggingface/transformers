@@ -146,10 +146,10 @@ class StopStringCriteria(StoppingCriteria):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
 
-        self.tokenizer = tokenizer
+        self.vocab = tokenizer.get_vocab()
         self.stop_strings: List[str] = stop_strings
         self.strings_to_valid_positions, self.strings_to_end_lengths = self.get_matching_positions(
-            tokenizer, stop_strings
+            self.vocab, stop_strings
         )
 
         self.max_valid_positions = {
@@ -163,12 +163,11 @@ class StopStringCriteria(StoppingCriteria):
         self.embedding_vecs = self.create_embedding_vecs()
 
     @staticmethod
-    def get_matching_positions(tokenizer, stop_strings):
+    def get_matching_positions(vocab, stop_strings):
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
         valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
         end of the stop string."""
-        vocab = tokenizer.get_vocab()
         tok_list = list(vocab.keys())
         strings_to_valid_positions = {}
         strings_to_end_lengths = {}
@@ -212,7 +211,7 @@ class StopStringCriteria(StoppingCriteria):
         and possible end lengths for each token, and the total length of the token string. When tokens have
         fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
         """
-        vocab = self.tokenizer.get_vocab()
+        vocab = self.vocab
         embedding_vecs = {}
         for stop_string in self.stop_strings:
             positions = self.strings_to_valid_positions[stop_string]
@@ -224,7 +223,7 @@ class StopStringCriteria(StoppingCriteria):
             max_valid_positions = self.max_valid_positions[stop_string]
             max_valid_end_lens = self.max_valid_end_lens[stop_string]
             vec_size = max_valid_positions + max_valid_end_lens + 1
-            gather_vec = np.full((len(self.tokenizer), vec_size), dtype=np.int32, fill_value=-1)
+            gather_vec = np.full((len(self.vocab), vec_size), dtype=np.int32, fill_value=-1)
             for token, valid_positions in positions.items():
                 token_idx = vocab[token]
                 gather_vec[token_idx, : len(valid_positions)] = valid_positions
