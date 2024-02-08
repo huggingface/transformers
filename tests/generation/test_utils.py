@@ -3476,7 +3476,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         }
         model.generate(**inputs, **generation_kwargs)
         # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
-        self.assertTrue(assistant_model.generation_config.num_assistant_tokens == 4 or assistant_model.generation_config.num_assistant_tokens == 7)
+        self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
