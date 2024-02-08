@@ -318,7 +318,7 @@ def main():
         choices=[1, 2],
         default=1,
         type=int,
-        help="Version of the Llama model to use. Current supported versions are Llama1 and Llama2.",
+        help="Version of the Llama model to convert. Currently supports Llama1 and Llama2. Controls the context size",
     )
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
