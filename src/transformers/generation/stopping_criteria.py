@@ -156,7 +156,6 @@ class StopStringCriteria(StoppingCriteria):
             stop_string: max([len(val) for val in self.strings_to_valid_positions[stop_string].values()])
             for stop_string in stop_strings
         }
-        self.global_max_position = max(self.max_valid_positions.values())
         self.max_valid_end_lens = {
             stop_string: max([len(val) for val in self.strings_to_end_lengths[stop_string].values()])
             for stop_string in stop_strings
@@ -245,9 +244,10 @@ class StopStringCriteria(StoppingCriteria):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         # TODO Joao - I'm not using the scores at all and just checking the most recent tokens in input_ids
         #      Is this correct? Should I be sampling from scores?
-        # Note that input_ids can also be *shorter* than the global max position, and the code below should be
-        # ready for that
-        input_ids = input_ids[:, -self.global_max_position :]
+        # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
+        # *shorter* than the global max, and the code below should be ready for that
+        maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
+        input_ids = input_ids[:, -maximum_token_len:]
         flipped_ids = torch.flip(input_ids, (1,))
         string_matches = []
         for stop_string in self.stop_strings:

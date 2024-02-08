@@ -16,7 +16,7 @@
 import time
 import unittest
 
-from transformers import is_torch_available, AutoTokenizer
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
@@ -29,8 +29,8 @@ if is_torch_available():
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,
-        StopStringCriteria,
         StoppingCriteriaList,
+        StopStringCriteria,
         validate_stopping_criteria,
     )
 
@@ -123,22 +123,28 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "<|im_start|><|im_end|<|im_end|",
             "<|im_end|><|im_start|>",
             "<|im_end|<><|im_end|",
-            ]
+        ]
+        too_short_strings = ["<|im_end|", "|im_end|>"]
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest")
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest")
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        too_short_input_ids = tokenizer(
+            too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
+        )
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
         self.assertTrue(criteria(true_input_ids["input_ids"], scores))
         self.assertFalse(criteria(false_input_ids["input_ids"], scores))
+        self.assertFalse(criteria(too_short_input_ids["input_ids"], scores))
 
         # Now try it with a tokenizer where those are actually special tokens
         tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest")
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest")
+        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
         self.assertTrue(criteria(true_input_ids["input_ids"], scores))
         self.assertFalse(criteria(false_input_ids["input_ids"], scores))
+        self.assertFalse(criteria(too_short_input_ids["input_ids"], scores))
