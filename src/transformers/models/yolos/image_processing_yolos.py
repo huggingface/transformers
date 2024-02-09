@@ -1007,6 +1007,7 @@ class YolosImageProcessor(BaseImageProcessor):
     def pad(
         self,
         images: List[np.ndarray],
+        annotations: Optional[List[Dict[str, Any]]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1021,6 +1022,9 @@ class YolosImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
+            annotations (`List[Dict[str, any]]`, *optional*):
+                Annotations to pad along with the images. If provided, the bounding boxes will be updated to match the
+                padded images.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
@@ -1043,17 +1047,22 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        padded_images = [
-            self._pad_image(
+        annotation_list = annotations if annotations is not None else [None] * len(images)
+        padded_images = []
+        padded_annotations = []
+        for image, annotation in zip(images, annotation_list):
+            padded_image, padded_annotation = self._pad_image(
                 image,
                 pad_size,
+                annotation,
                 constant_values=constant_values,
                 data_format=data_format,
                 input_data_format=input_data_format,
                 update_bboxes=update_bboxes,
             )
-            for image in images
-        ]
+            padded_images.append(padded_image)
+            padded_annotations.append(padded_annotation)
+
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:

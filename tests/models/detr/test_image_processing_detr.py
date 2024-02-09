@@ -308,6 +308,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         expected_size = torch.tensor([800, 1066])
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
+    @slow
     def test_batched_coco_detection_annotations(self):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
@@ -425,6 +426,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
         self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
 
+    @slow
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
