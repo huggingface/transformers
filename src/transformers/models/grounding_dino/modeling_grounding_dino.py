@@ -3583,6 +3583,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         outputs_classes = []
         outputs_coords = []
 
+        # hidden_states are of shape (batch_size, num_stages, height, width)
+        # predict class and bounding box deltas for each stage
         num_levels = hidden_states.shape[1]
         for level in range(num_levels):
             if level == 0:
