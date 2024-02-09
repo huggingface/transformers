@@ -349,7 +349,7 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[ :, :, :, : key_states.shape[-2]]
+            causal_mask = attention_mask[ :, :, cache_position, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -427,9 +427,6 @@ class LlamaFlashAttention2(LlamaAttention):
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": position_ids}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -633,7 +630,6 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # is_causal=causal_mask is None,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1022,15 +1018,9 @@ class LlamaModel(LlamaPreTrainedModel):
                 padding_mask, torch.finfo(dtype).min
             )
 
-        # if self.config._attn_implementation == "sdpa":
-        #     if attention_mask is None:
-        #         return None
-        #     is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-        #     # if not is_tracing and (torch.all(attention_mask == 1)):
-        #     #     return None
-        #     # if seq_length == 1:
-        #     #     return None
-        #     causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
+        if self.config._attn_implementation == "sdpa":
+            if attention_mask is not None and torch.any(attention_mask != 1):
+                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
 
         return causal_mask
 
