@@ -60,6 +60,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
@@ -1500,16 +1501,6 @@ class Trainer:
 
         return model
 
-    # TODO: Should we upstream this to accelerate?
-    def _xla_sharded_dataloader(self, dataloader):
-        if is_torch_tpu_available():
-            import torch_xla.distributed.parallel_loader as pl
-            sharding_spec = xs.ShardingSpec(xs.get_global_mesh(), ('fsdp', None))
-            assert isinstance(dataloader, pl.MpDeviceLoader)
-            dataloader._parallel_loader_kwargs['input_sharding'] = sharding_spec
-            return dataloader
-        else:
-            return dataloader
 
     def train(
         self,
@@ -1641,7 +1632,9 @@ class Trainer:
             self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
-        train_dataloader = self._xla_sharded_dataloader(self.get_train_dataloader())
+        train_dataloader = self.get_train_dataloader()
+        if self.is_fsdp_xla_v2_enabled:
+            train_dataloader = tpu_spmd_dataloader(train_dataloader)
 
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
@@ -3196,7 +3189,10 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
-        eval_dataloader = self._xla_sharded_dataloader(self.get_eval_dataloader(eval_dataset))
+        eval_dataloader = self.get_eval_dataloader(eval_dataset)
+        if self.is_fsdp_xla_v2_enabled:
+            eval_dataloader = tpu_spmd_dataloader(eval_dataloader)
+
         start_time = time.time()
 
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
