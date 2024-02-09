@@ -461,7 +461,7 @@ Recuerda la sección anterior sobre el procesamiento de datos de audio, siempre 
 
 ### Processor
 
-Un processor combina un extractor de características y un tokenizador. Cargue un procesador con [`AutoProcessor.from_pretrained]:
+Un processor combina un extractor de características y un tokenizador. Cargue un procesador con [`AutoProcessor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoProcessor

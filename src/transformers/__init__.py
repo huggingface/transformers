@@ -746,7 +746,6 @@ _import_structure = {
         "SiglipConfig",
         "SiglipProcessor",
         "SiglipTextConfig",
-        "SiglipTokenizer",
         "SiglipVisionConfig",
     ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -947,6 +946,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
@@ -975,6 +975,7 @@ _import_structure = {
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
+    "quantizers": [],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -1098,6 +1099,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizer")
+    _import_structure["models.siglip"].append("SiglipTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
@@ -1309,7 +1311,7 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
-    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache"]
+    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache", "StaticCache"]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -2455,6 +2457,7 @@ else:
     _import_structure["models.llama"].extend(
         [
             "LlamaForCausalLM",
+            "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
@@ -2704,6 +2707,7 @@ else:
             "MT5ForConditionalGeneration",
             "MT5ForQuestionAnswering",
             "MT5ForSequenceClassification",
+            "MT5ForTokenClassification",
             "MT5Model",
             "MT5PreTrainedModel",
         ]
@@ -3279,6 +3283,7 @@ else:
             "T5ForConditionalGeneration",
             "T5ForQuestionAnswering",
             "T5ForSequenceClassification",
+            "T5ForTokenClassification",
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
@@ -3350,6 +3355,7 @@ else:
             "UMT5ForConditionalGeneration",
             "UMT5ForQuestionAnswering",
             "UMT5ForSequenceClassification",
+            "UMT5ForTokenClassification",
             "UMT5Model",
             "UMT5PreTrainedModel",
         ]
@@ -4657,6 +4663,13 @@ else:
             "FlaxMBartPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral"].extend(
+        [
+            "FlaxMistralForCausalLM",
+            "FlaxMistralModel",
+            "FlaxMistralPreTrainedModel",
+        ]
+    )
     _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
@@ -5178,10 +5191,20 @@ if TYPE_CHECKING:
                                    SegformerConfig)
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
+<<<<<<< HEAD
     from .models.siglip import (SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                 SiglipConfig, SiglipProcessor,
                                 SiglipTextConfig, SiglipTokenizer,
                                 SiglipVisionConfig)
+=======
+    from .models.siglip import (
+        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SiglipConfig,
+        SiglipProcessor,
+        SiglipTextConfig,
+        SiglipVisionConfig,
+    )
+>>>>>>> 2749e479f30ab13235b0b9b4a6bbcf4c3b29a081
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig,
@@ -5292,29 +5315,45 @@ if TYPE_CHECKING:
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
     # Pipelines
-    from .pipelines import (AudioClassificationPipeline,
-                            AutomaticSpeechRecognitionPipeline, Conversation,
-                            ConversationalPipeline, CsvPipelineDataFormat,
-                            DepthEstimationPipeline,
-                            DocumentQuestionAnsweringPipeline,
-                            FeatureExtractionPipeline, FillMaskPipeline,
-                            ImageClassificationPipeline,
-                            ImageSegmentationPipeline, ImageToImagePipeline,
-                            ImageToTextPipeline, JsonPipelineDataFormat,
-                            MaskGenerationPipeline, NerPipeline,
-                            ObjectDetectionPipeline, PipedPipelineDataFormat,
-                            Pipeline, PipelineDataFormat,
-                            QuestionAnsweringPipeline, SummarizationPipeline,
-                            TableQuestionAnsweringPipeline,
-                            Text2TextGenerationPipeline,
-                            TextClassificationPipeline, TextGenerationPipeline,
-                            TextToAudioPipeline, TokenClassificationPipeline,
-                            TranslationPipeline, VideoClassificationPipeline,
-                            VisualQuestionAnsweringPipeline,
-                            ZeroShotAudioClassificationPipeline,
-                            ZeroShotClassificationPipeline,
-                            ZeroShotImageClassificationPipeline,
-                            ZeroShotObjectDetectionPipeline, pipeline)
+    from .pipelines import (
+        AudioClassificationPipeline,
+        AutomaticSpeechRecognitionPipeline,
+        Conversation,
+        ConversationalPipeline,
+        CsvPipelineDataFormat,
+        DepthEstimationPipeline,
+        DocumentQuestionAnsweringPipeline,
+        FeatureExtractionPipeline,
+        FillMaskPipeline,
+        ImageClassificationPipeline,
+        ImageFeatureExtractionPipeline,
+        ImageSegmentationPipeline,
+        ImageToImagePipeline,
+        ImageToTextPipeline,
+        JsonPipelineDataFormat,
+        MaskGenerationPipeline,
+        NerPipeline,
+        ObjectDetectionPipeline,
+        PipedPipelineDataFormat,
+        Pipeline,
+        PipelineDataFormat,
+        QuestionAnsweringPipeline,
+        SummarizationPipeline,
+        TableQuestionAnsweringPipeline,
+        Text2TextGenerationPipeline,
+        TextClassificationPipeline,
+        TextGenerationPipeline,
+        TextToAudioPipeline,
+        TokenClassificationPipeline,
+        TranslationPipeline,
+        VideoClassificationPipeline,
+        VisualQuestionAnsweringPipeline,
+        ZeroShotAudioClassificationPipeline,
+        ZeroShotClassificationPipeline,
+        ZeroShotImageClassificationPipeline,
+        ZeroShotObjectDetectionPipeline,
+        pipeline,
+    )
     from .processing_utils import ProcessorMixin
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
@@ -5391,6 +5430,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.seamless_m4t import SeamlessM4TTokenizer
+        from .models.siglip import SiglipTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
@@ -5581,13 +5621,18 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
-        from .cache_utils import Cache, DynamicCache, SinkCache
-        from .data.datasets import (GlueDataset, GlueDataTrainingArguments,
-                                    LineByLineTextDataset,
-                                    LineByLineWithRefDataset,
-                                    LineByLineWithSOPTextDataset, SquadDataset,
-                                    SquadDataTrainingArguments, TextDataset,
-                                    TextDatasetForNextSentencePrediction)
+        from .cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+        from .data.datasets import (
+            GlueDataset,
+            GlueDataTrainingArguments,
+            LineByLineTextDataset,
+            LineByLineWithRefDataset,
+            LineByLineWithSOPTextDataset,
+            SquadDataset,
+            SquadDataTrainingArguments,
+            TextDataset,
+            TextDatasetForNextSentencePrediction,
+        )
         from .generation import (
             AlternatingCodebooksLogitsProcessor, BeamScorer, BeamSearchScorer,
             ClassifierFreeGuidanceLogitsProcessor, ConstrainedBeamSearchScorer,
@@ -6129,28 +6174,46 @@ if TYPE_CHECKING:
             LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv3ForQuestionAnswering,
             LayoutLMv3ForSequenceClassification,
-            LayoutLMv3ForTokenClassification, LayoutLMv3Model,
-            LayoutLMv3PreTrainedModel)
-        from .models.led import (LED_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                 LEDForConditionalGeneration,
-                                 LEDForQuestionAnswering,
-                                 LEDForSequenceClassification, LEDModel,
-                                 LEDPreTrainedModel)
-        from .models.levit import (LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                   LevitForImageClassification,
-                                   LevitForImageClassificationWithTeacher,
-                                   LevitModel, LevitPreTrainedModel)
-        from .models.lilt import (LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                  LiltForQuestionAnswering,
-                                  LiltForSequenceClassification,
-                                  LiltForTokenClassification, LiltModel,
-                                  LiltPreTrainedModel)
-        from .models.llama import (LlamaForCausalLM,
-                                   LlamaForSequenceClassification, LlamaModel,
-                                   LlamaPreTrainedModel)
-        from .models.llava import (LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                   LlavaForConditionalGeneration,
-                                   LlavaPreTrainedModel, LlavaProcessor)
+            LayoutLMv3ForTokenClassification,
+            LayoutLMv3Model,
+            LayoutLMv3PreTrainedModel,
+        )
+        from .models.led import (
+            LED_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LEDForConditionalGeneration,
+            LEDForQuestionAnswering,
+            LEDForSequenceClassification,
+            LEDModel,
+            LEDPreTrainedModel,
+        )
+        from .models.levit import (
+            LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LevitForImageClassification,
+            LevitForImageClassificationWithTeacher,
+            LevitModel,
+            LevitPreTrainedModel,
+        )
+        from .models.lilt import (
+            LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LiltForQuestionAnswering,
+            LiltForSequenceClassification,
+            LiltForTokenClassification,
+            LiltModel,
+            LiltPreTrainedModel,
+        )
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
+        from .models.llava import (
+            LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlavaForConditionalGeneration,
+            LlavaPreTrainedModel,
+            LlavaProcessor,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST, LongformerForMaskedLM,
             LongformerForMultipleChoice, LongformerForQuestionAnswering,
@@ -6246,54 +6309,93 @@ if TYPE_CHECKING:
         from .models.mobilevitv2 import (
             MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileViTV2ForImageClassification,
-            MobileViTV2ForSemanticSegmentation, MobileViTV2Model,
-            MobileViTV2PreTrainedModel)
-        from .models.mpnet import (MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                   MPNetForMaskedLM, MPNetForMultipleChoice,
-                                   MPNetForQuestionAnswering,
-                                   MPNetForSequenceClassification,
-                                   MPNetForTokenClassification, MPNetLayer,
-                                   MPNetModel, MPNetPreTrainedModel)
-        from .models.mpt import (MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                 MptForCausalLM, MptForQuestionAnswering,
-                                 MptForSequenceClassification,
-                                 MptForTokenClassification, MptModel,
-                                 MptPreTrainedModel)
-        from .models.mra import (MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                 MraForMaskedLM, MraForMultipleChoice,
-                                 MraForQuestionAnswering,
-                                 MraForSequenceClassification,
-                                 MraForTokenClassification, MraModel,
-                                 MraPreTrainedModel)
-        from .models.mt5 import (MT5EncoderModel, MT5ForConditionalGeneration,
-                                 MT5ForQuestionAnswering,
-                                 MT5ForSequenceClassification, MT5Model,
-                                 MT5PreTrainedModel)
-        from .models.musicgen import (MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                      MusicgenForCausalLM,
-                                      MusicgenForConditionalGeneration,
-                                      MusicgenModel, MusicgenPreTrainedModel,
-                                      MusicgenProcessor)
-        from .models.mvp import (MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                 MvpForCausalLM, MvpForConditionalGeneration,
-                                 MvpForQuestionAnswering,
-                                 MvpForSequenceClassification, MvpModel,
-                                 MvpPreTrainedModel)
-        from .models.nat import (NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                 NatBackbone, NatForImageClassification,
-                                 NatModel, NatPreTrainedModel)
-        from .models.nezha import (NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                   NezhaForMaskedLM, NezhaForMultipleChoice,
-                                   NezhaForNextSentencePrediction,
-                                   NezhaForPreTraining,
-                                   NezhaForQuestionAnswering,
-                                   NezhaForSequenceClassification,
-                                   NezhaForTokenClassification, NezhaModel,
-                                   NezhaPreTrainedModel)
-        from .models.nllb_moe import (NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                      NllbMoeForConditionalGeneration,
-                                      NllbMoeModel, NllbMoePreTrainedModel,
-                                      NllbMoeSparseMLP, NllbMoeTop2Router)
+            MobileViTV2ForSemanticSegmentation,
+            MobileViTV2Model,
+            MobileViTV2PreTrainedModel,
+        )
+        from .models.mpnet import (
+            MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MPNetForMaskedLM,
+            MPNetForMultipleChoice,
+            MPNetForQuestionAnswering,
+            MPNetForSequenceClassification,
+            MPNetForTokenClassification,
+            MPNetLayer,
+            MPNetModel,
+            MPNetPreTrainedModel,
+        )
+        from .models.mpt import (
+            MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MptForCausalLM,
+            MptForQuestionAnswering,
+            MptForSequenceClassification,
+            MptForTokenClassification,
+            MptModel,
+            MptPreTrainedModel,
+        )
+        from .models.mra import (
+            MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MraForMaskedLM,
+            MraForMultipleChoice,
+            MraForQuestionAnswering,
+            MraForSequenceClassification,
+            MraForTokenClassification,
+            MraModel,
+            MraPreTrainedModel,
+        )
+        from .models.mt5 import (
+            MT5EncoderModel,
+            MT5ForConditionalGeneration,
+            MT5ForQuestionAnswering,
+            MT5ForSequenceClassification,
+            MT5ForTokenClassification,
+            MT5Model,
+            MT5PreTrainedModel,
+        )
+        from .models.musicgen import (
+            MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MusicgenForCausalLM,
+            MusicgenForConditionalGeneration,
+            MusicgenModel,
+            MusicgenPreTrainedModel,
+            MusicgenProcessor,
+        )
+        from .models.mvp import (
+            MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MvpForCausalLM,
+            MvpForConditionalGeneration,
+            MvpForQuestionAnswering,
+            MvpForSequenceClassification,
+            MvpModel,
+            MvpPreTrainedModel,
+        )
+        from .models.nat import (
+            NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NatBackbone,
+            NatForImageClassification,
+            NatModel,
+            NatPreTrainedModel,
+        )
+        from .models.nezha import (
+            NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
+            NezhaModel,
+            NezhaPreTrainedModel,
+        )
+        from .models.nllb_moe import (
+            NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NllbMoeForConditionalGeneration,
+            NllbMoeModel,
+            NllbMoePreTrainedModel,
+            NllbMoeSparseMLP,
+            NllbMoeTop2Router,
+        )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             NystromformerForMaskedLM, NystromformerForMultipleChoice,
@@ -6537,13 +6639,22 @@ if TYPE_CHECKING:
             SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwitchTransformersEncoderModel,
             SwitchTransformersForConditionalGeneration,
-            SwitchTransformersModel, SwitchTransformersPreTrainedModel,
-            SwitchTransformersSparseMLP, SwitchTransformersTop1Router)
-        from .models.t5 import (T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                T5EncoderModel, T5ForConditionalGeneration,
-                                T5ForQuestionAnswering,
-                                T5ForSequenceClassification, T5Model,
-                                T5PreTrainedModel, load_tf_weights_in_t5)
+            SwitchTransformersModel,
+            SwitchTransformersPreTrainedModel,
+            SwitchTransformersSparseMLP,
+            SwitchTransformersTop1Router,
+        )
+        from .models.t5 import (
+            T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            T5EncoderModel,
+            T5ForConditionalGeneration,
+            T5ForQuestionAnswering,
+            T5ForSequenceClassification,
+            T5ForTokenClassification,
+            T5Model,
+            T5PreTrainedModel,
+            load_tf_weights_in_t5,
+        )
         from .models.table_transformer import (
             TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TableTransformerForObjectDetection, TableTransformerModel,
@@ -6562,26 +6673,41 @@ if TYPE_CHECKING:
             TimesformerForVideoClassification, TimesformerModel,
             TimesformerPreTrainedModel)
         from .models.timm_backbone import TimmBackbone
-        from .models.trocr import (TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                   TrOCRForCausalLM, TrOCRPreTrainedModel)
-        from .models.tvlt import (TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                  TvltForAudioVisualClassification,
-                                  TvltForPreTraining, TvltModel,
-                                  TvltPreTrainedModel)
-        from .models.tvp import (TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                 TvpForVideoGrounding, TvpModel,
-                                 TvpPreTrainedModel)
-        from .models.umt5 import (UMT5EncoderModel,
-                                  UMT5ForConditionalGeneration,
-                                  UMT5ForQuestionAnswering,
-                                  UMT5ForSequenceClassification, UMT5Model,
-                                  UMT5PreTrainedModel)
-        from .models.unispeech import (UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
-                                       UniSpeechForCTC,
-                                       UniSpeechForPreTraining,
-                                       UniSpeechForSequenceClassification,
-                                       UniSpeechModel,
-                                       UniSpeechPreTrainedModel)
+        from .models.trocr import (
+            TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrOCRForCausalLM,
+            TrOCRPreTrainedModel,
+        )
+        from .models.tvlt import (
+            TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltForAudioVisualClassification,
+            TvltForPreTraining,
+            TvltModel,
+            TvltPreTrainedModel,
+        )
+        from .models.tvp import (
+            TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvpForVideoGrounding,
+            TvpModel,
+            TvpPreTrainedModel,
+        )
+        from .models.umt5 import (
+            UMT5EncoderModel,
+            UMT5ForConditionalGeneration,
+            UMT5ForQuestionAnswering,
+            UMT5ForSequenceClassification,
+            UMT5ForTokenClassification,
+            UMT5Model,
+            UMT5PreTrainedModel,
+        )
+        from .models.unispeech import (
+            UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UniSpeechForCTC,
+            UniSpeechForPreTraining,
+            UniSpeechForSequenceClassification,
+            UniSpeechModel,
+            UniSpeechPreTrainedModel,
+        )
         from .models.unispeech_sat import (
             UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechSatForAudioFrameClassification, UniSpeechSatForCTC,
@@ -7240,41 +7366,79 @@ if TYPE_CHECKING:
                                      FlaxElectraModel,
                                      FlaxElectraPreTrainedModel)
         from .models.encoder_decoder import FlaxEncoderDecoderModel
-        from .models.gpt2 import (FlaxGPT2LMHeadModel, FlaxGPT2Model,
-                                  FlaxGPT2PreTrainedModel)
-        from .models.gpt_neo import (FlaxGPTNeoForCausalLM, FlaxGPTNeoModel,
-                                     FlaxGPTNeoPreTrainedModel)
-        from .models.gptj import (FlaxGPTJForCausalLM, FlaxGPTJModel,
-                                  FlaxGPTJPreTrainedModel)
-        from .models.llama import (FlaxLlamaForCausalLM, FlaxLlamaModel,
-                                   FlaxLlamaPreTrainedModel)
-        from .models.longt5 import (FlaxLongT5ForConditionalGeneration,
-                                    FlaxLongT5Model, FlaxLongT5PreTrainedModel)
-        from .models.marian import (FlaxMarianModel, FlaxMarianMTModel,
-                                    FlaxMarianPreTrainedModel)
-        from .models.mbart import (FlaxMBartForConditionalGeneration,
-                                   FlaxMBartForQuestionAnswering,
-                                   FlaxMBartForSequenceClassification,
-                                   FlaxMBartModel, FlaxMBartPreTrainedModel)
-        from .models.mt5 import (FlaxMT5EncoderModel,
-                                 FlaxMT5ForConditionalGeneration, FlaxMT5Model)
-        from .models.opt import (FlaxOPTForCausalLM, FlaxOPTModel,
-                                 FlaxOPTPreTrainedModel)
-        from .models.pegasus import (FlaxPegasusForConditionalGeneration,
-                                     FlaxPegasusModel,
-                                     FlaxPegasusPreTrainedModel)
-        from .models.regnet import (FlaxRegNetForImageClassification,
-                                    FlaxRegNetModel, FlaxRegNetPreTrainedModel)
-        from .models.resnet import (FlaxResNetForImageClassification,
-                                    FlaxResNetModel, FlaxResNetPreTrainedModel)
-        from .models.roberta import (FlaxRobertaForCausalLM,
-                                     FlaxRobertaForMaskedLM,
-                                     FlaxRobertaForMultipleChoice,
-                                     FlaxRobertaForQuestionAnswering,
-                                     FlaxRobertaForSequenceClassification,
-                                     FlaxRobertaForTokenClassification,
-                                     FlaxRobertaModel,
-                                     FlaxRobertaPreTrainedModel)
+        from .models.gpt2 import (
+            FlaxGPT2LMHeadModel,
+            FlaxGPT2Model,
+            FlaxGPT2PreTrainedModel,
+        )
+        from .models.gpt_neo import (
+            FlaxGPTNeoForCausalLM,
+            FlaxGPTNeoModel,
+            FlaxGPTNeoPreTrainedModel,
+        )
+        from .models.gptj import (
+            FlaxGPTJForCausalLM,
+            FlaxGPTJModel,
+            FlaxGPTJPreTrainedModel,
+        )
+        from .models.llama import (
+            FlaxLlamaForCausalLM,
+            FlaxLlamaModel,
+            FlaxLlamaPreTrainedModel,
+        )
+        from .models.longt5 import (
+            FlaxLongT5ForConditionalGeneration,
+            FlaxLongT5Model,
+            FlaxLongT5PreTrainedModel,
+        )
+        from .models.marian import (
+            FlaxMarianModel,
+            FlaxMarianMTModel,
+            FlaxMarianPreTrainedModel,
+        )
+        from .models.mbart import (
+            FlaxMBartForConditionalGeneration,
+            FlaxMBartForQuestionAnswering,
+            FlaxMBartForSequenceClassification,
+            FlaxMBartModel,
+            FlaxMBartPreTrainedModel,
+        )
+        from .models.mistral import (
+            FlaxMistralForCausalLM,
+            FlaxMistralModel,
+            FlaxMistralPreTrainedModel,
+        )
+        from .models.mt5 import (
+            FlaxMT5EncoderModel,
+            FlaxMT5ForConditionalGeneration,
+            FlaxMT5Model,
+        )
+        from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
+        from .models.pegasus import (
+            FlaxPegasusForConditionalGeneration,
+            FlaxPegasusModel,
+            FlaxPegasusPreTrainedModel,
+        )
+        from .models.regnet import (
+            FlaxRegNetForImageClassification,
+            FlaxRegNetModel,
+            FlaxRegNetPreTrainedModel,
+        )
+        from .models.resnet import (
+            FlaxResNetForImageClassification,
+            FlaxResNetModel,
+            FlaxResNetPreTrainedModel,
+        )
+        from .models.roberta import (
+            FlaxRobertaForCausalLM,
+            FlaxRobertaForMaskedLM,
+            FlaxRobertaForMultipleChoice,
+            FlaxRobertaForQuestionAnswering,
+            FlaxRobertaForSequenceClassification,
+            FlaxRobertaForTokenClassification,
+            FlaxRobertaModel,
+            FlaxRobertaPreTrainedModel,
+        )
         from .models.roberta_prelayernorm import (
             FlaxRobertaPreLayerNormForCausalLM,
             FlaxRobertaPreLayerNormForMaskedLM,

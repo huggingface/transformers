@@ -474,8 +474,7 @@ _<model_name>.py`
 * Includere l'architettura del modello e le funzioni corrispondenti in [`~onnx.features.FeatureManager`]
 * Aggiungere la tua architettura del modello ai test in `test_onnx_v2.py`
 
-Scopri come stato contribuito la configurazione per [IBERT]
-(https://github.com/huggingface/transformers/pull/14868/files) per
+Scopri come stato contribuito la configurazione per [IBERT](https://github.com/huggingface/transformers/pull/14868/files) per
 avere un'idea di cosa è coinvolto.
 
 ## TorchScript
@@ -612,7 +611,7 @@ Usare il modello tracciato per l'inferenza è semplice come usare il suo metodo 
 traced_model(tokens_tensor, segments_tensors)
 ```
 
-###Implementare modelli HuggingFace TorchScript su AWS utilizzando Neuron SDK
+### Implementare modelli HuggingFace TorchScript su AWS utilizzando Neuron SDK
 
 AWS ha introdotto [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/)
 famiglia di istanze per l'inferenza di machine learning a basso costo e ad alte prestazioni nel cloud.

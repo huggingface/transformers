@@ -317,6 +317,7 @@ class ProcessorMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -330,6 +331,13 @@ class ProcessorMixin(PushToHubMixin):
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a {PROCESSOR_NAME} file"
                 )
+
+        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
+        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
+        # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
+        # However, for models added in the future, we won't get the expected error if this file is missing.
+        if resolved_processor_file is None:
+            return {}, kwargs
 
         try:
             # Load processor dict
@@ -456,17 +464,7 @@ class ProcessorMixin(PushToHubMixin):
             kwargs["token"] = token
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
-        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
-        # However, for models added in the future, we won't get the expected error if this file is missing.
-        try:
-            processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        except EnvironmentError as e:
-            if "does not appear to have a file named processor_config.json." in str(e):
-                processor_dict, kwargs = {}, kwargs
-            else:
-                raise
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
 
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 

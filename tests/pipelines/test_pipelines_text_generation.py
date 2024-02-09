@@ -93,17 +93,19 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         ## -- test tokenizer_kwargs
         test_str = "testing tokenizer kwargs. using truncation must result in a different generation."
+        input_len = len(text_generator.tokenizer(test_str)["input_ids"])
         output_str, output_str_with_truncation = (
-            text_generator(test_str, do_sample=False, return_full_text=False)[0]["generated_text"],
+            text_generator(test_str, do_sample=False, return_full_text=False, min_new_tokens=1)[0]["generated_text"],
             text_generator(
                 test_str,
                 do_sample=False,
                 return_full_text=False,
+                min_new_tokens=1,
                 truncation=True,
-                max_length=3,
+                max_length=input_len + 1,
             )[0]["generated_text"],
         )
-        assert output_str != output_str_with_truncation  # results must be different because one hd truncation
+        assert output_str != output_str_with_truncation  # results must be different because one had truncation
 
         # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id

@@ -130,7 +130,9 @@
   - local: custom_tools
     title: Custom Tools and Prompts
   - local: troubleshooting
-    title: Troubleshoot
+    title: Troubleshoot  
+  - local: hf_quantizer
+    title: Contribute new quantization method
   title: Developer guides
 - sections:
   - local: performance

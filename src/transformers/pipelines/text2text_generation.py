@@ -3,7 +3,7 @@ import warnings
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -22,7 +22,7 @@ class ReturnType(enum.Enum):
     TEXT = 1
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
@@ -213,7 +213,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return records
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class SummarizationPipeline(Text2TextGenerationPipeline):
     """
     Summarize news articles and other documents.
@@ -283,7 +283,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             )
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TranslationPipeline(Text2TextGenerationPipeline):
     """
     Translates from one language to another.
