@@ -792,8 +792,6 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
         # repeat attn mask
         if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
             # batch_size, num_queries, num_keys
-            # TODO we shouldn't switch the attention mask here
-            attention_masks = ~attention_masks
             attention_masks = attention_masks[:, None, :, :]
             attention_masks = attention_masks.repeat(1, self.num_heads, 1, 1)
 
@@ -2912,7 +2910,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 text_features=text_features,
                 text_attention_mask=~text_token_mask,
                 text_position_embedding=None,
-                text_self_attention_masks=text_self_attention_masks,
+                text_self_attention_masks=~text_self_attention_masks,
                 text_position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
