@@ -300,6 +300,7 @@ class LlamaAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
@@ -333,21 +334,13 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        past_seen_tokens = 0
         past_key_value = getattr(self, "past_key_value", past_key_value)
-        if past_key_value is not None:
-            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
-            kv_seq_len += past_seen_tokens
-
-        # new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device) if position_ids is None else position_ids
-        # position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
         cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": position_ids}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -356,7 +349,7 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[..., position_ids, : key_states.shape[-2]]
+            causal_mask = attention_mask[ :, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -427,21 +420,16 @@ class LlamaFlashAttention2(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        past_seen_tokens = 0
-        past_key_value = getattr(self, "past_key_value", past_key_value)
-        if past_key_value is not None:
-            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
-            kv_seq_len += past_seen_tokens
-
-        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
-        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": position_ids}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -605,7 +593,6 @@ class LlamaSdpaAttention(LlamaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -617,21 +604,13 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        # kv_seq_len = key_states.shape[-2]
-        # past_seen_tokens = 0
-        # past_key_value = getattr(self, "past_key_value", past_key_value)
-        # if past_key_value is not None:
-        #     past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
-        #     kv_seq_len += past_seen_tokens
-
-        # new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device) if position_ids is None else position_ids
-        # position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
         cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
+        
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": cache_position}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -977,8 +956,8 @@ class LlamaModel(LlamaPreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
-                    cache_position=cache_position,
                     position_ids=position_ids,
+                    cache_position=cache_position,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,

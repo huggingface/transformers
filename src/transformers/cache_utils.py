@@ -384,22 +384,21 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        new_cache_positions = cache_kwargs.get("position_ids")
+        new_cache_positions = cache_kwargs.get("cache_position")
         k_out = self.key_cache
         v_out = self.value_cache
 
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
 
-        self.seen_tokens += key_states.shape[-2]
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
-        return self.seen_tokens
+        return 0
 
     def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
-        return self.seen_tokens
+        return 0
         
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
