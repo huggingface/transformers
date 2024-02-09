@@ -1299,6 +1299,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 data_format=data_format,
                 input_data_format=input_data_format,
                 update_bboxes=do_convert_annotations,
+                return_tensors=return_tensors,
             )
         else:
             images = [
