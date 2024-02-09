@@ -134,9 +134,12 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         )
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
-        self.assertTrue(criteria(true_input_ids["input_ids"], scores))
-        self.assertFalse(criteria(false_input_ids["input_ids"], scores))
-        self.assertFalse(criteria(too_short_input_ids["input_ids"], scores))
+        for i in range(len(true_strings)):
+            self.assertTrue(criteria(true_input_ids["input_ids"][i: i+1], scores))
+        for i in range(len(false_strings)):
+            self.assertFalse(criteria(false_input_ids["input_ids"][i: i+1], scores))
+        for i in range(len(too_short_strings)):
+            self.assertFalse(criteria(too_short_input_ids["input_ids"][i: i+1], scores))
 
         # Now try it with a tokenizer where those are actually special tokens
         tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
@@ -145,6 +148,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
         false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
-        self.assertTrue(criteria(true_input_ids["input_ids"], scores))
-        self.assertFalse(criteria(false_input_ids["input_ids"], scores))
-        self.assertFalse(criteria(too_short_input_ids["input_ids"], scores))
+        for i in range(len(true_strings)):
+            self.assertTrue(criteria(true_input_ids["input_ids"][i: i+1], scores))
+        for i in range(len(false_strings)):
+            self.assertFalse(criteria(false_input_ids["input_ids"][i: i+1], scores))
+        for i in range(len(too_short_strings)):
+            self.assertFalse(criteria(too_short_input_ids["input_ids"][i: i+1], scores))
