@@ -170,9 +170,9 @@ if is_datasets_available():
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-    import torch_xla.runtime as xr
-    import torch_xla.distributed.spmd as xs
     import torch_xla.debug.metrics as met
+    import torch_xla.distributed.spmd as xs
+    import torch_xla.runtime as xr
 
 
 if is_sagemaker_mp_enabled():
@@ -643,8 +643,7 @@ class Trainer:
             # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
             num_devices = xr.global_runtime_device_count()
-            xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=('fsdp', 'tensor')))
-
+            xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
 
     def _activate_neftune(self, model):
         r"""
@@ -1396,8 +1395,11 @@ class Trainer:
                     size_based_auto_wrap_policy,
                     transformer_auto_wrap_policy,
                 )
+
                 if self.is_fsdp_xla_v2_enabled:
-                    from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
+                    from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
+                        SpmdFullyShardedDataParallel as FSDPv2,
+                    )
             except ImportError:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
@@ -1436,6 +1438,7 @@ class Trainer:
             if self.is_fsdp_xla_v2_enabled:
                 # Should we have this logic into the FSDPv2 wrapper?
                 model = model.to(xm.xla_device())
+
                 def shard_output(output, mesh):
                     from .modeling_outputs import CausalLMOutputWithPast
 
@@ -1449,7 +1452,7 @@ class Trainer:
 
                     if real_output is None:
                         raise ValueError("Something went wrong, the output of the model shouldn't be `None`")
-                    xs.mark_sharding(real_output, mesh, ('fsdp', None, None))
+                    xs.mark_sharding(real_output, mesh, ("fsdp", None, None))
 
                 self.model = model = FSDPv2(
                     model,
@@ -1500,7 +1503,6 @@ class Trainer:
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
-
 
     def train(
         self,
@@ -2989,7 +2991,7 @@ class Trainer:
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         # TODO: Enable distributed checkpointing with SPMD.
         if self.is_fsdp_xla_v2_enabled:
-            logger.info(f"Skip saving model for now before the TPU SPMD distributed checkpointing is available")
+            logger.info("Skip saving model for now before the TPU SPMD distributed checkpointing is available")
             return
 
         logger.info(f"Saving model checkpoint to {output_dir}")
