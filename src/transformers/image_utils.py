@@ -338,7 +338,6 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
 
 
 def validate_preprocess_arguments(
-    images: Optional[List] = None,
     do_rescale: Optional[bool] = None,
     rescale_factor: Optional[float] = None,
     do_normalize: Optional[bool] = None,
@@ -356,32 +355,32 @@ def validate_preprocess_arguments(
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
     Raises `ValueError` if arguments incompatibility is caught.
+    Many incompatibilities are model-specific. `do_pad` sometimes needs `size_divisor`,
+    sometimes `size_divisibility`, and sometimes `size`. New models and processors added should follow
+    existing arguments when possible.
+
     """
-
-    if images and not valid_images(images):
-        raise ValueError(
-            "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-            "torch.Tensor, tf.Tensor or jax.ndarray."
-        )
-
     if do_rescale and rescale_factor is None:
-        raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        raise ValueError("rescale_factor must be specified if do_rescale is True.")
 
     if do_pad and size_divisibility is None:
-        raise ValueError("Size divisibility must be specified if do_pad is True.")
+        # Here, size_divisor might be passed as the value of size
+        raise ValueError(
+            "Depending on moel, size_divisibility, size_divisor, pad_size or size must be specified if do_pad is True."
+        )
 
     if do_normalize and (image_mean is None or image_std is None):
-        raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        raise ValueError("image_mean and image_std must both be specified if do_normalize is True.")
 
     if do_center_crop and crop_size is None:
-        raise ValueError("Crop size must be specified if do_center_crop is True.")
+        raise ValueError("crop_size must be specified if do_center_crop is True.")
 
     if do_resize and (size is None or resample is None):
-        raise ValueError("Size and resample must be specified if do_resize is True.")
+        raise ValueError("size and resample must be specified if do_resize is True.")
 
     if segmentation_maps is not None and not valid_images(segmentation_maps):
         raise ValueError(
-            "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
+            "Invalid segmentation_maps type. Must be of type PIL.Image.Image, numpy.ndarray, "
             "torch.Tensor, tf.Tensor or jax.ndarray."
         )
 
