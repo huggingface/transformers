@@ -74,6 +74,7 @@ FSDP_MIN_VERSION = "1.12.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
@@ -568,6 +569,10 @@ def is_sacremoses_available():
 
 def is_apex_available():
     return _apex_available
+
+
+def is_aqlm_available():
+    return _aqlm_available
 
 
 def is_ninja_available():
