@@ -543,11 +543,6 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["pixel_values", "input_ids"]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" in arg_names
-                else []
-            )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_different_timm_backbone(self):
@@ -747,3 +742,12 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         )
         assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-3)
+
+        # assert postprocessing
+        results_cpu = processor.image_processor.post_process_object_detection(
+            cpu_outputs, threshold=0.35, target_sizes=[image.size[::-1]]
+        )[0]
+
+        print(results_cpu)
+
+        assert False
