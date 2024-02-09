@@ -203,7 +203,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         validate_preprocess_arguments(
             images=images,
             do_rescale=do_rescale,

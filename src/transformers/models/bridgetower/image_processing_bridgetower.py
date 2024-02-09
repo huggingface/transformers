@@ -125,17 +125,17 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     Constructs a BridgeTower image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
+        do_resize (`bool`, defaults to `True`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to 288):
+        size (`Dict[str, int]` *optional*, defaults to `{'shortest_edge': 288}`):
             Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
             `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
             `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, defaults to `Resampling.BICUBIC`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -144,7 +144,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
+        do_normalize (`bool`, defaults to `True`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -155,10 +155,13 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, defaults to `True`, *optional*, defaults to `True`):
             Whether to center crop the image. Can be overridden by the `do_center_crop` parameter in the `preprocess`
             method.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        crop_size (`Dict[str, int]`, defaults to `None`, *optional*):
+            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
+            Can be overridden by the `crop_size` parameter in the `preprocess` method.
+        do_pad (`bool`, defaults to `True`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
     """
@@ -168,7 +171,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = 288,
+        size: Dict[str, int] = {"shortest_edge": 288},
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,

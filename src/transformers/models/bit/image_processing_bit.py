@@ -256,7 +256,7 @@ class BitImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         images = make_list_of_images(images)
-        
+
         validate_preprocess_arguments(
             images=images,
             do_rescale=do_rescale,

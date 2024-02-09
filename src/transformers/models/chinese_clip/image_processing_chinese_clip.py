@@ -262,7 +262,7 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
-            
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 

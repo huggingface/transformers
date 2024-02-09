@@ -32,7 +32,6 @@ from .utils import (
     logging,
     requires_backends,
     to_numpy,
-    TensorType,
 )
 from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_MEAN,
@@ -337,24 +336,25 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     image = image.convert("RGB")
     return image
 
+
 def validate_preprocess_arguments(
-        images: Optional[List] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: Optional[bool] = None,
-        size_divisibility: Optional[int] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        segmentation_maps: Optional[ImageInput] = None,
+    images: Optional[List] = None,
+    do_rescale: Optional[bool] = None,
+    rescale_factor: Optional[float] = None,
+    do_normalize: Optional[bool] = None,
+    image_mean: Optional[Union[float, List[float]]] = None,
+    image_std: Optional[Union[float, List[float]]] = None,
+    do_pad: Optional[bool] = None,
+    size_divisibility: Optional[int] = None,
+    do_center_crop: Optional[bool] = None,
+    crop_size: Optional[Dict[str, int]] = None,
+    do_resize: Optional[bool] = None,
+    size: Optional[Dict[str, int]] = None,
+    resample: Optional[PILImageResampling] = None,
+    segmentation_maps: Optional[ImageInput] = None,
 ):
     """
-    Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method. 
+    Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
     Raises `ValueError` if arguments incompatibility is caught.
     """
 
@@ -362,8 +362,8 @@ def validate_preprocess_arguments(
         raise ValueError(
             "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
             "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-    
+        )
+
     if do_rescale and rescale_factor is None:
         raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
@@ -371,8 +371,8 @@ def validate_preprocess_arguments(
         raise ValueError("Size divisibility must be specified if do_pad is True.")
 
     if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-    
+        raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
     if do_center_crop and crop_size is None:
         raise ValueError("Crop size must be specified if do_center_crop is True.")
 
