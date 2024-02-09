@@ -30,9 +30,7 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 
 
-Try AQLM: <a target="_blank" href="https://colab.research.google.com/drive/1-xZmBRXT5Fm3Ghn4Mwa2KRypORXb855X?usp=sharing">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a>
+Try AQLM on [Google Colab](https://colab.research.google.com/drive/1-xZmBRXT5Fm3Ghn4Mwa2KRypORXb855X?usp=sharing)!
 
 Additive Quantization of Language Models ([AQLM](https://arxiv.org/abs/2401.06118)) is a Large Language Models compression method. It quantizes multiple weights together and take advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
 
