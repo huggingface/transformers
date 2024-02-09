@@ -38,6 +38,7 @@ class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
     AWQ = "awq"
+    TORCH_FP8 = "torch_fp8"
 
 
 class AWQLinearVersion(str, Enum):
@@ -731,3 +732,34 @@ class AwqConfig(QuantizationConfigMixin):
         loading_attibutes = ["do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
+
+
+@dataclass
+class TorchFp8Config(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `torch_float8` library.
+
+    Args:
+        linear_type (`str`, *optional*, defaults to `"dynamic"`):
+            The type of linear layer to use.
+    """
+
+    def __init__(
+        self,
+        linear_type="dynamic",
+        modules_to_not_convert=None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.TORCH_FP8
+        self.modules_to_not_convert = modules_to_not_convert
+        self.linear_type = linear_type
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if not torch.cuda.is_available():
+            raise ValueError("torch-float8 is only available on GPU")
