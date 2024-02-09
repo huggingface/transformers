@@ -601,6 +601,24 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             self.assertIsNotNone(model)
 
     @slow
+    def test_save_and_load_low_cpu_mem_usage(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            for model_class in self.all_model_classes:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                model_to_save = model_class(config)
+
+                model_to_save.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    low_cpu_mem_usage=True,
+                )
+
+                # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta. If there are
+                # any unloaded or untied parameters, then trying to move it to device=torch_device will throw an error.
+                model.to(torch_device)
+
+    @slow
     @require_torch_accelerator
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
