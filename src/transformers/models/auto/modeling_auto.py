@@ -29,7 +29,7 @@ from .configuration_auto import CONFIG_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
-MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
+_MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image mapping
         ("beit", "BeitModel"),
