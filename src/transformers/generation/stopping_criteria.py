@@ -283,7 +283,7 @@ class StopStringCriteria(StoppingCriteria):
 
             # The string is matched if we reached a cumsum equal to or greater than the length of the string
             # before hitting the mask
-            string_matches.append(torch.max(cumsum * mask, dim=1).values.squeeze() >= target_len)
+            string_matches.append(torch.max(cumsum * mask, dim=1).values.squeeze(1) >= target_len)
 
         # Now we concatenate the match booleans across all strings and check if any are True
         string_matches = torch.cat(string_matches, dim=0)
