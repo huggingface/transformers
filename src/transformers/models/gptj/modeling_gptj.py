@@ -536,6 +536,12 @@ class GPTJFlashAttention2(GPTJAttention):
         )
 
 
+GPTJ_ATTENTION_CLASSES = {
+    "eager": GPTJAttention,
+    "flash_attention_2": GPTJFlashAttention2,
+}
+
+
 class GPTJMLP(nn.Module):
     def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * embed_dim
         super().__init__()
@@ -560,11 +566,7 @@ class GPTJBlock(nn.Module):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = (
-            GPTJFlashAttention2(config)
-            if config._attn_implementation == "flash_attention_2"
-            else GPTJAttention(config)
-        )
+        self.attn = GPTJ_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
