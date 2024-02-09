@@ -99,16 +99,15 @@ class MusicgenMelodyOutputWithPast(ModelOutput):
     encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.encoder_decoder.modeling_encoder_decoder.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
     """
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
     if decoder_start_token_id is None:
         raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    shifted_input_ids[..., 0] = decoder_start_token_id
 
     if pad_token_id is None:
         raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
@@ -914,6 +913,11 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        if (labels is not None) and (input_ids is None and inputs_embeds is None):
+            input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.bos_token_id # TODO: how to make it work?
+            )
 
         outputs = self.model(
             input_ids,
@@ -935,7 +939,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not implemented for MusicgenMelody.")
+            loss_fct = CrossEntropyLoss()
+            # TODO: is is ok ?
+            loss = loss_fct(lm_logits[:,:,-labels.shape[-1]:].reshape(-1, self.config.vocab_size), labels.squeeze(1).view(-1))
 
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
         lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
@@ -2107,6 +2113,15 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 batch_size = value.shape[0]
                 break
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
+
+    def freeze_encoders(self):
+        for param in self.text_encoder.parameters():
+            param.requires_grad = False
+        self.text_encoder._requires_grad = False
+        
+        for param in self.audio_encoder.parameters():
+            param.requires_grad = False
+        self.audio_encoder._requires_grad = False
 
     @torch.no_grad()
     def generate(
