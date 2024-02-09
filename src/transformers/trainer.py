@@ -1388,7 +1388,6 @@ class Trainer:
         # Distributed training (should be after apex fp16 initialization)
         # Distributed training using PyTorch FSDP
         if self.is_fsdp_xla_enabled:
-            is_fsdp_xla_v2_enabled = self.args.fsdp_config["xla_fsdp_v2"]
             try:
                 from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
                 from torch_xla.distributed.fsdp import checkpoint_module
@@ -1396,7 +1395,8 @@ class Trainer:
                     size_based_auto_wrap_policy,
                     transformer_auto_wrap_policy,
                 )
-                from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
+                if self.is_fsdp_xla_v2_enabled:
+                    from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
             except ImportError:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
@@ -1428,12 +1428,11 @@ class Trainer:
             if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
                 # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                 def auto_wrapper_callable(m, *args, **kwargs):
-                    if is_fsdp_xla_v2_enabled:
-                        return FSDPv2(checkpoint_module(m), *args, **kwargs)
-                    return FSDP(checkpoint_module(m), *args, **kwargs)
+                    target_cls = FSDP if not self.is_fsdp_xla_v2_enabled else FSDPv2
+                    return target_cls(checkpoint_module(m), *args, **kwargs)
 
             # Wrap the base model with an outer FSDP wrapper
-            if is_fsdp_xla_v2_enabled:
+            if self.is_fsdp_xla_v2_enabled:
                 # Should we have this logic into the FSDPv2 wrapper?
                 model = model.to(xm.xla_device())
                 def shard_output(output, mesh):
@@ -1447,7 +1446,8 @@ class Trainer:
                     elif isinstance(output, CausalLMOutputWithPast):
                         real_output = output.logits
 
-                    assert real_output is not None
+                    if real_output is None:
+                        raise ValueError("Something went wrong, the output of the model shouldn't be `None`")
                     xs.mark_sharding(real_output, mesh, ('fsdp', None, None))
 
                 self.model = model = FSDPv2(
@@ -2995,8 +2995,8 @@ class Trainer:
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         # TODO: Enable distributed checkpointing with SPMD.
-        if xr.is_spmd():
-            logger.info(f"Skip saving model as we are using SPMD")
+        if self.is_fsdp_xla_v2_enabled:
+            logger.info(f"Skip saving model for now before the TPU SPMD distributed checkpointing is available")
             return
 
         logger.info(f"Saving model checkpoint to {output_dir}")
