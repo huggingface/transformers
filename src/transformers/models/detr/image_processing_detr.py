@@ -760,7 +760,7 @@ class DetrImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
+        do_normalize (`bool`, *optional*, defaults to True):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
@@ -769,6 +769,10 @@ class DetrImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
             overridden by the `do_pad` parameter in the `preprocess` method.
@@ -787,6 +791,7 @@ class DetrImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
+        do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         **kwargs,
     ) -> None:
@@ -805,6 +810,10 @@ class DetrImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
+        # Backwards compatibility
+        if do_convert_annotations is None:
+            do_convert_annotations = do_normalize
+
         super().__init__(**kwargs)
         self.format = format
         self.do_resize = do_resize
@@ -813,6 +822,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
+        self.do_convert_annotations = do_convert_annotations
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
@@ -986,7 +996,12 @@ class DetrImageProcessor(BaseImageProcessor):
         return normalize_annotation(annotation, image_size=image_size)
 
     def _update_annotation_for_padded_image(
-        self, annotation: Dict, input_image_size: Tuple[int, int], output_image_size: Tuple[int, int], padding
+        self,
+        annotation: Dict,
+        input_image_size: Tuple[int, int],
+        output_image_size: Tuple[int, int],
+        padding,
+        update_bboxes,
     ) -> Dict:
         """
         Update the annotation for a padded image.
@@ -1006,10 +1021,20 @@ class DetrImageProcessor(BaseImageProcessor):
                 )
                 masks = safe_squeeze(masks, 1)
                 new_annotation["masks"] = masks
+            elif key == "boxes" and update_bboxes:
+                boxes = value
+                boxes *= np.asarray(
+                    [
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                    ]
+                )
+                new_annotation["boxes"] = boxes
             elif key == "size":
                 new_annotation["size"] = output_image_size
             else:
-                # Boxes are not in relative format and don't need to be updated
                 new_annotation[key] = value
         return new_annotation
 
@@ -1021,6 +1046,7 @@ class DetrImageProcessor(BaseImageProcessor):
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        update_bboxes: bool = True,
     ) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
@@ -1041,7 +1067,7 @@ class DetrImageProcessor(BaseImageProcessor):
         )
         if annotation is not None:
             annotation = self._update_annotation_for_padded_image(
-                annotation, (input_height, input_width), (output_height, output_width), padding
+                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
             )
         return padded_image, annotation
 
@@ -1054,6 +1080,7 @@ class DetrImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        update_bboxes: bool = True,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1079,6 +1106,10 @@ class DetrImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
+            update_bboxes (`bool`, *optional*, defaults to `True`):
+                Whether to update the bounding boxes in the annotations to match the padded images. If the
+                bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
+                format, the bounding boxes will not be updated.
         """
         pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
@@ -1093,6 +1124,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 constant_values=constant_values,
                 data_format=data_format,
                 input_data_format=input_data_format,
+                update_bboxes=update_bboxes,
             )
             padded_images.append(padded_image)
             padded_annotations.append(padded_annotation)
@@ -1127,6 +1159,7 @@ class DetrImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
+        do_convert_annotations: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
@@ -1170,6 +1203,10 @@ class DetrImageProcessor(BaseImageProcessor):
                 Rescale factor to use when rescaling the image.
             do_normalize (`bool`, *optional*, defaults to self.do_normalize):
                 Whether to normalize the image.
+            do_convert_annotations (`bool`, *optional*, defaults to self.do_convert_annotations):
+                Whether to convert the annotations to the format expected by the model. Converts the bounding
+                boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
+                and in relative coordinates.
             image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
                 Mean to use when normalizing the image.
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
@@ -1216,6 +1253,9 @@ class DetrImageProcessor(BaseImageProcessor):
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
+        do_convert_annotations = (
+            self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
+        )
         do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
 
@@ -1319,11 +1359,12 @@ class DetrImageProcessor(BaseImageProcessor):
             images = [
                 self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
             ]
-            if annotations is not None:
-                annotations = [
-                    self.normalize_annotation(annotation, get_image_size(image, input_data_format))
-                    for annotation, image in zip(annotations, images)
-                ]
+
+        if do_convert_annotations and annotations is not None:
+            annotations = [
+                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+                for annotation, image in zip(annotations, images)
+            ]
 
         if do_pad:
             # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
@@ -1334,6 +1375,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 data_format=data_format,
                 input_data_format=input_data_format,
                 return_tensors=return_tensors,
+                update_bboxes=do_convert_annotations,
             )
         else:
             images = [
