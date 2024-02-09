@@ -48,6 +48,9 @@ class ViTHybridConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -100,6 +103,7 @@ class ViTHybridConfig(PretrainedConfig):
         backbone_config=None,
         backbone=None,
         use_pretrained_backbone=False,
+        use_timm_backbone=False,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -147,6 +151,7 @@ class ViTHybridConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

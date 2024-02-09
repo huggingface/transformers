@@ -598,6 +598,7 @@ def get_tokenizer_config(
         revision=revision,
         local_files_only=local_files_only,
         subfolder=subfolder,
+        _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
         _commit_hash=commit_hash,

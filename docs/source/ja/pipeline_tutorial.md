@@ -76,7 +76,7 @@ generator(
 
 データセット全体を繰り返し処理したり、ウェブサーバーで推論に使用したい場合は、専用の部分をチェックしてください。
 
-[データセットでパイプラインを使用する](#using-pipelines-on-a-dataset)
+[データセットでパイプラインを使用する](#using-pipeline-in-a-dataset)
 
 [ウェブサーバーでパイプラインを使用する](./pipeline_webserver)
 

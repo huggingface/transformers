@@ -461,7 +461,7 @@ Ricorda dalla sezione precedente sull'elaborazione dei dati audio, tu dovresti s
 
 ### Processor
 
-Un processor combina un estrattore di caratteristiche e un tokenizer. Carica un processor con [`AutoProcessor.from_pretrained]:
+Un processor combina un estrattore di caratteristiche e un tokenizer. Carica un processor con [`AutoProcessor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoProcessor

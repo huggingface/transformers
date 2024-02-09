@@ -16,6 +16,7 @@
 import json
 import os
 import re
+import warnings
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
@@ -427,6 +428,22 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
     def _normalize(self, text):
+        warnings.warn(
+            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
+        )
+        return self.normalize(text)
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
+    def _basic_normalize(self, text, remove_diacritics=False):
+        warnings.warn(
+            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
+        )
+        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
+    def normalize(self, text):
         """
         Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
         english text.
@@ -435,8 +452,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return normalizer(text)
 
     @staticmethod
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(text, remove_diacritics=False):
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
+    def basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
         multilingual text.
