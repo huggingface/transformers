@@ -20,11 +20,24 @@ class ReturnType(enum.Enum):
     FULL_TEXT = 2
 
 
+class Chat:
+    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages):
+        for message in messages:
+            if not ("role" in message and "content" in message):
+                raise ValueError("When passing chat dicts as input, each chat must have a 'role' and 'content' key.")
+        self.messages = messages
+
+
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt.
+    specified text prompt. It can also accept one or more chats. Each chat takes the form of a list of dicts,
+    where each dict contains "role" and "content" keys.
 
     Example:
 
@@ -216,7 +229,15 @@ class TextGenerationPipeline(Pipeline):
             - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
-        return super().__call__(text_inputs, **kwargs)
+        if isinstance(text_inputs, (list, tuple)) and isinstance(text_inputs[0], (list, tuple, dict)):
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            chats = text_inputs
+            if isinstance(chats[0], dict):
+                chats = [chats]
+            chats = [Chat(chat) for chat in chats]  # 🐈 🐈 🐈
+            return super().__call__(chats, **kwargs)
+        else:
+            return super().__call__(text_inputs, **kwargs)
 
     def preprocess(
         self,
@@ -229,14 +250,25 @@ class TextGenerationPipeline(Pipeline):
         max_length=None,
         **generate_kwargs,
     ):
-        inputs = self.tokenizer(
-            prefix + prompt_text,
-            return_tensors=self.framework,
-            truncation=truncation,
-            padding=padding,
-            max_length=max_length,
-            add_special_tokens=add_special_tokens,
-        )
+        if isinstance(prompt_text, Chat):
+            inputs = self.tokenizer.apply_chat_template(
+                prompt_text.messages,
+                padding=padding,
+                add_generation_prompt=True,
+                return_tensors=self.framework,
+                max_length=max_length,
+                truncation=truncation,
+                return_dict=True,
+            )
+        else:
+            inputs = self.tokenizer(
+                prefix + prompt_text,
+                return_tensors=self.framework,
+                truncation=truncation,
+                padding=padding,
+                max_length=max_length,
+                add_special_tokens=add_special_tokens,
+            )
         inputs["prompt_text"] = prompt_text
 
         if handle_long_generation == "hole":
@@ -331,7 +363,10 @@ class TextGenerationPipeline(Pipeline):
 
                 all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
-                    all_text = prompt_text + all_text
+                    if isinstance(prompt_text, str):
+                        all_text = prompt_text + all_text
+                    elif isinstance(prompt_text, Chat):
+                        all_text = prompt_text.messages + [{"role": "assistant", "content": all_text}]
 
                 record = {"generated_text": all_text}
             records.append(record)
