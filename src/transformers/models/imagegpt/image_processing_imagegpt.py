@@ -29,7 +29,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -243,7 +243,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         # Here, normalize() is using a constant factor to divide pixel values.
         # hence, the method does not need iamge_mean and image_std.
         validate_preprocess_arguments(

@@ -30,7 +30,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -181,12 +181,12 @@ class GLPNImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         # Here, the rescale() method uses a constant rescale_factor. It does not need to be validated
-        # with a rescale_factor. 
+        # with a rescale_factor.
         validate_preprocess_arguments(
             do_resize=do_resize,
-            size=size_divisor, # Here, size_divisor is used as a parameter for optimal resizing instead of size.
+            size=size_divisor,  # Here, size_divisor is used as a parameter for optimal resizing instead of size.
             resample=resample,
         )
 

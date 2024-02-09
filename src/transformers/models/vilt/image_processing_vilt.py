@@ -32,7 +32,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -423,7 +423,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         # Here the pad() method does not require any additional argument as it takes the maximum of (height, width).
         # Hence, it does not need to be passed to a validate_preprocess_arguments() method.
         validate_preprocess_arguments(

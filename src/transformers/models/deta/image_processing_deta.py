@@ -45,7 +45,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import (
     is_flax_available,

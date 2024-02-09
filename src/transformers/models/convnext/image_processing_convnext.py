@@ -36,7 +36,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -91,7 +91,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Dict[str, int] = None,
         crop_pct: float = None,
-        resample: `PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -281,7 +281,6 @@ class ConvNextImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(

@@ -278,7 +278,7 @@ class CLIPImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        
+
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 

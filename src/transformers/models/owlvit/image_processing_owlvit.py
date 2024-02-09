@@ -38,7 +38,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, logging
 
@@ -356,7 +356,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

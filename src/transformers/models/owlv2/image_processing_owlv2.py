@@ -37,7 +37,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -408,7 +408,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             )
         # Here, pad and resize methods are different from the rest of image processors
         # as they don't have any resampling in resize()
-        # or pad size in pad() (the maximum of (height, width) is taken instead). 
+        # or pad size in pad() (the maximum of (height, width) is taken instead).
         # hence, these arguments don't need to be passed in validate_preprocess_arguments.
         validate_preprocess_arguments(
             do_rescale=do_rescale,

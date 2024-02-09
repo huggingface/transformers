@@ -39,7 +39,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -739,7 +739,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            segmentation_maps=segmentation_maps
+            segmentation_maps=segmentation_maps,
         )
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):

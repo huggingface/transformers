@@ -48,6 +48,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -1178,6 +1179,9 @@ class DetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+
+        # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

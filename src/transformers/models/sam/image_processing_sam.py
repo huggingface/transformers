@@ -34,7 +34,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -503,11 +503,11 @@ class SamImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisibility=pad_size, # Here _preprocess needs do_pad and pad_size.
+            size_divisibility=pad_size,  # Here _preprocess needs do_pad and pad_size.
             do_resize=do_resize,
             size=size,
             resample=resample,
-            segmentation_maps=segmentation_maps
+            segmentation_maps=segmentation_maps,
         )
 
         images, original_sizes, reshaped_input_sizes = zip(

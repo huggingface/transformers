@@ -28,7 +28,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -170,7 +170,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_pad=do_pad,
-            size_divisibility=pad_size, # Here the pad function simply requires pad_size.
+            size_divisibility=pad_size,  # Here the pad function simply requires pad_size.
         )
 
         # All transformations expect numpy arrays.

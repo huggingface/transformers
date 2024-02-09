@@ -264,7 +264,6 @@ class BitImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

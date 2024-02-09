@@ -39,7 +39,7 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -713,7 +713,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -723,7 +723,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            segmentation_maps=segmentation_maps
+            segmentation_maps=segmentation_maps,
         )
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):

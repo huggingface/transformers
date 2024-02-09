@@ -36,7 +36,7 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -294,7 +294,7 @@ class TvpImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisibility=pad_size, # here the pad() method simply requires the pad_size argument.
+            size_divisibility=pad_size,  # here the pad() method simply requires the pad_size argument.
             do_center_crop=do_center_crop,
             crop_size=crop_size,
             do_resize=do_resize,

@@ -35,7 +35,7 @@ from ...image_utils import (
     is_valid_image,
     make_list_of_images,
     to_numpy_array,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -454,7 +454,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             do_pad=do_pad,
-            size_divisibility=size, # There is no pad divisibility in this processor, but pad requires the size arg.
+            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
             do_resize=do_resize,
             size=size,
             resample=resample,
