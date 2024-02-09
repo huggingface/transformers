@@ -231,11 +231,11 @@ class TextGenerationPipeline(Pipeline):
         """
         if isinstance(text_inputs, (list, tuple)) and isinstance(text_inputs[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
-            chats = text_inputs
-            if isinstance(chats[0], dict):
-                chats = [chats]
-            chats = [Chat(chat) for chat in chats]  # 🐈 🐈 🐈
-            return super().__call__(chats, **kwargs)
+            if isinstance(text_inputs[0], dict):
+                return super().__call__(Chat(text_inputs), **kwargs)
+            else:
+                chats = [Chat(chat) for chat in text_inputs]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
         else:
             return super().__call__(text_inputs, **kwargs)
 

@@ -157,7 +157,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                [{"generated_text": expected_chat1}],
+                {"generated_text": expected_chat1},
             ],
         )
 
