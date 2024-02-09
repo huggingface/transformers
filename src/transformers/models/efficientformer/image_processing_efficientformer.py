@@ -35,6 +35,7 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments
 )
 from ...utils import TensorType, logging
 
@@ -240,22 +241,23 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         if not is_batched(images):
             images = [images]
 
-        if not valid_images(images):
+        if images and not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_center_crop and crop_size is None:
-            raise ValueError("Crop size must be specified if do_center_crop is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        # All transformations expect numpy arrays.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+                )        # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:

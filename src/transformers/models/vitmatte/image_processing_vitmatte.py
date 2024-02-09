@@ -204,8 +204,14 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        images = make_list_of_images(images)
+
+        if images and not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
         validate_preprocess_arguments(
-            images=images,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
