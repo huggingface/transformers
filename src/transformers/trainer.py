@@ -169,6 +169,8 @@ if is_datasets_available():
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
+    import torch_xla.distributed.spmd as xs
     import torch_xla.debug.metrics as met
 
 
@@ -634,6 +636,15 @@ class Trainer:
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
+
+        # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
+        # Tensor axis is just a placeholder where it will not be used in FSDPv2.
+        num_devices = xr.global_runtime_device_count()
+        spmd_mesh = xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=('fsdp', 'tensor'))
+
+        # Update training args with relevant SPMD config
+        self.spmd_mesh = spmd_mesh
+
 
     def _activate_neftune(self, model):
         r"""
@@ -1378,6 +1389,7 @@ class Trainer:
         # Distributed training (should be after apex fp16 initialization)
         # Distributed training using PyTorch FSDP
         if self.is_fsdp_xla_enabled:
+            is_fsdp_xla_v2_enabled = self.args.fsdp_config["xla_fsdp_v2"]
             try:
                 from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
                 from torch_xla.distributed.fsdp import checkpoint_module
@@ -1385,6 +1397,7 @@ class Trainer:
                     size_based_auto_wrap_policy,
                     transformer_auto_wrap_policy,
                 )
+                from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
             except ImportError:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
@@ -1416,15 +1429,42 @@ class Trainer:
             if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
                 # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                 def auto_wrapper_callable(m, *args, **kwargs):
+                    if is_fsdp_xla_v2_enabled:
+                        return FSDPv2(checkpoint_module(m), *args, **kwargs)
                     return FSDP(checkpoint_module(m), *args, **kwargs)
 
             # Wrap the base model with an outer FSDP wrapper
-            self.model = model = FSDP(
-                model,
-                auto_wrap_policy=auto_wrap_policy,
-                auto_wrapper_callable=auto_wrapper_callable,
-                **fsdp_kwargs,
-            )
+            if is_fsdp_xla_v2_enabled:
+                # Should we have this logic into the FSDPv2 wrapper?
+                model = model.to(xm.xla_device())
+                def shard_output(output, mesh):
+                    from .modeling_outputs import CausalLMOutputWithPast
+
+                    real_output = None
+                    if isinstance(output, torch.Tensor):
+                        real_output = output
+                    elif isinstance(output, tuple):
+                        real_output = output[0]
+                    elif isinstance(output, CausalLMOutputWithPast):
+                        real_output = output.logits
+
+                    assert real_output is not None
+                    xs.mark_sharding(real_output, mesh, ('fsdp', None, None))
+
+                self.model = model = FSDPv2(
+                    model,
+                    self.spmd_mesh,
+                    shard_output,
+                    auto_wrap_policy=auto_wrap_policy,
+                    auto_wrapper_callable=auto_wrapper_callable,
+                )
+            else:
+                self.model = model = FSDP(
+                    model,
+                    auto_wrap_policy=auto_wrap_policy,
+                    auto_wrapper_callable=auto_wrapper_callable,
+                    **fsdp_kwargs,
+                )
 
             # Patch `xm.optimizer_step` should not reduce gradients in this case,
             # as FSDP does not need gradient reduction over sharded parameters.
@@ -1461,6 +1501,17 @@ class Trainer:
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
+
+    # TODO: Should we upstream this to accelerate?
+    def _xla_sharded_dataloader(self, dataloader):
+        if is_torch_tpu_available():
+            import torch_xla.distributed.parallel_loader as pl
+            sharding_spec = xs.ShardingSpec(self.spmd_mesh, ('fsdp', None))
+            assert isinstance(dataloader, pl.MpDeviceLoader)
+            dataloader._parallel_loader_kwargs['input_sharding'] = sharding_spec
+            return dataloader
+        else:
+            return dataloader
 
     def train(
         self,
@@ -1592,7 +1643,7 @@ class Trainer:
             self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
-        train_dataloader = self.get_train_dataloader()
+        train_dataloader = self._xla_sharded_dataloader(self.get_train_dataloader())
 
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
@@ -2945,6 +2996,11 @@ class Trainer:
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
+        # TODO: Enable distributed checkpointing with SPMD.
+        if xr.is_spmd():
+            logger.info(f"Skip saving model as we are using SPMD")
+            return
+
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
         model.to("cpu")
@@ -3142,7 +3198,7 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
-        eval_dataloader = self.get_eval_dataloader(eval_dataset)
+        eval_dataloader = self._xla_sharded_dataloader(self.get_eval_dataloader(eval_dataset))
         start_time = time.time()
 
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
