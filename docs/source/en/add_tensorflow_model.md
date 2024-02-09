@@ -83,7 +83,7 @@ don't have your eyes set on a specific architecture, asking the 🤗 Transformer
 maximize your impact - we will guide you towards the most prominent architectures that are missing on the TensorFlow
 side. If the specific model you want to use with TensorFlow already has a TensorFlow architecture implementation in
 🤗 Transformers but is lacking weights, feel free to jump straight into the
-[weight conversion section](#adding-tensorflow-weights-to-hub)
+[weight conversion section](#adding-tensorflow-weights-to--hub)
 of this page.
 
 For simplicity, the remainder of this guide assumes you've decided to contribute with the TensorFlow version of
