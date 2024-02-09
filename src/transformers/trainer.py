@@ -637,13 +637,12 @@ class Trainer:
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
-        # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
-        # Tensor axis is just a placeholder where it will not be used in FSDPv2.
-        num_devices = xr.global_runtime_device_count()
-        spmd_mesh = xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=('fsdp', 'tensor'))
-
-        # Update training args with relevant SPMD config
-        self.spmd_mesh = spmd_mesh
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config["xla_fsdp_v2"]
+        if self.is_fsdp_xla_v2_enabled:
+            # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
+            # Tensor axis is just a placeholder where it will not be used in FSDPv2.
+            num_devices = xr.global_runtime_device_count()
+            xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=('fsdp', 'tensor')))
 
 
     def _activate_neftune(self, model):
@@ -1453,7 +1452,6 @@ class Trainer:
 
                 self.model = model = FSDPv2(
                     model,
-                    self.spmd_mesh,
                     shard_output,
                     auto_wrap_policy=auto_wrap_policy,
                     auto_wrapper_callable=auto_wrapper_callable,
@@ -1506,7 +1504,7 @@ class Trainer:
     def _xla_sharded_dataloader(self, dataloader):
         if is_torch_tpu_available():
             import torch_xla.distributed.parallel_loader as pl
-            sharding_spec = xs.ShardingSpec(self.spmd_mesh, ('fsdp', None))
+            sharding_spec = xs.ShardingSpec(xs.get_global_mesh(), ('fsdp', None))
             assert isinstance(dataloader, pl.MpDeviceLoader)
             dataloader._parallel_loader_kwargs['input_sharding'] = sharding_spec
             return dataloader
