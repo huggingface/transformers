@@ -26,6 +26,35 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 </Tip>
 
+## AQLM
+
+
+
+Try AQLM: <a target="_blank" href="https://colab.research.google.com/drive/1-xZmBRXT5Fm3Ghn4Mwa2KRypORXb855X?usp=sharing">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
+Additive Quantization of Language Models ([AQLM](https://arxiv.org/abs/2401.06118)) is a Large Language Models compression method. It quantizes multiple weights together and take advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
+
+Inference support for AQLM is realised in the `aqlm` library. Make sure to install it to run the models:
+```bash
+pip install aqlm[gpu,cpu]
+```
+
+The library provides efficient kernels for both GPU and CPU inference.
+
+The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM).
+
+### AQLM configurations
+
+AQLM quantization setpus vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
+ 
+| Number of codebooks | Codebook size, bits | Notation | Performance | Speedup     | Fast GPU inference | Fast CPU inference |
+|---------------------|---------------------|----------|-------------|-------------|--------------------|--------------------|
+| 1                   | 16                  | 1x16     | Best        | Up to ~1.3x | ✅                  | ❌                  |
+| 2                   | 8                   | 2x8      | OK          | Up to ~3.0x | ✅                  | ❌                  |
+| K                   | 8                   | Kx8      | Good        | Up to ~4.0x | ❌                  | ✅                  |
+
 ## AWQ
 
 <Tip>
@@ -517,19 +546,6 @@ double_quant_config = BitsAndBytesConfig(
 
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
-
-## AQLM
-
-Additive Quantization of Language Models ([AQLM](https://arxiv.org/abs/2401.06118)) is a Large Language Models compression method. It quantizes multiple weights together and take advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
-
-Inference support for AQLM is realised in the `aqlm` library. Make sure to install in to run the models:
-```bash
-pip install aqlm
-```
-
-The library provides efficient kernels for both GPU and CPU inference.
-
-The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM).
 
 ## Optimum
 
