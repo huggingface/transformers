@@ -66,6 +66,7 @@ from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
+from .image_feature_extraction import ImageFeatureExtractionPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
@@ -362,6 +363,18 @@ SUPPORTED_TASKS = {
         },
         "type": "image",
     },
+    "image-feature-extraction": {
+        "impl": ImageFeatureExtractionPipeline,
+        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("google/vit-base-patch16-224", "29e7a1e183"),
+                "tf": ("google/vit-base-patch16-224", "29e7a1e183"),
+            }
+        },
+        "type": "image",
+    },
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
         "tf": (),
@@ -500,6 +513,7 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"feature-extraction"`
             - `"fill-mask"`
             - `"image-classification"`
+            - `"image-feature-extraction"`
             - `"image-segmentation"`
             - `"image-to-text"`
             - `"image-to-image"`
@@ -586,6 +600,7 @@ def pipeline(
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
+            - `"image-feature-extraction"`: will return an [`ImageFeatureExtractionPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
             - `"image-to-image"`: will return a [`ImageToImagePipeline`].
             - `"image-to-text"`: will return a [`ImageToTextPipeline`].

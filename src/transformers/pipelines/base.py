@@ -41,6 +41,7 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
@@ -852,6 +853,8 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device("cpu")
             elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
+            elif is_torch_npu_available():
+                self.device = torch.device(f"npu:{device}")
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
             else:

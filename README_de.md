@@ -1,5 +1,5 @@
 <!---
-Copyright 2020 The HuggingFace Team. All rights reserved.
+Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <b>English</b> |
+        <a href="https://github.com/huggingface/transformers/">English</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hans.md">简体中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
@@ -56,115 +56,114 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_de.md">Deutsch</a> |
+        <b>Deutsch</b> |
     </p>
 </h4>
 
 <h3 align="center">
-    <p>State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow</p>
+    <p>Maschinelles Lernen auf dem neuesten Stand der Technik für JAX, PyTorch und TensorFlow</p>
 </h3>
 
 <h3 align="center">
     <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
 </h3>
 
-🤗 Transformers provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio.
+🤗 Transformers bietet Tausende von vortrainierten Modellen, um Aufgaben in verschiedenen Modalitäten wie Text, Bild und Audio durchzuführen.
 
-These models can be applied on:
+Diese Modelle können angewendet werden, auf:
 
-* 📝 Text, for tasks like text classification, information extraction, question answering, summarization, translation, and text generation, in over 100 languages.
-* 🖼️ Images, for tasks like image classification, object detection, and segmentation.
-* 🗣️ Audio, for tasks like speech recognition and audio classification.
+* 📝 Text - für Aufgaben wie Textklassifizierung, Informationsextraktion, Question Answering, automatische Textzusammenfassung, maschinelle Übersetzung und Textgenerierung in über 100 Sprachen.
+* 🖼️ Bilder - für Aufgaben wie Bildklassifizierung, Objekterkennung und Segmentierung.
+* 🗣️ Audio - für Aufgaben wie Spracherkennung und Audioklassifizierung.
 
-Transformer models can also perform tasks on **several modalities combined**, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
+Transformer-Modelle können auch Aufgaben für **mehrere Modalitäten in Kombination** durchführen, z. B. tabellenbasiertes Question Answering, optische Zeichenerkennung, Informationsextraktion aus gescannten Dokumenten, Videoklassifizierung und visuelles Question Answering.
 
-🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
+🤗 Transformers bietet APIs, um diese vortrainierten Modelle schnell herunterzuladen und für einen gegebenen Text zu verwenden, sie auf Ihren eigenen Datensätzen zu feintunen und dann mit der Community in unserem [Model Hub](https://huggingface.co/models) zu teilen. Gleichzeitig ist jedes Python-Modul, das eine Architektur definiert, komplett eigenständig und kann modifiziert werden, um schnelle Forschungsexperimente zu ermöglichen.
 
-🤗 Transformers is backed by the three most popular deep learning libraries — [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) and [TensorFlow](https://www.tensorflow.org/) — with a seamless integration between them. It's straightforward to train your models with one before loading them for inference with the other.
+🤗 Transformers unterstützt die nahtlose Integration von drei der beliebtesten Deep-Learning-Bibliotheken: [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) und [TensorFlow](https://www.tensorflow.org/). Trainieren Sie Ihr Modell in einem Framework und laden Sie es zur Inferenz unkompliziert mit einem anderen.
 
-## Online demos
+## Online-Demos
 
-You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer [private model hosting, versioning, & an inference API](https://huggingface.co/pricing) for public and private models.
+Sie können die meisten unserer Modelle direkt auf ihren Seiten im [Model Hub](https://huggingface.co/models) testen. Wir bieten auch [privates Modell-Hosting, Versionierung, & eine Inferenz-API](https://huggingface.co/pricing) für öffentliche und private Modelle an.
 
-Here are a few examples:
+Hier sind einige Beispiele:
 
-In Natural Language Processing:
-- [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
-- [Name Entity Recognition with Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
-- [Text generation with GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
-- [Natural Language Inference with RoBERTa](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
-- [Summarization with BART](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
-- [Question answering with DistilBERT](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
-- [Translation with T5](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
+In der Computerlinguistik:
 
-In Computer Vision:
-- [Image classification with ViT](https://huggingface.co/google/vit-base-patch16-224)
-- [Object Detection with DETR](https://huggingface.co/facebook/detr-resnet-50)
-- [Semantic Segmentation with SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-- [Panoptic Segmentation with MaskFormer](https://huggingface.co/facebook/maskformer-swin-small-coco)
-- [Depth Estimation with DPT](https://huggingface.co/docs/transformers/model_doc/dpt)
-- [Video Classification with VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae)
-- [Universal Segmentation with OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
+- [Maskierte Wortvervollständigung mit BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
+- [Eigennamenerkennung mit Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
+- [Textgenerierung mit GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
+- [Natural Language Inference mit RoBERTa](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
+- [Automatische Textzusammenfassung mit BART](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
+- [Question Answering mit DistilBERT](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
+- [Maschinelle Übersetzung mit T5](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
-In Audio:
-- [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
-- [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
-- [Audio Classification with Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
+In der Computer Vision:
 
-In Multimodal tasks:
-- [Table Question Answering with TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
-- [Visual Question Answering with ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
-- [Zero-shot Image Classification with CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
-- [Document Question Answering with LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
-- [Zero-shot Video Classification with X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
+- [Bildklassifizierung mit ViT](https://huggingface.co/google/vit-base-patch16-224)
+- [Objekterkennung mit DETR](https://huggingface.co/facebook/detr-resnet-50)
+- [Semantische Segmentierung mit SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+- [Panoptische Segmentierung mit MaskFormer](https://huggingface.co/facebook/maskformer-swin-small-coco)
+- [Depth Estimation mit DPT](https://huggingface.co/docs/transformers/model_doc/dpt)
+- [Videoklassifizierung mit VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae)
+- [Universelle Segmentierung mit OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
+Im Audio-Bereich:
 
-## 100 projects using Transformers
+- [Automatische Spracherkennung mit Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
+- [Keyword Spotting mit Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+- [Audioklassifizierung mit Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
-Transformers is more than a toolkit to use pretrained models: it's a community of projects built around it and the
-Hugging Face Hub. We want Transformers to enable developers, researchers, students, professors, engineers, and anyone
-else to build their dream projects.
+In multimodalen Aufgaben:
 
-In order to celebrate the 100,000 stars of transformers, we have decided to put the spotlight on the
-community, and we have created the [awesome-transformers](./awesome-transformers.md) page which lists 100
-incredible projects built in the vicinity of transformers.
+- [Tabellenbasiertes Question Answering mit TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
+- [Visuelles Question Answering mit ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
+- [Zero-Shot-Bildklassifizierung mit CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
+- [Dokumentenbasiertes Question Answering mit LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
+- [Zero-Shot-Videoklassifizierung mit X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
 
-If you own or use a project that you believe should be part of the list, please open a PR to add it!
+## 100 Projekte, die 🤗 Transformers verwenden
 
-## If you are looking for custom support from the Hugging Face team
+🤗 Transformers ist mehr als nur ein Toolkit zur Verwendung von vortrainierten Modellen: Es ist eine Gemeinschaft von Projekten, die darum herum und um den Hugging Face Hub aufgebaut sind. Wir möchten, dass 🤗 Transformers es Entwicklern, Forschern, Studenten, Professoren, Ingenieuren und jedem anderen ermöglicht, ihre Traumprojekte zu realisieren.
+
+Um die 100.000 Sterne von 🤗 Transformers zu feiern, haben wir beschlossen, die Gemeinschaft in den Mittelpunkt zu stellen und die Seite [awesome-transformers](./awesome-transformers.md) erstellt, die 100 unglaubliche Projekte auflistet, die zusammen mit 🤗 Transformers realisiert wurden.
+
+Wenn Sie ein Projekt besitzen oder nutzen, von dem Sie glauben, dass es Teil der Liste sein sollte, öffnen Sie bitte einen PR, um es hinzuzufügen!
+
+## Wenn Sie individuelle Unterstützung vom Hugging Face-Team möchten
 
 <a target="_blank" href="https://huggingface.co/support">
     <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
 </a><br>
 
-## Quick tour
+## Schnelleinstieg
 
-To immediately use a model on a given input (text, image, audio, ...), we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model's training. Here is how to quickly use a pipeline to classify positive versus negative texts:
+Um sofort ein Modell mit einer bestimmten Eingabe (Text, Bild, Audio ...) zu verwenden, bieten wir die `pipeline`-API an. Pipelines kombinieren ein vortrainiertes Modell mit der jeweiligen Vorverarbeitung, die während dessen Trainings verwendet wurde. Hier sehen Sie, wie man schnell eine Pipeline verwenden kann, um positive und negative Texte zu klassifizieren:
 
 ```python
 >>> from transformers import pipeline
 
-# Allocate a pipeline for sentiment-analysis
+# Zuweisung einer Pipeline für die Sentiment-Analyse
 >>> classifier = pipeline('sentiment-analysis')
 >>> classifier('We are very happy to introduce pipeline to the transformers repository.')
 [{'label': 'POSITIVE', 'score': 0.9996980428695679}]
 ```
 
-The second line of code downloads and caches the pretrained model used by the pipeline, while the third evaluates it on the given text. Here, the answer is "positive" with a confidence of 99.97%.
+Die zweite Codezeile lädt und cacht das vortrainierte Modell, das von der Pipeline verwendet wird, während die dritte es an dem gegebenen Text evaluiert. Hier ist die Antwort "positiv" mit einer Konfidenz von 99,97 %.
 
-Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in computer vision and speech. For example, we can easily extract detected objects in an image:
+Viele Aufgaben, sowohl in der Computerlinguistik als auch in der Computer Vision und Sprachverarbeitung, haben eine vortrainierte `pipeline`, die sofort einsatzbereit ist. Z. B. können wir leicht erkannte Objekte in einem Bild extrahieren:
 
 ``` python
 >>> import requests
 >>> from PIL import Image
 >>> from transformers import pipeline
 
-# Download an image with cute cats
+# Download eines Bildes mit süßen Katzen
 >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
 >>> image_data = requests.get(url, stream=True).raw
 >>> image = Image.open(image_data)
 
-# Allocate a pipeline for object detection
+# Zuweisung einer Pipeline für die Objekterkennung
 >>> object_detector = pipeline('object-detection')
 >>> object_detector(image)
 [{'score': 0.9982201457023621,
@@ -184,16 +183,17 @@ Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in compute
   'box': {'xmin': 345, 'ymin': 23, 'xmax': 640, 'ymax': 368}}]
 ```
 
-Here, we get a list of objects detected in the image, with a box surrounding the object and a confidence score. Here is the original image on the left, with the predictions displayed on the right:
+Hier erhalten wir eine Liste von Objekten, die im Bild erkannt wurden, mit einer Markierung, die das Objekt eingrenzt, und einem zugehörigen Konfidenzwert. Folgend ist das Originalbild links und die Vorhersagen rechts dargestellt:
 
 <h3 align="center">
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" width="400"></a>
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample_post_processed.png" width="400"></a>
 </h3>
 
-You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
+Sie können mehr über die von der `pipeline`-API unterstützten Aufgaben in [diesem Tutorial](https://huggingface.co/docs/transformers/task_summary) erfahren.
 
-In addition to `pipeline`, to download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
+Zusätzlich zur `pipeline` benötigt es nur drei Zeilen Code, um eines der vortrainierten Modelle für Ihre Aufgabe herunterzuladen und zu verwenden. Hier ist der Code für die PyTorch-Version:
+
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
@@ -204,7 +204,8 @@ In addition to `pipeline`, to download and use any of the pretrained models on y
 >>> outputs = model(**inputs)
 ```
 
-And here is the equivalent code for TensorFlow:
+Und hier ist der entsprechende Code für TensorFlow:
+
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -215,81 +216,80 @@ And here is the equivalent code for TensorFlow:
 >>> outputs = model(**inputs)
 ```
 
-The tokenizer is responsible for all the preprocessing the pretrained model expects and can be called directly on a single string (as in the above examples) or a list. It will output a dictionary that you can use in downstream code or simply directly pass to your model using the ** argument unpacking operator.
+Der Tokenizer ist für die gesamte Vorverarbeitung, die das vortrainierte Modell benötigt, verantwortlich und kann direkt auf einem einzelnen String (wie in den obigen Beispielen) oder einer Liste ausgeführt werden. Er gibt ein Dictionary aus, das Sie im darauffolgenden Code verwenden oder einfach direkt Ihrem Modell übergeben können, indem Sie den ** Operator zum Entpacken von Argumenten einsetzen.
 
-The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (depending on your backend) which you can use as usual. [This tutorial](https://huggingface.co/docs/transformers/training) explains how to integrate such a model into a classic PyTorch or TensorFlow training loop, or how to use our `Trainer` API to quickly fine-tune on a new dataset.
+Das Modell selbst ist ein reguläres [PyTorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) oder ein [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (abhängig von Ihrem Backend), das Sie wie gewohnt verwenden können. [Dieses Tutorial](https://huggingface.co/docs/transformers/training) erklärt, wie man ein solches Modell in eine klassische PyTorch- oder TensorFlow-Trainingsschleife integrieren kann oder wie man unsere `Trainer`-API verwendet, um es schnell auf einem neuen Datensatz zu feintunen.
 
-## Why should I use transformers?
+## Warum sollten Sie 🤗 Transformers verwenden?
 
-1. Easy-to-use state-of-the-art models:
-    - High performance on natural language understanding & generation, computer vision, and audio tasks.
-    - Low barrier to entry for educators and practitioners.
-    - Few user-facing abstractions with just three classes to learn.
-    - A unified API for using all our pretrained models.
+1. Benutzerfreundliche Modelle auf dem neuesten Stand der Technik:
+    - Hohe Leistung bei Aufgaben zu Natural Language Understanding & Generation, Computer Vision und Audio.
+    - Niedrige Einstiegshürde für Bildungskräfte und Praktiker.
+    - Wenige benutzerseitige Abstraktionen mit nur drei zu lernenden Klassen.
+    - Eine einheitliche API für die Verwendung aller unserer vortrainierten Modelle.
 
-1. Lower compute costs, smaller carbon footprint:
-    - Researchers can share trained models instead of always retraining.
-    - Practitioners can reduce compute time and production costs.
-    - Dozens of architectures with over 400,000 pretrained models across all modalities.
+1. Geringere Rechenkosten, kleinerer CO<sub>2</sub>-Fußabdruck:
+    - Forscher können trainierte Modelle teilen, anstatt sie immer wieder neu zu trainieren.
+    - Praktiker können die Rechenzeit und Produktionskosten reduzieren.
+    - Dutzende Architekturen mit über 400.000 vortrainierten Modellen über alle Modalitäten hinweg.
 
-1. Choose the right framework for every part of a model's lifetime:
-    - Train state-of-the-art models in 3 lines of code.
-    - Move a single model between TF2.0/PyTorch/JAX frameworks at will.
-    - Seamlessly pick the right framework for training, evaluation, and production.
+1. Wählen Sie das richtige Framework für jeden Lebensabschnitt eines Modells:
+    - Trainieren Sie Modelle auf neustem Stand der Technik in nur drei Codezeilen.
+    - Verwenden Sie ein einzelnes Modell nach Belieben mit TF2.0-/PyTorch-/JAX-Frameworks.
+    - Wählen Sie nahtlos das richtige Framework für Training, Evaluation und Produktiveinsatz.
 
-1. Easily customize a model or an example to your needs:
-    - We provide examples for each architecture to reproduce the results published by its original authors.
-    - Model internals are exposed as consistently as possible.
-    - Model files can be used independently of the library for quick experiments.
+1. Passen Sie ein Modell oder Beispiel leicht an Ihre Bedürfnisse an:
+    - Wir bieten Beispiele für jede Architektur an, um die von ihren ursprünglichen Autoren veröffentlichten Ergebnisse zu reproduzieren.
+    - Modellinterna sind so einheitlich wie möglich verfügbar gemacht.
+    - Modelldateien können unabhängig von der Bibliothek für schnelle Experimente verwendet werden.
 
-## Why shouldn't I use transformers?
+## Warum sollten Sie 🤗 Transformers nicht verwenden?
 
-- This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
-- The training API is not intended to work on any model but is optimized to work with the models provided by the library. For generic machine learning loops, you should use another library (possibly, [Accelerate](https://huggingface.co/docs/accelerate)).
-- While we strive to present as many use cases as possible, the scripts in our [examples folder](https://github.com/huggingface/transformers/tree/main/examples) are just that: examples. It is expected that they won't work out-of-the-box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs.
+- Diese Bibliothek ist kein modularer Werkzeugkasten mit Bausteinen für neuronale Netze. Der Code in den Modelldateien ist absichtlich nicht mit zusätzlichen Abstraktionen refaktorisiert, sodass Forscher schnell mit jedem der Modelle iterieren können, ohne sich in zusätzliche Abstraktionen/Dateien vertiefen zu müssen.
+- Die Trainings-API ist nicht dafür gedacht, mit beliebigen Modellen zu funktionieren, sondern ist für die Verwendung mit den von der Bibliothek bereitgestellten Modellen optimiert. Für generische Trainingsschleifen von maschinellem Lernen sollten Sie eine andere Bibliothek verwenden (möglicherweise [Accelerate](https://huggingface.co/docs/accelerate)).
+- Auch wenn wir bestrebt sind, so viele Anwendungsfälle wie möglich zu veranschaulichen, sind die Beispielskripte in unserem [`examples`](./examples) Ordner genau das: Beispiele. Es ist davon auszugehen, dass sie nicht sofort auf Ihr spezielles Problem anwendbar sind und einige Codezeilen geändert werden müssen, um sie für Ihre Bedürfnisse anzupassen.
 
 ## Installation
 
-### With pip
+### Mit pip
 
-This repository is tested on Python 3.8+, Flax 0.4.1+, PyTorch 1.11+, and TensorFlow 2.6+.
+Dieses Repository wurde mit Python 3.8+, Flax 0.4.1+, PyTorch 1.11+ und TensorFlow 2.6+ getestet.
 
-You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
+Sie sollten 🤗 Transformers in einer [virtuellen Umgebung](https://docs.python.org/3/library/venv.html) installieren. Wenn Sie mit virtuellen Python-Umgebungen nicht vertraut sind, schauen Sie sich den [Benutzerleitfaden](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) an.
 
-First, create a virtual environment with the version of Python you're going to use and activate it.
+Erstellen und aktivieren Sie zuerst eine virtuelle Umgebung mit der Python-Version, die Sie verwenden möchten.
 
-Then, you will need to install at least one of Flax, PyTorch, or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific installation command for your platform.
+Dann müssen Sie entweder Flax, PyTorch oder TensorFlow installieren. Bitte beziehe dich entsprechend auf die jeweiligen Installationsanleitungen für [TensorFlow](https://www.tensorflow.org/install/), [PyTorch](https://pytorch.org/get-started/locally/#start-locally), und/oder [Flax](https://github.com/google/flax#quick-install) und [Jax](https://github.com/google/jax#installation) für den spezifischen Installationsbefehl für Ihre Plattform.
 
-When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
+Wenn eines dieser Backends installiert ist, kann 🤗 Transformers wie folgt mit pip installiert werden:
 
 ```bash
 pip install transformers
 ```
 
-If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/docs/transformers/installation#installing-from-source).
+Wenn Sie mit den Beispielen experimentieren möchten oder die neueste Version des Codes benötigen und nicht auf eine neue Veröffentlichung warten können, müssen Sie [die Bibliothek von der Quelle installieren](https://huggingface.co/docs/transformers/installation#installing-from-source).
 
-### With conda
+### Mit conda
 
-🤗 Transformers can be installed using conda as follows:
+🤗 Transformers kann wie folgt mit conda installiert werden:
 
 ```shell script
 conda install conda-forge::transformers
 ```
 
-> **_NOTE:_** Installing `transformers` from the `huggingface` channel is deprecated.
+> **_HINWEIS:_** Die Installation von `transformers` aus dem `huggingface`-Kanal ist veraltet.
 
-Follow the installation pages of Flax, PyTorch or TensorFlow to see how to install them with conda.
+Folgen Sie den Installationsanleitungen von Flax, PyTorch oder TensorFlow, um zu sehen, wie sie mit conda installiert werden können.
 
-> **_NOTE:_**  On Windows, you may be prompted to activate Developer Mode in order to benefit from caching. If this is not an option for you, please let us know in [this issue](https://github.com/huggingface/huggingface_hub/issues/1062).
+> **_HINWEIS:_** Auf Windows werden Sie möglicherweise aufgefordert, den Entwicklermodus zu aktivieren, um von Caching zu profitieren. Wenn das für Sie keine Option ist, lassen Sie es uns bitte in [diesem Issue](https://github.com/huggingface/huggingface_hub/issues/1062) wissen.
 
-## Model architectures
+## Modellarchitekturen
 
-**[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co/models), where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
+**[Alle Modell-Checkpoints](https://huggingface.co/models)**, die von 🤗 Transformers bereitgestellt werden, sind nahtlos aus dem huggingface.co [Model Hub](https://huggingface.co/models) integriert, wo sie direkt von [Benutzern](https://huggingface.co/users) und [Organisationen](https://huggingface.co/organizations) hochgeladen werden.
 
-Current number of checkpoints: ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
+Aktuelle Anzahl der Checkpoints: ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
 
-🤗 Transformers currently provides the following architectures (see [here](https://huggingface.co/docs/transformers/model_summary) for a high-level summary of each them):
+🤗 Transformers bietet derzeit die folgenden Architekturen an (siehe [hier](https://huggingface.co/docs/transformers/model_summary) für eine jeweilige Übersicht):
 
 1. **[ALBERT](https://huggingface.co/docs/transformers/model_doc/albert)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
 1. **[ALIGN](https://huggingface.co/docs/transformers/model_doc/align)** (from Google Research) released with the paper [Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision](https://arxiv.org/abs/2102.05918) by Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc V. Le, Yunhsuan Sung, Zhen Li, Tom Duerig.
@@ -476,7 +476,6 @@ Current number of checkpoints: ![](https://img.shields.io/endpoint?url=https://h
 1. **[SeamlessM4T](https://huggingface.co/docs/transformers/model_doc/seamless_m4t)** (from Meta AI) released with the paper [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://dl.fbaipublicfiles.com/seamless/seamless_m4t_paper.pdf) by the Seamless Communication team.
 1. **[SeamlessM4Tv2](https://huggingface.co/docs/transformers/model_doc/seamless_m4t_v2)** (from Meta AI) released with the paper [Seamless: Multilingual Expressive and Streaming Speech Translation](https://ai.meta.com/research/publications/seamless-multilingual-expressive-and-streaming-speech-translation/) by the Seamless Communication team.
 1. **[SegFormer](https://huggingface.co/docs/transformers/model_doc/segformer)** (from NVIDIA) released with the paper [SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://arxiv.org/abs/2105.15203) by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo.
-1. **[SegGPT](https://huggingface.co/docs/transformers/main/model_doc/seggpt)** (from Beijing Academy of Artificial Intelligence (BAAI)) released with the paper [SegGPT: Segmenting Everything In Context](https://arxiv.org/abs/2304.03284) by Xinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang, Chunhua Shen, Tiejun Huang.
 1. **[Segment Anything](https://huggingface.co/docs/transformers/model_doc/sam)** (from Meta AI) released with the paper [Segment Anything](https://arxiv.org/pdf/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
 1. **[SEW](https://huggingface.co/docs/transformers/model_doc/sew)** (from ASAPP) released with the paper [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav Artzi.
 1. **[SEW-D](https://huggingface.co/docs/transformers/model_doc/sew_d)** (from ASAPP) released with the paper [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav Artzi.
@@ -541,27 +540,27 @@ Current number of checkpoints: ![](https://img.shields.io/endpoint?url=https://h
 1. **[XLSR-Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/xlsr_wav2vec2)** (from Facebook AI) released with the paper [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 1. **[YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos)** (from Huazhong University of Science & Technology) released with the paper [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://arxiv.org/abs/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.
 1. **[YOSO](https://huggingface.co/docs/transformers/model_doc/yoso)** (from the University of Wisconsin - Madison) released with the paper [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714) by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh.
-1. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedback before starting your PR.
+1. Möchten Sie ein neues Modell beitragen? Wir haben einen **detaillierten Leitfaden und Vorlagen** hinzugefügt, um Sie beim Hinzufügen eines neuen Modells zu unterstützen. Sie können diese im [`templates`](./templates) Ordner des Repositorys finden. Lesen Sie unbedingt die [Beitragshinweise](./CONTRIBUTING.md) und kontaktieren Sie die Maintainer oder erstellen Sie ein Issue, um Feedback zu sammeln, bevor Sie mit der PR starten.
 
-To check if each model has an implementation in Flax, PyTorch or TensorFlow, or has an associated tokenizer backed by the 🤗 Tokenizers library, refer to [this table](https://huggingface.co/docs/transformers/index#supported-frameworks).
+Um zu überprüfen, ob jedes Modell eine Implementierung in Flax, PyTorch oder TensorFlow hat oder über einen zugehörigen Tokenizer verfügt, der von der 🤗 Tokenizers-Bibliothek unterstützt wird, schauen Sie auf [diese Tabelle](https://huggingface.co/docs/transformers/index#supported-frameworks).
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performance of the original implementations. You can find more details on performance in the Examples section of the [documentation](https://github.com/huggingface/transformers/tree/main/examples).
+Diese Implementierungen wurden mit mehreren Datensätzen getestet (siehe Beispielskripte) und sollten den Leistungen der ursprünglichen Implementierungen entsprechen. Weitere Details zur Leistung finden Sie im Abschnitt der Beispiele in der [Dokumentation](https://github.com/huggingface/transformers/tree/main/examples).
 
+## Mehr erfahren
 
-## Learn more
-
-| Section | Description |
+| Abschnitt | Beschreibung |
 |-|-|
-| [Documentation](https://huggingface.co/docs/transformers/) | Full API documentation and tutorials |
-| [Task summary](https://huggingface.co/docs/transformers/task_summary) | Tasks supported by 🤗 Transformers |
-| [Preprocessing tutorial](https://huggingface.co/docs/transformers/preprocessing) | Using the `Tokenizer` class to prepare data for the models |
-| [Training and fine-tuning](https://huggingface.co/docs/transformers/training) | Using the models provided by 🤗 Transformers in a PyTorch/TensorFlow training loop and the `Trainer` API |
-| [Quick tour: Fine-tuning/usage scripts](https://github.com/huggingface/transformers/tree/main/examples) | Example scripts for fine-tuning models on a wide range of tasks |
-| [Model sharing and uploading](https://huggingface.co/docs/transformers/model_sharing) | Upload and share your fine-tuned models with the community |
+| [Dokumentation](https://huggingface.co/docs/transformers/) | Vollständige API-Dokumentation und Tutorials |
+| [Zusammenfassung der Aufgaben](https://huggingface.co/docs/transformers/task_summary) | Von 🤗 Transformers unterstützte Aufgaben |
+| [Vorverarbeitungs-Tutorial](https://huggingface.co/docs/transformers/preprocessing) | Verwendung der `Tokenizer`-Klasse zur Vorverarbeitung der Daten für die Modelle |
+| [Training und Feintuning](https://huggingface.co/docs/transformers/training) | Verwendung der von 🤗 Transformers bereitgestellten Modelle in einer PyTorch-/TensorFlow-Trainingsschleife und der `Trainer`-API |
+| [Schnelleinstieg: Feintuning/Anwendungsskripte](https://github.com/huggingface/transformers/tree/main/examples) | Beispielskripte für das Feintuning von Modellen für eine breite Palette von Aufgaben |
+| [Modellfreigabe und -upload](https://huggingface.co/docs/transformers/model_sharing) | Laden Sie Ihre feingetunten Modelle hoch und teilen Sie sie mit der Community |
 
-## Citation
+## Zitation
 
-We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
+Wir haben jetzt ein [Paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/), das Sie für die 🤗 Transformers-Bibliothek zitieren können:
+
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
