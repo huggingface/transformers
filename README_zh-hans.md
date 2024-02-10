@@ -76,6 +76,7 @@ checkpoint: 检查点
         <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_fr.md">Français</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_de.md">Deutsch</a> |
     </p>
 </h4>
 
