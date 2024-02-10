@@ -37,6 +37,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_rt_detr"] = [
         "RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "RTDetrForObjectDetection",
         "RTDetrModel",
         "RTDetrPreTrainedModel",
     ]
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_rt_detr import (
             RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RTDetrForObjectDetection,
             RTDetrModel,
             RTDetrPreTrainedModel,
         )

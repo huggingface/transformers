@@ -155,7 +155,7 @@ class RTDetrModelOutput(ModelOutput):
 @dataclass
 class RTDetrObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`RTDetrObjectDetection`].
+    Output type of [`RTDetrForObjectDetection`].
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -1299,7 +1299,31 @@ class RTDetrModel(RTDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, RTDetrModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
+        >>> model = RTDetrModel.from_pretrained("SenseTime/deformable-detr")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 300, 256]
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1431,7 +1455,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
     """,
     RTDETR_START_DOCSTRING,
 )
-class RTDetrObjectDetection(RTDetrPreTrainedModel):
+class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
 
@@ -1483,7 +1507,7 @@ class RTDetrObjectDetection(RTDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, RTDetrObjectDetection
+        >>> from transformers import AutoImageProcessor, RTDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1492,7 +1516,7 @@ class RTDetrObjectDetection(RTDetrPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained(_CHECKPOINT_FOR_DOC)
-        >>> model = RTDetrObjectDetection.from_pretrained(_CHECKPOINT_FOR_DOC)
+        >>> model = RTDetrForObjectDetection.from_pretrained(_CHECKPOINT_FOR_DOC)
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
