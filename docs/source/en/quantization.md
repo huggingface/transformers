@@ -47,7 +47,7 @@ The instructions on how to quantize models yourself, as well as all the relevant
 
 AQLM quantization setpus vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
  
-| Kernel | Number of codebooks | Codebook size, bits | Notation | Performance | Speedup     | Fast GPU inference | Fast CPU inference |
+| Kernel | Number of codebooks | Codebook size, bits | Notation | Accuracy | Speedup     | Fast GPU inference | Fast CPU inference |
 |---|---------------------|---------------------|----------|-------------|-------------|--------------------|--------------------|
 | Triton | K                   | N                  | KxN     | -        | Up to ~0.7x | ✅                  | ❌                  |
 | CUDA | 1                   | 16                  | 1x16     | Best        | Up to ~1.3x | ✅                  | ❌                  |
