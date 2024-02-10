@@ -14,6 +14,8 @@
 "AQLM (Additive Quantization of Languageg Model) integration file"
 
 
+from typing import Tuple
+
 from ..utils import is_accelerate_available, is_aqlm_available, is_torch_available
 
 
@@ -27,7 +29,7 @@ def replace_with_aqlm_linear(
     linear_weights_not_to_quantize=None,
     current_key_name=None,
     has_been_replaced=False,
-) -> tuple[nn.Module, bool]:
+) -> Tuple[nn.Module, bool]:
     """
     Public method that recursively replaces the Linear layers of the given model with AQLM quantized layers.
     `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
