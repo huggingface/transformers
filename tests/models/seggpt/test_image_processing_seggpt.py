@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
+import numpy as np
 from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
@@ -114,10 +114,10 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_palette(self):
         num_labels = 3
-        image_processing = SegGptImageProcessor(num_labels=num_labels)
-        self.assertEqual(image_processing.num_labels, num_labels)
-        self.assertEqual(len(image_processing.palette), num_labels + 1)
-        self.assertEqual(image_processing.palette[0], (0, 0, 0))
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        palette = image_processing.get_palette(num_labels)
+        self.assertEqual(len(palette), num_labels + 1)
+        self.assertEqual(palette[0], (0, 0, 0))
 
     def test_mask_equivalence(self):
         image_processor = SegGptImageProcessor()
@@ -129,3 +129,27 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt")
 
         self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())
+
+    def test_mask_to_rgb(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        mask = prepare_mask()
+        mask = np.array(mask)
+        mask = (mask > 0).astype(np.uint8)
+
+        def check_two_colors(image, color1=(0, 0, 0), color2=(255, 255, 255)):
+            unique_colors = np.unique(image.reshape(-1, 3), axis=0)
+            if len(unique_colors) == 2 and (color1 in unique_colors) and (color2 in unique_colors):
+                return True
+            else:
+                return False
+
+        num_labels = 1
+        palette = image_processing.get_palette(num_labels)
+
+        # Should only duplicate repeat class indices map, hence only (0,0,0) and (1,1,1)
+        mask_duplicated = image_processing.mask_to_rgb(mask)
+        # Mask using palette, since only 1 class is present we have colors (0,0,0) and (255,255,255)
+        mask_painted = image_processing.mask_to_rgb(mask, palette=palette)
+
+        self.assertTrue(check_two_colors(mask_duplicated, color2=(1, 1, 1)))
+        self.assertTrue(check_two_colors(mask_painted, color2=(255, 255, 255)))

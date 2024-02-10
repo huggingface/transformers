@@ -26,6 +26,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_channel_dimension_axis,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -64,20 +65,53 @@ def build_palette(num_labels: int) -> List[Tuple[int, int]]:
     return color_list
 
 
-def mask_to_rgb(mask: np.ndarray, palette: List[Tuple[int, int]]) -> np.ndarray:
-    height, width = mask.shape
+def get_num_channels(image: np.ndarray, input_data_format: ChannelDimension) -> int:
+    if image.ndim == 2:
+        return 1
 
-    rgb_mask = np.zeros((height, width, 3), dtype=np.uint8)
-    classes_in_mask = np.unique(mask)
+    channel_idx = get_channel_dimension_axis(image, input_data_format)
+    return image.shape[channel_idx]
 
-    for class_idx in classes_in_mask:
-        rgb_value = palette[class_idx]
-        class_mask = (mask == class_idx).astype(np.uint8)
-        class_mask = np.expand_dims(class_mask, axis=-1)
-        class_rgb_mask = class_mask * np.array(rgb_value)
-        rgb_mask += class_rgb_mask.astype(np.uint8)
 
-    rgb_mask = np.clip(rgb_mask, 0, 255).astype(np.uint8)
+def mask_to_rgb(
+    mask: np.ndarray,
+    palette: Optional[List[Tuple[int, int]]] = None,
+    input_data_format: Optional[ChannelDimension] = None,
+    data_format: Optional[ChannelDimension] = None,
+) -> np.ndarray:
+    if input_data_format is None:
+        input_data_format = infer_channel_dimension_format(mask) if mask.ndim > 2 else ChannelDimension.LAST
+
+    num_channels = get_num_channels(mask, input_data_format)
+
+    if num_channels == 3:
+        return to_channel_dimension_format(mask, data_format, input_data_format) if data_format is not None else mask
+
+    mask = mask[0] if mask.ndim == 3 else mask
+
+    if palette is not None:
+        height, width = mask.shape
+
+        if input_data_format == ChannelDimension.LAST:
+            rgb_mask = np.zeros((height, width, 3), dtype=np.uint8)
+        else:
+            rgb_mask = np.zeros((3, height, width), dtype=np.uint8)
+
+        classes_in_mask = np.unique(mask)
+
+        for class_idx in classes_in_mask:
+            rgb_value = palette[class_idx]
+            class_mask = (mask == class_idx).astype(np.uint8)
+            class_mask = np.expand_dims(class_mask, axis=-1)
+            class_rgb_mask = class_mask * np.array(rgb_value)
+            rgb_mask += class_rgb_mask.astype(np.uint8)
+
+        rgb_mask = np.clip(rgb_mask, 0, 255).astype(np.uint8)
+    else:
+        if input_data_format == ChannelDimension.FIRST:
+            rgb_mask = np.repeat(mask[None, ...], 3, axis=0)
+        else:
+            rgb_mask = np.repeat(mask[..., None], 3, axis=-1)
 
     return rgb_mask
 
@@ -111,10 +145,6 @@ class SegGptImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        num_labels (`int`, *optional*):
-            Number of classes in the segmentation task (excluding the background). If specified, a palette will be built,
-            assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx channel to a 3 channel RGB.
-            Not specifying this will result in the prompt mask being passed through as is.
     """
 
     model_input_names = ["pixel_values"]
@@ -129,7 +159,6 @@ class SegGptImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        num_labels: Optional[int] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -143,8 +172,54 @@ class SegGptImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.num_labels = num_labels
-        self.palette = build_palette(self.num_labels) if num_labels is not None else None
+
+    def get_palette(self, num_labels: int) -> List[Tuple[int, int]]:
+        """Build a palette to map the prompt mask from a single channel to a 3 channel RGB.
+
+        Args:
+            num_labels (`int`):
+                Number of classes in the segmentation task (excluding the background).
+
+        Returns:
+            `List[Tuple[int, int]]`: Palette to map the prompt mask from a single channel to a 3 channel RGB.
+        """
+        return build_palette(num_labels)
+
+    def mask_to_rgb(
+        self,
+        image: np.ndarray,
+        palette: Optional[List[Tuple[int, int]]] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """Convert a mask to RGB format.
+
+        Args:
+            image (`np.ndarray`):
+                Mask to convert to RGB format. If the mask is already in RGB format, it will be passed through.
+            palette (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
+                Palette to use to convert the mask to RGB format. If unset, the mask is duplicated across the channel
+                dimension.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The mask in RGB format.
+        """
+        return mask_to_rgb(
+            image,
+            palette=palette,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
     def resize(
         self,
@@ -208,6 +283,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        num_labels: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -256,6 +332,11 @@ class SegGptImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            num_labels: (`int`, *optional*):
+                Number of classes in the segmentation task (excluding the background). If specified, a palette will be
+                built, assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx
+                channel to a 3 channel RGB. Not specifying this will result in the prompt mask either being passed
+                through as is if it is already in RGB format or being duplicated across the channel dimension.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -288,12 +369,6 @@ class SegGptImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_mask and images[0].ndim == 2:
-            if self.num_labels is not None:
-                images = [mask_to_rgb(image, self.palette) for image in images]
-            else:
-                images = [np.repeat(image[..., None], 3, axis=-1) for image in images]
-
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
@@ -302,7 +377,15 @@ class SegGptImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+            # If mask is PIL could have 2 or 3 dimensions, hence the if-else check
+            input_data_format = (
+                infer_channel_dimension_format(images[0]) if images[0].ndim > 2 else ChannelDimension.LAST
+            )
+
+        if is_mask:
+            palette = self.get_palette(num_labels) if num_labels is not None else None
+            # Since this is the input for the next steps and transformation
+            images = [self.mask_to_rgb(image, palette, input_data_format=input_data_format) for image in images]
 
         if do_resize:
             images = [
@@ -344,6 +427,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        num_labels: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -396,6 +480,11 @@ class SegGptImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            num_labels: (`int`, *optional*):
+                Number of classes in the segmentation task (excluding the background). If specified, a palette will be
+                built, assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx
+                channel to a 3 channel RGB. Not specifying this will result in the prompt mask either being passed
+                through as is if it is already in RGB format or being duplicated across the channel dimension.
         """
         if all(v is None for v in [images, prompt_images, prompt_masks]):
             raise ValueError("At least one of images, prompt_images, prompt_masks must be specified.")
@@ -454,6 +543,7 @@ class SegGptImageProcessor(BaseImageProcessor):
                 image_std=image_std,
                 data_format=data_format,
                 input_data_format=input_data_format,
+                num_labels=num_labels,
                 **kwargs,
             )
 
@@ -461,7 +551,9 @@ class SegGptImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None, num_labels: Optional[int] = None
+    ):
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
         PyTorch.
@@ -472,6 +564,10 @@ class SegGptImageProcessor(BaseImageProcessor):
             target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            num_labels (`int`, *optional*):
+                Number of classes in the segmentation task (excluding the background). If specified, a palette will be
+                built, assuming that class_idx 0 is the background, to map prediction masks from RGB values to class
+                indices. This value should be the same used when preprocessing inputs.
         Returns:
             semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
@@ -500,10 +596,11 @@ class SegGptImageProcessor(BaseImageProcessor):
 
         semantic_segmentation = []
         palette_tensor = None
-        if self.palette is not None:
-            palette_tensor = torch.tensor(self.palette).float().to(masks.device)
+        palette = self.get_palette(num_labels) if num_labels is not None else None
+        if palette is not None:
+            palette_tensor = torch.tensor(palette).float().to(masks.device)
             _, num_channels, _, _ = masks.shape
-            palette_tensor = palette_tensor.view(1, 1, self.num_labels + 1, num_channels)
+            palette_tensor = palette_tensor.view(1, 1, num_labels + 1, num_channels)
 
         for idx, mask in enumerate(masks):
             if target_sizes is not None:
@@ -513,7 +610,7 @@ class SegGptImageProcessor(BaseImageProcessor):
                     mode="nearest",
                 )[0]
 
-            if self.num_labels is not None:
+            if num_labels is not None:
                 channels, height, width = mask.shape
                 dist = mask.permute(1, 2, 0).view(height, width, 1, channels)
                 dist = dist - palette_tensor
