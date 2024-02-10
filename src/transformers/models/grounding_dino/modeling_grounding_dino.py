@@ -3484,7 +3484,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         if config.decoder_bbox_embed_share:
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
-            self.bbox_embed = nn.ModuleList(_bbox_embed, config.decoder_layers)
+            self.bbox_embed = nn.ModuleList([copy.deepcopy(_bbox_embed) for _ in range(config.decoder_layers)])
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack implementation for two-stage
         self.model.decoder.bbox_embed = self.bbox_embed
