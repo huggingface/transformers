@@ -28,7 +28,7 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
-from ...file_utils import (
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
