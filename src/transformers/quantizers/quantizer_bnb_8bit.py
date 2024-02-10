@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Dict, List, Union
 
 from packaging import version
 
@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
-from .quantizers_utils import get_module_from_name
 
 
 if is_torch_available():
@@ -133,57 +132,15 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             logger.info("target_dtype {target_dtype} is replaced by `torch.int8` for 8-bit BnB quantization")
         return torch.int8
 
-    def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
-    ):
-        import bitsandbytes as bnb
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
-            if self.pre_quantized:
-                if param_name.replace("weight", "SCB") not in state_dict.keys():
-                    raise ValueError("Missing quantization component `SCB`")
-                if param_value.dtype != torch.int8:
-                    raise ValueError(
-                        f"Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
-                    )
-            return True
-        return False
-
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: List[str],
-    ):
+    def activate_module(self, module):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
         needs aux items from state dicts, if found - removes them from unexpected_keys
         """
         import bitsandbytes as bnb
 
-        fp16_statistics_key = param_name.replace("weight", "SCB")
-        fp16_statistics = state_dict.get(fp16_statistics_key, None)
+        target_device = module.weight.device
 
-        module, tensor_name = get_module_from_name(model, param_name)
-        if tensor_name not in module._parameters:
-            raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
-
-        old_value = getattr(module, tensor_name)
-
-        if not isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
-            raise ValueError(f"Parameter `{tensor_name}` should only be a `bnb.nn.Int8Params` instance.")
-        if (
-            old_value.device == torch.device("meta")
-            and target_device not in ["meta", torch.device("meta")]
-            and param_value is None
-        ):
-            raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
-
-        new_value = param_value.to("cpu")
         if self.pre_quantized and not self.is_serializable:
             raise ValueError(
                 "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
@@ -192,23 +149,19 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
-        if issubclass(module.source_cls, Conv1D):
-            if fp16_statistics is None:
-                new_value = new_value.T
+        if issubclass(module.source_cls, Conv1D) and not self.pre_quantized:
+            new_value = module.weight.data
+            new_value = new_value.T
 
-        kwargs = old_value.__dict__
-        new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(target_device)
+            kwargs = module.weight.__dict__
+            new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(target_device)
 
-        module._parameters[tensor_name] = new_value
-        if fp16_statistics is not None:
-            setattr(module.weight, "SCB", fp16_statistics.to(target_device))
-            unexpected_keys.remove(fp16_statistics_key)
+            module._parameters["weight"] = new_value
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model._is_quantized_training_enabled = self.is_trainable
-        model.is_loaded_in_8bit = True
-        model.is_8bit_serializable = self.is_serializable
-        return model
+        if self.pre_quantized:
+            fp16_statistics = module._buffers.get("SCB", None)
+            if fp16_statistics is not None:
+                setattr(module.weight, "SCB", fp16_statistics.to(target_device))
 
     def _process_model_before_weight_loading(
         self,
@@ -217,6 +170,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         keep_in_fp32_modules: List[str] = [],
         **kwargs,
     ):
+        import bitsandbytes as bnb
+
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
@@ -247,9 +202,33 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
+        # adding buffers for loading components
+        if self.pre_quantized:
+            for name, module in model.named_modules():
+                if isinstance(module, bnb.nn.modules.Linear8bitLt):
+                    module.register_buffer(
+                        "SCB",
+                        torch.empty(
+                            module.weight.shape[0], dtype=torch.float32, device=torch.device("meta")
+                        ),
+                        persistent=True,
+                    )
+
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        import bitsandbytes as bnb
+
+        for name, module in model.named_modules():
+            if isinstance(module, bnb.nn.modules.Linear8bitLt):
+                self.activate_module(module)
+
+        model._is_quantized_training_enabled = self.is_trainable
+        model.is_loaded_in_8bit = True
+        model.is_8bit_serializable = self.is_serializable
+        return model
 
     @property
     def is_serializable(self):
