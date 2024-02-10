@@ -3477,14 +3477,18 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         # Detection heads on top
         _class_embed = GroundingDinoContrastiveEmbedding(config)
-        _bbox_embed = GroundingDinoMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-        )
 
         if config.decoder_bbox_embed_share:
+            _bbox_embed = GroundingDinoMLPPredictionHead(
+                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+            )
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
-            self.bbox_embed = nn.ModuleList([copy.deepcopy(_bbox_embed) for _ in range(config.decoder_layers)])
+            for _ in range(config.decoder_layers):
+                _bbox_embed = GroundingDinoMLPPredictionHead(
+                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                )
+                self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack implementation for two-stage
         self.model.decoder.bbox_embed = self.bbox_embed

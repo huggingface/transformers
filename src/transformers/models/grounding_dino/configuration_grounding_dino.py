@@ -232,7 +232,7 @@ class GroundingDinoConfig(PretrainedConfig):
         query_dim (`int`, *optional*, defaults to 4):
             The dimension of the query vector.
         decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
-            Whether to share the bbox embedding between the decoder and the two-stage bbox generator.
+            Whether to share the bbox regression head for all decoder layers.
         two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
             generation.
