@@ -40,7 +40,7 @@ The original code can be found [here](https://github.com/mistralai/mistral-src).
 
 Mixtral-45B is a decoder-based LM with the following architectural choices:
 
-* Mixtral is a Mixture of Expert (MOE) model with 8 experts per MLP, with a total of 45B paramateres but the compute required is the same as a 14B model. This is because even though each experts have to be loaded in RAM (70B like ram requirement) each token from the hidden states are dipatched twice (top 2 routing) and thus the compute (the operation required at each foward computation) is just 2 X sequence_length. 
+* Mixtral is a Mixture of Expert (MOE) model with 8 experts per MLP, with a total of 45B paramateres but the compute required is the same as a 14B model. This is because even though each experts have to be loaded in RAM (70B like ram requirement) each token from the hidden states are dispatched twice (top 2 routing) and thus the compute (the operation required at each forward computation) is just 2 X sequence_length. 
 
 The following implementation details are shared with Mistral AI's first model [mistral](mistral):
 * Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
