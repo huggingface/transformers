@@ -17,7 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..timm_backbone import TimmBackboneConfig
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -155,29 +155,36 @@ class RTDetrConfig(PretrainedConfig):
         use_pretrained_backbone=True,
         dilation=False,
         # encoder HybridEncoder
+        d_model=256,
+        encoder_in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
-        hidden_dim=256,
-        num_attention_heads=8,
-        dim_feedforward=1024,
-        dropout=0.0,
-        encode_proj_layers=[2],
         num_encoder_layers=1,
+        encoder_ffn_dim=1024,
+        encoder_attention_heads=8,
+        dropout=0.0,
+        activation_dropout=0.0,
+        encode_proj_layers=[2],
         pe_temperature=10000,
-        act_encoder="silu",
+        encoder_activation_function="silu",
+        activation_function="gelu",
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
         num_queries=300,
         feat_channels=[256, 256, 256],
+        decoder_ffn_dim=1024,
         num_feature_levels=3,
-        num_decoder_points=4,
+        decoder_n_points=4,
         num_decoder_layers=6,
+        decoder_attention_heads=8,
+        attention_dropout=0.0,
         num_denoising=100,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
         image_size=[640, 640],
         eval_idx=-1,
+        disable_custom_kernels=False,
         # Loss
         matcher_alpha=0.25,
         matcher_gamma=2.0,
@@ -224,23 +231,29 @@ class RTDetrConfig(PretrainedConfig):
         self.use_pretrained_backbone = use_pretrained_backbone
         self.dilation = dilation
         # encoder
+        self.d_model = d_model
+        self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
-        self.hidden_dim = hidden_dim
-        self.num_attention_heads = num_attention_heads
-        self.dim_feedforward = dim_feedforward
+        self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_ffn_dim = encoder_ffn_dim
         self.dropout = dropout
+        self.activation_dropout = activation_dropout
         self.encode_proj_layers = encode_proj_layers
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
-        self.act_encoder = act_encoder
         self.eval_size = eval_size
         self.normalize_before = normalize_before
+        self.encoder_activation_function = encoder_activation_function
+        self.activation_function = activation_function
         # decoder
         self.num_queries = num_queries
+        self.decoder_ffn_dim = decoder_ffn_dim
         self.feat_channels = feat_channels
         self.num_feature_levels = num_feature_levels
-        self.num_decoder_points = num_decoder_points
+        self.decoder_n_points = decoder_n_points
         self.num_decoder_layers = num_decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.attention_dropout = attention_dropout
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
@@ -248,6 +261,7 @@ class RTDetrConfig(PretrainedConfig):
         self.image_size = image_size
         self.eval_idx = eval_idx
         self.use_aux_loss = use_aux_loss
+        self.disable_custom_kernels = disable_custom_kernels
         # Loss
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma
