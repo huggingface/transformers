@@ -19,13 +19,13 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
+from ..integrations import replace_with_aqlm_linear
 from ..utils import is_accelerate_available, is_aqlm_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
 logger = logging.get_logger(__name__)
 
@@ -69,10 +69,10 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        _replace_with_aqlm_linear(
+        replace_with_aqlm_linear(
             model,
-            linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
             quantization_config=self.quantization_config,
+            linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
         )
         model.config.quantization_config = self.quantization_config
 
@@ -87,58 +87,3 @@ class AqlmHfQuantizer(HfQuantizer):
     @property
     def is_serializable(self):
         return True
-
-
-def _replace_with_aqlm_linear(
-    model,
-    linear_weights_not_to_quantize=None,
-    current_key_name=None,
-    quantization_config=None,
-    has_been_replaced=False,
-):
-    """
-    Private method that wraps the recursion for module replacement.
-
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
-    """
-    from accelerate import init_empty_weights
-    from aqlm import QuantizedLinear
-
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-
-        if isinstance(module, nn.Linear):
-            # Check if the current key is not in the `linear_weights_not_to_quantize`
-            if ".".join(current_key_name) + ".weight" not in linear_weights_not_to_quantize:
-                with init_empty_weights():
-                    in_features = module.in_features
-                    out_features = module.out_features
-
-                    model._modules[name] = QuantizedLinear(
-                        in_features,
-                        out_features,
-                        bias=module.bias is not None,
-                        in_group_size=quantization_config.in_group_size,
-                        out_group_size=quantization_config.out_group_size,
-                        num_codebooks=quantization_config.num_codebooks,
-                        nbits_per_codebook=quantization_config.nbits_per_codebook,
-                    )
-                    has_been_replaced = True
-
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_aqlm_linear(
-                module,
-                linear_weights_not_to_quantize,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
