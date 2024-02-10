@@ -32,6 +32,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    is_timm_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -41,6 +42,9 @@ from .configuration_rt_detr import RTDetrConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+if is_timm_available():
+    from timm import create_model
 
 logger = logging.get_logger(__name__)
 
@@ -295,6 +299,131 @@ def get_contrastive_denoising_training_group(
     return input_query_class, input_query_bbox, attn_mask, dn_meta
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDETR
+class RTDetrFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->DeformableDetr
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `DeformableDetrFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = RTDetrFrozenBatchNorm2d(module.num_features)
+
+            if not module.weight.device == torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class RTDetrConvEncoder(nn.Module):
+    """
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
+
+    nn.BatchNorm2d layers are replaced by RTDetrFrozenBatchNorm2d as defined above.
+
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(0, 1, 2, 3) if config.num_feature_levels > 1 else (4,),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
+
+        # replace batch norm by frozen batch norm
+        with torch.no_grad():
+            replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
+
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
+            for name, parameter in self.model.named_parameters():
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
+
+    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
+
+
 class RTDetrConvNormLayer(nn.Module):
     def __init__(self, config, channels_in, channels_out, kernel_size, stride, padding=None, activation=None):
         super().__init__()
@@ -532,9 +661,9 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
         self.embed_dim = config.hidden_dim
         self.num_heads = config.num_attention_heads
-        self.num_levels = config.num_levels
+        self.num_feature_levels = config.num_feature_levels
         self.num_points = config.num_decoder_points
-        self.total_points = self.num_heads * self.num_levels * self.num_points
+        self.total_points = self.num_heads * self.num_feature_levels * self.num_points
         self.head_dim = self.embed_dim // self.num_heads
 
         if self.head_dim * self.num_heads != self.embed_dim:
@@ -554,20 +683,20 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
             value *= value_mask
         value = value.reshape(batch_size, len_v, self.num_heads, self.head_dim)
         sampling_offsets = self.sampling_offsets(query).reshape(
-            batch_size, query_length, self.num_heads, self.num_levels, self.num_points, 2
+            batch_size, query_length, self.num_heads, self.num_feature_levels, self.num_points, 2
         )
         attention_weights = self.attention_weights(query).reshape(
-            batch_size, query_length, self.num_heads, self.num_levels * self.num_points
+            batch_size, query_length, self.num_heads, self.num_feature_levels * self.num_points
         )
         attention_weights = F.softmax(attention_weights, dim=-1).reshape(
-            batch_size, query_length, self.num_heads, self.num_levels, self.num_points
+            batch_size, query_length, self.num_heads, self.num_feature_levels, self.num_points
         )
         # reference_points is a point type to sample feature
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(value_spatial_shapes)
-            offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.num_levels, 1, 2)
+            offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.num_feature_levels, 1, 2)
             sampling_locations = (
-                reference_points.reshape(batch_size, query_length, 1, self.num_levels, 1, 2)
+                reference_points.reshape(batch_size, query_length, 1, self.num_feature_levels, 1, 2)
                 + sampling_offsets / offset_normalizer
             )
         # reference_points is a box type to sample feature
@@ -1191,7 +1320,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = RTDetrConvEncoder(config)
 
         # Create input projection layers
         num_backbone_outs = len(self.backbone.intermediate_channel_sizes)
@@ -1339,10 +1468,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # get projection features
         projected_features = [self.input_proj[i](feat) for i, feat in enumerate(features["feature_maps"])]
-        if self.num_levels > len(projected_features):
+        if self.num_feature_levels > len(projected_features):
             len_srcs = len(projected_features)
             projected_features.append(self.input_proj[len_srcs](features["feature_maps"])[-1])
-            for i in range(len_srcs + 1, self.num_levels):
+            for i in range(len_srcs + 1, self.num_feature_levels):
                 projected_features.append(self.input_proj[i](projected_features[-1]))
 
         # get encoder inputs
@@ -1353,7 +1482,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             height, width = feat.shape[-2:]
             # [batch, channels, height, width] -> [batch, height*width, channel]
             feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
-            # [num_levels, 2]
+            # [num_feature_levels, 2]
             spatial_shapes.append([height, width])
             # [level], start index of each level
             level_start_index.append(height * width + level_start_index[-1])

@@ -148,7 +148,12 @@ class RTDetrConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
+        use_timm_backbone=True,
         backbone_config=None,
+        num_channels=3,
+        backbone="resnet50d",
+        use_pretrained_backbone=True,
+        dilation=False,
         # encoder HybridEncoder
         feat_strides=[8, 16, 32],
         hidden_dim=256,
@@ -164,7 +169,7 @@ class RTDetrConfig(PretrainedConfig):
         # decoder RTDetrTransformer
         num_queries=300,
         feat_channels=[256, 256, 256],
-        num_levels=3,
+        num_feature_levels=3,
         num_decoder_points=4,
         num_decoder_layers=6,
         num_denoising=100,
@@ -193,25 +198,31 @@ class RTDetrConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        # backbone
-        if backbone_config is None:
-            logger.info("Initializing the config with a `TimmBackbone` backbone.")
-            backbone_config = {
-                "backbone": "resnet50d",
-                "out_indices": [2, 3, 4],
-                "freeze_batch_norm_2d": True,
-            }
-            self.backbone_config = TimmBackboneConfig(**backbone_config)
-        elif isinstance(backbone_config, dict):
-            logger.info("Initializing the config with a `TimmBackbone` backbone.")
-            self.backbone_config = TimmBackboneConfig(**backbone_config)
-        elif isinstance(backbone_config, PretrainedConfig):
-            self.backbone_config = backbone_config
-        else:
+        if not use_timm_backbone and use_pretrained_backbone:
             raise ValueError(
-                f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
             )
 
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is not None and use_timm_backbone:
+            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+
+        if not use_timm_backbone:
+            if backbone_config is None:
+                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_config = backbone_config
+        self.num_channels = num_channels
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.dilation = dilation
         # encoder
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
@@ -227,7 +238,7 @@ class RTDetrConfig(PretrainedConfig):
         # decoder
         self.num_queries = num_queries
         self.feat_channels = feat_channels
-        self.num_levels = num_levels
+        self.num_feature_levels = num_feature_levels
         self.num_decoder_points = num_decoder_points
         self.num_decoder_layers = num_decoder_layers
         self.num_denoising = num_denoising
