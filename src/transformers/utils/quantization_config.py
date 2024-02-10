@@ -740,13 +740,13 @@ class AqlmConfig(QuantizationConfigMixin):
     This is a wrapper class about `aqlm` parameters.
 
     Args:
-        in_group_size (`int`):
+        in_group_size (`int`, *optional*, defaults to 8):
             The group size along the input dimension.
-        out_group_size (`int`):
+        out_group_size (`int`, *optional*, defaults to 1):
             The group size along the output dimension. It's recommended to always use 1.
-        num_codebooks (`int`):
+        num_codebooks (`int`, *optional*, defaults to 1):
             Number of codebooks for the Additive Quantization procedure.
-        nbits_per_codebook (`int`):
+        nbits_per_codebook (`int`, *optional*, defaults to 16):
             Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
         linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*, default to `None`):
             List of full paths of `nn.Linear` weight parameters that shall not be quantized.
