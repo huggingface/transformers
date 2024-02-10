@@ -37,7 +37,7 @@ if is_accelerate_available():
 
 
 @require_torch_gpu
-class AwqConfigTest(unittest.TestCase):
+class AqlmConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
@@ -101,7 +101,7 @@ class AqlmTest(unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly
         """
         from aqlm import QuantizedLinear
-        from transformers.quantizers.quantizer_aqlm import _replace_with_aqlm_linear
+        from transformers.integrations import replace_with_aqlm_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -115,7 +115,7 @@ class AqlmTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = _replace_with_aqlm_linear(model, quantization_config=quantization_config)
+        model, _ = replace_with_aqlm_linear(model, quantization_config=quantization_config)
         nb_aqlm_linear = 0
         for module in model.modules():
             if isinstance(module, QuantizedLinear):
@@ -127,8 +127,8 @@ class AqlmTest(unittest.TestCase):
         with init_empty_weights():
             model = OPTForCausalLM(config)
 
-        model, _ = _replace_with_aqlm_linear(
-            model, quantization_config=quantization_config, linear_weights_not_to_quantize=["lm_head"]
+        model, _ = replace_with_aqlm_linear(
+            model, quantization_config=quantization_config, linear_weights_not_to_quantize=["lm_head.weight"]
         )
         nb_aqlm_linear = 0
         for module in model.modules():
