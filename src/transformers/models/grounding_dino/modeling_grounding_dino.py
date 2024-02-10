@@ -2921,9 +2921,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             encoder_outputs = GroundingDinoEncoderOutput(
                 last_hidden_state_vision=encoder_outputs[0],
                 last_hidden_state_text=encoder_outputs[1],
-                vision_hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                text_hidden_states=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attentions=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
+                vision_hidden_states=encoder_outputs[2] if output_hidden_states else None,
+                text_hidden_states=encoder_outputs[3] if output_hidden_states else None,
+                attentions=encoder_outputs[-1] if output_attentions else None,
             )
 
         # Fifth, prepare decoder inputs
