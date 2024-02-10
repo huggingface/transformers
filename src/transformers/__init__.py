@@ -1760,6 +1760,7 @@ else:
     _import_structure["models.clip"].extend(
         [
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLIPForImageClassification",
             "CLIPModel",
             "CLIPPreTrainedModel",
             "CLIPTextModel",
@@ -6437,6 +6438,7 @@ if TYPE_CHECKING:
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLIPForImageClassification,
             CLIPModel,
             CLIPPreTrainedModel,
             CLIPTextModel,
