@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -202,6 +203,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = ViTModelTester(self)
