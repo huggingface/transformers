@@ -66,6 +66,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A [similar notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LLaVa/Inference_with_LLaVa_for_multimodal_generation.ipynb) showcasing batched inference. 🌎
 
 
+## LlavaImageProcessor
+
+[[autodoc]] LlavaImageProcessor
+    - preprocess
+
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
