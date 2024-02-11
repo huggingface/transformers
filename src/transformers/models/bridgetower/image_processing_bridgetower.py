@@ -136,7 +136,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-        resample (`PILImageResampling`, defaults to `Resampling.BICUBIC`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
