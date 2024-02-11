@@ -126,7 +126,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     Constructs a BridgeTower image processor.
 
     Args:
-        do_resize (`bool`, defaults to `True`, *optional*, defaults to `True`):
+        do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{'shortest_edge': 288}`):
