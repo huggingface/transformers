@@ -725,7 +725,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        if images and not valid_images(images):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -739,7 +739,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            segmentation_maps=segmentation_maps,
         )
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):

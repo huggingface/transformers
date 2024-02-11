@@ -882,7 +882,7 @@ class DetaImageProcessor(BaseImageProcessor):
             images = [images]
             annotations = [annotations] if annotations is not None else None
 
-        if images and not valid_images(images):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -890,12 +890,6 @@ class DetaImageProcessor(BaseImageProcessor):
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(
                 f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
-            )
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
         format = AnnotationFormat(format)

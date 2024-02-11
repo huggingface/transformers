@@ -244,7 +244,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        if images and not valid_images(images):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."

@@ -383,7 +383,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         if segmentation_maps is not None:
             segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
-        if images and not valid_images(images):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -397,7 +397,6 @@ class SegformerImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            segmentation_maps=segmentation_maps,
         )
 
         images = [

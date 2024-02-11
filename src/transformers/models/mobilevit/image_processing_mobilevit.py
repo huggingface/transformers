@@ -371,7 +371,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        if images and not valid_images(images):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -384,7 +384,6 @@ class MobileViTImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            segmentation_maps=segmentation_maps,
         )
 
         images = [
