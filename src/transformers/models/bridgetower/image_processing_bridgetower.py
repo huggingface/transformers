@@ -162,7 +162,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         crop_size (`Dict[str, int]`, defaults to `None`, *optional*):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
             Can be overridden by the `crop_size` parameter in the `preprocess` method.
-        do_pad (`bool`, defaults to `True`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
     """
