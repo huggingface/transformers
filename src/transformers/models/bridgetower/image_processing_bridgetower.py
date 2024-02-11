@@ -456,7 +456,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
+        # For backwards compatibility. Initial version of this processor was cropping to the "size" argument, which 
+        # it should default to if crop_size is undefined.
+        crop_size = crop_size if crop_size is not None else (self.crop_size if self.crop_size is not None else self.size)
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -464,12 +466,12 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         if not is_batched(images):
             images = [images]
 
-        if images and not valid_images(images):
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
+        # Here, crop_size is used only if it is set, else size will be used.  
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -507,7 +509,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         if do_center_crop:
             images = [
-                self.center_crop(image=image, size=size, input_data_format=input_data_format) for image in images
+                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
             ]
 
         if do_rescale:
