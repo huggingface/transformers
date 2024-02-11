@@ -350,7 +350,6 @@ def validate_preprocess_arguments(
     do_resize: Optional[bool] = None,
     size: Optional[Dict[str, int]] = None,
     resample: Optional[PILImageResampling] = None,
-    segmentation_maps: Optional[ImageInput] = None,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
@@ -377,12 +376,6 @@ def validate_preprocess_arguments(
 
     if do_resize and (size is None or resample is None):
         raise ValueError("size and resample must be specified if do_resize is True.")
-
-    if segmentation_maps is not None and not valid_images(segmentation_maps):
-        raise ValueError(
-            "Invalid segmentation_maps type. Must be of type PIL.Image.Image, numpy.ndarray, "
-            "torch.Tensor, tf.Tensor or jax.ndarray."
-        )
 
 
 # In the future we can add a TF implementation here when we have TF models.
