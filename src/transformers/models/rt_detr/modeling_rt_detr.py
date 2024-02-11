@@ -213,6 +213,7 @@ class RTDetrModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
+    intermediate_logits: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -221,6 +222,7 @@ class RTDetrModelOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    dn_meta: Optional[Dict] = None
 
 
 @dataclass
@@ -436,7 +438,7 @@ class RTDetrConvEncoder(nn.Module):
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by RTDetrFrozenBatchNorm2d as defined above.
-
+    https://github.com/lyuwenyu/RT-DETR/blob/main/rtdetr_pytorch/src/nn/backbone/presnet.py#L142
     """
 
     def __init__(self, config):
@@ -453,7 +455,7 @@ class RTDetrConvEncoder(nn.Module):
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
-                out_indices=(0, 1, 2, 3) if config.num_feature_levels > 1 else (4,),
+                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
                 in_chans=config.num_channels,
                 **kwargs,
             )
@@ -478,7 +480,7 @@ class RTDetrConvEncoder(nn.Module):
                     if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
                         parameter.requires_grad_(False)
 
-    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
+    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->RTDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
@@ -492,17 +494,17 @@ class RTDetrConvEncoder(nn.Module):
 
 
 class RTDetrConvNormLayer(nn.Module):
-    def __init__(self, config, channels_in, channels_out, kernel_size, stride, padding=None, activation=None):
+    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
         super().__init__()
         self.conv = nn.Conv2d(
-            channels_in,
-            channels_out,
+            in_channels,
+            out_channels,
             kernel_size,
             stride,
             padding=(kernel_size - 1) // 2 if padding is None else padding,
             bias=False,
         )
-        self.norm = nn.BatchNorm2d(channels_out, config.batch_norm_eps)
+        self.norm = nn.BatchNorm2d(out_channels, config.batch_norm_eps)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, hidden_state):
@@ -595,7 +597,7 @@ class RTDetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        object_queries: torch.Tensor = None,
+        position_embeddings: torch.Tensor = None,
         output_attentions: bool = False,
         **kwargs,
     ):
@@ -605,28 +607,12 @@ class RTDetrEncoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            object_queries (`torch.FloatTensor`, *optional*):
+            position_embeddings (`torch.FloatTensor`, *optional*):
                 Object queries (also called content embeddings), to be added to the hidden states.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         residual = hidden_states
         if self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -634,7 +620,7 @@ class RTDetrEncoderLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            object_queries=object_queries,
+            position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
 
@@ -678,11 +664,9 @@ class RTDetrRepVggBlock(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        in_channels = int(config.d_model)
-        out_channels = int(config.d_model)
         activation = config.activation_function
-        self.conv1 = RTDetrConvNormLayer(config, in_channels, out_channels, 3, 1, padding=1)
-        self.conv2 = RTDetrConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
+        self.conv1 = RTDetrConvNormLayer(config, config.d_model, config.d_model, 3, 1, padding=1)
+        self.conv2 = RTDetrConvNormLayer(config, config.d_model, config.d_model, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -1177,13 +1161,14 @@ class RTDetrEncoder(nn.Module):
         self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
     def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
-        output = src
+        hidden_states = src
         for layer in self.layers:
-            output = layer(output, src_mask=src_mask, pos_embed=pos_embed)
-        return output
+            layer_outputs = layer(hidden_states, attention_mask=src_mask, position_embeddings=pos_embed)
+            hidden_states = layer_outputs[0]
+        return hidden_states
 
 
-class RTDetrHybridEncoder(RTDetrPreTrainedModel):
+class RTDetrHybridEncoder(nn.Module):
     """
     Decoder consists of a projection layer, a set of `RTDetrEncoder`, a top-down Feature Pyramid Network
     (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
@@ -1193,7 +1178,8 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
     """
 
     def __init__(self, config: RTDetrConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.in_channels = config.encoder_in_channels
         self.feat_strides = config.feat_strides
         self.d_model = config.d_model
@@ -1298,6 +1284,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
                 pos_embed = None
 
             memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
+            print('memory', memory.shape)
             hidden_states[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
 
         # broadcasting and fusion
@@ -1327,13 +1314,13 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.num_decoder_layers)])
-        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.num_decoder_layers + config.eval_idx
+        self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
+        self.query_pos_head = None
         self.bbox_embed = None
         self.class_embed = None
-        self.query_pos_head = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1401,6 +1388,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         intermediate_reference_points = ()
         intermediate_logits = ()
 
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L252
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
             position_embeddings = self.query_pos_head(reference_points)
@@ -1422,19 +1410,10 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             # hack implementation for iterative bounding box refinement
-            if self.bbox_head is not None:
+            if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                if reference_points.shape[-1] == 4:
-                    new_reference_points = tmp + inverse_sigmoid(reference_points)
-                    new_reference_points = new_reference_points.sigmoid()
-                else:
-                    if reference_points.shape[-1] != 2:
-                        raise ValueError(
-                            f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
-                        )
-                    new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
-                    new_reference_points = new_reference_points.sigmoid()
+                print('reference_points', reference_points.shape)
+                new_reference_points = tmp.sigmoid() + inverse_sigmoid(reference_points)
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
@@ -1498,28 +1477,19 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Create backbone
         self.backbone = RTDetrConvEncoder(config)
 
-        # Create input projection layers
-        num_backbone_outs = len(self.backbone.intermediate_channel_sizes)
-        input_proj_list = []
-        for _ in range(num_backbone_outs):
-            in_channels = self.backbone.intermediate_channel_sizes[_]
-            input_proj_list.append(
+        # Create encoder input projection layers
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
+        encoder_input_proj_list = []
+        for in_channel in config.encoder_in_channels:
+            encoder_input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                    nn.Conv2d(in_channel, config.d_model, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model)
                 )
             )
-        for _ in range(config.num_feature_levels - num_backbone_outs):
-            input_proj_list.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-            in_channels = config.d_model
-        self.input_proj = nn.ModuleList(input_proj_list)
+        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
 
-        # enconder
+        # Create encoder
         self.encoder = RTDetrHybridEncoder(config)
 
         # denoising part
@@ -1548,8 +1518,31 @@ class RTDetrModel(RTDetrPreTrainedModel):
         if config.image_size:
             self.anchors, self.valid_mask = self.generate_anchors()
 
+        # Create decoder input projection layers
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
+        num_backbone_outs = len(config.decoder_in_channels)
+        decoder_input_proj_list = []
+        for _ in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[_]
+            decoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            decoder_input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+            in_channels = config.d_model
+        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+
         # decoder
         self.decoder = RTDetrDecoder(config)
+        self.decoder.query_pos_head = self.query_pos_head
 
         self.post_init()
 
@@ -1583,7 +1576,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
-
+            print('anchors', height, width)
         # define the valid range for anchor coordinates
         eps = 1e-2
         anchors = torch.concat(anchors, 1).to(device)
@@ -1641,38 +1634,46 @@ class RTDetrModel(RTDetrPreTrainedModel):
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
-        features = self.backbone(pixel_values)
-        # encoder_outputs = self.encoder(features["feature_maps"])
-        # outputs = self.decoder(encoder_outputs)
+        if pixel_mask is None:
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-        # get projection features
-        projected_features = [self.input_proj[i](feat) for i, feat in enumerate(features["feature_maps"])]
-        if self.num_feature_levels > len(projected_features):
-            len_srcs = len(projected_features)
-            projected_features.append(self.input_proj[len_srcs](features["feature_maps"])[-1])
-            for i in range(len_srcs + 1, self.num_feature_levels):
-                projected_features.append(self.input_proj[i](projected_features[-1]))
+        features = self.backbone(pixel_values, pixel_mask)
 
-        # get encoder inputs
-        feat_flatten = []
+        assert len(features) == len(self.config.encoder_in_channels)
+        proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
+
+        encoder_outputs = self.encoder(proj_feats)
+
+        # Equivalent to def _get_encoder_input
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
+        sources = []
+        for level, source in enumerate(encoder_outputs):
+            sources.append(self.decoder_input_proj[level](source))
+
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
+        if self.config.num_feature_levels > len(sources):
+            _len_sources = len(sources)
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs)[-1])
+            for i in range(_len_sources + 1, self.config.num_feature_levels):
+                sources.append(self.decoder_input_proj[i](encoder_outputs[-1]))
+
+        # Prepare encoder inputs (by flattening)
+        source_flatten = []
         spatial_shapes = []
-        level_start_index = [0]
-        for feat in projected_features:
-            height, width = feat.shape[-2:]
-            # [batch, channels, height, width] -> [batch, height*width, channel]
-            feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
-            # [num_feature_levels, 2]
-            spatial_shapes.append([height, width])
-            # [level], start index of each level
-            level_start_index.append(height * width + level_start_index[-1])
-
-        # [batch, level, channel]
-        feat_flatten = torch.concat(feat_flatten, 1)
-        level_start_index.pop()
+        for level, source in enumerate(sources):
+            batch_size, num_channels, height, width = source.shape
+            spatial_shape = (height, width)
+            spatial_shapes.append(spatial_shape)
+            source = source.flatten(2).transpose(1, 2)
+            source_flatten.append(source)
+            print('source', source.shape)
+        source_flatten = torch.cat(source_flatten, 1)
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
         if self.training and self.num_denoising > 0 and labels is not None:
-            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = get_contrastive_denoising_training_group(
+            denoising_class, denoising_bbox_unact, mask_flatten, dn_meta = get_contrastive_denoising_training_group(
                 targets=labels,
                 num_classes=self.config.num_labels,
                 num_queries=self.num_queries,
@@ -1682,29 +1683,29 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 box_noise_scale=self.box_noise_scale,
             )
         else:
-            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = None, None, None, None
+            denoising_class, denoising_bbox_unact, mask_flatten, dn_meta = None, None, None, None
 
-        batch_size = len(feat_flatten)
-        device = feat_flatten.device
+        batch_size = len(source_flatten)
+        device = source_flatten.device
 
         # prepare input for decoder
-        if self.training or self.image_size is None:
+        if self.training or self.config.image_size is None:
             anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device)
         else:
             anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
-        memory = valid_mask.to(feat_flatten.dtype) * feat_flatten
+        memory = valid_mask.to(source_flatten.dtype) * source_flatten
 
         output_memory = self.enc_output(memory)
 
         enc_outputs_class = self.enc_score_head(output_memory)
-        enc_outputs_coord_unact = self.enc_bbox_head(output_memory) + anchors
+        enc_outputs_coord_logits = self.enc_bbox_head(output_memory) + anchors
 
-        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.num_queries, dim=1)
+        _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.config.num_queries, dim=1)
 
-        reference_points_unact = enc_outputs_coord_unact.gather(
-            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_unact.shape[-1])
+        reference_points_unact = enc_outputs_coord_logits.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
         )
 
         enc_topk_bboxes = F.sigmoid(reference_points_unact)
@@ -1716,7 +1717,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         )
 
         # extract region features
-        if self.learnt_init_query:
+        if self.config.learnt_init_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
@@ -1724,36 +1725,44 @@ class RTDetrModel(RTDetrPreTrainedModel):
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
 
-        init_ref_points_unact = reference_points_unact.detach()
+        init_reference_points = reference_points_unact.detach()
 
         # decoder
-        out_bboxes, out_logits = self.decoder(
-            target=target,
-            ref_points_unact=init_ref_points_unact,
-            memory=feat_flatten,
-            memory_spatial_shapes=spatial_shapes,
-            memory_level_start_index=level_start_index,
-            bbox_head=self.dec_bbox_head,
-            score_head=self.dec_score_head,
-            query_pos_head=self.query_pos_head,
-            attn_mask=attn_mask,
+        decoder_outputs = self.decoder(
+            inputs_embeds=target,
+            encoder_hidden_states=memory,
+            encoder_attention_mask=mask_flatten,
+            reference_points=init_reference_points,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            # valid_ratios=valid_ratios,
+            # output_attentions=output_attentions,
+            # output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        if dn_meta is not None:
-            dn_out_bboxes, out_bboxes = torch.split(out_bboxes, dn_meta["dn_num_split"], dim=2)
-            dn_out_logits, out_logits = torch.split(out_logits, dn_meta["dn_num_split"], dim=2)
+        if not return_dict:
+            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
+            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
 
-        out = {"logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
+            return tuple_outputs
 
-        if self.training and self.use_aux_loss:
-            out["aux_outputs"] = self._set_aux_loss(out_logits[:-1], out_bboxes[:-1])
-            out["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
-
-            if self.training and dn_meta is not None:
-                out["dn_aux_outputs"] = self._set_aux_loss(dn_out_logits, dn_out_bboxes)
-                out["dn_meta"] = dn_meta
-
-        return out
+        return RTDetrModelOutput(
+            init_reference_points=init_reference_points,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            intermediate_logits=decoder_outputs.intermediate_logits,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            # encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            # encoder_hidden_states=encoder_outputs.hidden_states,
+            # encoder_attentions=encoder_outputs.attentions,
+            enc_outputs_class=enc_outputs_class,
+            enc_outputs_coord_logits=enc_outputs_coord_logits,
+            dn_meta=dn_meta,
+        )
 
 
 @add_start_docstrings(
@@ -1770,16 +1779,27 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # RTDETR encoder-decoder model
         self.model = RTDetrModel(config)
 
-        # decoder head
-        self.dec_score_head = nn.ModuleList(
-            [nn.Linear(config.d_model, config.num_labels) for _ in range(config.num_decoder_layers)]
-        )
-        self.dec_bbox_head = nn.ModuleList(
-            [
-                RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
-                for _ in range(config.num_decoder_layers)
-            ]
-        )
+        # Detection heads on top
+        self.class_embed = nn.Linear(config.d_model, config.num_labels)
+        self.bbox_embed = RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+
+        prior_prob = 0.01
+        bias_value = -math.log((1 - prior_prob) / prior_prob)
+        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
+        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
+        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+
+        num_pred = config.decoder_layers
+
+        nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
+        self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
+        self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
+        
+        self.model.decoder.bbox_embed = self.bbox_embed
+        # hack implementation for two-stage
+        self.model.decoder.class_embed = self.class_embed
+        for box_embed in self.bbox_embed:
+            nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
         self.criterion = RTDetrLoss(config)
 
@@ -1799,7 +1819,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.FloatTensor] = None,
+        encoder_outputs: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[List[dict]] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
@@ -1864,12 +1890,29 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        features = self.backbone(pixel_values)
-        encoder_outputs = self.encoder(features["feature_maps"])
-        outputs = self.decoder(encoder_outputs)
+        outputs = self.model(
+            pixel_values,
+            pixel_mask=pixel_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-        pred_boxes = outputs["pred_boxes"]
-        logits = outputs["logits"]
+        dn_meta = outputs.dn_meta
+        
+        outputs_class = outputs.intermediate_logits
+        outputs_coord = outputs.intermediate_reference_points
+
+        if self.training and dn_meta is not None:
+            dn_out_coord, out_coord = torch.split(out_coord, dn_meta["dn_num_split"], dim=2)
+            dn_out_class, out_class = torch.split(out_class, dn_meta["dn_num_split"], dim=2)
+
+        logits = outputs_class[-1]
+        pred_boxes = outputs_coord[-1]
 
         loss, loss_dict = None, None
         if labels is not None:
@@ -1878,6 +1921,17 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
+
+            # out = {"logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}
+
+            if self.training and self.use_aux_loss:
+                out["aux_outputs"] = self._set_aux_loss(out_class[:-1], out_coord[:-1])
+                out["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
+
+                if self.training and dn_meta is not None:
+                    out["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
+                    out["dn_meta"] = dn_meta
+
             loss_dict = self.criterion(outputs_loss, labels)
             # Compute total loss, as a weighted sum of the various losses
             weight_dict = {

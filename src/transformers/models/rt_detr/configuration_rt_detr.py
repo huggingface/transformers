@@ -171,11 +171,11 @@ class RTDetrConfig(PretrainedConfig):
         normalize_before=False,
         # decoder RTDetrTransformer
         num_queries=300,
-        feat_channels=[256, 256, 256],
+        decoder_in_channels=[256, 256, 256],
         decoder_ffn_dim=1024,
         num_feature_levels=3,
         decoder_n_points=4,
-        num_decoder_layers=6,
+        decoder_layers=6,
         decoder_attention_heads=8,
         attention_dropout=0.0,
         num_denoising=100,
@@ -248,10 +248,10 @@ class RTDetrConfig(PretrainedConfig):
         # decoder
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.feat_channels = feat_channels
+        self.decoder_in_channels = decoder_in_channels
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
-        self.num_decoder_layers = num_decoder_layers
+        self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.attention_dropout = attention_dropout
         self.num_denoising = num_denoising
