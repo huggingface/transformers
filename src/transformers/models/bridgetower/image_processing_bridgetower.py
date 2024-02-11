@@ -145,7 +145,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, defaults to `True`, *optional*, defaults to `True`):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -156,10 +156,10 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_center_crop (`bool`, defaults to `True`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image. Can be overridden by the `do_center_crop` parameter in the `preprocess`
             method.
-        crop_size (`Dict[str, int]`, defaults to `None`, *optional*):
+        crop_size (`Dict[str, int]`, *optional*):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
             Can be overridden by the `crop_size` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
