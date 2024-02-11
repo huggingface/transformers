@@ -400,12 +400,12 @@ class BeitImageProcessor(BaseImageProcessor):
 
         if segmentation_maps is not None:
             segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
-            
+
         if not valid_images(segmentation_maps):
             raise ValueError(
-            "Invalid segmentation_maps type. Must be of type PIL.Image.Image, numpy.ndarray, "
-            "torch.Tensor, tf.Tensor or jax.ndarray."
-        )
+                "Invalid segmentation_maps type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
