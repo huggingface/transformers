@@ -1756,6 +1756,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     truncation=truncation,
                     max_length=max_length,
                     return_tensors=return_tensors,
+                    add_special_tokens=False,
                     **tokenizer_kwargs,
                 )
             else:
