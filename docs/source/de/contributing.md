@@ -18,7 +18,7 @@ limitations under the License.
 
 Jeder ist willkommen, einen Beitrag zu leisten, und wir schätzen den Beitrag jedes Einzelnen. Codebeiträge sind nicht der einzige Weg, der Community zu helfen. Fragen zu beantworten, anderen zu helfen und die Dokumentation zu verbessern, sind ebenfalls äußerst wertvoll.
 
-Es hilft uns auch, wenn Sie es weiterempfehlen! Erwähnen Sie die Bibliothek in Blogposts über die großartigen Projekte, die sie ermöglicht hat, tweeten Sie, wenn sie Ihnen geholfen hat, oder hinterlassen Sie dem Repository ein ⭐️, um Danke zu sagen.
+Es hilft uns auch, wenn Sie das Projekt weiterempfehlen! Erwähnen Sie die Bibliothek in Blogposts über die großartigen Projekte, die sie ermöglicht hat, tweeten Sie, wenn sie Ihnen geholfen hat, oder hinterlassen Sie dem Repository ein ⭐️, um Danke zu sagen.
 
 Wie auch immer Sie sich entscheiden beizutragen, seien Sie achtsam und respektieren Sie unseren [Verhaltenskodex](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
@@ -66,7 +66,7 @@ Um das Betriebssystem und die Softwareversionen automatisch auszugeben, führen 
 transformers-cli env
 ```
 
-Sie können denselben Befehl auch im Wurzelverzeichnis des Repositorys ausführen:
+Sie können denselben Befehl auch im Hauptverzeichnis des Repositorys ausführen:
 
 ```bash
 python src/transformers/commands/transformers_cli.py env
@@ -74,7 +74,7 @@ python src/transformers/commands/transformers_cli.py env
 
 ### Möchten Sie eine neue Funktion?
 
-Wenn Sie eine bestimmte neue Funktion in 🤗 Transformers sehen möchten, erstellen Sie bitte ein Issue und beschreiben Sie:
+Wenn Sie eine bestimmte neue Funktion in 🤗 Transformers sehen möchten, erstellen Sie bitte ein Issue und fügen sie eine Beschreibung hinzu:
 
 1. Was ist die *Motivation* hinter dieser Funktion? Steht sie in Zusammenhang mit einem Problem oder einer Frustration mit der Bibliothek? Ist es eine Funktion, die Sie für ein Projekt benötigen? Ist es etwas, an dem Sie gearbeitet haben und denken, dass es der Community nutzen könnte?
 
@@ -192,7 +192,7 @@ Sie benötigen **[Python 3.8](https://github.com/huggingface/transformers/blob/m
    pip install ".[docs]"
    ```
 
-   Führen Sie den folgenden Befehl im Wurzelverzeichnis des Repositorys aus:
+   Führen Sie den folgenden Befehl im Hauptverzeichnis des Repositorys aus:
 
    ```bash
    doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
@@ -250,7 +250,7 @@ Um mehr über die Prüfungen zu erfahren, die bei einer Pull-Anfrage ausgelöst 
 
 Eine umfangreiche Test-Suite ist enthalten, um das Verhalten der Bibliothek und mehrerer Beispiele zu testen. Tests für die Bibliothek und Beispiele finden Sie jeweils im [tests](https://github.com/huggingface/transformers/tree/main/tests) und im [examples](https://github.com/huggingface/transformers/tree/main/examples) Ordner.
 
-Wir bevorzugen `pytest` und `pytest-xdist`, weil es schneller ist. Geben Sie einen *Pfad zu einem Unterordner oder einer Testdatei* vom Wurzelverzeichnis des Repositorys aus an, um den Test auszuführen:
+Wir bevorzugen `pytest` und `pytest-xdist`, weil es schneller ist. Geben Sie einen *Pfad zu einem Unterordner oder einer Testdatei* vom Hauptverzeichnis des Repositorys aus an, um den Test auszuführen:
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
