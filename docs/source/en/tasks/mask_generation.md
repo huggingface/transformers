@@ -139,13 +139,13 @@ and pass it to the model for inference. To post-process the model output, pass t
 `original_sizes` and `reshaped_input_sizes` we take from the processor's initial output. We need to pass these 
 since processor resizes the image, and the output needs to be extrapolated.
 
-```
+```python
 input_points = [[[2592, 1728]]] # point location of the bee
 
 inputs = processor(image, input_points=input_points, return_tensors="pt").to(device)
-outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu())
-```
 
 We can visualize the three masks in the `masks` output.
 
