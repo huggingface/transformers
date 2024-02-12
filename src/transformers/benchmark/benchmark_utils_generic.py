@@ -14,7 +14,6 @@
 """
 Benchmark
 """
-import json
 import timeit
 
 
@@ -88,57 +87,3 @@ class SpeedBenchMark(BenchMark):
             return {"time": min(runtimes) / number}
 
         return wrapper
-
-
-class SpeedBenchMark(BenchMark):
-
-    def measure(self, func, number=3, repeat=1):
-
-        def wrapper():
-
-            # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(
-                func,
-                repeat=repeat,
-                number=number,
-            )
-
-            return {"time": min(runtimes) / number}
-
-        return wrapper
-
-
-class FromPretrainedBenchMark(BenchMark):
-
-    def target(self, model_class, repo_id):
-
-        def target():
-            _ = model_class.from_pretrained(repo_id)
-
-        return target
-
-
-class FromPretrainedSpeedBenchMark(SpeedBenchMark, FromPretrainedBenchMark):
-    pass
-
-
-if __name__ == "__main__":
-
-    from transformers import AutoModel
-    repo_id = "bert-base-uncased"
-
-    benchmakr = FromPretrainedSpeedBenchMark()
-
-    run_kwargs = {
-        "measure_kwargs": {"number": 2, "repeat": 3},
-        "target_kwargs": {"model_class": AutoModel, "repo_id": repo_id},
-        "inputs_kwargs": [{}],
-        "report_kwargs": {},
-        # "report_kwargs": {"output_path": None, "keys_to_keep": None}
-    }
-    result = benchmakr.run(**run_kwargs)
-    print(json.dumps(result, indent=4))
-
-    run_kwargs["report_kwargs"]["only_result"] = True
-    result = benchmakr.run(**run_kwargs)
-    print(json.dumps(result, indent=4))
