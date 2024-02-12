@@ -35,7 +35,9 @@ if is_vision_available():
 
 
 @require_vision
+# Copied from tests.models.blip_2.test_processor_blip_2.Blip2ProcessorTest with Blip2->CogVLM, BlipImageProcessor->CLIPImageProcessor
 class CogVLMProcessorTest(unittest.TestCase):
+    # Ignore copy
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -112,6 +114,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
+    # Ignore copy
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -142,6 +145,7 @@ class CogVLMProcessorTest(unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
+    # Ignore copy
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -153,5 +157,5 @@ class CogVLMProcessorTest(unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
+        # For now the processor supports only ['input_ids', 'attention_mask', 'pixel_values']
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
