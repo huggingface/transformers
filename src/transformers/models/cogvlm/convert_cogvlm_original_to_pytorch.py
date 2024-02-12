@@ -128,8 +128,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     )
     processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-    original_inputs = gather_inputs(inputs, device=hf_device)
-    original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
+    # original_inputs = gather_inputs(inputs, device=hf_device)
+    # original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
 
     if template_version == "chat":
         # chat history template
@@ -142,15 +142,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
-    for k, v in inputs.items():
-        print(k, v.shape)
-
-    print("HF input_ids:", tokenizer.decode(inputs.input_ids[0]))
-
-    # verify inputs
-    # for k, v in inputs.items():
-    #     assert torch.allclose(v, original_inputs[k].to(v.device))
-
+    # verify generation
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)
         outputs = outputs[:, inputs["input_ids"].shape[1] :]
@@ -159,17 +151,22 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     print("Original text:", original_generated_text)
     print("HF text:", generated_text)
     assert original_generated_text == generated_text
-    # with torch.no_grad():
-    #      original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
-    #      logits = model(pixel_values, input_ids).logits
 
-    # assert original_logits.shape == logits.shape
-    # print("First values of original logits:", original_logits[0, :3, :3])
-    # print("First values of HF logits:", logits[0, :3, :3])
+    for k, v in inputs.items():
+        print(k, v.shape)
 
-    # # assert values
-    # assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-4)
-    # print("Looks ok!")
+    # verify logits
+    with torch.no_grad():
+        original_logits = original_model(**original_inputs).logits
+        logits = model(**inputs).logits
+
+    assert original_logits.shape == logits.shape
+    print("First values of original logits:", original_logits[0, :3, :3])
+    print("First values of HF logits:", logits[0, :3, :3])
+
+    # assert values
+    assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
