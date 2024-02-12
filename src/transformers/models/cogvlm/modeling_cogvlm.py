@@ -671,7 +671,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
             if pixel_values is not None:
                 batch_size = pixel_values.shape[0]
                 vision_mask = (
-                    torch.tensor([1] * self.num_vision_tokens).repeat(batch_size, 1).to(attention_mask.device)
+                    torch.full(size=(batch_size, self.num_vision_tokens), fill_value=1, device=attention_mask.device)
                 )
                 attention_mask = torch.cat(
                     [attention_mask[:, :-1], vision_mask, attention_mask[:, -1].repeat(batch_size, 1)], dim=1
