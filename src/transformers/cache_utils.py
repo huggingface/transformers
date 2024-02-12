@@ -351,10 +351,10 @@ class StaticCache(Cache):
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
 
-        cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
+        cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.seen_tokens = 0
@@ -398,6 +398,12 @@ class StaticCache(Cache):
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
         return self.seen_tokens
 
+<<<<<<< Updated upstream
+=======
+    def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
+        return 0
+
+>>>>>>> Stashed changes
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
         return self.max_cache_len

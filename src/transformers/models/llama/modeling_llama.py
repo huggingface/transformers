@@ -629,8 +629,14 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+<<<<<<< Updated upstream
         kv_seq_len = key_states.shape[-2]
         past_seen_tokens = 0
+=======
+        cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+
+>>>>>>> Stashed changes
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
             past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
