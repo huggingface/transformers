@@ -29,6 +29,7 @@ from PIL import Image
 from safetensors import safe_open
 
 from transformers import (
+    AddedToken,
     AutoConfig,
     AutoTokenizer,
     LlavaConfig,
@@ -106,9 +107,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    # tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    # tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     image_processor = LlavaImageProcessor.from_pretrained(vision_model_id)
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)

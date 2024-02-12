@@ -338,9 +338,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
 
-        print("Input ids:", input_ids)
-        print("Shape of input_ids:", input_ids.shape)
-        print("Shape of image_features:", image_features.shape)
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
@@ -401,8 +398,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        print("Shape of final_embedding:", final_embedding.shape)
 
         if labels is None:
             final_labels = None
@@ -485,13 +480,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 # TODO support llava 1.6 here
                 if pixel_values.ndim == 5:
                     concat_images = torch.cat(list(pixel_values), dim=0)
-                    print("Shape of concat_images:", concat_images.shape)
-                    print("First values of concat_images:", concat_images[0, 0, :3, :3])
                     image_features = self.vision_tower(concat_images, output_hidden_states=True)
-                    print("Image encoder last_hidden_state:", image_features.last_hidden_state.shape)
-                    print(
-                        "First values of image encoder last_hidden_state:", image_features.last_hidden_state[0, :3, :3]
-                    )
 
                     selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
@@ -504,9 +493,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                             f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
                         )
                     image_features = self.multi_modal_projector(selected_image_feature)
-
-                    print("Shape of image_features:", image_features.shape)
-                    print("First values of image_features:", image_features[0, :3, :3])
 
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
@@ -522,8 +508,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                 base_image_feature = image_feature[0]
                                 image_feature = image_feature[1:]
                                 height = width = self.num_patches_per_side()
-                                print("Height:", height)
-                                print("Shape of base_image_feature:", base_image_feature.shape)
                                 assert height * width == base_image_feature.shape[0]
                                 if image_aspect_ratio == "anyres":
                                     num_patch_width, num_patch_height = get_anyres_image_grid_shape(
@@ -576,11 +560,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         )
 
                     image_features = self.multi_modal_projector(selected_image_feature)
-
-                print("Shape of final image features:")
-                for i in image_features:
-                    print(i.shape)
-                    print(i[:3, :3])
 
                 # TODO remove this
                 image_features = image_features[0].unsqueeze(0)
