@@ -134,7 +134,7 @@ which helps with capping GPU memory usage.
 To learn how to deploy Deepspeed Integration please refer to [this guide](https://huggingface.co/transformers/main/main_classes/deepspeed.html#deepspeed-trainer-integration).
 
 But to get started quickly all you need is to install:
-```
+```bash
 pip install deepspeed
 ```
 and then use the default configuration files in this directory:
@@ -148,7 +148,7 @@ Here are examples of how you can use DeepSpeed:
 
 ZeRO-2:
 
-```
+```bash
 PYTHONPATH=../../../src deepspeed --num_gpus 2 \
 run_asr.py \
 --output_dir=output_dir --num_train_epochs=2 --per_device_train_batch_size=2 \
@@ -162,7 +162,7 @@ run_asr.py \
 ```
 
 For ZeRO-2 with more than 1 gpu you need to use (which is already in the example configuration file):
-```
+```json
     "zero_optimization": {
         ...
         "find_unused_parameters": true,
@@ -172,7 +172,7 @@ For ZeRO-2 with more than 1 gpu you need to use (which is already in the example
 
 ZeRO-3:
 
-```
+```bash
 PYTHONPATH=../../../src deepspeed --num_gpus 2 \
 run_asr.py \
 --output_dir=output_dir --num_train_epochs=2 --per_device_train_batch_size=2 \
@@ -192,7 +192,7 @@ It is recommended to pre-train Wav2Vec2 with Trainer + Deepspeed (please refer t
 
 Here is an example of how you can use DeepSpeed ZeRO-2 to pretrain a small Wav2Vec2 model:
 
-```
+```bash
 PYTHONPATH=../../../src deepspeed --num_gpus 4 run_pretrain.py \
 --output_dir="./wav2vec2-base-libri-100h" \
 --num_train_epochs="3" \
@@ -238,7 +238,7 @@ Output directory will contain 0000.txt and 0001.txt. Each file will have format 
     
 #### Run command
 
-```
+```bash
 python alignment.py  \
 --model_name="arijitx/wav2vec2-xls-r-300m-bengali" \
 --wav_dir="./wavs"

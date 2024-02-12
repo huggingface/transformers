@@ -173,7 +173,7 @@ In particular, hardware manufacturers are announcing devices that will speedup i
 
 If you find this resource useful, please consider citing the following paper:
 
-```
+```bibtex
 @article{sanh2020movement,
     title={Movement Pruning: Adaptive Sparsity by Fine-Tuning},
     author={Victor Sanh and Thomas Wolf and Alexander M. Rush},

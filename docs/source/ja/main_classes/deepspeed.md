@@ -2202,7 +2202,7 @@ print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 
 それを`t0.py`として保存して実行しましょう。
 
-```
+```bash
 $ deepspeed --num_gpus 2 t0.py
 rank0:
    in=Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy
@@ -2226,13 +2226,13 @@ DeepSpeed 統合を含む PR を送信する場合は、CircleCI PR CI セット
 
 DeepSpeed テストを実行するには、少なくとも以下を実行してください。
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
 ```
 
 モデリングまたは pytorch サンプル コードのいずれかを変更した場合は、Model Zoo テストも実行します。以下はすべての DeepSpeed テストを実行します。
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed
 ```
 

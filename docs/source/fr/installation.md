@@ -74,7 +74,7 @@ Pour les architectures mac M1 / ARM
 
 Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
 
-```
+```bash
 brew install cmake
 brew install pkg-config
 ```

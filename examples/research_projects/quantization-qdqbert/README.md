@@ -30,17 +30,17 @@ Required:
 ## Setup the environment with Dockerfile
 
 Under the directory of `transformers/`, build the docker image:
-```
+```bash
 docker build . -f examples/research_projects/quantization-qdqbert/Dockerfile -t bert_quantization:latest
 ```
 
 Run the docker:
-```
+```bash
 docker run --gpus all --privileged --rm -it --shm-size=1g --ulimit memlock=-1 --ulimit stack=67108864 bert_quantization:latest
 ```
 
 In the container:
-```
+```bash
 cd transformers/examples/research_projects/quantization-qdqbert/
 ```
 
@@ -48,7 +48,7 @@ cd transformers/examples/research_projects/quantization-qdqbert/
 
 Calibrate the pretrained model and finetune with quantization awared:
 
-```
+```bash
 python3 run_quant_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
@@ -60,7 +60,7 @@ python3 run_quant_qa.py \
   --percentile 99.99
 ```
 
-```
+```bash
 python3 run_quant_qa.py \
   --model_name_or_path calib/bert-base-uncased \
   --dataset_name squad \
@@ -80,7 +80,7 @@ python3 run_quant_qa.py \
 
 To export the QAT model finetuned above:
 
-```
+```bash
 python3 run_quant_qa.py \
   --model_name_or_path finetuned_int8/bert-base-uncased \
   --output_dir ./ \
@@ -97,19 +97,19 @@ Recalibrating will affect the accuracy of the model, but the change should be mi
 
 ### Benchmark the INT8 QAT ONNX model inference with TensorRT using dummy input
 
-```
+```bash
 trtexec --onnx=model.onnx --explicitBatch --workspace=16384 --int8 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
 ```
 
 ### Benchmark the INT8 QAT ONNX model inference with [ONNX Runtime-TRT](https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html) using dummy input
 
-```
+```bash
 python3 ort-infer-benchmark.py
 ```
 
 ### Evaluate the INT8 QAT ONNX model inference with TensorRT
 
-```
+```bash
 python3 evaluate-hf-trt-qa.py \
   --onnx_model_path=./model.onnx \
   --output_dir ./ \
@@ -126,7 +126,7 @@ python3 evaluate-hf-trt-qa.py \
 
 Finetune a fp32 precision model with [transformers/examples/pytorch/question-answering/](../../pytorch/question-answering/):
 
-```
+```bash
 python3 ../../pytorch/question-answering/run_qa.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name squad \
@@ -145,7 +145,7 @@ python3 ../../pytorch/question-answering/run_qa.py \
 
 ### PTQ by calibrating and evaluating the finetuned FP32 model above:
 
-```
+```bash
 python3 run_quant_qa.py \
   --model_name_or_path ./finetuned_fp32/bert-base-uncased \
   --dataset_name squad \
@@ -161,7 +161,7 @@ python3 run_quant_qa.py \
 
 ### Export the INT8 PTQ model to ONNX
 
-```
+```bash
 python3 run_quant_qa.py \
   --model_name_or_path ./calib/bert-base-uncased \
   --output_dir ./ \
@@ -175,7 +175,7 @@ python3 run_quant_qa.py \
 
 ### Evaluate the INT8 PTQ ONNX model inference with TensorRT
 
-```
+```bash
 python3 evaluate-hf-trt-qa.py \
   --onnx_model_path=./model.onnx \
   --output_dir ./ \
