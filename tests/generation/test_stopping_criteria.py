@@ -110,12 +110,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(len(stopping_criteria), 1)
 
     def test_stop_string_criteria(self):
-        true_strings = [
-            "<|im_start|><|im_end|>",
-            "<|im_start|><|im_end|<|im_end|>",
-            ">><|im_start|>>stop",
-            "stop"
-        ]
+        true_strings = ["<|im_start|><|im_end|>", "<|im_start|><|im_end|<|im_end|>", ">><|im_start|>>stop", "stop"]
         false_strings = [
             "<|im_start|><|im_end|",
             "<|im_start|><|im_end|<|im_end|",
