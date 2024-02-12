@@ -75,7 +75,7 @@ class AqlmTest(unittest.TestCase):
 
     input_text = "Hello my name is"
 
-    EXPECTED_OUTPUT = "Hello my name is TODO"
+    EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am currently a sophomore and am majoring in Psychology. I am"
 
     device_map = "cuda"
 
@@ -101,6 +101,7 @@ class AqlmTest(unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly
         """
         from aqlm import QuantizedLinear
+
         from transformers.integrations import replace_with_aqlm_linear
 
         model_id = "facebook/opt-350m"

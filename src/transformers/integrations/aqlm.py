@@ -53,6 +53,9 @@ def replace_with_aqlm_linear(
     if not is_accelerate_available():
         raise ValueError("AQLM requires Accelerate to be installed: `pip install accelerate`")
 
+    if linear_weights_not_to_quantize is None:
+        linear_weights_not_to_quantize = []
+
     from accelerate import init_empty_weights
     from aqlm import QuantizedLinear
 
@@ -86,9 +89,9 @@ def replace_with_aqlm_linear(
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_aqlm_linear(
                 module,
-                linear_weights_not_to_quantize,
-                current_key_name,
-                quantization_config,
+                quantization_config=quantization_config,
+                linear_weights_not_to_quantize=linear_weights_not_to_quantize,
+                current_key_name=current_key_name,
                 has_been_replaced=has_been_replaced,
             )
         # Remove the last key for recursion
