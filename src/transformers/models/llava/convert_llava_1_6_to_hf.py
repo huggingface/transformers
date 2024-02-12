@@ -140,6 +140,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
 
+    # TODO test single forward pass
+    print("Single forward pass")
+    with torch.inference_mode():
+        outputs = model(**inputs)
+        print("Shape of logits:", outputs.logits.shape)
+
     # TODO test generation
     # pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
     # mu = torch.mean(pre_expansion_embeddings, dim=0).float()
