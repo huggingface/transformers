@@ -312,26 +312,6 @@ class CogVLMVisionExpertMLP(nn.Module):
         return output
 
 
-def attention_fn(
-    query_layer: torch.FloatTensor,
-    key_layer: torch.FloatTensor,
-    value_layer: torch.FloatTensor,
-    attention_mask: torch.FloatTensor,
-    *,
-    scaling_attention_score: bool = True,
-    attention_dropout: nn.Module = None,
-):
-    if scaling_attention_score:
-        query_layer = query_layer / math.sqrt(query_layer.shape[-1])
-    attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-    attention_scores = attention_scores + attention_mask
-    attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_layer.dtype)
-    if attention_dropout is not None:
-        attention_scores = attention_dropout(attention_scores)
-    context_layer = torch.matmul(attention_scores, value_layer)
-    return context_layer, attention_scores
-
-
 # source: https://github.com/THUDM/SwissArmyTransformer/blob/1b160fcf42989c1ffcb964587f51241618f39f5b/tests/test_triton_rotary_embedding.py#L25.
 class CogVLMRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, base=10000, precision=torch.half, learnable=False, device=torch.device("cpu")):
@@ -430,14 +410,16 @@ class CogVLMVisionExpertAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        context_layer, attention_probs = attention_fn(
-            query_layer=query_states,
-            key_layer=key_states,
-            value_layer=value_states,
-            attention_mask=attention_mask,
-            scaling_attention_score=True,
-            attention_dropout=None,
-        )
+        query_states = query_states / math.sqrt(query_states.shape[-1])
+
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+
+        # Apply attention mask
+        attention_scores = attention_scores + attention_mask
+        # Normalize the attention scores to probabilities
+        attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+        context_layer = torch.matmul(attention_scores, value_states)
 
         if context_layer.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -451,7 +433,7 @@ class CogVLMVisionExpertAttention(nn.Module):
         attn_output[language_token_mask] = self.language_expert_dense(context_layer[language_token_mask])
 
         return (
-            (attn_output, attention_probs, past_key_value)
+            (attn_output, attention_scores, past_key_value)
             if output_attentions
             else (attn_output, None, past_key_value)
         )
