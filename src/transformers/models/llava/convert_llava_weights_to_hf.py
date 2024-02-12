@@ -11,6 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""
+Convert LLaVa 1.5 and BakLLaVa models from the original repository.
+
+URL: https://github.com/haotian-liu/LLaVA/tree/main.
+"""
+
 import argparse
 
 import torch

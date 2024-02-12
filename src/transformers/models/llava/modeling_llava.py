@@ -271,6 +271,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
+
+        if "unpad" in getattr(config, "mm_patch_merge_type", ""):
+            self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
+
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
@@ -508,9 +512,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                     image_feature = torch.cat(
                                         (
                                             image_feature,
-                                            self.model.image_newline[:, None, None].expand(
-                                                *image_feature.shape[:-1], 1
-                                            ),
+                                            self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
                                         ),
                                         dim=-1,
                                     )
@@ -522,7 +524,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                             else:
                                 image_feature = image_feature[0]
                                 if "unpad" in mm_patch_merge_type:
-                                    image_feature = torch.cat((image_feature, self.model.image_newline[None]), dim=0)
+                                    image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
                             new_image_features.append(image_feature)
                         image_features = new_image_features
                     else:

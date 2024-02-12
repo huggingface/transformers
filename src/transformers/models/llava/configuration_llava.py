@@ -53,7 +53,9 @@ class LlavaConfig(PretrainedConfig):
             The index of the layer to select the vision feature.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`]
+            `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`].
+        mm_patch_merge_type (`str`, *optional*):
+            The patch merging type to use. Only used by the newer LLaVa 1.6 variant.
 
     Example:
 
@@ -89,6 +91,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         vocab_size=32000,
+        mm_patch_merge_type="",
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -97,6 +100,7 @@ class LlavaConfig(PretrainedConfig):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
+        self.mm_patch_merge_type = mm_patch_merge_type
 
         self.vision_config = vision_config
 
