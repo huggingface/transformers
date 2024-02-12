@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Llava model."""
+
+from ast import literal_eval
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -32,6 +34,7 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
+from .image_processing_llava import select_best_resolution
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +47,26 @@ LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "llava-hf/bakLlava-v1-hf",
     # See all Llava models at https://huggingface.co/models?filter=llava
 ]
+
+
+def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
+    """
+    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
+
+    Args:
+        image_size (tuple): The size of the input image in the format (width, height).
+        grid_pinpoints (str): A string representation of a list of possible resolutions.
+        patch_size (int): The size of each image patch.
+
+    Returns:
+        tuple: The shape of the image patch grid in the format (width, height).
+    """
+    if type(grid_pinpoints) is list:
+        possible_resolutions = grid_pinpoints
+    else:
+        possible_resolutions = literal_eval(grid_pinpoints)
+    width, height = select_best_resolution(image_size, possible_resolutions)
+    return width // patch_size, height // patch_size
 
 
 def unpad_image(tensor, original_size):
@@ -314,6 +337,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
+
+        print("Input ids:", input_ids)
+        print("Shape of input_ids:", input_ids.shape)
+        print("Shape of image_features:", image_features.shape)
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
@@ -375,29 +402,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
+        print("Shape of final_embedding:", final_embedding.shape)
+
         if labels is None:
             final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
-
-    def get_anyres_image_grid_shape(self, image_size, grid_pinpoints, patch_size):
-        """
-        Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
-
-        Args:
-            image_size (tuple): The size of the input image in the format (width, height).
-            grid_pinpoints (str): A string representation of a list of possible resolutions.
-            patch_size (int): The size of each image patch.
-
-        Returns:
-            tuple: The shape of the image patch grid in the format (width, height).
-        """
-        if type(grid_pinpoints) is list:
-            possible_resolutions = grid_pinpoints
-        else:
-            possible_resolutions = ast.literal_eval(grid_pinpoints)
-        width, height = select_best_resolution(image_size, possible_resolutions)
-        return width // patch_size, height // patch_size
 
     def num_patches_per_side(self):
         return self.config.vision_config.image_size // self.config.vision_config.patch_size
@@ -474,8 +484,13 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 # TODO support llava 1.6 here
                 if pixel_values.ndim == 5:
-                    pixel_values = torch.cat([image for image in pixel_values], dim=0)
-                    image_features = self.vision_tower(pixel_values, output_hidden_states=True)
+                    concat_images = torch.cat([image for image in pixel_values], dim=0)
+                    print("Shape of concat_images:", concat_images.shape)
+                    print("First values of concat_images:", concat_images[0,0,:3,:3])
+                    image_features = self.vision_tower(concat_images, output_hidden_states=True)
+                    print("Image encoder last_hidden_state:", image_features.last_hidden_state.shape)
+                    print("First values of image encoder last_hidden_state:", image_features.last_hidden_state[0,:3,:3])
+
                     selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
                     if vision_feature_select_strategy == "default":
@@ -488,9 +503,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         )
                     image_features = self.multi_modal_projector(selected_image_feature)
 
+                    print("Shape of image_features:", image_features.shape)
+                    print("First values of image_features:", image_features[0,:3,:3])
+
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
-                    image_features = [x.flatten(0, 1).to(self.device) for x in image_features]
 
                     mm_patch_merge_type = getattr(self.config, "mm_patch_merge_type", "flat")
                     image_aspect_ratio = getattr(self.config, "image_aspect_ratio", "square")
@@ -503,12 +520,14 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                 base_image_feature = image_feature[0]
                                 image_feature = image_feature[1:]
                                 height = width = self.num_patches_per_side()
+                                print("Height:", height)
+                                print("Shape of base_image_feature:", base_image_feature.shape)
                                 assert height * width == base_image_feature.shape[0]
                                 if image_aspect_ratio == "anyres":
                                     num_patch_width, num_patch_height = get_anyres_image_grid_shape(
                                         image_sizes[image_idx],
                                         self.config.image_grid_pinpoints,
-                                        self.get_vision_tower().config.image_size,
+                                        self.config.vision_config.image_size,
                                     )
                                     image_feature = image_feature.view(
                                         num_patch_height, num_patch_width, height, width, -1
@@ -554,7 +573,16 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                             f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
                         )
 
-                image_features = self.multi_modal_projector(selected_image_feature)
+                    image_features = self.multi_modal_projector(selected_image_feature)
+
+                print("Shape of final image features:")
+                for i in image_features:
+                    print(i.shape)
+                    print(i[:3,:3])
+
+                # TODO remove this
+                image_features = image_features[0].unsqueeze(0)
+
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )

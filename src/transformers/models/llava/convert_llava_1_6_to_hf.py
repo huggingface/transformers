@@ -82,7 +82,7 @@ def convert_state_dict_to_hf(state_dict):
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
 
-        new_state_dict[key] = value
+        new_state_dict[key] = value.to(torch.float16)
     return new_state_dict
 
 
@@ -113,7 +113,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     image_processor = LlavaImageProcessor.from_pretrained(vision_model_id)
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-    config = LlavaConfig(text_config=text_config, mm_patch_merge_type="spatial_unpad")
+    config = LlavaConfig(text_config=text_config,
+                         mm_patch_merge_type="spatial_unpad",
+                         image_aspect_ratio="anyres",
+                         image_grid_pinpoints=image_processor.image_grid_pinpoints)
     config.pad_token_id = 32001
 
     with init_empty_weights():
@@ -123,8 +126,28 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     state_dict = load_original_state_dict()
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, assign=True)
+    model.eval()
 
-    device = "cuda:1"
+    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
+    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+    n = pre_expansion_embeddings.size()[0]
+    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+    # We add an image token so we resize the model
+    # Pad to 64 for performance reasons
+    pad_shape = 64
+    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
+    model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
+    model.language_model.lm_head.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
+
+    device = "cuda:0"
     model.to(device)
 
     # TODO verify input_ids
@@ -142,35 +165,30 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
+    print("Shape of original pixel values:", original_pixel_values.shape)
+    print("Shape of original input_ids:", original_input_ids.shape)
+
     print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
+
+    # replace -200 by 32000 (ask Arthur)
+    original_input_ids[original_input_ids == -200] = 32000
 
     # test single forward pass
     # TODO make sure image_sizes is not a list
     print("Single forward pass")
     with torch.inference_mode():
-        inputs = inputs.to(device)
-        outputs = model(**inputs, image_sizes=[(1024, 899)])
+        # TODO use processor instead
+        outputs = model(input_ids=original_input_ids.to(device),
+                        attention_mask=torch.ones_like(original_input_ids),
+                        pixel_values=original_pixel_values.to(device), image_sizes=[(1024, 899)])
         print("Shape of logits:", outputs.logits.shape)
+        print("First values of logits:", outputs.logits[0, :3, :3])
 
-    # TODO test generation
-    # pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-    # mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    # n = pre_expansion_embeddings.size()[0]
-    # sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    # dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
-    # # We add an image token so we resize the model
-    # # Pad to 64 for performance reasons
-    # pad_shape = 64
-    # model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
-    # model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-    #     tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
-    #     dim=0,
-    # )
-    # model.language_model.lm_head.weight.data[32000:] = torch.stack(
-    #     tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
-    #     dim=0,
-    # )
+        expected_slice = torch.tensor([[ -4.8555,  -4.6992,  -0.1996],
+        [-10.5703, -10.7344,  -2.7246],
+        [ -7.0391,  -7.3672,  -0.2634]], dtype=torch.float32, device=device)
+        assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+        print("Logits are ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")

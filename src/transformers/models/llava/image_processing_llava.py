@@ -52,6 +52,40 @@ if is_torch_available():
     import torch
 
 
+def select_best_resolution(original_size: tuple, possible_resolutions: list) -> tuple:
+        """
+        Selects the best resolution from a list of possible resolutions based on the original size.
+
+        Args:
+            original_size (tuple):
+                The original size of the image in the format (width, height).
+            possible_resolutions (list):
+                A list of possible resolutions in the format [(width1, height1), (width2, height2), ...].
+
+        Returns:
+            tuple: The best fit resolution in the format (width, height).
+        """
+        original_width, original_height = original_size
+        best_fit = None
+        max_effective_resolution = 0
+        min_wasted_resolution = float("inf")
+
+        for width, height in possible_resolutions:
+            scale = min(width / original_width, height / original_height)
+            downscaled_width, downscaled_height = int(original_width * scale), int(original_height * scale)
+            effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
+            wasted_resolution = (width * height) - effective_resolution
+
+            if effective_resolution > max_effective_resolution or (
+                effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution
+            ):
+                max_effective_resolution = effective_resolution
+                min_wasted_resolution = wasted_resolution
+                best_fit = (width, height)
+
+        return best_fit
+
+
 class LlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
@@ -137,39 +171,6 @@ class LlavaImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
-
-    def select_best_resolution(self, original_size: tuple, possible_resolutions: list) -> tuple:
-        """
-        Selects the best resolution from a list of possible resolutions based on the original size.
-
-        Args:
-            original_size (tuple):
-                The original size of the image in the format (width, height).
-            possible_resolutions (list):
-                A list of possible resolutions in the format [(width1, height1), (width2, height2), ...].
-
-        Returns:
-            tuple: The best fit resolution in the format (width, height).
-        """
-        original_width, original_height = original_size
-        best_fit = None
-        max_effective_resolution = 0
-        min_wasted_resolution = float("inf")
-
-        for width, height in possible_resolutions:
-            scale = min(width / original_width, height / original_height)
-            downscaled_width, downscaled_height = int(original_width * scale), int(original_height * scale)
-            effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
-            wasted_resolution = (width * height) - effective_resolution
-
-            if effective_resolution > max_effective_resolution or (
-                effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution
-            ):
-                max_effective_resolution = effective_resolution
-                min_wasted_resolution = wasted_resolution
-                best_fit = (width, height)
-
-        return best_fit
 
     def resize_and_pad_image(self, image: Image.Image, target_resolution: tuple) -> Image.Image:
         """
@@ -434,7 +435,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             possible_resolutions = grid_pinpoints
         else:
             possible_resolutions = literal_eval(grid_pinpoints)
-        best_resolution = self.select_best_resolution(image.size, possible_resolutions)
+        best_resolution = select_best_resolution(image.size, possible_resolutions)
         image_padded = self.resize_and_pad_image(image, best_resolution)
 
         patches = self.divide_to_patches(image_padded, self.crop_size["height"])

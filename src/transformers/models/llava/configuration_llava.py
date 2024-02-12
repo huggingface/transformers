@@ -56,6 +56,10 @@ class LlavaConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`].
         mm_patch_merge_type (`str`, *optional*):
             The patch merging type to use. Only used by the newer LLaVa 1.6 variant.
+        image_aspect_ratio (`str`, *optional*):
+            The aspect ratio of the image. Only used by the newer LLaVa 1.6 variant.
+        image_grid_pinpoints (`str`, *optional*):
+            The grid pinpoints of the image. Only used by the newer LLaVa 1.6 variant.
 
     Example:
 
@@ -92,6 +96,8 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_layer=-2,
         vocab_size=32000,
         mm_patch_merge_type="",
+        image_aspect_ratio="",
+        image_grid_pinpoints=None,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -101,6 +107,8 @@ class LlavaConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
         self.mm_patch_merge_type = mm_patch_merge_type
+        self.image_aspect_ratio = image_aspect_ratio
+        self.image_grid_pinpoints = image_grid_pinpoints
 
         self.vision_config = vision_config
 
