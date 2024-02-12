@@ -30,7 +30,7 @@ def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
 
 def decode_one_tokens(model, cur_token, input_pos, cache_position):
     logits = model(cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache = True)[0]
-    new_token = sample(logits,temperature=0.6, top_k=5)[0]
+    new_token = sample(logits, temperature=0.6, top_k=5)[0]
 
     return new_token
 
@@ -124,15 +124,26 @@ if __name__ == "__main__":
 
     benchmakr = StaticCacheSpeedBenchMark(repo_id, prefill_num_iter, num_iter)
 
-    run_kwargs = {
-        "measure_kwargs": {"number": 2, "repeat": 3},
-        "target_kwargs": {"batch_size": 1, "max_cache_length": 16, "seq_length": 4},
-        "inputs_kwargs": [{}],
-        "report_kwargs": {},
-    }
-    result = benchmakr.run(**run_kwargs)
-    print(json.dumps(result, indent=4))
+    # for batch_size in [1, 2, 4]:
+    #     for max_cache_length in [4096, 2048, 1024, 512]:
+    #         for seq_length in [512, 1, 1024, 2048]:
+    #             print(f"{batch_size}, {seq_length}, {max_cache_length}")
 
-    run_kwargs["report_kwargs"]["only_result"] = True
-    result = benchmakr.run(**run_kwargs)
-    print(json.dumps(result, indent=4))
+    results = []
+    for batch_size in [1, 2, 4]:
+        for max_cache_length in [16, 32, 64]:
+            for seq_length in [4, 8, 16, 32]:
+                print(f"{batch_size}, {seq_length}, {max_cache_length}")
+
+                run_kwargs = {
+                    "measure_kwargs": {"number": 2, "repeat": 3},
+                    "target_kwargs": {"batch_size": 1, "max_cache_length": 16, "seq_length": 4},
+                    "inputs_kwargs": {},
+                    "report_kwargs": {},
+                }
+
+                result = benchmakr.run(**run_kwargs)
+                results.append(result)
+
+    print(json.dumps(results, indent=4))
+
