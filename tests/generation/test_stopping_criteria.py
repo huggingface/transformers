@@ -122,7 +122,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "<|im_end|><|im_start|>",
             "<|im_end|<>stop<|im_end|",
         ]
-        too_short_strings = ["<|im_end|", "|im_end|>", "s"]
+        too_short_strings = ["<|im_end|", "|im_end|>", "s", "end"]
 
         # Use a tokenizer that won't actually have special tokens for these
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
