@@ -1256,13 +1256,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)
         if cache_position is None:
-<<<<<<< HEAD
             cache_position = torch.arange(
                 past_length, past_length + position_ids.shape[-1], device=position_ids.device
             )
-=======
-            cache_position = torch.arange(past_length, past_length + input_ids.shape[1])
->>>>>>> 651c4bd80 (is_tracing should still be used to pass tracing tests)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
