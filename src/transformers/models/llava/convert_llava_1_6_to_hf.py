@@ -115,13 +115,17 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     config = LlavaConfig(text_config=text_config, mm_patch_merge_type="spatial_unpad")
     config.pad_token_id = 32001
 
-    with torch.device("meta"):
-        model = LlavaForConditionalGeneration(config)
+    # don't use meta for now due to weird bug
+    # with torch.device("meta"):
+    model = LlavaForConditionalGeneration(config)
 
     # load original state dict
     state_dict = load_original_state_dict()
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, assign=True)
+
+    device = "cuda:1"
+    model.to(device)
 
     # TODO verify input_ids
     image = load_image()
@@ -141,9 +145,6 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
 
     # TODO test single forward pass
-    device = "cuda:1"
-    model.to(device)
-
     print("Single forward pass")
     with torch.inference_mode():
         inputs = inputs.to(device)
