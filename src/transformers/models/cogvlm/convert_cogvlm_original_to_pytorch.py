@@ -106,10 +106,11 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
 
     config = CogVLMConfig(**original_model.config.to_dict())
-    model = CogVLMForCausalLM(config)
+    with torch.device("meta"):
+        model = CogVLMForCausalLM(config)
 
     # load state dict
-    model.load_state_dict(original_model.state_dict())
+    model.load_state_dict(original_model.state_dict(), assign=True)
     model.to(hf_device)
     model.eval()
 
