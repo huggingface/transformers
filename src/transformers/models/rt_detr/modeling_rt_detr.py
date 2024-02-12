@@ -220,6 +220,8 @@ class RTDetrModelOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1764,6 +1766,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
+            enc_topk_bboxes=enc_topk_bboxes,
+            enc_topk_logits=enc_topk_logits,
             # encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             # encoder_hidden_states=encoder_outputs.hidden_states,
             # encoder_attentions=encoder_outputs.attentions,
@@ -1825,7 +1829,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -1916,13 +1920,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         )
 
         dn_meta = outputs.dn_meta
-        
+
         outputs_class = outputs.intermediate_logits
         outputs_coord = outputs.intermediate_reference_points
 
         if self.training and dn_meta is not None:
-            dn_out_coord, out_coord = torch.split(out_coord, dn_meta["dn_num_split"], dim=2)
-            dn_out_class, out_class = torch.split(out_class, dn_meta["dn_num_split"], dim=2)
+            dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
+            dn_out_class, outputs_class = torch.split(outputs_class, dn_meta["dn_num_split"], dim=2)
 
         logits = outputs_class[-1]
         pred_boxes = outputs_coord[-1]
@@ -1930,22 +1934,18 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         loss, loss_dict = None, None
         if labels is not None:
             # First: create the criterion
-            critertion = RTDetrLoss(self.config)
+            criterion = RTDetrLoss(self.config)
             criterion.to(self.device)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
-
-            # out = {"logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}
-
-            if self.training and self.use_aux_loss:
-                out["aux_outputs"] = self._set_aux_loss(out_class[:-1], out_coord[:-1])
-                out["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
-
+            if self.config.auxiliary_loss:
+                outputs_loss["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_loss["aux_outputs"].extend(self._set_aux_loss([outputs.enc_topk_logits], [outputs.enc_topk_bboxes]))
                 if self.training and dn_meta is not None:
-                    out["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
-                    out["dn_meta"] = dn_meta
+                    outputs_loss["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
+                    outputs_loss["dn_meta"] = dn_meta
 
             loss_dict = criterion(outputs_loss, labels)
             # Compute total loss, as a weighted sum of the various losses
