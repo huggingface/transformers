@@ -181,7 +181,7 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self._lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in additional_special_tokens
+            lang_code: self.convert_tokens_to_ids(str(lang_code)) for lang_code in additional_special_tokens
         }
 
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
