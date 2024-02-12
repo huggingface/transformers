@@ -973,6 +973,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
@@ -1336,7 +1337,7 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
-    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache"]
+    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache", "StaticCache"]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -2482,6 +2483,7 @@ else:
     _import_structure["models.llama"].extend(
         [
             "LlamaForCausalLM",
+            "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
@@ -5709,6 +5711,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageFeatureExtractionPipeline,
         ImageSegmentationPipeline,
         ImageToImagePipeline,
         ImageToTextPipeline,
@@ -6070,7 +6073,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
-        from .cache_utils import Cache, DynamicCache, SinkCache
+        from .cache_utils import Cache, DynamicCache, SinkCache, StaticCache
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
@@ -7023,7 +7026,13 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,

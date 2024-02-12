@@ -22,7 +22,7 @@ Sie werden auch Skripte finden, die wir in unseren [Forschungsprojekten](https:/
 
 Es wird nicht erwartet, dass die Beispielskripte bei jedem Problem sofort funktionieren. Möglicherweise müssen Sie das Skript an das Problem anpassen, das Sie zu lösen versuchen. Um Ihnen dabei zu helfen, legen die meisten Skripte vollständig offen, wie die Daten vorverarbeitet werden, so dass Sie sie nach Bedarf für Ihren Anwendungsfall bearbeiten können.
 
-Für jede Funktion, die Sie in einem Beispielskript implementieren möchten, diskutieren Sie bitte im [Forum] (https://discuss.huggingface.co/) oder in einem [issue] (https://github.com/huggingface/transformers/issues), bevor Sie einen Pull Request einreichen. Wir freuen uns zwar über Fehlerkorrekturen, aber es ist unwahrscheinlich, dass wir einen Pull Request zusammenführen, der mehr Funktionalität auf Kosten der Lesbarkeit hinzufügt.
+Für jede Funktion, die Sie in einem Beispielskript implementieren möchten, diskutieren Sie bitte im [Forum](https://discuss.huggingface.co/) oder in einem [issue](https://github.com/huggingface/transformers/issues), bevor Sie einen Pull Request einreichen. Wir freuen uns zwar über Fehlerkorrekturen, aber es ist unwahrscheinlich, dass wir einen Pull Request zusammenführen, der mehr Funktionalität auf Kosten der Lesbarkeit hinzufügt.
 
 Diese Anleitung zeigt Ihnen, wie Sie ein Beispiel für ein Trainingsskript zur Zusammenfassung in [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) und [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) ausführen können. Sofern nicht anders angegeben, sollten alle Beispiele mit beiden Frameworks funktionieren.
 
@@ -226,7 +226,7 @@ accelerate launch run_summarization_no_trainer.py \
 Das Verdichtungsskript unterstützt benutzerdefinierte Datensätze, solange es sich um eine CSV- oder JSON-Line-Datei handelt. Wenn Sie Ihren eigenen Datensatz verwenden, müssen Sie mehrere zusätzliche Argumente angeben:
 
 - `train_file` und `validation_file` geben den Pfad zu Ihren Trainings- und Validierungsdateien an.
-- text_column` ist der Eingabetext, der zusammengefasst werden soll.
+- `text_column` ist der Eingabetext, der zusammengefasst werden soll.
 - Summary_column" ist der auszugebende Zieltext.
 
 Ein Zusammenfassungsskript, das einen benutzerdefinierten Datensatz verwendet, würde wie folgt aussehen:

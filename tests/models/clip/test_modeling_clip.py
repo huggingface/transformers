@@ -477,7 +477,9 @@ class CLIPModelTester:
 @require_torch
 class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": CLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": CLIPModel, "image-feature-extraction": CLIPVisionModel} if is_torch_available() else {}
+    )
     fx_compatible = True
     test_head_masking = False
     test_pruning = False
