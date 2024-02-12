@@ -400,6 +400,7 @@ class LlamaFlashAttention2(LlamaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
@@ -422,10 +423,12 @@ class LlamaFlashAttention2(LlamaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+        
+        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": position_ids}
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -590,6 +593,21 @@ class LlamaSdpaAttention(LlamaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache_position=cache_position,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -927,7 +945,7 @@ class LlamaModel(LlamaPreTrainedModel):
             past_seen_tokens = past_key_values.get_usable_length(inputs_embeds.shape[1]) # kept for BC (cache positions)
             
         if cache_position is None:
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens+inputs_embeds.shape[1])
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens+inputs_embeds.shape[1], device=inputs_embeds.device)
         
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -983,7 +1001,8 @@ class LlamaModel(LlamaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
-        if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
+        # if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
+        if use_cache:
             next_cache = (
                 next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
             )
