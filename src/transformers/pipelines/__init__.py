@@ -528,7 +528,7 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"translation"`
             - `"translation_xx_to_yy"`
             - `"video-classification"`
-            - `"visual-question-answering"`
+            - `"visual-question-answering"` (alias `"vqa"` available)
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
             - `"zero-shot-object-detection"`
