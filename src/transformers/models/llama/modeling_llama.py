@@ -402,6 +402,7 @@ class LlamaFlashAttention2(LlamaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
@@ -425,6 +426,8 @@ class LlamaFlashAttention2(LlamaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
+
+        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
@@ -1019,7 +1022,8 @@ class LlamaModel(LlamaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
-        if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
+        # if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
+        if use_cache:
             next_cache = (
                 next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
             )
