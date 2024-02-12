@@ -21,12 +21,13 @@ import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
 from huggingface_hub import hf_hub_download
+from PIL import Image
 from safetensors import safe_open
 
 from transformers import (
-    AddedToken,
     AutoConfig,
     AutoTokenizer,
     LlavaConfig,
@@ -84,6 +85,12 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
+def load_image():
+    url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
+
+
 def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # load original config
     filepath = hf_hub_download(repo_id=model_id, filename="config.json", repo_type="model")
@@ -98,12 +105,11 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    # tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    # tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     image_processor = LlavaImageProcessor.from_pretrained(vision_model_id)
-
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     config = LlavaConfig(text_config=text_config, mm_patch_merge_type="spatial_unpad")
@@ -116,6 +122,23 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     state_dict = load_original_state_dict()
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, assign=True)
+
+    # TODO verify input_ids
+    image = load_image()
+    text = "hello world"
+    inputs = processor(images=image, text=text, return_tensors="pt")
+
+    for k, v in inputs.items():
+        print(k, v.shape)
+
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
+    original_input_ids = torch.load(filepath, map_location="cpu")
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
+    original_pixel_values = torch.load(filepath, map_location="cpu")
+
+    assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
+
+    print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
 
     # TODO test generation
     # pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
