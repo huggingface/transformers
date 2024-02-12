@@ -308,43 +308,41 @@ class CogVLMVisionExpertMLP(nn.Module):
         return output
 
 
-# source: https://github.com/THUDM/SwissArmyTransformer/blob/1b160fcf42989c1ffcb964587f51241618f39f5b/tests/test_triton_rotary_embedding.py#L25.
-class CogVLMRotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, base=10000, precision=torch.half, learnable=False, device=torch.device("cpu")):
+# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->CogVLM
+class CogVLMRotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device).float() / dim))
-        self.learnable = learnable
-        if learnable:
-            self.inv_freq = torch.nn.Parameter(inv_freq)
-            self.max_seq_len_cached = None
-        else:
-            self.register_buffer("inv_freq", inv_freq)
-            self.max_seq_len_cached = None
-            self.cos_cached = None
-            self.sin_cached = None
-        self.precision = precision
 
-    def forward(self, x, seq_dim=1, seq_len=None):
-        if seq_len is None:
-            seq_len = x.shape[seq_dim]
-        if self.max_seq_len_cached is None or (seq_len > self.max_seq_len_cached):
-            self.max_seq_len_cached = None if self.learnable else seq_len
-            t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            if self.precision == torch.bfloat16:
-                emb = emb.float()
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-            # [sx, 1 (b * np), hn]
-            cos_cached = emb.cos()[:, None, :]
-            sin_cached = emb.sin()[:, None, :]
-            cos_cached = cos_cached.to(x.dtype)
-            sin_cached = sin_cached.to(x.dtype)
-            if self.learnable:
-                return cos_cached, sin_cached
-            self.cos_cached, self.sin_cached = cos_cached, sin_cached
-        return self.cos_cached[:seq_len, ...], self.sin_cached[:seq_len, ...]
+        # Build here to make `torch.jit.trace` work.
+        self._set_cos_sin_cache(
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+    def forward(self, x, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+
+        return (
+            self.cos_cached[:seq_len].to(dtype=x.dtype),
+            self.sin_cached[:seq_len].to(dtype=x.dtype),
+        )
 
 
 class CogVLMVisionExpertAttention(nn.Module):

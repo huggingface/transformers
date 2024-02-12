@@ -32,6 +32,8 @@ from transformers import (
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
+from accelerate import init_empty_weights
+
 
 original_device = "cuda:0"
 hf_device = "cuda:1"
@@ -106,11 +108,13 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
 
     config = CogVLMConfig(**original_model.config.to_dict())
-    with torch.device("meta"):
+    with init_empty_weights():
         model = CogVLMForCausalLM(config)
 
     # load state dict
-    model.load_state_dict(original_model.state_dict(), assign=True)
+    missing_keys, unexpected_keys = model.load_state_dict(original_model.state_dict(), strict=False, assign=True)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
     model.to(hf_device)
     model.eval()
 
