@@ -299,7 +299,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # here I create a tokenizer with the default behaviour
         tok1 = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
         # here I enhance the model's vocabulary with two new language codes
-        tok2 = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", language_codes=new_codes)
+        tok2 = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", additional_special_tokens=new_codes)
 
         # testing that the new codes can work
         self.assertEqual(len(tok2), len(tok1) + 2)
