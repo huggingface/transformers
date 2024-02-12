@@ -78,7 +78,7 @@ the IoU confidence threshold where only the masks above that certain threshold a
 masks = mask_generator(image, points_per_batch=128, pred_iou_thresh=0.88)
 ```
 
-The `masks` looks like following:
+The `masks` looks like the following:
 
 ```bash
 {'masks': [array([[False, False, False, ...,  True,  True,  True],
