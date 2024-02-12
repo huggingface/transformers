@@ -544,26 +544,34 @@ class CogVLMPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-def build_position_ids(x: torch.BoolTensor, attention_mask: Optional[torch.BoolTensor] = None) -> torch.LongTensor:
+def build_position_ids(
+    token_type_ids: torch.BoolTensor, attention_mask: Optional[torch.BoolTensor] = None
+) -> torch.LongTensor:
+    """
+    Create position_ids based on provided token_type_ids and attention_mask.
+    """
+
     if attention_mask is not None:
-        tmp = x.clone()
+        tmp = token_type_ids.clone()
         tmp[~(attention_mask.bool())] = -1
     else:
-        tmp = x.clone()
-    # image boi eoi token as LANGUAGE_TOKEN_TYPE
-    is_boi_eoi = torch.zeros_like(x, dtype=torch.bool)
+        tmp = token_type_ids.clone()
+
+    # image beginning-of-image (boi), end-of-image (eoi) token as LANGUAGE_TOKEN_TYPE
+    is_boi_eoi = torch.zeros_like(token_type_ids, dtype=torch.bool)
     is_boi_eoi[:, 1:] |= (tmp[:, 1:] == VISION_TOKEN_TYPE) & (tmp[:, :-1] == LANGUAGE_TOKEN_TYPE)
     is_boi_eoi[:, 0] |= tmp[:, 0] == VISION_TOKEN_TYPE
     is_boi_eoi[:, :-1] |= (tmp[:, :-1] == VISION_TOKEN_TYPE) & (tmp[:, 1:] == LANGUAGE_TOKEN_TYPE)
     is_boi_eoi[:, -1] |= tmp[:, -1] == VISION_TOKEN_TYPE
     tmp[is_boi_eoi] = LANGUAGE_TOKEN_TYPE
+
     # final position ids
-    y = torch.zeros_like(x, dtype=torch.long)
-    y[:, 1:] = (tmp[:, 1:] == LANGUAGE_TOKEN_TYPE) | (
+    position_ids = torch.zeros_like(token_type_ids, dtype=torch.long)
+    position_ids[:, 1:] = (tmp[:, 1:] == LANGUAGE_TOKEN_TYPE) | (
         (tmp[:, 1:] == VISION_TOKEN_TYPE) & (tmp[:, :-1] == LANGUAGE_TOKEN_TYPE)
     )
-    y = y.cumsum(dim=-1)
-    return y
+    position_ids = position_ids.cumsum(dim=-1)
+    return position_ids
 
 
 @add_start_docstrings(
