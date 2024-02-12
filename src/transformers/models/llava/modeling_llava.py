@@ -61,7 +61,7 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     Returns:
         tuple: The shape of the image patch grid in the format (width, height).
     """
-    if type(grid_pinpoints) is list:
+    if isinstance(grid_pinpoints, list):
         possible_resolutions = grid_pinpoints
     else:
         possible_resolutions = literal_eval(grid_pinpoints)
@@ -484,12 +484,14 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 # TODO support llava 1.6 here
                 if pixel_values.ndim == 5:
-                    concat_images = torch.cat([image for image in pixel_values], dim=0)
+                    concat_images = torch.cat(list(pixel_values), dim=0)
                     print("Shape of concat_images:", concat_images.shape)
-                    print("First values of concat_images:", concat_images[0,0,:3,:3])
+                    print("First values of concat_images:", concat_images[0, 0, :3, :3])
                     image_features = self.vision_tower(concat_images, output_hidden_states=True)
                     print("Image encoder last_hidden_state:", image_features.last_hidden_state.shape)
-                    print("First values of image encoder last_hidden_state:", image_features.last_hidden_state[0,:3,:3])
+                    print(
+                        "First values of image encoder last_hidden_state:", image_features.last_hidden_state[0, :3, :3]
+                    )
 
                     selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
@@ -504,7 +506,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     image_features = self.multi_modal_projector(selected_image_feature)
 
                     print("Shape of image_features:", image_features.shape)
-                    print("First values of image_features:", image_features[0,:3,:3])
+                    print("First values of image_features:", image_features[0, :3, :3])
 
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
@@ -578,7 +580,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 print("Shape of final image features:")
                 for i in image_features:
                     print(i.shape)
-                    print(i[:3,:3])
+                    print(i[:3, :3])
 
                 # TODO remove this
                 image_features = image_features[0].unsqueeze(0)
@@ -663,7 +665,14 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        image_sizes=None,
+        attention_mask=None,
+        **kwargs,
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -711,6 +720,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "image_sizes": image_sizes,
             }
         )
         return model_inputs

@@ -113,10 +113,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     image_processor = LlavaImageProcessor.from_pretrained(vision_model_id)
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-    config = LlavaConfig(text_config=text_config,
-                         mm_patch_merge_type="spatial_unpad",
-                         image_aspect_ratio="anyres",
-                         image_grid_pinpoints=image_processor.image_grid_pinpoints)
+    config = LlavaConfig(
+        text_config=text_config,
+        mm_patch_merge_type="spatial_unpad",
+        image_aspect_ratio="anyres",
+        image_grid_pinpoints=image_processor.image_grid_pinpoints,
+    )
     config.pad_token_id = 32001
 
     with init_empty_weights():
@@ -173,22 +175,45 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # replace -200 by 32000 (ask Arthur)
     original_input_ids[original_input_ids == -200] = 32000
 
-    # test single forward pass
+    # verify single forward pass
     # TODO make sure image_sizes is not a list
+    image_sizes = [(1024, 899)]
     print("Single forward pass")
     with torch.inference_mode():
         # TODO use processor instead
-        outputs = model(input_ids=original_input_ids.to(device),
-                        attention_mask=torch.ones_like(original_input_ids),
-                        pixel_values=original_pixel_values.to(device), image_sizes=[(1024, 899)])
+        outputs = model(
+            input_ids=original_input_ids.to(device),
+            attention_mask=torch.ones_like(original_input_ids),
+            pixel_values=original_pixel_values.to(device),
+            image_sizes=image_sizes,
+        )
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
 
-        expected_slice = torch.tensor([[ -4.8555,  -4.6992,  -0.1996],
-        [-10.5703, -10.7344,  -2.7246],
-        [ -7.0391,  -7.3672,  -0.2634]], dtype=torch.float32, device=device)
+        expected_slice = torch.tensor(
+            [[-4.8555, -4.6992, -0.1996], [-10.5703, -10.7344, -2.7246], [-7.0391, -7.3672, -0.2634]],
+            dtype=torch.float32,
+            device=device,
+        )
         assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
         print("Logits are ok!")
+
+    # verify generation
+    output_ids = model.generate(
+        input_ids=original_input_ids.to(device),
+        attention_mask=torch.ones_like(original_input_ids),
+        pixel_values=original_pixel_values.to(device),
+        image_sizes=image_sizes,
+        do_sample=False,
+        temperature=0,
+        top_p=None,
+        num_beams=1,
+        max_new_tokens=512,
+        use_cache=True,
+    )
+
+    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+    print(outputs)
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")
