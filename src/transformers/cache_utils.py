@@ -399,7 +399,7 @@ class StaticCache(Cache):
 
     def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
         return 0
-        
+
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
         return self.max_cache_len
