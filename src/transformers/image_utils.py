@@ -349,7 +349,7 @@ def validate_preprocess_arguments(
     crop_size: Optional[Dict[str, int]] = None,
     do_resize: Optional[bool] = None,
     size: Optional[Dict[str, int]] = None,
-    resample: Optional[PILImageResampling] = None,
+    resample: Optional["PILImageResampling"] = None,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
