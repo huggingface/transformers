@@ -882,11 +882,14 @@ class WhisperGenerationMixin:
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
         def split_by_batch_index(values, key, batch_idx):
-            if key == "scores":
-                return [v[batch_idx].cpu() for v in values]
             if key == "past_key_values":
                 # we don't save `past_key_values` as this is too costly
                 return None
+            elif isinstance(values[batch_idx], list) and torch.is_tensor(values[batch_idx][0]):
+                return [v[batch_idx].cpu() for v in values[batch_idx]]
+            elif isinstance(values[batch_idx], tuple) and torch.is_tensor(values[batch_idx][0]):
+                return (v[batch_idx].cpu() for v in values[batch_idx])
+
             return values[batch_idx].cpu()
 
         sequence_tokens = seek_outputs["sequences"]
