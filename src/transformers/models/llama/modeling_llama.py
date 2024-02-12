@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SinkCache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -349,7 +349,7 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[ :, :, cache_position, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -423,7 +423,7 @@ class LlamaFlashAttention2(LlamaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-        
+
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
@@ -621,7 +621,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-        
+
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
@@ -939,14 +939,18 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        past_seen_tokens = 0 
+        past_seen_tokens = 0
         if use_cache and not isinstance(past_key_values, Cache):
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_usable_length(inputs_embeds.shape[1]) # kept for BC (cache positions)
-            
+            past_seen_tokens = past_key_values.get_usable_length(
+                inputs_embeds.shape[1]
+            )  # kept for BC (cache positions)
+
         if cache_position is None:
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens+inputs_embeds.shape[1], device=inputs_embeds.device)
-        
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
@@ -1047,8 +1051,11 @@ class LlamaModel(LlamaPreTrainedModel):
             )
 
         if self.config._attn_implementation == "sdpa":
-            if attention_mask is not None and torch.any(attention_mask != 1):
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
+            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
+            if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
+                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
+                    dtype
+                )
 
         return causal_mask
 
@@ -1225,11 +1232,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
 
-        # TODO @gante we should only keep a `cache_position` in generate, and do +=1. 
+        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)
         if cache_position is None:
-            cache_position = torch.arange(past_length, past_length+input_ids.shape[1])
+            cache_position = torch.arange(past_length, past_length + input_ids.shape[1])
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1240,7 +1247,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         model_inputs.update(
             {
                 "position_ids": position_ids,
-                "cache_position":cache_position,
+                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
