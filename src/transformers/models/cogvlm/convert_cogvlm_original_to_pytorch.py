@@ -34,7 +34,7 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 original_device = "cuda:0"
-hf_device = "cuda:4"
+hf_device = "cuda:1"
 
 
 @torch.no_grad()
