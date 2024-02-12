@@ -42,20 +42,20 @@ Here we call the model `"english-roberta-base-dummy"`, but you can change the mo
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
-```
+```bash
 huggingface-cli repo create english-roberta-base-dummy
 ```
 
 Next we clone the model repository to add the tokenizer and model files.
 
-```
+```bash
 git clone https://huggingface.co/<your-username>/english-roberta-base-dummy
 ```
 
 To ensure that all tensorboard traces will be uploaded correctly, we need to 
 track them. You can run the following command inside your model repo to do so.
 
-```
+```bash
 cd english-roberta-base-dummy
 git lfs track "*tfevents*"
 ```

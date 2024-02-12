@@ -151,7 +151,7 @@ training_args = TrainingArguments(bf16=True, **default_args)
 
 アンペアハードウェアは、tf32という特別なデータ型を使用します。これは、fp32と同じ数値範囲（8ビット）を持っていますが、23ビットの精度ではなく、10ビットの精度（fp16と同じ）を持ち、合計で19ビットしか使用しません。これは通常のfp32トレーニングおよび推論コードを使用し、tf32サポートを有効にすることで、最大3倍のスループットの向上が得られる点で「魔法のよう」です。行う必要があるのは、次のコードを追加するだけです：
 
-```
+```python
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

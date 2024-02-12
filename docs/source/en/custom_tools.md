@@ -405,7 +405,7 @@ Assistant:
 Therefore it is important that the examples of the custom `chat` prompt template also make use of this format.
 You can overwrite the `chat` template at instantiation as follows.
 
-```
+```python
 template = """ [...] """
 
 agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)
