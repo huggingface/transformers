@@ -2,7 +2,7 @@ import uuid
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -192,13 +192,12 @@ class Conversation:
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         min_length_for_response (`int`, *optional*, defaults to 32):
             The minimum length (in number of tokens) for a response.
         minimum_tokens (`int`, *optional*, defaults to 10):
-            The minimum length of tokens to leave for a response.
-    """,
+            The minimum length of tokens to leave for a response.""",
 )
 class ConversationalPipeline(Pipeline):
     """

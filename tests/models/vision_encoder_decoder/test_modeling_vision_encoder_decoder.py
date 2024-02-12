@@ -23,6 +23,7 @@ from packaging import version
 
 from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
 from transformers.testing_utils import (
+    is_flaky,
     require_levenshtein,
     require_nltk,
     require_sentencepiece,
@@ -323,6 +324,10 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_output_attentions(**input_ids_dict)
 
+    # FIXME @gante: flaky test
+    @is_flaky(
+        description="Fails on distributed runs e.g.: https://app.circleci.com/pipelines/github/huggingface/transformers/83611/workflows/666b01c9-1be8-4daa-b85d-189e670fc168/jobs/1078635/tests#failed-test-0"
+    )
     def test_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)

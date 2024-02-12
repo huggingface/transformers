@@ -95,6 +95,7 @@ class DPTModelTester:
     def get_config(self):
         return DPTConfig(
             backbone_config=self.get_backbone_config(),
+            backbone=None,
             neck_hidden_sizes=self.neck_hidden_sizes,
             fusion_hidden_size=self.fusion_hidden_size,
         )
