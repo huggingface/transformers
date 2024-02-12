@@ -74,7 +74,7 @@ python src/transformers/commands/transformers_cli.py env
 
 ### Möchten Sie eine neue Funktion?
 
-Wenn Sie eine bestimmte neue Funktion in 🤗 Transformers sehen möchten, erstellen Sie bitte ein Issue und fügen sie eine Beschreibung hinzu:
+Wenn Sie eine bestimmte neue Funktion in 🤗 Transformers sehen möchten, erstellen Sie bitte ein Issue und fügen Sie eine Beschreibung hinzu:
 
 1. Was ist die *Motivation* hinter dieser Funktion? Steht sie in Zusammenhang mit einem Problem oder einer Frustration mit der Bibliothek? Ist es eine Funktion, die Sie für ein Projekt benötigen? Ist es etwas, an dem Sie gearbeitet haben und denken, dass es der Community nutzen könnte?
 
