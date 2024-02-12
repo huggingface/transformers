@@ -940,7 +940,7 @@ class LlamaModel(LlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is not None and not isinstance(past_key_values, Cache):
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_seen_tokens = past_key_values.get_usable_length(
                 inputs_embeds.shape[1]
@@ -1236,7 +1236,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)
         if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + position_ids.shape[-1])
+            cache_position = torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
