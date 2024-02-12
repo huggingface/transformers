@@ -715,9 +715,8 @@ class CogVLMModel(CogVLMPreTrainedModel):
                     token_type_ids = (
                         torch.ones_like(input_ids, dtype=torch.long, device=input_ids.device) * LANGUAGE_TOKEN_TYPE
                     )
-                assert not (
-                    token_type_ids == VISION_TOKEN_TYPE
-                ).any(), f"{(token_type_ids == VISION_TOKEN_TYPE).sum()}"
+                if (token_type_ids == VISION_TOKEN_TYPE).any():
+                    raise ValueError("Token type ids should not contain the VISION_TOKEN_TYPE")
                 if inputs_embeds is None:
                     inputs_embeds = self.embed_tokens(input_ids)
 
