@@ -113,15 +113,16 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         true_strings = [
             "<|im_start|><|im_end|>",
             "<|im_start|><|im_end|<|im_end|>",
-            ">><|im_start|>><|im_end|>",
+            ">><|im_start|>>stop",
+            "stop"
         ]
         false_strings = [
             "<|im_start|><|im_end|",
             "<|im_start|><|im_end|<|im_end|",
             "<|im_end|><|im_start|>",
-            "<|im_end|<><|im_end|",
+            "<|im_end|<>stop<|im_end|",
         ]
-        too_short_strings = ["<|im_end|", "|im_end|>"]
+        too_short_strings = ["<|im_end|", "|im_end|>", "s"]
 
         # Use a tokenizer that won't actually have special tokens for these
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -133,7 +134,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
         )
         scores = None
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop"])
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
@@ -143,11 +144,13 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # Now try it with a tokenizer where those are actually special tokens
         tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
         true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
         false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings="<|im_end|>")
+        too_short_input_ids = tokenizer(
+            too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
+        )
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop"])
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
