@@ -91,6 +91,10 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         outputs = feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
 
+        # Test pooling option
+        outputs = feature_extractor(img, pool=True)
+        self.assertEqual(np.squeeze(outputs).shape, (32,))
+
     @require_tf
     def test_image_processing_small_model_tf(self):
         feature_extractor = pipeline(
@@ -108,6 +112,10 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         img = prepare_img()
         outputs = feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
+
+        # Test pooling option
+        outputs = feature_extractor(img, pool=True)
+        self.assertEqual(np.squeeze(outputs).shape, (32,))
 
     @require_torch
     def test_return_tensors_pt(self):
