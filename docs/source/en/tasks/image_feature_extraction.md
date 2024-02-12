@@ -1,0 +1,107 @@
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Image Feature Extraction
+
+[[open-in-colab]]
+
+Image feature extraction is the task of extracting semantically meaningful features given an image. This has many use cases, including, image similarity and image retrieval. Moreover, every computer vision model can be used for image feature extraction, where one can remove the task-specific head (image classification, object detection etc) and get the features. These features are very useful on a higher level: edge detection, corner detection and so on, as well as containing information about the real world (e.g. how a cat looks like) depending on how deep the model is. Therefore, these outputs can be used to train new classifiers on a specific dataset.
+
+In this notebook, we will:
+
+- See how to build a simple image similarity system on top of `image-feature-extraction` pipeline,
+- Also accomplish the same task with bare model inference.
+
+## Image Similarity using `image-feature-extraction` Pipeline
+
+We have two images of cats sitting on top of fish nets, one of them is generated. 
+
+```python
+from PIL import Image
+import requests
+
+img_urls = ["https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png", "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.jpeg"]
+image_real = Image.open(requests.get(img_urs[0], stream=True).raw).convert("RGB")
+image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB")
+```
+
+Let's see the pipeline in action. We will initialize the pipeline. If we do not pass any model, it will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224).
+
+```python
+import torch
+from transformers import pipeline
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE)
+```
+
+We can now infer with `pipe`, by passing in both of the images.
+
+```python
+outputs = pipe([image_real, image_gen])
+```
+
+The output is contains embeddings of those two images. To get the similarity, we need to pass them to a similarity function. 
+
+```python
+from torch.nn.functional import cosine_similarity
+
+similarity_score = cosine_similarity(torch.Tensor(embeddings[0]),
+                                     torch.Tensor(embeddings[1]), dim=1)
+
+print(similarity_score)
+
+# tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
+```
+
+## Getting Features and Similarities using `AutoModel`
+
+We can also use `AutoModel` class of transformers to get the features. `AutoModel` loads any transformers model with no task-specific head, and we can use this to get the features.
+
+```python
+from transformers import AutoImageProcessor, AutoModel
+
+processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(DEVICE)
+```
+
+Let's write a simple function for inference. We will pass the inputs to the `processor` first and pass it's outputs to the `model`.
+
+```python
+def infer(image):
+  inputs = processor(image, return_tensors="pt").to(DEVICE)
+  outputs = model(**inputs)
+  return outputs.pooler_output
+```
+
+We can pass the images directly to this function and get the embeddings.
+
+```python
+embed_real = infer(image_real)
+embed_gen = infer(image_gen)
+```
+
+We can get the similarity again over the embeddings.
+
+```python
+from torch.nn.functional import cosine_similarity
+
+similarity_score = cosine_similarity(embed_real, embed_gen, dim=1)
+print(similarity_score)
+
+# tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
+```
+
