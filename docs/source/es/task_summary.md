@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Lo que 🤗 Transformers puede hacer
 
-🤗 Transformers es una biblioteca de modelos preentrenados de última generación para procesamiento del lenguaje natural (PLN), visión por computadora y tareas de procesamiento de audio y voz. No solo contiene modelos Transformer, sino también modelos no Transformer como redes convolucionales modernas para tareas de visión por computadora. Si observas algunos de los productos de consumo más populares hoy en día, como teléfonos inteligentes, aplicaciones y televisores, es probable que haya alguna tecnología de aprendizaje profundo detrás. ¿Quieres quitar un objeto de fondo de una foto tomada por tu teléfono inteligente? Este es un ejemplo de una tarea de segmentación panóptica (no te preocupes si aún no sabes qué significa, ¡lo describiremos en las siguientes secciones!).
+🤗 Transformers es una biblioteca de modelos preentrenados de última generación para procesamiento del lenguaje natural (NLP, por sus siglas en inglés), visión por computadora y tareas de procesamiento de audio y voz. No solo contiene modelos Transformer, sino también modelos no Transformer como redes convolucionales modernas para tareas de visión por computadora. Si observas algunos de los productos de consumo más populares hoy en día, como teléfonos inteligentes, aplicaciones y televisores, es probable que haya alguna tecnología de aprendizaje profundo detrás. ¿Quieres quitar un objeto de fondo de una foto tomada por tu teléfono inteligente? Este es un ejemplo de una tarea de segmentación panóptica (no te preocupes si aún no sabes qué significa, ¡lo describiremos en las siguientes secciones!).
 
-Esta página proporciona una descripción general de las diferentes tareas de procesamiento de audio y voz, visión por computadora y PLN que se pueden resolver con la biblioteca 🤗 Transformers en solo tres líneas de código.
+Esta página proporciona una descripción general de las diferentes tareas de procesamiento de audio y voz, visión por computadora y NLP que se pueden resolver con la biblioteca 🤗 Transformers en solo tres líneas de código.
 
 ## Audio
 
