@@ -75,7 +75,7 @@ _MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_msn", "ViTMSNModel"),
         ("vitdet", "VitDetModel"),
-        ("vitmae", "ViTMAEModel"),
+        ("vit_mae", "ViTMAEModel"),
         ("vivit", "VivitModel"),
         ("yolos", "YolosModel"),
     ]
