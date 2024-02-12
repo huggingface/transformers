@@ -180,7 +180,7 @@ plt.show()
 
 ### Box Prompting
 
-You can also do box prompting in a similar fashion to point prompting. You can simply pass the input box in format of a list
+You can also do box prompting in a similar fashion to point prompting. You can simply pass the input box in the format of a list
 `[x_min, y_min, x_max, y_max]` format along with the image to the `processor`. Take the processor output and directly pass it 
 to the model, then postprocess the output again.
 
