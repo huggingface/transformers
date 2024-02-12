@@ -23,6 +23,7 @@ from pathlib import Path
 
 import requests
 import torch
+from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from safetensors import safe_open
@@ -115,9 +116,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     config = LlavaConfig(text_config=text_config, mm_patch_merge_type="spatial_unpad")
     config.pad_token_id = 32001
 
-    # don't use meta for now due to weird bug
-    # with torch.device("meta"):
-    model = LlavaForConditionalGeneration(config)
+    with init_empty_weights():
+        model = LlavaForConditionalGeneration(config)
 
     # load original state dict
     state_dict = load_original_state_dict()
@@ -144,11 +144,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
 
-    # TODO test single forward pass
+    # test single forward pass
+    # TODO make sure image_sizes is not a list
     print("Single forward pass")
     with torch.inference_mode():
         inputs = inputs.to(device)
-        outputs = model(**inputs)
+        outputs = model(**inputs, image_sizes=[(1024, 899)])
         print("Shape of logits:", outputs.logits.shape)
 
     # TODO test generation

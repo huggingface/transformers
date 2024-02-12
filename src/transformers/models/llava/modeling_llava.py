@@ -476,7 +476,17 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 if pixel_values.ndim == 5:
                     pixel_values = torch.cat([image for image in pixel_values], dim=0)
                     image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-                    image_features = self.multi_modal_projector(image_features)
+                    selected_image_feature = image_features.hidden_states[vision_feature_layer]
+
+                    if vision_feature_select_strategy == "default":
+                        selected_image_feature = selected_image_feature[:, 1:]
+                    elif vision_feature_select_strategy == "full":
+                        selected_image_feature = selected_image_feature
+                    else:
+                        raise ValueError(
+                            f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
+                        )
+                    image_features = self.multi_modal_projector(selected_image_feature)
 
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
