@@ -542,6 +542,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                     image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
                             new_image_features.append(image_feature)
                         image_features = new_image_features
+                        # TODO remove this
+                        image_features = image_features[0].unsqueeze(0)
                     else:
                         raise ValueError(f"Unexpected mm_patch_merge_type: {self.config.mm_patch_merge_type}")
 
@@ -560,9 +562,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         )
 
                     image_features = self.multi_modal_projector(selected_image_feature)
-
-                # TODO remove this
-                image_features = image_features[0].unsqueeze(0)
 
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
