@@ -189,8 +189,8 @@ if __name__ == "__main__":
             "THUDM/cogvlm-chat-hf",
             "THUDM/cogvlm-base-490-hf",
             "THUDM/cogvlm-base-224-hf",
-            "THUDM/cogvlm-grounding-base-hf",  # TODO check this one
-            "THUDM/cogvlm-grounding-generalist-hf",  # TODO check this one
+            "THUDM/cogvlm-grounding-base-hf",
+            "THUDM/cogvlm-grounding-generalist-hf",
         ],
         help="Name of the model to convert",
     )

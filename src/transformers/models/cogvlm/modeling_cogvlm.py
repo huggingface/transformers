@@ -15,7 +15,6 @@
 """ PyTorch CogVLM model."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -322,18 +321,6 @@ def attention_fn(
     scaling_attention_score: bool = True,
     attention_dropout: nn.Module = None,
 ):
-    # attention_mask_bool = attention_mask == 0
-    # is_low_triangle = (attention_mask_bool == torch.ones_like(attention_mask_bool, dtype=torch.float).tril()).all()
-    # is_full = (attention_mask_bool > 0).all()
-    if not (int(torch.__version__.split(".")[0]) >= 2):
-        warnings.warn("It's recommended to use torch2.0 or higher.")
-    # if int(torch.__version__.split(".")[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
-    #     dropout_p = 0.0 if attention_dropout is None or not attention_dropout.training else attention_dropout.p
-    #     context_layer = torch.nn.functional.scaled_dot_product_attention(
-    #         query_layer, key_layer, value_layer, attn_mask=None, dropout_p=dropout_p, is_causal=not is_full
-    #     )
-    #     return context_layer, None
-    # else:
     if scaling_attention_score:
         query_layer = query_layer / math.sqrt(query_layer.shape[-1])
     attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -670,8 +657,8 @@ class CogVLMModel(CogVLMPreTrainedModel):
             # update attention_mask
             if pixel_values is not None:
                 batch_size = pixel_values.shape[0]
-                vision_mask = (
-                    torch.full(size=(batch_size, self.num_vision_tokens), fill_value=1, device=attention_mask.device)
+                vision_mask = torch.full(
+                    size=(batch_size, self.num_vision_tokens), fill_value=1, device=attention_mask.device
                 )
                 attention_mask = torch.cat(
                     [attention_mask[:, :-1], vision_mask, attention_mask[:, -1].repeat(batch_size, 1)], dim=1
