@@ -440,7 +440,7 @@ class DonutImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format, **kwargs)
                 for image in images
             ]
 
