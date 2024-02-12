@@ -273,7 +273,7 @@ class StopStringCriteria(StoppingCriteria):
             initial_match = torch.any(starts > 0, dim=-1, keepdim=True)
             # Tokens can continue the string if the cumsum() so far is one of the valid positions for that token
             # Note that we're actually tracking one cumsum() for the list for each possible start overhang length
-            later_match = torch.isin(cumsum[:, :-1], valid_positions)
+            later_match = torch.any(cumsum[:, :-1, None] == valid_positions[:, :, :, None], axis=2)
             # The match vector is a boolean vector that indicates which positions have valid tokens
             match = torch.cat([initial_match, later_match], dim=1)
 
