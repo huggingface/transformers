@@ -20,6 +20,7 @@ import argparse
 
 import requests
 import torch
+from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
@@ -31,8 +32,6 @@ from transformers import (
     LlamaTokenizer,
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
-
-from accelerate import init_empty_weights
 
 
 original_device = "cuda:0"
