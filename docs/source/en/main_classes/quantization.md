@@ -18,6 +18,8 @@ rendered properly in your Markdown viewer.
 
 Quantization techniques reduces memory and computational costs by representing weights and activations with lower-precision data types like 8-bit integers (int8). This enables loading larger models you normally wouldn't be able to fit into memory, and speeding up inference. Transformers supports the AWQ and GPTQ quantization algorithms and it supports 8-bit and 4-bit quantization with bitsandbytes.
 
+Quantization techniques that aren't supported in Transformers can be added with the [`HfQuantizer`] class.
+
 <Tip>
 
 Learn how to quantize models in the [Quantization](../quantization) guide.
@@ -35,3 +37,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## BitsAndBytesConfig
 
 [[autodoc]] BitsAndBytesConfig
+
+## HfQuantizer
+
+[[autodoc]] quantizers.base.HfQuantizer

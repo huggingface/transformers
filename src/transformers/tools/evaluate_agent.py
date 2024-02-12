@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .agents import BASE_PYTHON_TOOLS, clean_code_for_chat, clean_code_for_run
+from .agents import BASE_PYTHON_TOOLS, clean_code_for_chat
 from .python_interpreter import InterpretorError, evaluate
 
 
@@ -554,7 +554,7 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
             problem = EVALUATION_TASKS[eval_idx[start_idx + idx]]
             if verbose:
                 print(f"====Task {start_idx + idx}====\n{batch_tasks[idx]}\n")
-            explanation, code = clean_code_for_run(result)
+            explanation, code = agent.clean_code_for_run(result)
 
             # Evaluate agent answer and code answer
             agent_answer = evaluate_code(code, problem.inputs, verbose=verbose)

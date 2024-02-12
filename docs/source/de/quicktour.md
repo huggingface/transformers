@@ -89,7 +89,7 @@ Importieren sie die [`pipeline`] und spezifizieren sie die Aufgabe, welche sie l
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-Die Pipeline lädt ein standardmäßiges [vortrainiertes Modell] (https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) und einen Tokenizer für die Stimmungs-Analyse herunter und speichert sie. Jetzt können Sie den "Klassifikator" auf Ihren Zieltext anwenden:
+Die Pipeline lädt ein standardmäßiges [vortrainiertes Modell](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) und einen Tokenizer für die Stimmungs-Analyse herunter und speichert sie. Jetzt können Sie den "Klassifikator" auf Ihren Zieltext anwenden:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -148,7 +148,7 @@ Bei einem größeren Datensatz mit vielen Eingaben (wie bei Sprache oder Bildver
 
 ### Ein anderes Modell und einen anderen Tokenizer in der Pipeline verwenden
 
-Die [`pipeline`] kann jedes Modell aus dem [Model Hub] (https://huggingface.co/models) verwenden, wodurch es einfach ist, die [`pipeline`] für andere Anwendungsfälle anzupassen. Wenn Sie beispielsweise ein Modell wünschen, das französischen Text verarbeiten kann, verwenden Sie die Tags im Model Hub, um nach einem geeigneten Modell zu filtern. Das oberste gefilterte Ergebnis liefert ein mehrsprachiges [BERT-Modell](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment), das auf die Stimmungsanalyse abgestimmt ist. Großartig, verwenden wir dieses Modell!
+Die [`pipeline`] kann jedes Modell aus dem [Model Hub](https://huggingface.co/models) verwenden, wodurch es einfach ist, die [`pipeline`] für andere Anwendungsfälle anzupassen. Wenn Sie beispielsweise ein Modell wünschen, das französischen Text verarbeiten kann, verwenden Sie die Tags im Model Hub, um nach einem geeigneten Modell zu filtern. Das oberste gefilterte Ergebnis liefert ein mehrsprachiges [BERT-Modell](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment), das auf die Stimmungsanalyse abgestimmt ist. Großartig, verwenden wir dieses Modell!
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"

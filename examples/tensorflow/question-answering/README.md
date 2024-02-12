@@ -45,7 +45,7 @@ README, but for more information you can see the 'Input Datasets' section of
 [this document](https://www.tensorflow.org/guide/tpu).
 
 ### Example command
-```
+```bash
 python run_qa.py \
 --model_name_or_path distilbert-base-cased \
 --output_dir output \

@@ -5,7 +5,7 @@ from typing import Dict
 import numpy as np
 
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
-from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
+from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -32,7 +32,7 @@ class ClassificationFunction(ExplicitEnum):
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         return_all_scores (`bool`, *optional*, defaults to `False`):
             Whether to return all prediction scores or just the one of the predicted class.
@@ -43,8 +43,7 @@ class ClassificationFunction(ExplicitEnum):
               has several labels, will apply the softmax function on the output.
             - `"sigmoid"`: Applies the sigmoid function on the output.
             - `"softmax"`: Applies the softmax function on the output.
-            - `"none"`: Does not apply any function on the output.
-    """,
+            - `"none"`: Does not apply any function on the output.""",
 )
 class TextClassificationPipeline(Pipeline):
     """

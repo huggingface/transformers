@@ -37,7 +37,7 @@ rendered properly in your Markdown viewer.
 | 1.11.0            |            | √          | √          | √          | √           |
 | 1.10.0            | √          | √          | √          | √          |             |
 
-```
+```bash
 pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
 `{pytorch_version}`은 1.13.0과 같이 PyTorch 버전을 나타냅니다.
@@ -57,13 +57,13 @@ PyTorch 1.12.1은 oneccl_bindings_for_pytorch 1.12.10 버전과 함께 사용해
 oneccl_bindings_for_pytorch는 MPI 도구 세트와 함께 설치됩니다. 사용하기 전에 환경을 소스로 지정해야 합니다.
 
 Intel® oneCCL 버전 1.12.0 이상인 경우
-```
+```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
 ```
 
 Intel® oneCCL 버전이 1.12.0 미만인 경우
-```
+```bash
 torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
 source $torch_ccl_path/env/setvars.sh
 ```

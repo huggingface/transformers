@@ -75,7 +75,7 @@ DatasetDict({
 
 </Tip>
 
-[~datasets.Dataset.train_test_split] 메소드를 사용하여 데이터세트의 학습 분할을 학습 및 테스트 세트로 나눕니다:
+[`~datasets.Dataset.train_test_split`] 메소드를 사용하여 데이터세트의 학습 분할을 학습 및 테스트 세트로 나눕니다:
 
 
 ```python
