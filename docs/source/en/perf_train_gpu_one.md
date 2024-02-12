@@ -201,7 +201,7 @@ of 23 bits precision it has only 10 bits (same as fp16) and uses only 19 bits in
 you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput 
 improvement. All you need to do is to add the following to your code:
 
-```
+```python
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

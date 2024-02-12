@@ -63,7 +63,7 @@ Diamo quindi un'occhiata a uno degli aspetti più importanti quando si hanno pi�
 
 Se utilizzi più GPU, il modo in cui le schede sono interconnesse può avere un enorme impatto sul tempo totale di allenamento. Se le GPU si trovano sullo stesso nodo fisico, puoi eseguire:
 
-```
+```bash
 nvidia-smi topo -m
 ```
 

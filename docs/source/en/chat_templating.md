@@ -390,7 +390,7 @@ If your model expects those, they won't be added automatically by `apply_chat_te
 text will be tokenized with `add_special_tokens=False`. This is to avoid potential conflicts between the template and
 the `add_special_tokens` logic. If your model expects special tokens, make sure to add them to the template!
 
-```
+```python
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 ```
 
