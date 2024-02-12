@@ -2468,6 +2468,10 @@ class Trainer:
                 # Solely rely on numerical checkpoint id for rotation.
                 # mtime is not reliable especially on some fuse fs in cloud environments.
                 self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
+        elif self.is_local_process_zero():
+            # Clean up the remaining staging checkpoint folders on other nodes
+            if staging_output_dir != output_dir and os.path.exists(staging_output_dir):
+                shutil.rmtree(staging_output_dir)
 
         self.args.distributed_state.wait_for_everyone()
 
