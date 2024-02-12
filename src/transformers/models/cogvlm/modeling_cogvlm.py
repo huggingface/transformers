@@ -144,19 +144,6 @@ class CogVLMVisionAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
 
-    # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
-    def attention(self, queries, keys, values, attention_bias=None):
-        queries = queries * self.scale
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
-        attention_scores = queries @ keys.transpose(-2, -1)
-        if attention_bias is not None:
-            attention_scores = attention_scores + attention_bias
-        attention_probs = attention_scores.softmax(-1)
-        attention_output = attention_probs @ values
-        return attention_output.transpose(1, 2)
-
     def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
         batch_size, sequence_length, _ = hidden_state.shape
         qkv = self.query_key_value(hidden_state)
@@ -164,7 +151,16 @@ class CogVLMVisionAttention(nn.Module):
         qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
         queries, keys, values = qkv[0], qkv[1], qkv[2]
 
-        attention_output = self.attention(queries, keys, values)
+        # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
+        queries = queries * self.scale
+        queries = queries.transpose(1, 2)
+        keys = keys.transpose(1, 2)
+        values = values.transpose(1, 2)
+        attention_scores = queries @ keys.transpose(-2, -1)
+
+        attention_probs = attention_scores.softmax(-1)
+        attention_output = attention_probs @ values
+        attention_output = attention_output.transpose(1, 2)
 
         output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
         output = self.output_dropout(output)
