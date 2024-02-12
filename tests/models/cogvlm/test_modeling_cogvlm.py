@@ -200,9 +200,8 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return inputs_dict
 
-    # Copied from tests.models.bert.test_modeling_bert.BertModelTest.test_for_causal_lm
     def test_for_causal_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
