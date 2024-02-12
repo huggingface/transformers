@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch RT-DETR model."""
+
+
+import copy
 import math
 import warnings
 from dataclasses import dataclass
@@ -256,6 +259,82 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+def _get_clones(module, N):
+    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+
+
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1 / x2)
+
+
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDETR
+class RTDetrFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->DeformableDetr
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `DeformableDetrFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = RTDetrFrozenBatchNorm2d(module.num_features)
+
+            if not module.weight.device == torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
 def get_contrastive_denoising_training_group(
     targets,
     num_classes,
@@ -368,71 +447,6 @@ def get_contrastive_denoising_training_group(
     return input_query_class, input_query_bbox, attn_mask, dn_meta
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDETR
-class RTDetrFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->DeformableDetr
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `DeformableDetrFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = RTDetrFrozenBatchNorm2d(module.num_features)
-
-            if not module.weight.device == torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
 class RTDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -517,11 +531,6 @@ class RTDetrConvNormLayer(nn.Module):
 def bias_init_with_prob(prior_prob=0.01):
     bias_init = float(-math.log((1 - prior_prob) / prior_prob))
     return bias_init
-
-
-def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
-    x = x.clip(min=0.0, max=1.0)
-    return torch.log(x.clip(min=eps) / (1 - x).clip(min=eps))
 
 
 def deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights):
@@ -1412,7 +1421,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                print('reference_points', reference_points.shape)
                 new_reference_points = tmp.sigmoid() + inverse_sigmoid(reference_points)
                 reference_points = new_reference_points.detach()
 
@@ -1789,19 +1797,24 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
+        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
+        if config.with_box_refine:
+            self.class_embed = _get_clones(self.class_embed, num_pred)
+            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
+            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
+            # hack implementation for iterative bounding box refinement
+            self.model.decoder.bbox_embed = self.bbox_embed
+        else:
+            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
+            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
+            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
 
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-        self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-        self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-        
         self.model.decoder.bbox_embed = self.bbox_embed
         # hack implementation for two-stage
         self.model.decoder.class_embed = self.class_embed
         for box_embed in self.bbox_embed:
             nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
-
-        self.criterion = RTDetrLoss(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1916,7 +1929,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         loss, loss_dict = None, None
         if labels is not None:
-            self.criterion.to(self.device)
+            # First: create the criterion
+            critertion = RTDetrLoss(self.config)
+            criterion.to(self.device)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
@@ -1932,7 +1947,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                     out["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
                     out["dn_meta"] = dn_meta
 
-            loss_dict = self.criterion(outputs_loss, labels)
+            loss_dict = criterion(outputs_loss, labels)
             # Compute total loss, as a weighted sum of the various losses
             weight_dict = {
                 "loss_vfl": self.config.weight_loss_vfl,

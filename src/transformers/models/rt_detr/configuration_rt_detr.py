@@ -185,6 +185,7 @@ class RTDetrConfig(PretrainedConfig):
         image_size=[640, 640],
         eval_idx=-1,
         disable_custom_kernels=False,
+        with_box_refine=True,
         # Loss
         matcher_alpha=0.25,
         matcher_gamma=2.0,
@@ -262,6 +263,7 @@ class RTDetrConfig(PretrainedConfig):
         self.eval_idx = eval_idx
         self.use_aux_loss = use_aux_loss
         self.disable_custom_kernels = disable_custom_kernels
+        self.with_box_refine = with_box_refine
         # Loss
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma
