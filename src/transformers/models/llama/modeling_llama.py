@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, SinkCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -335,7 +335,7 @@ class LlamaAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
-        cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_value is not None:
@@ -420,7 +420,7 @@ class LlamaFlashAttention2(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_value is not None:
@@ -601,10 +601,11 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids.unsqueeze(0), seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
         
         past_key_value = getattr(self, "past_key_value", past_key_value)
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
@@ -917,11 +918,19 @@ class LlamaModel(LlamaPreTrainedModel):
             )
             use_cache = False
 
-        if use_cache and not isinstance(past_key_values, Cache):
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        past_seen_tokens = 0 
+        if use_cache and not isinstance(past_key_values, Cache):
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_seen_tokens = past_key_values.get_usable_length(inputs_embeds.shape[1]) # kept for BC (cache positions)
+            
+        if cache_position is None:
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens+inputs_embeds.shape[1])
+        
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
@@ -974,7 +983,7 @@ class LlamaModel(LlamaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
-        if use_cache:
+        if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
             next_cache = (
                 next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
             )
@@ -1153,6 +1162,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -1192,9 +1202,13 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
             # generation with static cache
-            seen_tokens = past_key_value.get_seq_length()
-            input_ids = input_ids[:, seen_tokens:]
-            position_ids = position_ids[:, seen_tokens:]
+            past_length = past_key_value.get_seq_length()
+            input_ids = input_ids[:, past_length:]
+            position_ids = position_ids[:, past_length:]
+
+        cache_position = kwargs.get("cache_position", None)
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length+input_ids.shape[1])
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1205,6 +1219,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         model_inputs.update(
             {
                 "position_ids": position_ids,
+                "cache_position":cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
