@@ -1022,7 +1022,11 @@ class LlamaModel(LlamaPreTrainedModel):
     def _update_causal_mask(self, attention_mask, input_tensor):
         if self.config._attn_implementation == "flash_attention_2":
             causal_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-            return causal_mask
+            # since the static cache is padded, you have to pass the attention mask raw.
+            # similar to https://github.com/facebookresearch/llama/commit/e9077bd24177a74aa79f406bef7d4b57fe393157
+            if input_tensor.shape[1] == 1 :
+                return None
+            return attention_mask
 
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
