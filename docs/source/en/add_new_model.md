@@ -531,7 +531,7 @@ but all the other ones should use an initialization as above. This is coded like
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True
@@ -682,7 +682,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implement the forward pass**
 
 Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
-sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#34-run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
+sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#3-4-run-a-pretrained-checkpoint-using-the-original-repository), you have already created a script that runs a forward
 pass of the model using the original repository. Now you should write an analogous script using the 🤗 Transformers
 implementation instead of the original one. It should look as follows:
 

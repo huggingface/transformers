@@ -394,7 +394,7 @@ Activation and gradient checkpointing trades speed for more GPU memory which all
 
 ### Optimizer and scheduler
 
-DeepSpeed and Transformers optimizer and scheduler can be mixed and matched as long as you don't enable `offload_optimizer`. When `offload_optimizer` is enabled, you could use a non-DeepSpeede optimizer (except for LAMB) as long as it has both a CPU and GPU implementation.
+DeepSpeed and Transformers optimizer and scheduler can be mixed and matched as long as you don't enable `offload_optimizer`. When `offload_optimizer` is enabled, you could use a non-DeepSpeed optimizer (except for LAMB) as long as it has both a CPU and GPU implementation.
 
 <Tip warning={true}>
 
@@ -626,7 +626,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 DeepSpeed is still useful with just 1 GPU because you can:
 
 1. Offload some computations and memory to the CPU to make more GPU resources available to your model to use a larger batch size or fit a very large model that normally won't fit.
-2. Minimze memory fragmentation with it's smart GPU memory management system which also allows you to fit bigger models and data batches.
+2. Minimize memory fragmentation with it's smart GPU memory management system which also allows you to fit bigger models and data batches.
 
 <Tip>
 
@@ -851,7 +851,7 @@ checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
-If you've enabled the `--load_best_model_at_end` parameter to track the best checkpoint in [`TraininArguments`], you can finish training first and save the final model explicitly. Then you can reload it as shown below:
+If you've enabled the `--load_best_model_at_end` parameter to track the best checkpoint in [`TrainingArguments`], you can finish training first and save the final model explicitly. Then you can reload it as shown below:
 
 ```py
 from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
@@ -907,7 +907,7 @@ python zero_to_fp32.py . pytorch_model.bin
 
 <Tip>
 
-Run `python zero_to_fp32.py -h` for more usage details. The script requirees 2x the general RAM of the final fp32 weights.
+Run `python zero_to_fp32.py -h` for more usage details. The script requires 2x the general RAM of the final fp32 weights.
 
 </Tip>
 
@@ -1056,7 +1056,7 @@ train_batch_size = 1 * world_size
 # - if using `offload_param` you can manually finetune stage3_param_persistence_threshold to control
 # - which params should remain on gpus - the larger the value the smaller the offload size
 #
-# For indepth info on Deepspeed config see
+# For in-depth info on Deepspeed config see
 # https://huggingface.co/docs/transformers/main/main_classes/deepspeed
 
 # keeping the same format as json for consistency, except it uses lower case for true/false
@@ -1137,7 +1137,7 @@ This is a very basic example and you'll want to adapt it to your use case.
 
 ### Generate
 
-Using multiple GPUs with ZeRO-3 for generation requires sychronizing the GPUs by setting `synced_gpus=True` in the [`~GenerationMixin.generate`] method. Otherwise, if one GPU is finished generating before another one, the whole system hangs because the remaining GPUs haven't received the weight shard from the GPU that finished first.
+Using multiple GPUs with ZeRO-3 for generation requires synchronizing the GPUs by setting `synced_gpus=True` in the [`~GenerationMixin.generate`] method. Otherwise, if one GPU is finished generating before another one, the whole system hangs because the remaining GPUs haven't received the weight shard from the GPU that finished first.
 
 For Transformers>=4.28, if `synced_gpus` is automatically set to `True` if multiple GPUs are detected during generation.
 
@@ -1167,7 +1167,7 @@ The following sections provide a guide for resolving two of the most common issu
 
 ### DeepSpeed process killed at startup
 
-When the DeepSpeeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than your system has or your process tried to allocate more CPU memory than allowed leading the OS kernel to terminate the process. In this case, check whether your configuration file has either `offload_optimizer`, `offload_param` or both configured to offload to the CPU. 
+When the DeepSpeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than your system has or your process tried to allocate more CPU memory than allowed leading the OS kernel to terminate the process. In this case, check whether your configuration file has either `offload_optimizer`, `offload_param` or both configured to offload to the CPU. 
 
 If you have NVMe and ZeRO-3 setup, experiment with offloading to the NVMe ([estimate](https://deepspeed.readthedocs.io/en/latest/memory.html) the memory requirements for your model).
 

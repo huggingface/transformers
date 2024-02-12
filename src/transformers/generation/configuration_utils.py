@@ -233,8 +233,11 @@ class GenerationConfig(PushToHubMixin):
         encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+        decoder_start_token_id (`Union[int, List[int]]`, *optional*):
+            If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token or a list of length
+            `batch_size`. Indicating a list enables different start ids for each element in the batch
+            (e.g. multilingual models with different target languages in one batch)
+
 
         > Generation parameters exclusive to [assistant generation](https://arxiv.org/abs/2211.17192)
 
@@ -250,6 +253,11 @@ class GenerationConfig(PushToHubMixin):
               reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
+
+        > Parameters specific to the caching mechanism:
+
+        cache_implementation (`str`, *optional*, default to `None`):
+            Cache class that should be used when generating.
 
         > Wild card
 
@@ -322,6 +330,9 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
 
+        # Cache implementation
+        self.cache_implementation = kwargs.pop("cache_implementation", None)
+
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
 
@@ -374,6 +385,8 @@ class GenerationConfig(PushToHubMixin):
         # Validation of individual attributes
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
+        if self.max_new_tokens is not None and self.max_new_tokens <= 0:
+            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
 
         # Validation of attribute relations:
         fix_location = ""

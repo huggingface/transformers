@@ -123,7 +123,7 @@ def parse_args():
         default=384,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(
@@ -278,7 +278,7 @@ def parse_args():
         type=bool,
         default=False,
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
             "execute code present on the Hub on your local machine."
         ),
@@ -460,7 +460,7 @@ def main():
         model = AutoModelForQuestionAnswering.from_config(config, trust_remote_code=args.trust_remote_code)
 
     # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # Preprocessing is slightly different for training and evaluation.
 
     column_names = raw_datasets["train"].column_names
 
@@ -561,7 +561,7 @@ def main():
         raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
     if args.max_train_samples is not None:
-        # We will select sample from whole data if agument is specified
+        # We will select sample from whole data if argument is specified
         train_dataset = train_dataset.select(range(args.max_train_samples))
 
     # Create train feature from dataset

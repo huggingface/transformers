@@ -211,7 +211,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.input_shape = input_shape
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
-        # To check if the model was intialized automatically.
+        # To check if the model was initialized automatically.
         self._is_initialized = _do_init
 
         if _do_init:

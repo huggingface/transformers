@@ -94,7 +94,7 @@ Installieren wir 🤗 Transformers aus dem Quellcode mit dem folgenden Befehl:
 pip install git+https://github.com/huggingface/transformers
 ```
 
-Dieser Befehl installiert die aktuelle `main` Version und nicht die neueste `stable` Version. Die `main`-Version ist nützlich, um mit den neuesten Entwicklungen Schritt zu halten. Zum Beispiel, wenn ein Fehler seit der letzten offiziellen Version behoben wurde, aber eine neue Version noch nicht veröffentlicht wurde. Das bedeutet jedoch, dass die "Hauptversion" nicht immer stabil ist. Wir bemühen uns, die Hauptversion einsatzbereit zu halten, und die meisten Probleme werden normalerweise innerhalb weniger Stunden oder eines Tages behoben. Wenn Sie auf ein Problem stoßen, öffnen Sie bitte ein [Issue] (https://github.com/huggingface/transformers/issues), damit wir es noch schneller beheben können!
+Dieser Befehl installiert die aktuelle `main` Version und nicht die neueste `stable` Version. Die `main`-Version ist nützlich, um mit den neuesten Entwicklungen Schritt zu halten. Zum Beispiel, wenn ein Fehler seit der letzten offiziellen Version behoben wurde, aber eine neue Version noch nicht veröffentlicht wurde. Das bedeutet jedoch, dass die "Hauptversion" nicht immer stabil ist. Wir bemühen uns, die Hauptversion einsatzbereit zu halten, und die meisten Probleme werden normalerweise innerhalb weniger Stunden oder eines Tages behoben. Wenn Sie auf ein Problem stoßen, öffnen Sie bitte ein [Issue](https://github.com/huggingface/transformers/issues), damit wir es noch schneller beheben können!
 
 Überprüfen wir, ob 🤗 Transformers richtig installiert wurde, indem Sie den folgenden Befehl ausführen:
 
@@ -245,6 +245,6 @@ Sobald Ihre Datei heruntergeladen und lokal zwischengespeichert ist, geben Sie d
 
 <Tip>
 
-Weitere Informationen zum Herunterladen von Dateien, die auf dem Hub gespeichert sind, finden Sie im Abschnitt [Wie man Dateien vom Hub herunterlädt] (https://huggingface.co/docs/hub/how-to-downstream).
+Weitere Informationen zum Herunterladen von Dateien, die auf dem Hub gespeichert sind, finden Sie im Abschnitt [Wie man Dateien vom Hub herunterlädt](https://huggingface.co/docs/hub/how-to-downstream).
 
 </Tip>

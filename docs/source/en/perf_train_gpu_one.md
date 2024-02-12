@@ -51,7 +51,7 @@ The methods and tools covered in this guide can be classified based on the effec
 | [Data preloading](#data-preloading)                        | Yes                     | No                           |
 | [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
 | [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
-| [Parameter-Efficient Fine Tuning (PEFT)](#peft)            | No                      | Yes                          |
+| [Parameter-Efficient Fine Tuning (PEFT)](#using--peft)            | No                      | Yes                          |
  
 <Tip>
 
@@ -62,12 +62,12 @@ large model and a small batch size, the memory use will be larger.
 
 You can combine the above methods to get a cumulative effect. These techniques are available to you whether you are 
 training your model with [`Trainer`] or writing a pure PyTorch loop, in which case you can [configure these optimizations 
-with 🤗 Accelerate](#using-accelerate).
+with 🤗 Accelerate](#using--accelerate).
 
 If these methods do not result in sufficient gains, you can explore the following options: 
 * [Look into building your own custom Docker container with efficient softare prebuilds](#efficient-software-prebuilds)
 * [Consider a model that uses Mixture of Experts (MoE)](#mixture-of-experts)
-* [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention)
+* [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention-and-flash-attention)
 
 Finally, if all of the above is still not enough, even after switching to a server-grade GPU like A100, consider moving 
 to a multi-GPU setup. All these approaches are still valid in a multi-GPU setup, plus you can leverage additional parallelism 
@@ -110,7 +110,7 @@ training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumu
 In the above example, your effective batch size becomes 4. 
 
 Alternatively, use 🤗 Accelerate to gain full control over the training loop. Find the 🤗 Accelerate example 
-[further down in this guide](#using-accelerate).
+[further down in this guide](#using--accelerate).
 
 While it is advised to max out GPU usage as much as possible, a high number of gradient accumulation steps can 
 result in a more pronounced training slowdown. Consider the following example. Let's say, the `per_device_train_batch_size=4` 
@@ -143,7 +143,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
+Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
 
 <Tip>
 
@@ -179,7 +179,7 @@ To enable mixed precision training, set the `fp16` flag to `True`:
 training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args)
 ```
 
-If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
+If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
 
 ### BF16
 

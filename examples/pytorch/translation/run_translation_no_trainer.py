@@ -175,7 +175,7 @@ def parse_args():
         default=128,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(
@@ -262,7 +262,7 @@ def parse_args():
         type=bool,
         default=False,
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
             "execute code present on the Hub on your local machine."
         ),

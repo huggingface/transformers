@@ -25,7 +25,7 @@ Recognition、Masked Language Modeling、Sentiment Analysis、Feature Extraction
 パイプラインの抽象化には2つのカテゴリーがある：
 
 - [`pipeline`] は、他のすべてのパイプラインをカプセル化する最も強力なオブジェクトです。
-- タスク固有のパイプラインは、[オーディオ](#audio)、[コンピューター ビジョン](#computer-vision)、[自然言語処理](#natural-language-processing)、および [マルチモーダル](#multimodal) タスクで使用できます。 
+- タスク固有のパイプラインは、[オーディオ](#audio)、[コンピューター ビジョン](#computer-vision)、[自然言語処理](#natural-language-processing)、および [マルチモーダル](#multimodal) タスクで使用できます。
 
 ## The pipeline abstraction
 
@@ -474,6 +474,12 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
+    - __call__
+    - all
+
+### ImageFeatureExtractionPipeline
+
+[[autodoc]] ImageFeatureExtractionPipeline
     - __call__
     - all
 

@@ -30,6 +30,7 @@ from typing import Optional
 import evaluate
 import tensorflow as tf
 from datasets import load_dataset
+from packaging.version import parse
 from utils_qa import postprocess_qa_predictions
 
 import transformers
@@ -46,6 +47,19 @@ from transformers import (
     set_seed,
 )
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version, send_example_telemetry
+
+
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -97,7 +111,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -233,7 +247,7 @@ class DataTrainingArguments:
 
 
 # region Helper classes
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
+class SavePretrainedCallback(keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
     # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
     # that saves the model with this method after each epoch.
@@ -498,7 +512,7 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
-            # We will select sample from whole data if agument is specified
+            # We will select sample from whole data if argument is specified
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset

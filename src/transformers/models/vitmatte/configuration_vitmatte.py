@@ -48,6 +48,9 @@ class VitMatteConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
         hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the decoder.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -81,6 +84,7 @@ class VitMatteConfig(PretrainedConfig):
         backbone_config: PretrainedConfig = None,
         backbone=None,
         use_pretrained_backbone=False,
+        use_timm_backbone=False,
         hidden_size: int = 384,
         batch_norm_eps: float = 1e-5,
         initializer_range: float = 0.02,
@@ -107,6 +111,7 @@ class VitMatteConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
         self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range

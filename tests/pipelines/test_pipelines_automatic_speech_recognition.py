@@ -1334,22 +1334,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_chunk_iterator(self):
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
         inputs = torch.arange(100).long()
-        ratio = 1
-        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0))
+
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
         self.assertEqual([o["is_last"] for o in outs], [True])
 
         # two chunks no stride
-        outs = list(chunk_iter(inputs, feature_extractor, 50, 0, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 50, 0, 0))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(50, 0, 0), (50, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 50), (1, 50)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
         # two chunks incomplete last
-        outs = list(chunk_iter(inputs, feature_extractor, 80, 0, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 80, 0, 0))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(80, 0, 0), (20, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 80), (1, 20)])
@@ -1360,7 +1360,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # This test is specifically crafted to trigger a bug if next chunk
         # would be ignored by the fact that all the data would be
         # contained in the strided left data.
-        outs = list(chunk_iter(inputs, feature_extractor, 105, 5, 5, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 105, 5, 5))
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
@@ -1373,25 +1373,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
             "input_values"
         ]
-        ratio = 1
-        outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 10), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100), (1, 30)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(80, 0, 10), (50, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 80), (1, 50)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 90, 20, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 90, 20, 0))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(90, 0, 0), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 90), (1, 30)])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6))
         self.assertEqual(len(outs), 4)
         self.assertEqual([o["stride"] for o in outs], [(36, 0, 6), (36, 6, 6), (36, 6, 6), (28, 6, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 36), (1, 36), (1, 36), (1, 28)])
@@ -1400,7 +1399,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
             "input_values"
         ]
-        outs = list(chunk_iter(inputs, feature_extractor, 30, 5, 5, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 30, 5, 5))
         self.assertEqual(len(outs), 5)
         self.assertEqual([o["stride"] for o in outs], [(30, 0, 5), (30, 5, 5), (30, 5, 5), (30, 5, 5), (20, 5, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 30), (1, 30), (1, 30), (1, 30), (1, 20)])
@@ -1451,6 +1450,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
 
+        # the audio is 4 seconds long
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
         out = pipe(
@@ -1460,11 +1460,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             out,
             {
-                "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.02)},
-                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
-                ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+                "chunks": [{"timestamp": (0.58, None), "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं"}],
             },
         )
 

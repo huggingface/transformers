@@ -32,6 +32,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     unpack_inputs,
 )
 from ...tf_utils import shape_list
@@ -77,7 +78,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -258,7 +259,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
         ):
-            self.enc_to_dec_proj = tf.keras.layers.Dense(
+            self.enc_to_dec_proj = keras.layers.Dense(
                 units=self.decoder.config.hidden_size,
                 kernel_initializer=get_initializer(config.encoder.initializer_range),
                 name="enc_to_dec_proj",
@@ -445,7 +446,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
+        # Make sure these 2 `keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         if encoder.name != "encoder":
             raise ValueError("encoder model must be created with the name `encoder`.")
         if decoder.name != "decoder":

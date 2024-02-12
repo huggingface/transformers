@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache
+from ..cache_utils import Cache, DynamicCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -91,6 +91,10 @@ logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
+
+NEED_SETUP_CACHE_CLASSES_MAPPING = {
+    "static": StaticCache,
+}
 
 
 @dataclass
@@ -497,7 +501,7 @@ class GenerationMixin:
         batch_size: int,
         model_input_name: str,
         model_kwargs: Dict[str, torch.Tensor],
-        decoder_start_token_id: int = None,
+        decoder_start_token_id: Union[int, List[int]] = None,
         bos_token_id: int = None,
         device: torch.device = None,
     ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
@@ -515,7 +519,17 @@ class GenerationMixin:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         if device is None:
             device = self.device
-        decoder_input_ids_start = torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
+        if isinstance(decoder_start_token_id, list):
+            if len(decoder_start_token_id) != batch_size:
+                raise ValueError(
+                    f"`decoder_start_token_id` expcted to have length {batch_size} but got {len(decoder_start_token_id)}"
+                )
+            decoder_input_ids_start = torch.tensor(decoder_start_token_id, dtype=torch.long, device=device)
+            decoder_input_ids_start = decoder_input_ids_start.view(-1, 1)
+        else:
+            decoder_input_ids_start = (
+                torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
+            )
 
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
@@ -527,7 +541,13 @@ class GenerationMixin:
             pass
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
-        elif (decoder_input_ids[:, 0] != decoder_start_token_id).all().item():
+        elif (
+            isinstance(decoder_start_token_id, int)
+            and (decoder_input_ids[:, 0] != decoder_start_token_id).all().item()
+        ) or (
+            isinstance(decoder_start_token_id, torch.Tensor)
+            and (decoder_input_ids[:, 0] != decoder_start_token_id[:, 0]).all().item()
+        ):
             decoder_input_ids = torch.cat([decoder_input_ids_start, decoder_input_ids], dim=-1)
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
@@ -539,7 +559,9 @@ class GenerationMixin:
 
         return decoder_input_ids, model_kwargs
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+    ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id
             if decoder_start_token_id is not None
@@ -968,7 +990,7 @@ class GenerationMixin:
         >>> input_length = 1 if model.config.is_encoder_decoder else inputs.input_ids.shape[1]
         >>> generated_tokens = outputs.sequences[:, input_length:]
         >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
-        ...     # | token | token string | logits | probability
+        ...     # | token | token string | log probability | probability
         ...     print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.numpy():.3f} | {np.exp(score.numpy()):.2%}")
         |   262 |  the     | -1.414 | 24.33%
         |  1110 |  day     | -2.609 | 7.36%
@@ -1138,11 +1160,10 @@ class GenerationMixin:
             )
         if input_ids_length >= generation_config.max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-            warnings.warn(
+            raise ValueError(
                 f"Input length of {input_ids_string} is {input_ids_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                " increasing `max_new_tokens`.",
-                UserWarning,
+                " increasing `max_length` or, better yet, setting `max_new_tokens`."
             )
 
         # 2. Min length warnings due to unfeasible parameter combinations
@@ -1399,6 +1420,19 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+
+        # if we don't pass `past_key_values` and a cache_implementation is specified
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
+            "past_key_values", False
+        ):
+            cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
+            if not callable(getattr(self, "_setup_cache", None)):
+                raise ValueError(
+                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                    " Make sure it has a `_setup_cache` function."
+                )
+            self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
