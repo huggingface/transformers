@@ -83,7 +83,7 @@ Sie sich nicht auf eine bestimmte Architektur festgelegt haben, ist es eine gute
 Wir werden Sie zu den wichtigsten Architekturen führen, die auf der TensorFlow-Seite noch fehlen.
 Seite fehlen. Wenn das spezifische Modell, das Sie mit TensorFlow verwenden möchten, bereits eine Implementierung der TensorFlow-Architektur in
 🤗 Transformers, aber es fehlen Gewichte, können Sie direkt in den
-Abschnitt [Gewichtskonvertierung](#adding-tensorflow-weights-to-hub)
+Abschnitt [Gewichtskonvertierung](#hinzufügen-von-tensorflow-gewichten-zum--hub)
 auf dieser Seite.
 
 Der Einfachheit halber wird im Rest dieser Anleitung davon ausgegangen, dass Sie sich entschieden haben, mit der TensorFlow-Version von
@@ -187,8 +187,8 @@ ermutigen wir Sie, alle dringenden Fragen in unserem [Forum](https://discuss.hug
 ### 4. Implementierung des Modells
 
 Jetzt ist es an der Zeit, endlich mit dem Programmieren zu beginnen. Als Ausgangspunkt empfehlen wir die PyTorch-Datei selbst: Kopieren Sie den Inhalt von
-modeling_brand_new_bert.py` in `src/transformers/models/brand_new_bert/` nach
-modeling_tf_brand_new_bert.py`. Das Ziel dieses Abschnitts ist es, die Datei zu ändern und die Importstruktur von
+`modeling_brand_new_bert.py` in `src/transformers/models/brand_new_bert/` nach
+`modeling_tf_brand_new_bert.py`. Das Ziel dieses Abschnitts ist es, die Datei zu ändern und die Importstruktur von
 🤗 Transformers zu aktualisieren, so dass Sie `TFBrandNewBert` und
 `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` erfolgreich ein funktionierendes TensorFlow *BrandNewBert* Modell lädt.
 
@@ -241,7 +241,7 @@ fertig ist:
 von den Top-Level-Klassen weitergegeben wird
 2. Sie haben `#copied from ...` verwendet, wann immer es möglich war.
 3. Die Funktion `TFBrandNewBertMainLayer` und alle Klassen, die sie verwenden, haben ihre Funktion `call` mit `@unpack_inputs` dekoriert
-4. TFBrandNewBertMainLayer` ist mit `@keras_serializable` dekoriert
+4. `TFBrandNewBertMainLayer` ist mit `@keras_serializable` dekoriert
 5. Ein TensorFlow-Modell kann aus PyTorch-Gewichten mit `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` geladen werden.
 6. Sie können das TensorFlow Modell mit dem erwarteten Eingabeformat aufrufen
 

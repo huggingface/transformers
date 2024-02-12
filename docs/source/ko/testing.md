@@ -260,7 +260,7 @@ pip install pytest-xdist
 looponfailroots = transformers tests
 ```
 
-또는 `pytest.ini`/``tox.ini`` 파일:
+또는 `pytest.ini`/`tox.ini`` 파일:
 
 ```ini
 [pytest]

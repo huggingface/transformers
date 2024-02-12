@@ -40,6 +40,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -68,12 +69,12 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
-# - tf.keras.layers.Layer for the layers and
-# - TFPreTrainedModel for the models (it-self a sub-class of tf.keras.Model)
+# - keras.layers.Layer for the layers and
+# - TFPreTrainedModel for the models (it-self a sub-class of keras.Model)
 ####################################################
 
 
-class TFT5LayerNorm(tf.keras.layers.Layer):
+class TFT5LayerNorm(keras.layers.Layer):
     def __init__(self, hidden_size, epsilon=1e-6, **kwargs):
         """
         Construct a layernorm module in the T5 style No bias and no subtraction of mean.
@@ -93,22 +94,22 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         return self.weight * hidden_states
 
 
-class TFT5DenseActDense(tf.keras.layers.Layer):
+class TFT5DenseActDense(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        wi_initializer = tf.keras.initializers.RandomNormal(
+        wi_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_model**-0.5)
         )
-        wo_initializer = tf.keras.initializers.RandomNormal(
+        wo_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_ff**-0.5)
         )
-        self.wi = tf.keras.layers.Dense(
+        self.wi = keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi", kernel_initializer=wi_initializer
         )  # Update init weights as in flax
-        self.wo = tf.keras.layers.Dense(
+        self.wo = keras.layers.Dense(
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation(config.dense_act_fn)
         self.config = config
 
@@ -131,25 +132,25 @@ class TFT5DenseActDense(tf.keras.layers.Layer):
                 self.wo.build([None, None, self.config.d_ff])
 
 
-class TFT5DenseGatedActDense(tf.keras.layers.Layer):
+class TFT5DenseGatedActDense(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        wi_initializer = tf.keras.initializers.RandomNormal(
+        wi_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_model**-0.5)
         )
-        wo_initializer = tf.keras.initializers.RandomNormal(
+        wo_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (config.d_ff**-0.5)
         )
-        self.wi_0 = tf.keras.layers.Dense(
+        self.wi_0 = keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi_0", kernel_initializer=wi_initializer
         )  # Update init weights as in flax
-        self.wi_1 = tf.keras.layers.Dense(
+        self.wi_1 = keras.layers.Dense(
             config.d_ff, use_bias=False, name="wi_1", kernel_initializer=wi_initializer
         )  # Update init weights as in flax
-        self.wo = tf.keras.layers.Dense(
+        self.wo = keras.layers.Dense(
             config.d_model, use_bias=False, name="wo", kernel_initializer=wo_initializer
         )  # Update init weights as in flax
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation(config.dense_act_fn)
         self.config = config
 
@@ -176,7 +177,7 @@ class TFT5DenseGatedActDense(tf.keras.layers.Layer):
                 self.wo.build([None, None, self.config.d_ff])
 
 
-class TFT5LayerFF(tf.keras.layers.Layer):
+class TFT5LayerFF(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         if config.is_gated_act:
@@ -185,7 +186,7 @@ class TFT5LayerFF(tf.keras.layers.Layer):
             self.DenseReluDense = TFT5DenseActDense(config, name="DenseReluDense")
 
         self.layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def call(self, hidden_states, training=False):
         normed_hidden_states = self.layer_norm(hidden_states)
@@ -205,7 +206,7 @@ class TFT5LayerFF(tf.keras.layers.Layer):
                 self.DenseReluDense.build(None)
 
 
-class TFT5Attention(tf.keras.layers.Layer):
+class TFT5Attention(keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
@@ -224,35 +225,35 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        q_initializer = tf.keras.initializers.RandomNormal(
+        q_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
         )
-        k_initializer = tf.keras.initializers.RandomNormal(
+        k_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
-        v_initializer = tf.keras.initializers.RandomNormal(
+        v_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
-        o_initializer = tf.keras.initializers.RandomNormal(
+        o_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
-        self.relative_attention_bias_initializer = tf.keras.initializers.RandomNormal(
+        self.relative_attention_bias_initializer = keras.initializers.RandomNormal(
             mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
         )
 
-        self.q = tf.keras.layers.Dense(
+        self.q = keras.layers.Dense(
             self.inner_dim, use_bias=False, name="q", kernel_initializer=q_initializer
         )  # Update init weights as in flax
-        self.k = tf.keras.layers.Dense(
+        self.k = keras.layers.Dense(
             self.inner_dim, use_bias=False, name="k", kernel_initializer=k_initializer
         )  # Update init weights as in flax
-        self.v = tf.keras.layers.Dense(
+        self.v = keras.layers.Dense(
             self.inner_dim, use_bias=False, name="v", kernel_initializer=v_initializer
         )  # Update init weights as in flax
-        self.o = tf.keras.layers.Dense(
+        self.o = keras.layers.Dense(
             self.d_model, use_bias=False, name="o", kernel_initializer=o_initializer
         )  # Update init weights as in flax
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
         self.pruned_heads = set()
 
@@ -482,7 +483,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFT5LayerSelfAttention(tf.keras.layers.Layer):
+class TFT5LayerSelfAttention(keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.SelfAttention = TFT5Attention(
@@ -491,7 +492,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
             name="SelfAttention",
         )
         self.layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def call(
         self,
@@ -531,7 +532,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
                 self.layer_norm.build(None)
 
 
-class TFT5LayerCrossAttention(tf.keras.layers.Layer):
+class TFT5LayerCrossAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.EncDecAttention = TFT5Attention(
@@ -540,7 +541,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
             name="EncDecAttention",
         )
         self.layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def call(
         self,
@@ -584,7 +585,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
                 self.layer_norm.build(None)
 
 
-class TFT5Block(tf.keras.layers.Layer):
+class TFT5Block(keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.is_decoder = config.is_decoder
@@ -698,10 +699,10 @@ class TFT5Block(tf.keras.layers.Layer):
 
 ####################################################
 # The full model without a specific pretrained or finetuning head is
-# provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
+# provided as a keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
 @keras_serializable
-class TFT5MainLayer(tf.keras.layers.Layer):
+class TFT5MainLayer(keras.layers.Layer):
     config_class = T5Config
 
     def __init__(self, config, embed_tokens=None, **kwargs):
@@ -725,7 +726,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.final_layer_norm = TFT5LayerNorm(
             config.d_model, epsilon=config.layer_norm_epsilon, name="final_layer_norm"
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = keras.layers.Dropout(config.dropout_rate)
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -936,7 +937,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
 
 ####################################################
-# TFT5PreTrainedModel is a sub-class of tf.keras.Model
+# TFT5PreTrainedModel is a sub-class of keras.Model
 # which take care of loading and saving pretrained weights
 # and various common utilities.
 # Here you just need to specify a few (self-explanatory)
@@ -1006,7 +1007,7 @@ T5_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1182,10 +1183,10 @@ class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(self.config.initializer_factor),
+            embeddings_initializer=keras.initializers.TruncatedNormal(self.config.initializer_factor),
             name="shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
@@ -1331,7 +1332,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             config.vocab_size,
             config.d_model,
             name="shared",
@@ -1350,8 +1351,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
 
         if not config.tie_word_embeddings:
-            lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
-            self.lm_head = tf.keras.layers.Dense(
+            lm_head_initializer = keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
+            self.lm_head = keras.layers.Dense(
                 config.vocab_size, use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
             )  # Update init weights as in flax
         self.config = config
@@ -1368,8 +1369,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         if self.config.tie_word_embeddings:
             self.set_input_embeddings(value)
         else:
-            lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
-            self.lm_head = tf.keras.layers.Dense(
+            lm_head_initializer = keras.initializers.RandomNormal(mean=0, stddev=self.config.initializer_factor)
+            self.lm_head = keras.layers.Dense(
                 shape_list(value)[0], use_bias=False, name="lm_head", kernel_initializer=lm_head_initializer
             )  # Update init weights as in flax
             # in a dense layer the kernel has a shape (last_dim, units), for us (dim, num_tokens)
@@ -1603,7 +1604,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             config.vocab_size,
             config.d_model,
             name="shared",
