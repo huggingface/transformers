@@ -178,7 +178,7 @@
   title: Performance and scalability
 - sections:
   - local: contributing
-    title: How to contribute to transformers?
+    title: How to contribute to 🤗 Transformers?
   - local: add_new_model
     title: How to add a model to 🤗 Transformers?
   - local: add_tensorflow_model
