@@ -1206,6 +1206,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
 
+        # TODO @gante we should only keep a `cache_position` in generate, and do +=1. 
+        # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length+input_ids.shape[1])
