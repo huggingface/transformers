@@ -121,13 +121,13 @@ Arr, 'twas easy after all!
 
 ## Is there an automated pipeline for chat?
 
-Yes, there is: [`ConversationalPipeline`]. This pipeline is designed to make it easy to use chat models. Let's try
+Yes, there is! Our text generation pipelines support chat inputs, which makes it easy to use chat models. Let's try
 the `Zephyr` example again, but this time using the pipeline:
 
 ```python
 from transformers import pipeline
 
-pipe = pipeline("conversational", "HuggingFaceH4/zephyr-7b-beta")
+pipe = pipeline("text-generation", "HuggingFaceH4/zephyr-7b-beta")
 messages = [
     {
         "role": "system",
@@ -135,7 +135,7 @@ messages = [
     },
     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
 ]
-print(pipe(messages))
+print(pipe(messages, max_new_tokens=128, do_sample=False)[0]['generated_text'][-1])  # Print the assistant's response
 ```
 
 ```text
@@ -145,7 +145,7 @@ user: How many helicopters can a human eat in one sitting?
 assistant: Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
 
-[`ConversationalPipeline`] will take care of all the details of tokenization and calling `apply_chat_template` for you -
+The pipeline will take care of all the details of tokenization and calling `apply_chat_template` for you -
 once the model has a chat template, all you need to do is initialize the pipeline and pass it the list of messages!
 
 ## What are "generation prompts"?
