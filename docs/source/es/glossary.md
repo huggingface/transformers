@@ -165,7 +165,7 @@ La cabecera del modelo se refiere a la última capa de una red neuronal que acep
 
   * [`GPT2ForSequenceClassification`] es una cabecera de clasificación de secuencias, es decir, una capa lineal, encima del modelo base [`GPT2Model`].
   * [`ViTForImageClassification`] es una cabecera de clasificación de imágenes, es decir, una capa lineal encima del estado oculto final del token `CLS`, encima del modelo base [`ViTModel`].
-  * [`Wav2Vec2ForCTC`] es una cabecera de modelado de lenguaje con [CTC](#connectionist-temporal-classification-(CTC)) encima del modelo base [`Wav2Vec2Model`].
+  * [`Wav2Vec2ForCTC`] es una cabecera de modelado de lenguaje con [CTC](#connectionist-temporal-classification-ctc) encima del modelo base [`Wav2Vec2Model`].
 
 ## I
 
@@ -376,7 +376,7 @@ Modelos que generan una nueva secuencia a partir de una entrada, como modelos de
 
 ### Sharded DDP
 
-Otro nombre para el concepto fundamental de [ZeRO](#zero-redundancy-optimizer--zero-) utilizado por varias otras implementaciones de ZeRO.
+Otro nombre para el concepto fundamental de [ZeRO](#zero-redundancy-optimizer-zero) utilizado por varias otras implementaciones de ZeRO.
 
 ### stride
 

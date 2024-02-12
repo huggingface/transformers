@@ -343,6 +343,15 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`ConversationalPipeline`] class, so 
 once you set the correct chat template, your model will automatically become compatible with [`ConversationalPipeline`].
 
+<Tip>
+If you're fine-tuning a model for chat, in addition to setting a chat template, you should probably add any new chat
+control tokens as special tokens in the tokenizer. Special tokens are never split, 
+ensuring that your control tokens are always handled as single tokens rather than being tokenized in pieces. You 
+should also set the tokenizer's `eos_token` attribute to the token that marks the end of assistant generations in your
+template. This will ensure that text generation tools can correctly figure out when to stop generating text.
+</Tip>
+
+
 ### What are "default" templates?
 
 Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
