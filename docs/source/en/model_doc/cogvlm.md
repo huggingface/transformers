@@ -35,7 +35,6 @@ The original code can be found [here](https://github.com/THUDM/CogVLM).
 ## CogVLMConfig
 
 [[autodoc]] CogVLMConfig
-    - from_vision_qformer_text_configs
 
 ## CogVLMVisionConfig
 
