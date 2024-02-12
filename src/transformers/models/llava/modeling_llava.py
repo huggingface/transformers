@@ -67,12 +67,12 @@ def unpad_image(tensor, original_size):
         scale_factor = current_width / original_width
         new_height = int(original_height * scale_factor)
         padding = (current_height - new_height) // 2
-        unpadded_tensor = tensor[:, padding:current_height - padding, :]
+        unpadded_tensor = tensor[:, padding : current_height - padding, :]
     else:
         scale_factor = current_height / original_height
         new_width = int(original_width * scale_factor)
         padding = (current_width - new_width) // 2
-        unpadded_tensor = tensor[:, :, padding:current_width - padding]
+        unpadded_tensor = tensor[:, :, padding : current_width - padding]
 
     return unpadded_tensor
 
@@ -375,7 +375,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
-    
+
     def get_anyres_image_grid_shape(self, image_size, grid_pinpoints, patch_size):
         """
         Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
@@ -394,7 +394,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             possible_resolutions = ast.literal_eval(grid_pinpoints)
         width, height = select_best_resolution(image_size, possible_resolutions)
         return width // patch_size, height // patch_size
-    
+
     def num_patches_per_side(self):
         return self.config.vision_config.image_size // self.config.vision_config.patch_size
 
@@ -468,7 +468,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-
                 # TODO support llava 1.6 here
                 if pixel_values.ndim == 5:
                     pixel_values = torch.cat([image for image in pixel_values], dim=0)
@@ -478,12 +477,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
                     image_features = [x.flatten(0, 1).to(self.device) for x in image_features]
-                    
-                    mm_patch_merge_type = getattr(self.config, 'mm_patch_merge_type', 'flat')
-                    image_aspect_ratio = getattr(self.config, 'image_aspect_ratio', 'square')
-                    if mm_patch_merge_type == 'flat':
+
+                    mm_patch_merge_type = getattr(self.config, "mm_patch_merge_type", "flat")
+                    image_aspect_ratio = getattr(self.config, "image_aspect_ratio", "square")
+                    if mm_patch_merge_type == "flat":
                         image_features = [x.flatten(0, 1) for x in image_features]
-                    elif mm_patch_merge_type.startswith('spatial'):
+                    elif mm_patch_merge_type.startswith("spatial"):
                         new_image_features = []
                         for image_idx, image_feature in enumerate(image_features):
                             if image_feature.shape[0] > 1:
@@ -491,19 +490,30 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                 image_feature = image_feature[1:]
                                 height = width = self.num_patches_per_side()
                                 assert height * width == base_image_feature.shape[0]
-                                if image_aspect_ratio == 'anyres':
-                                    num_patch_width, num_patch_height = get_anyres_image_grid_shape(image_sizes[image_idx], self.config.image_grid_pinpoints, self.get_vision_tower().config.image_size)
-                                    image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                                if image_aspect_ratio == "anyres":
+                                    num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                                        image_sizes[image_idx],
+                                        self.config.image_grid_pinpoints,
+                                        self.get_vision_tower().config.image_size,
+                                    )
+                                    image_feature = image_feature.view(
+                                        num_patch_height, num_patch_width, height, width, -1
+                                    )
                                 else:
                                     raise NotImplementedError
-                                if 'unpad' in mm_patch_merge_type:
+                                if "unpad" in mm_patch_merge_type:
                                     image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                                     image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                                     image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                                    image_feature = torch.cat((
-                                        image_feature,
-                                        self.model.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1)
-                                    ), dim=-1)
+                                    image_feature = torch.cat(
+                                        (
+                                            image_feature,
+                                            self.model.image_newline[:, None, None].expand(
+                                                *image_feature.shape[:-1], 1
+                                            ),
+                                        ),
+                                        dim=-1,
+                                    )
                                     image_feature = image_feature.flatten(1, 2).transpose(0, 1)
                                 else:
                                     image_feature = image_feature.permute(0, 2, 1, 3, 4).contiguous()
@@ -511,11 +521,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                 image_feature = torch.cat((base_image_feature, image_feature), dim=0)
                             else:
                                 image_feature = image_feature[0]
-                                if 'unpad' in mm_patch_merge_type:
-                                    image_feature = torch.cat((
-                                        image_feature,
-                                        self.model.image_newline[None]
-                                    ), dim=0)
+                                if "unpad" in mm_patch_merge_type:
+                                    image_feature = torch.cat((image_feature, self.model.image_newline[None]), dim=0)
                             new_image_features.append(image_feature)
                         image_features = new_image_features
                     else:

@@ -41,7 +41,7 @@ class LlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = ("CLIPImageProcessor", "LlavaImageProcessor")
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):
