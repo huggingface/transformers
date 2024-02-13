@@ -1436,9 +1436,6 @@ class Trainer:
 
             # Wrap the base model with an outer FSDP wrapper
             if self.is_fsdp_xla_v2_enabled:
-                # Should we have this logic into the FSDPv2 wrapper?
-                model = model.to(xm.xla_device())
-
                 def shard_output(output, mesh):
                     from .modeling_outputs import CausalLMOutputWithPast
 
