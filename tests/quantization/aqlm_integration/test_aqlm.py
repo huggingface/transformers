@@ -176,7 +176,7 @@ class AqlmTest(unittest.TestCase):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
 
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1, 2, 3})
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
