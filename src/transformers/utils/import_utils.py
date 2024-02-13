@@ -42,7 +42,6 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
     # Check if the package spec exists to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
-    
     if package_exists:
         try:
             # Primary method to get the package version
@@ -65,9 +64,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
             else:
                 # For packages other than 'torch', don't attempt the fallback and set as not available
                 package_exists = False
-        
         logger.debug(f"Detected {pkg_name} version: {package_version}")
-    
     if return_version:
         return package_exists, package_version
     else:
