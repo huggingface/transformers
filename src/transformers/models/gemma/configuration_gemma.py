@@ -72,11 +72,11 @@ class GemmaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
+        bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
+        eos_token_id (`int`, *optional*, defaults to 1):
             End of stream token id.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
@@ -130,9 +130,9 @@ class GemmaConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        pad_token_id=0,
+        eos_token_id=1,
+        bos_token_id=2,
         tie_word_embeddings=True,
         rope_theta=10000.0,
         rope_scaling=None,
