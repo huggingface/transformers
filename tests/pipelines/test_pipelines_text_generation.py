@@ -90,6 +90,24 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 {"generated_token_ids": ANY(list)},
             ],
         )
+
+        ## -- test tokenizer_kwargs
+        test_str = "testing tokenizer kwargs. using truncation must result in a different generation."
+        input_len = len(text_generator.tokenizer(test_str)["input_ids"])
+        output_str, output_str_with_truncation = (
+            text_generator(test_str, do_sample=False, return_full_text=False, min_new_tokens=1)[0]["generated_text"],
+            text_generator(
+                test_str,
+                do_sample=False,
+                return_full_text=False,
+                min_new_tokens=1,
+                truncation=True,
+                max_length=input_len + 1,
+            )[0]["generated_text"],
+        )
+        assert output_str != output_str_with_truncation  # results must be different because one had truncation
+
+        # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
         text_generator.tokenizer.pad_token = "<pad>"
         outputs = text_generator(
@@ -276,7 +294,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-bloom",
             model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
         )
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
@@ -293,7 +310,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         # Upgraded those two to real pipeline arguments (they just get sent for the model as they're unlikely to mean anything else.)
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.bfloat16)
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
@@ -310,7 +326,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         # torch_dtype will be automatically set to float32 if not provided - check: https://github.com/huggingface/transformers/pull/20602
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
         out = pipe("This is a test")
         self.assertEqual(

@@ -154,7 +154,7 @@ def run_generate():
     parser.add_argument("--src_lang", type=str, default=None, required=False)
     parser.add_argument("--tgt_lang", type=str, default=None, required=False)
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
     )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--debug", action="store_true")

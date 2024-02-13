@@ -27,6 +27,7 @@ env:
   OMP_NUM_THREADS: 8
   MKL_NUM_THREADS: 8
   RUN_SLOW: yes
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
@@ -140,7 +141,7 @@ jobs:
           echo "$job_name"
           echo "$job_name" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/job_name.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_${{ inputs.framework }}-${{ inputs.version }}"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
@@ -220,7 +221,7 @@ jobs:
           echo "$job_name"
           echo "$job_name" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/job_name.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_${{ inputs.framework }}-${{ inputs.version }}"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
@@ -292,7 +293,7 @@ jobs:
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports_postfix_${{ inputs.framework }}-${{ inputs.version }}"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:

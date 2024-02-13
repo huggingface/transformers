@@ -140,7 +140,7 @@ Here is the benchmarking code and outputs:
 
 **DP**
 
-```
+```bash
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 python examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
@@ -151,7 +151,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 
 **DDP w/ NVlink**
 
-```
+```bash
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
@@ -162,7 +162,7 @@ torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 
 **DDP w/o NVlink**
 
-```
+```bash
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
@@ -285,10 +285,19 @@ following diagram shows an 8-layer model split vertically into two slices, placi
 GPU0 and 4-7 to GPU1:
 
 ```
-===================  ===================
-|  0 | 1 | 2 | 3  |  |  4 | 5 | 6 | 7  |
-===================  ===================
-        GPU0                 GPU1
+================
+| Layer |      |
+|   0   |      |
+|   1   | GPU0 |
+|   2   |      |
+|   3   |      |
+================
+| Layer |      |
+|   4   |      |
+|   5   | GPU1 |
+|   6   |      |
+|   7   |      |
+================
 ```
 
 In this example, when data moves from layer 0 to 3, it's no different from regular forward pass. However, passing data 

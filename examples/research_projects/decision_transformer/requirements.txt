@@ -34,11 +34,11 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==41.0.2
+cryptography==42.0.0
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
-dash==2.3.0
+dash==2.15.0
 dash-bootstrap-components==1.0.3
 dash-core-components==2.0.0
 dash-html-components==2.0.0
@@ -61,7 +61,7 @@ Flask==2.3.2
 Flask-Compress==1.11
 flatbuffers==2.0
 flax==0.4.0
-fonttools==4.31.1
+fonttools==4.43.0
 frozenlist==1.3.0
 fsspec==2022.2.0
 fugashi==1.1.2
@@ -92,7 +92,7 @@ itsdangerous==2.1.1
 jax==0.3.4
 jaxlib==0.3.2
 jedi==0.18.1
-Jinja2==2.11.3
+Jinja2==3.1.3
 jinja2-time==0.2.0
 jmespath==0.10.0
 joblib==1.2.0

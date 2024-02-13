@@ -481,7 +481,7 @@ deepspeed examples/pytorch/translation/run_translation.py ...
 設定ファイルで使用できる DeepSpeed 設定オプションの完全なガイドについては、次を参照してください。
 [次のドキュメント](https://www.deepspeed.ai/docs/config-json/) にアクセスしてください。
 
-さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples] (https://github.com/microsoft/DeepSpeedExamples)で見つけることができます。
+さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples](https://github.com/microsoft/DeepSpeedExamples)で見つけることができます。
 リポジトリ:
 
 ```bash
@@ -1910,7 +1910,7 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 3. 次の出力:
 
-   ```bash 
+   ```bash
     python -c 'import torch; print(f"torch: {torch.__version__}")'
     python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
     python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
@@ -1994,7 +1994,6 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 ### Notes
 
-- DeepSpeed は PyTorch [`Trainer`] では動作しますが、TF [`TFTrainer`] では動作しません。
 - DeepSpeed には pip でインストール可能な PyPI パッケージがありますが、ハードウェアに最も適合するように、また有効にする必要がある場合は、[ソース](https://github.com/microsoft/deepspeed#installation) からインストールすることを強くお勧めします。
   1 ビット Adam などの特定の機能は、pypi ディストリビューションでは利用できません。
 - 🤗 Transformers で DeepSpeed を使用するために [`Trainer`] を使用する必要はありません - 任意のモデルを使用できます
@@ -2136,7 +2135,7 @@ train_batch_size = 1 * world_size
 # - if using `offload_param` you can manually finetune stage3_param_persistence_threshold to control
 # - which params should remain on gpus - the larger the value the smaller the offload size
 #
-# For indepth info on Deepspeed config see
+# For in-depth info on Deepspeed config see
 # https://huggingface.co/docs/transformers/main/main_classes/deepspeed
 
 # keeping the same format as json for consistency, except it uses lower case for true/false
@@ -2203,7 +2202,7 @@ print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 
 それを`t0.py`として保存して実行しましょう。
 
-```
+```bash
 $ deepspeed --num_gpus 2 t0.py
 rank0:
    in=Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy
@@ -2227,13 +2226,13 @@ DeepSpeed 統合を含む PR を送信する場合は、CircleCI PR CI セット
 
 DeepSpeed テストを実行するには、少なくとも以下を実行してください。
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
 ```
 
 モデリングまたは pytorch サンプル コードのいずれかを変更した場合は、Model Zoo テストも実行します。以下はすべての DeepSpeed テストを実行します。
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed
 ```
 

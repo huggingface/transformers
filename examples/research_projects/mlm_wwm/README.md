@@ -95,4 +95,4 @@ python run_mlm_wwm.py \
 
 **Note1:** On TPU, you should the flag `--pad_to_max_length` to make sure all your batches have the same length.
 
-**Note2:** And if you have any questions or something goes wrong when runing this code, don't hesitate to pin @wlhgtc.
+**Note2:** And if you have any questions or something goes wrong when running this code, don't hesitate to pin @wlhgtc.
