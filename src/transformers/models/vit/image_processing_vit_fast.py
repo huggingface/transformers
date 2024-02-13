@@ -14,8 +14,8 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
+import functools
 from dataclasses import dataclass
-from functools import cache
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -170,7 +170,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             transforms.append(Normalize(image_mean, image_std))
         return Compose(transforms)
 
-    @cache
+    @functools.lru_cache(maxsize=1)
     def _validate_input_arguments(
         self,
         return_tensors: Union[str, TensorType],
