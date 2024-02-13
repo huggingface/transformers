@@ -2277,14 +2277,14 @@ else:
     _import_structure["models.crystalcoder"].extend(
         [
             "CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CrystalCoderDoubleHeadsModel",
-            "CrystalCoderForQuestionAnswering",
-            "CrystalCoderForSequenceClassification",
-            "CrystalCoderForTokenClassification",
+            # "CrystalCoderDoubleHeadsModel",
+            # "CrystalCoderForQuestionAnswering",
+            # "CrystalCoderForSequenceClassification",
+            # "CrystalCoderForTokenClassification",
             "CrystalCoderLMHeadModel",
             "CrystalCoderModel",
             "CrystalCoderPreTrainedModel",
-            "load_tf_weights_in_crystalcoder",
+            # "load_tf_weights_in_crystalcoder",
         ]
     )
     _import_structure["models.gpt_bigcode"].extend(
@@ -6886,14 +6886,14 @@ if TYPE_CHECKING:
         )
         from .models.crystalcoder import (
             CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CrystalCoderDoubleHeadsModel,
-            CrystalCoderForQuestionAnswering,
-            CrystalCoderForSequenceClassification,
-            CrystalCoderForTokenClassification,
+            # CrystalCoderDoubleHeadsModel,
+            # CrystalCoderForQuestionAnswering,
+            # CrystalCoderForSequenceClassification,
+            # CrystalCoderForTokenClassification,
             CrystalCoderLMHeadModel,
             CrystalCoderModel,
             CrystalCoderPreTrainedModel,
-            load_tf_weights_in_crystalcoder,
+            # load_tf_weights_in_crystalcoder,
         )
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
