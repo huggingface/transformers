@@ -18,6 +18,7 @@ fronting encoding methods) Special token mixing (host the special tokens logic) 
 of output with special method for the Fast tokenizers)
 """
 
+import abc
 import copy
 import json
 import os
@@ -39,6 +40,7 @@ from .utils import (
     ExplicitEnum,
     PaddingStrategy,
     PushToHubMixin,
+    TArrayType,
     TensorType,
     add_end_docstrings,
     add_model_info_to_auto_map,
@@ -61,6 +63,13 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+
+
+# GenericAlias requires >= Python 3.9.
+try:
+    from types import GenericAlias
+except ImportError:
+    GenericAlias = Any
 
 
 if TYPE_CHECKING:
@@ -124,6 +133,12 @@ TextInputPair = Tuple[str, str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
 
+TextEntry = TextInput
+PreTokenizedEntry = PreTokenizedInput
+EncodedEntry = EncodedInput
+TextEntryPair = TextInputPair
+PreTokenizedEntryPair = PreTokenizedInputPair
+EncodedEntryPair = EncodedInputPair
 
 # Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -198,6 +213,8 @@ class BatchEncoding(UserDict):
         n_sequences (`Optional[int]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
+        data_is_tensor_list (`bool`, *optional*, defaults to `False`):
+            Whether the data is already a list of tensors or not, tensors in list can have different length.
     """
 
     def __init__(
@@ -207,6 +224,7 @@ class BatchEncoding(UserDict):
         tensor_type: Union[None, str, TensorType] = None,
         prepend_batch_axis: bool = False,
         n_sequences: Optional[int] = None,
+        data_is_tensor_list: bool = False,
     ):
         super().__init__(data)
 
@@ -214,6 +232,7 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
+        self._data_is_tensor_list = data_is_tensor_list
 
         if n_sequences is None and encoding is not None and len(encoding):
             n_sequences = encoding[0].n_sequences
@@ -690,6 +709,7 @@ class BatchEncoding(UserDict):
             prepend_batch_axis (`int`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
         """
+        # TODO: move to generic.py
         if tensor_type is None:
             return self
 
@@ -738,23 +758,34 @@ class BatchEncoding(UserDict):
 
             is_tensor = is_numpy_array
 
+        def process_single_value(value):
+            tensor = as_tensor(value)
+
+            # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
+            # # at-least2d
+            # if tensor.ndim > 2:
+            #     tensor = tensor.squeeze(0)
+            # elif tensor.ndim < 2:
+            #     tensor = tensor[None, :]
+            return tensor
+
         # Do the tensor conversion in batch
         for key, value in self.items():
             try:
                 if prepend_batch_axis:
-                    value = [value]
+                    if self._data_is_tensor_list:
+                        value = [[v] for v in value]
+                    else:
+                        value = [value]
 
                 if not is_tensor(value):
-                    tensor = as_tensor(value)
-
-                    # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
-                    # # at-least2d
-                    # if tensor.ndim > 2:
-                    #     tensor = tensor.squeeze(0)
-                    # elif tensor.ndim < 2:
-                    #     tensor = tensor[None, :]
-
-                    self[key] = tensor
+                    if self._data_is_tensor_list:
+                        res = []
+                        for v in value:
+                            res.append(process_single_value(v))
+                        self[key] = res
+                    else:
+                        self[key] = process_single_value(value)
             except Exception as e:
                 if key == "overflowing_tokens":
                     raise ValueError(
@@ -790,6 +821,9 @@ class BatchEncoding(UserDict):
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
+
+
+EntryEncoding = BatchEncoding
 
 
 class SpecialTokensMixin:
@@ -1541,7 +1575,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
+class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
     """
     Base class for [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`].
 
@@ -1617,7 +1651,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
     @max_len_single_sentence.setter
-    def max_len_single_sentence(self, value) -> int:
+    def max_len_single_sentence(self, value):
         # For backward compatibility, allow to try to setup 'max_len_single_sentence'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
             if not self.deprecation_warnings.get("max_len_single_sentence", False):
@@ -1631,7 +1665,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
     @max_len_sentences_pair.setter
-    def max_len_sentences_pair(self, value) -> int:
+    def max_len_sentences_pair(self, value):
         # For backward compatibility, allow to try to setup 'max_len_sentences_pair'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
             if not self.deprecation_warnings.get("max_len_sentences_pair", False):
@@ -1743,13 +1777,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
         )
 
-        if padding is True:
-            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        # There's only one sequence here, so "longest" makes no sense
+        _padding = PaddingStrategy.MAX_LENGTH if padding is True else padding
         if tokenize:
             return self.encode(
                 rendered,
                 add_special_tokens=False,
-                padding=padding,
+                padding=_padding,
                 truncation=truncation,
                 max_length=max_length,
                 return_tensors=return_tensors,
@@ -2516,6 +2550,76 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         raise NotImplementedError
 
+    def _get_entry_type(
+        self, entry: Union[TextEntry, PreTokenizedEntry, EncodedEntry], is_split_into_words: bool = False
+    ) -> Union[type, GenericAlias]:
+        # TODO: should we check if the type are same and change the func name to `_get_text_or_text_pair_type_if_same`?
+        if isinstance(entry, str):
+            return TextEntry
+        if isinstance(entry, list) and len(entry) > 0:
+            if isinstance(entry[0], str):
+                return PreTokenizedEntry
+            if isinstance(entry[0], int):
+                if is_split_into_words:
+                    raise TypeError(
+                        f"Entry type is not valid: {type(entry)}. "
+                        f"It should be a string or a `list` of strings "
+                        f"when `is_split_into_words=True`."
+                    )
+                return EncodedEntry
+        raise TypeError(
+            f"Entry type is not valid: {type(entry)}. " f"It should be a string or a `list` of strings or integers."
+        )
+
+    def _tuple_entry_pair_if_exists(
+        self,
+        entry: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
+        entry_type: Union[type, GenericAlias],
+        pair_entry: Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]] = None,
+    ) -> Union[TextEntry, TextEntryPair, PreTokenizedEntry, PreTokenizedEntryPair, EncodedEntry, EncodedEntryPair]:
+        """
+        Args:
+            entry (TextEntry, PreTokenizedEntry or EncodedEntry):
+                The first sequence to be encoded.
+            entry_type:
+                The type of `entry` (and pair_entry).
+            pair_entry (Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]], *optional*):
+                Optional second sequence to be encoded.
+        Returns:
+            bool: If the result will be a entry_pair, return `True`, otherwise, return `False`.
+            entry_or_entry_pair: tuple the entry and pair_entry if pair_entry is not `None`.
+        """
+        if pair_entry is None:
+            return entry
+        if entry_type is TextEntry:
+            return (entry, pair_entry)
+        if entry_type is PreTokenizedEntry or entry_type is EncodedEntry:
+            return list(zip(entry, pair_entry))
+        raise TypeError(
+            "`entry` must be `str` or a `Sequence` (e.g., list or tuple) of `str` or `int`, `pair_entry` shall be the same."
+        )
+
+    def _tuple_entries_pairs_if_exists(
+        self,
+        entries: Union[Sequence[TextEntry], Sequence[PreTokenizedEntry], Sequence[EncodedEntry]],
+        entry_type: Union[type, GenericAlias],
+        pair_entries: Optional[Union[Sequence[TextEntry], Sequence[PreTokenizedEntry], Sequence[EncodedEntry]]] = None,
+    ) -> Union[
+        Sequence[TextEntry],
+        Sequence[TextEntryPair],
+        Sequence[PreTokenizedEntry],
+        Sequence[PreTokenizedEntryPair],
+        Sequence[EncodedEntry],
+        Sequence[EncodedEntryPair],
+    ]:
+        if pair_entries is None:
+            return entries
+        return [
+            self._tuple_entry_pair_if_exists(entry, entry_type, pair_entry)
+            for entry, pair_entry in zip(entries, pair_entries)
+        ]
+
+    # TODO: add @abc.abstractmethod?
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
         Converts a string into a sequence of tokens, replacing unknown tokens with the `unk_token`.
@@ -2587,11 +2691,76 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         return encoded_inputs["input_ids"]
 
+    # TODO: add docstrings for consistent_XXX methods
+    def consistent_encode(
+        self,
+        text: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
+        text_pair: Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        return_tensors: Optional[Union[str, TArrayType]] = None,
+        **kwargs,
+    ) -> List[int]:
+        encoded_inputs = self.consistent_encode_plus(
+            text,
+            pair_entry=text_pair,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
+
+        return encoded_inputs["input_ids"]
+
+    def consistent_encode_batch(
+        self,
+        entries_or_entry_pairs: Union[
+            Sequence[TextEntry],
+            Sequence[TextEntryPair],
+            Sequence[PreTokenizedEntry],
+            Sequence[PreTokenizedEntryPair],
+            Sequence[EncodedEntry],
+            Sequence[EncodedEntryPair],
+        ],
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        return_tensors: Optional[Union[str, TArrayType]] = None,
+        **kwargs,
+    ) -> List[Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"]]:
+        encoded_inputs = self.consistent_encode_batch_plus(
+            entries_or_entry_pairs,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
+
+        return encoded_inputs["input_ids"]
+
+    # TODO: add @abc.abstractmethod?
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         raise NotImplementedError
 
     def _get_padding_truncation_strategies(
-        self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
+        self,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        verbose: bool = True,
+        **kwargs,
     ):
         """
         Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
@@ -3002,6 +3171,85 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             **kwargs,
         )
 
+    def consistent_encode_plus(
+        self,
+        entry: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
+        pair_entry: Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TArrayType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
+    ) -> EntryEncoding:
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+        entry_type = self._get_entry_type(entry, is_split_into_words=is_split_into_words)
+        return_tensors = TArrayType.from_type(return_tensors)
+        return self._consistent_encode_plus(
+            entry=entry,
+            entry_type=entry_type,
+            pair_entry=pair_entry,
+            add_special_tokens=add_special_tokens,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            stride=stride,
+            is_split_into_words=is_split_into_words,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
+    # TODO: add @abc.abstractmethod?
+    def _consistent_encode_plus(
+        self,
+        entry: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
+        entry_type: Union[type, GenericAlias],
+        pair_entry: Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]] = None,
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[TArrayType] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
+    ) -> EntryEncoding:
+        raise NotImplementedError
+
     def _encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput, EncodedInput],
@@ -3099,6 +3347,74 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             **kwargs,
         )
 
+    def consistent_encode_batch_plus(
+        self,
+        entries_or_entry_pairs: Union[
+            List[TextEntry],
+            List[TextEntryPair],
+            List[PreTokenizedEntry],
+            List[PreTokenizedEntryPair],
+            List[EncodedEntry],
+            List[EncodedEntryPair],
+        ],
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TArrayType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
+    ) -> EntryEncoding:
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+        if not isinstance(entries_or_entry_pairs, Sequence) or len(entries_or_entry_pairs) == 0:
+            raise TypeError(
+                f"`entries_or_entry_pairs` has to be a `Sequence` (e.g., list or tuple) "
+                f"(got {type(entries_or_entry_pairs)})"
+            )
+        _first_item = entries_or_entry_pairs[0]
+        if isinstance(_first_item, tuple):
+            entry_type = self._get_entry_type(_first_item[0], is_split_into_words=is_split_into_words)
+        else:
+            entry_type = self._get_entry_type(_first_item, is_split_into_words=is_split_into_words)
+        return_tensors = TArrayType.from_type(return_tensors)
+        return self._consistent_encode_batch_plus(
+            entries_or_entry_pairs=entries_or_entry_pairs,
+            entry_type=entry_type,
+            add_special_tokens=add_special_tokens,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            stride=stride,
+            is_split_into_words=is_split_into_words,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -3126,6 +3442,37 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        raise NotImplementedError
+
+    # TODO: add @abc.abstractmethod? add necessary docstrings for subclasses
+    def _consistent_encode_batch_plus(
+        self,
+        entries_or_entry_pairs: Union[
+            Sequence[TextEntry],
+            Sequence[TextEntryPair],
+            Sequence[PreTokenizedEntry],
+            Sequence[PreTokenizedEntryPair],
+            Sequence[EncodedEntry],
+            Sequence[EncodedEntryPair],
+        ],
+        entry_type: Union[type, GenericAlias],
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[TArrayType] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
+    ) -> EntryEncoding:
         raise NotImplementedError
 
     def pad(
@@ -3295,9 +3642,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
             for key, value in outputs.items():
-                if key not in batch_outputs:
-                    batch_outputs[key] = []
-                batch_outputs[key].append(value)
+                batch_outputs.setdefault(key, []).append(value)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
@@ -3770,6 +4115,50 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs,
     ) -> str:
         raise NotImplementedError
+
+    # TODO: add @abc.abstractmethod?
+    def _consistent_decode(
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        raise NotImplementedError
+
+    def consistent_decode(
+        self,
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        # Convert inputs to python lists
+        token_ids = to_py_obj(token_ids)
+
+        return self._consistent_decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    def consistent_decode_batch(
+        self,
+        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> List[str]:
+        return [
+            self.consistent_decode(
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                **kwargs,
+            )
+            for seq in sequences
+        ]
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
