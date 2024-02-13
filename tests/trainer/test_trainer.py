@@ -2534,6 +2534,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.dispatch_batches, None)
 
 
 @require_torch
