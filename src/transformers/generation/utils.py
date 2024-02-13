@@ -1422,7 +1422,7 @@ class GenerationMixin:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
 
         # adjust max_length when using `input_embeds` in decoder-only models
-        elif len(inputs_tensor.shape) == 3 and inputs_tensor.shape[:-1] != input_ids.shape:
+        elif model_input_name == "inputs_embeds" and inputs_tensor.shape[:-1] != input_ids.shape:
             if not self.config.is_encoder_decoder:
                 generation_config.max_length -= inputs_tensor.shape[1] - 1
 
