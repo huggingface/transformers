@@ -1398,6 +1398,11 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+
+        # adjust max_length when using `input_embeds` in decoder-only models
+        elif len(inputs_tensor.shape) == 3 and inputs_tensor.shape[:-1] != input_ids.shape:
+            if not self.config.is_encoder_decoder:
+                generation_config.max_length -= inputs_tensor.shape[1] - 1
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
