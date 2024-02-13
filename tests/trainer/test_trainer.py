@@ -2413,6 +2413,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             execute_subprocess_async(command)
             # successful return here == success - any errors would have caused an error or a timeout in the sub-call
 
+    def test_accelerator_config_empty(self):
+        # Checks that a config can be made with the defaults if not passed
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves one option as something *not* basic
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, False)
+            self.assertEqual(trainer.accelerator.dispatch_batches, None)
+            self.assertEqual(trainer.accelerator.even_batches, True)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
     def test_accelerator_config_from_dict(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively

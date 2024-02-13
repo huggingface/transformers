@@ -1734,6 +1734,8 @@ class TrainingArguments:
 
         if isinstance(self.accelerator_config, str):
             self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+        elif self.accelerator_config is None:
+            self.accelerator_config = AcceleratorConfig()
         if self.dispatch_batches is not None:
             warnings.warn(
                 "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
