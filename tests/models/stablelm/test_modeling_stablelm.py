@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
+    slow,
     torch_device,
 )
 
