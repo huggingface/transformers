@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 from typing import TYPE_CHECKING
+
+from packaging import version
 
 from .base import HfQuantizer
 
@@ -95,6 +98,8 @@ class AwqQuantizer(HfQuantizer):
             model = fuse_awq_modules(model, self.quantization_config)
             model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
 
+        model._is_quantized_training_enabled = self.is_trainable
+
     @property
     def is_serializable(self):
         # AWQ through auto-awq has been always serializable, except if the model is fused.
@@ -105,6 +110,6 @@ class AwqQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # AWQ does not support neither QAT (Quantization Aware Training or PEFT yet.)
-        # TODO: if this is supported in the future, do a version check here.
-        return False
+        # AWQ support PEFT fine-tuning from its 0.2.0 version
+        MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
+        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)
