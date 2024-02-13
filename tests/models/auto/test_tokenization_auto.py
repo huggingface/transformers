@@ -176,12 +176,14 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):
-        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False), BertTokenizer)
-        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased"), BertTokenizerFast)
+        self.assertIsInstance(
+            AutoTokenizer.from_pretrained("google-bert/bert-base-cased", use_fast=False), BertTokenizer
+        )
+        self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
 
     @require_tokenizers
     def test_do_lower_case(self):
-        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", do_lower_case=False)
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased", do_lower_case=False)
         sample = "Hello, world. How are you?"
         tokens = tokenizer.tokenize(sample)
         self.assertEqual("[UNK]", tokens[0])
@@ -211,15 +213,15 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer2.vocab_size, 12)
 
     def test_auto_tokenizer_fast_no_slow(self):
-        tokenizer = AutoTokenizer.from_pretrained("ctrl")
+        tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
         # There is no fast CTRL so this always gives us a slow tokenizer.
         self.assertIsInstance(tokenizer, CTRLTokenizer)
 
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.
-        config = get_tokenizer_config("bert-base-cased")
+        config = get_tokenizer_config("google-bert/bert-base-cased")
         _ = config.pop("_commit_hash", None)
-        # If we ever update bert-base-cased tokenizer config, this dict here will need to be updated.
+        # If we ever update google-bert/bert-base-cased tokenizer config, this dict here will need to be updated.
         self.assertEqual(config, {"do_lower_case": False})
 
         # This model does not have a tokenizer_config so we get back an empty dict.

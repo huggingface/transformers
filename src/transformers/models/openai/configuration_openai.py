@@ -21,7 +21,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/config.json"}
+OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "openai-community/openai-gpt": "https://huggingface.co/openai-community/openai-gpt/resolve/main/config.json"
+}
 
 
 class OpenAIGPTConfig(PretrainedConfig):
@@ -29,7 +31,7 @@ class OpenAIGPTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
     used to instantiate a GPT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
-    [openai-gpt](https://huggingface.co/openai-gpt) architecture from OpenAI.
+    [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -108,7 +110,7 @@ class OpenAIGPTConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "openai-gpt"
+    model_type = "openai-community/openai-gpt"
     attribute_map = {
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",

@@ -1536,7 +1536,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""
                 run_glue.py
-                --model_name_or_path distilbert-base-uncased
+                --model_name_or_path distilbert/distilbert-base-uncased
                 --task_name mrpc
                 --do_train
                 --do_eval
@@ -1885,7 +1885,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_mrpc(self):
-        MODEL_ID = "bert-base-cased-finetuned-mrpc"
+        MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
@@ -1900,7 +1900,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_multiple(self):
-        MODEL_ID = "gpt2"
+        MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
@@ -1929,7 +1929,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_lm(self):
-        MODEL_ID = "distilroberta-base"
+        MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
@@ -2383,7 +2383,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "launch",
                 script_path,
                 "--model_name_or_path",
-                "t5-small",
+                "google-t5/t5-small",
                 "--per_device_train_batch_size",
                 "1",
                 "--output_dir",
