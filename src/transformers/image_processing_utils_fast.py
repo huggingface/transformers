@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import cache
+import functools
 
 from .image_processing_utils import BaseImageProcessor
 
@@ -42,8 +42,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         raise NotImplementedError
 
     def set_transforms(self, **kwargs):
-        # FIXME - put input validation or kwargs for all these methods
-
         if self._same_transforms_settings(**kwargs):
             return self._transforms
 
@@ -51,7 +49,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self._set_transform_settings(**kwargs)
         self._transforms = transforms
 
-    @cache
+    @functools.lru_cache(maxsize=1)
     def _maybe_update_transforms(self, **kwargs):
         if self._same_transforms_settings(**kwargs):
             return
