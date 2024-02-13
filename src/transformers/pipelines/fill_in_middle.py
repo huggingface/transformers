@@ -187,12 +187,15 @@ class FimPipeline(Pipeline):
         add_special_tokens=False,
         **generate_kwargs,
     ):
+        # Save the old prompt text since we'll use it at the end to form infilled text
+        old_prompt_text = prompt_text
+
         # Ensure the prompt_text contains the infill token
-        self.ensure_infill_token(prompt_text, infill_token)
+        self.ensure_infill_token(old_prompt_text, infill_token)
 
         # Assemble the inputs in the PSM (Prefix-Suffix-Middle) format based on the model architecture
         # Extract prefix and suffix
-        input_prefix, input_suffix = self.extract_prefix_suffix(prompt_text, infill_token)
+        input_prefix, input_suffix = self.extract_prefix_suffix(old_prompt_text, infill_token)
 
         # If the mode is Prefix-Suffix-Middle, arrange the components accordingly
         if mode == "psm":
@@ -212,6 +215,7 @@ class FimPipeline(Pipeline):
         )
         inputs["prompt_text"] = prompt_text
         inputs["infill_token"] = infill_token
+        inputs["old_prompt_text"] = old_prompt_text
 
         return inputs
 
@@ -219,13 +223,12 @@ class FimPipeline(Pipeline):
         input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs["attention_mask"]
         infill_token = model_inputs["infill_token"]
+        old_prompt_text = model_inputs["old_prompt_text"]
 
         # Handle empty prompts by setting id and attention mask to None
         if input_ids.shape[1] == 0:
             input_ids = None
             attention_mask = None
-
-        prompt_text = model_inputs.pop("prompt_text")
 
         # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
         # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
@@ -253,8 +256,8 @@ class FimPipeline(Pipeline):
 
         return {
             "generated_sequence": generated_sequence,
+            "old_prompt_text": old_prompt_text,
             "input_ids": input_ids,
-            "prompt_text": prompt_text,
             "infill_token": infill_token,
         }
 
@@ -300,8 +303,8 @@ class FimPipeline(Pipeline):
     ):
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
-        prompt = model_outputs["prompt_text"]
         infill_token = model_outputs["infill_token"]
+        prompt = model_outputs["old_prompt_text"]
 
         records = []
 
@@ -321,6 +324,7 @@ class FimPipeline(Pipeline):
                 # If full text is to be returned, replace the infill token with the generated infilled text
                 all_text = filled_text
                 if return_type == ReturnType.FULL_TEXT:
+                    # First remove all the infill tokens from the text and then add the generated text
                     all_text = prompt.replace(infill_token, all_text)
 
                 record = {"generated_text": all_text}
