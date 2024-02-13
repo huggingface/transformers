@@ -456,6 +456,7 @@ _import_structure = {
         "FunnelTokenizer",
     ],
     "models.fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
+    "models.gemma": ["GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "GemmaConfig"],
     "models.git": [
         "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GitConfig",
@@ -463,7 +464,6 @@ _import_structure = {
         "GitVisionConfig",
     ],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
-    "models.gemma": ["GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "GemmaConfig"],
     "models.gpt2": [
         "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPT2Config",
@@ -2241,6 +2241,14 @@ else:
         ]
     )
     _import_structure["models.fuyu"].extend(["FuyuForCausalLM", "FuyuPreTrainedModel"])
+    _import_structure["models.gemma"].extend(
+        [
+            "GemmaForCausalLM",
+            "GemmaForSequenceClassification",
+            "GemmaModel",
+            "GemmaPreTrainedModel",
+        ]
+    )
     _import_structure["models.git"].extend(
         [
             "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2256,14 +2264,6 @@ else:
             "GLPNForDepthEstimation",
             "GLPNModel",
             "GLPNPreTrainedModel",
-        ]
-    )
-    _import_structure["models.gemma"].extend(
-        [
-            "GemmaForCausalLM",
-            "GemmaForSequenceClassification",
-            "GemmaModel",
-            "GemmaPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -4671,9 +4671,7 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
-    _import_structure["models.gemma"].extend(
-        ["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"]
-    )
+    _import_structure["models.gemma"].extend(["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"])
     _import_structure["models.longt5"].extend(
         [
             "FlaxLongT5ForConditionalGeneration",
@@ -5210,6 +5208,7 @@ if TYPE_CHECKING:
         FunnelTokenizer,
     )
     from .models.fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
+    from .models.gemma import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, GemmaConfig
     from .models.git import (
         GIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GitConfig,
@@ -5217,7 +5216,6 @@ if TYPE_CHECKING:
         GitVisionConfig,
     )
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
-    from .models.gemma import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, GemmaConfig
     from .models.gpt2 import (
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2Config,
@@ -6851,6 +6849,12 @@ if TYPE_CHECKING:
             FuyuForCausalLM,
             FuyuPreTrainedModel,
         )
+        from .models.gemma import (
+            GemmaForCausalLM,
+            GemmaForSequenceClassification,
+            GemmaModel,
+            GemmaPreTrainedModel,
+        )
         from .models.git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GitForCausalLM,
@@ -6863,12 +6867,6 @@ if TYPE_CHECKING:
             GLPNForDepthEstimation,
             GLPNModel,
             GLPNPreTrainedModel,
-        )
-        from .models.gemma import (
-            GemmaForCausalLM,
-            GemmaForSequenceClassification,
-            GemmaModel,
-            GemmaPreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,

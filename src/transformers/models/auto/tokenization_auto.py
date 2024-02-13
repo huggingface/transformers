@@ -178,7 +178,6 @@ else:
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
-            ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "gemma",
                 (
@@ -186,6 +185,7 @@ else:
                     "GemmaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),

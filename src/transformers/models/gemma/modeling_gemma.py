@@ -32,7 +32,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -104,14 +103,15 @@ class GemmaRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        # inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2) [: (self.dim // 2)].to(device) / self.dim))
-        self.register_buffer("inv_freq", None, persistent=False)
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, x, position_ids):
+    def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         freqs = (self.inv_freq[:, None].float().expand(-1, position_ids.shape[0]) @ (position_ids.float())).t()
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
+
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
@@ -245,24 +245,22 @@ class GemmaAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        past_seen_tokens = 0
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            kv_seq_len += past_seen_tokens
 
-        self.rotary_emb.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.head_dim, 2) [: (self.head_dim // 2)].to(hidden_states.device) / self.head_dim))        
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
+        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
         query_states = query_states.to(hidden_states.dtype)
         key_states = key_states.to(hidden_states.dtype)
-        
+
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -270,18 +268,9 @@ class GemmaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
+            causal_mask = attention_mask[..., past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -348,29 +337,23 @@ class GemmaFlashAttention2(GemmaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
         kv_seq_len = key_states.shape[-2]
+        past_seen_tokens = 0
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            kv_seq_len += past_seen_tokens
 
-        
-        
-        self.rotary_emb.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.head_dim, 2) [: (self.head_dim // 2)].to(hidden_states.device) / self.head_dim))        
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
+        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
         query_states = query_states.to(hidden_states.dtype)
         key_states = key_states.to(hidden_states.dtype)
-        
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -561,30 +544,28 @@ class GemmaSdpaAttention(GemmaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        past_seen_tokens = 0
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        
-        # TODO the inv freq should be stored and kept in the correct dtype
-        if self.rotary_emb.inv_freq is None:
-            self.rotary_emb.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.head_dim, 2) [: (self.head_dim // 2)].to(hidden_states.device) / self.head_dim))        
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
-        query_states = query_states.to(hidden_states.dtype)
-        key_states = key_states.to(hidden_states.dtype)
+            past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
+            kv_seq_len += past_seen_tokens
+
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
+        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
+        causal_mask = None
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+            causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -597,10 +578,10 @@ class GemmaSdpaAttention(GemmaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=causal_mask is None,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -720,7 +701,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
     _no_split_modules = ["GemmaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
@@ -735,6 +716,20 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
+        if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
+            causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
+            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+
+        for layer in self.model.layers:
+            layer.self_attn.past_key_value = cache_cls(
+                self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device
+            )
+
+    def _reset_cache(self):
+        for layer in self.model.layers:
+            layer.self_attn.past_key_value = None
 
 
 GEMMA_INPUTS_DOCSTRING = r"""
@@ -835,6 +830,11 @@ class GemmaModel(GemmaPreTrainedModel):
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
+
+        # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
+        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
+        self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -862,60 +862,26 @@ class GemmaModel(GemmaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape[:2]
-        elif inputs_embeds is not None:
-            batch_size, seq_length = inputs_embeds.shape[:2]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        past_key_values_length = 0
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
-
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
-            position_ids = position_ids.unsqueeze(0)
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        if use_cache and not isinstance(past_key_values, Cache):
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._use_sdpa and not output_attentions:
-            # output_attentions=True can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,
-            )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-            )
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -935,7 +901,7 @@ class GemmaModel(GemmaPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -944,7 +910,7 @@ class GemmaModel(GemmaPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -966,8 +932,11 @@ class GemmaModel(GemmaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
+        # if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+            next_cache = (
+                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
+            )
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -976,6 +945,49 @@ class GemmaModel(GemmaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
+
+    def _update_causal_mask(self, attention_mask, input_tensor):
+        if self.config._attn_implementation == "flash_attention_2":
+            causal_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            return causal_mask
+
+        batch_size, seq_length = input_tensor.shape[:2]
+        dtype = input_tensor.dtype
+
+        # support going beyond cached `max_position_embedding`
+        if seq_length > self.causal_mask.shape[-1]:
+            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
+            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+
+        if hasattr(self, "causal_mask"):  # we use the current dtype to avoid any overflows
+            causal_mask = (
+                self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
+            )
+        else:
+            mask = torch.full(
+                (self.config.max_position_embeddings, self.config.max_position_embeddings),
+                fill_value=torch.finfo(dtype).min,
+            )
+            causal_mask = torch.triu(mask, diagonal=1).to(dtype)
+
+        if attention_mask is not None and attention_mask.dim() == 2:
+            mask_length = attention_mask.shape[-1]
+            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(
+                padding_mask, torch.finfo(dtype).min
+            )
+
+        if self.config._attn_implementation == "sdpa":
+            if attention_mask is None:
+                return None
+            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
+            if not is_tracing and (torch.all(attention_mask == 1)):
+                return None
+            if is_tracing and seq_length == 1:
+                return None
+            causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
+
+        return causal_mask
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GEMMA,Llama->Gemma,llama->gemma
@@ -1136,6 +1148,12 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
+            # generation with static cache
+            seen_tokens = past_key_value.get_seq_length()
+            input_ids = input_ids[:, seen_tokens:]
+            position_ids = position_ids[:, seen_tokens:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

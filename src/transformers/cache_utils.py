@@ -351,7 +351,9 @@ class StaticCache(Cache):
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_heads = config.num_attention_heads
+        self.num_heads = (
+            config.num_attention_heads if not hasattr(config, "num_key_value_heads") else config.num_key_value_heads
+        )
         self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
 
         cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)

@@ -16,9 +16,10 @@ import os
 import warnings
 
 import torch
+from accelerate import init_empty_weights
 
 from transformers import GemmaConfig, GemmaForCausalLM, GemmaTokenizer
-from accelerate import init_empty_weights
+
 
 try:
     from transformers import GemmaTokenizerFast
@@ -83,13 +84,21 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
                 k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size).clone()
-                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size).clone()
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(
+                    num_attn_heads * head_dim, hidden_size
+                ).clone()
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(
+                    num_kv_heads * head_dim, hidden_size
+                ).clone()
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0].clone()
             else:
                 q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
-                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size).clone()
-                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size).clone()
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(
+                    num_attn_heads * head_dim, hidden_size
+                ).clone()
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(
+                    num_kv_heads * head_dim, hidden_size
+                ).clone()
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj.clone()
 
         elif k == "embedder.weight":
@@ -112,7 +121,6 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
     else:
         model.save_pretrained(save_path, safe_serialization=safe_serialization)
-
 
 
 def write_tokenizer(input_tokenizer_path, save_path, push_to_hub=False):
@@ -182,7 +190,7 @@ def main():
         input_tokenizer_path=spm_path,
         save_path=args.output_dir,
         safe_serialization=not args.pickle_serialization,
-        push_to_hub=args.push_to_hub
+        push_to_hub=args.push_to_hub,
     )
 
 
