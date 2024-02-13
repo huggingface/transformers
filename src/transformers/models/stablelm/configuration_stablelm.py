@@ -21,17 +21,17 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "jon-tow/stablelm-3b-4e1t-dev": "https://huggingface.co/jon-tow/stablelm-3b-4e1t-dev/resolve/main/config.json",
+    "stabilityai/stablelm-3b-4e1t": "https://huggingface.co/stabilityai/stablelm-3b-4e1t/resolve/main/config.json",
     # See all StableLM models at https://huggingface.co/models?filter=stablelm
 }
 
 
-class StableLMConfig(PretrainedConfig):
+class StableLmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~StableLMModel`].
+    This is the configuration class to store the configuration of a [`~StableLmModel`].
     It is used to instantiate an StableLM model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the StableLM [stablelm](https://huggingface.co/stablelm) architecture.
+    the StableLM [stabilityai/stablelm-3b-4e1t](https://huggingface.co/stabilityai/stablelm-3b-4e1t) architecture.
 
     Configuration objects inherit from  [`PretrainedConfig`] and can be used
     to control the model outputs. Read the documentation from  [`PretrainedConfig`]
@@ -41,11 +41,11 @@ class StableLMConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the StableLM model. Defines the number of different tokens that
-            can be represented by the `inputs_ids` passed when calling [`StableLMEpochModel`].
-        hidden_size (`int`, *optional*, defaults to 2560):
-            Dimension of the decoder layers and the pooler layer.
+            can be represented by the `inputs_ids` passed when calling [`StableLmModel`].
         intermediate_size (`int`, *optional*, defaults to 6912):
             Dimension of the MLP representations.
+        hidden_size (`int`, *optional*, defaults to 2560):
+            Number of hidden layers in the Transformer decoder.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -83,23 +83,26 @@ class StableLMConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
             is an experimental feature, subject to breaking API changes in future versions.
-        use_qkv_bias (`bool`, *optional*, defaults to `True`):
+        use_qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use bias for qkv layers.
-            Whether to tie weight embeddings
-        hidden_dropout (`float`, *optional*, default to 0.0):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        partial_rotary_factor (`float`, *optional*, default to 0.5):
+        partial_rotary_factor (`float`, *optional*, defaults to 0.25):
             Percentage of the query and keys which will have rotary embedding.
+        bos_token_id (int, *optional*, defaults to 0):
+            The id of the `BOS` token in the vocabulary.
+        eos_token_id (int, *optional*, defaults to 0):
+            The id of the `EOS` token in the vocabulary.
 
     Example:
 
     ```python
-    >>> from transformers import StableLMModel, StableLMConfig
+    >>> from transformers import StableLmModel, StableLmConfig
 
     >>> # Initializing a StableLM stablelm-3b style configuration
-    >>> configuration = StableLMConfig()
+    >>> configuration = StableLmConfig()
     ```"""
 
     model_type = "stablelm"
@@ -121,7 +124,7 @@ class StableLMConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10_000,
         rope_scaling=None,
-        use_qkv_bias=True,
+        use_qkv_bias=False,
         hidden_dropout=0.0,
         attention_dropout=0.0,
         partial_rotary_factor=0.25,
@@ -131,12 +134,14 @@ class StableLMConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
+
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
+
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache

@@ -1,4 +1,4 @@
-# Copyright 2024 AdeptAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Stability AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLMConfig"],
+    "configuration_stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
 }
 
 
@@ -32,15 +32,15 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_stablelm"] = [
-        "StableLMForCausalLM",
-        "StableLMModel",
-        "StableLMPreTrainedModel",
-        "StableLMForSequenceClassification",
+        "StableLmForCausalLM",
+        "StableLmModel",
+        "StableLmPreTrainedModel",
+        "StableLmForSequenceClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLMConfig
+    from .configuration_stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
 
     try:
         if not is_torch_available():
@@ -49,10 +49,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_stablelm import (
-            StableLMForCausalLM,
-            StableLMForSequenceClassification,
-            StableLMModel,
-            StableLMPreTrainedModel,
+            StableLmForCausalLM,
+            StableLmForSequenceClassification,
+            StableLmModel,
+            StableLmPreTrainedModel,
         )
 
 

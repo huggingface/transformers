@@ -7798,31 +7798,28 @@ class SqueezeBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-STABLELM_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class StableLMForCausalLM(metaclass=DummyObject):
+class StableLmForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class StableLMForSequenceClassification(metaclass=DummyObject):
+class StableLmForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class StableLMModel(metaclass=DummyObject):
+class StableLmModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class StableLMPreTrainedModel(metaclass=DummyObject):
+class StableLmPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -477,7 +477,7 @@
       - local: model_doc/squeezebert
         title: SqueezeBERT
       - local: model_doc/stablelm
-        title: StableLM
+        title: StableLm
       - local: model_doc/switch_transformers
         title: SwitchTransformers
       - local: model_doc/t5

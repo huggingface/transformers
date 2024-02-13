@@ -12,15 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch StableLM model. """
+""" Testing suite for the PyTorch StableLm model. """
 
 
 import unittest
 
 from parameterized import parameterized
 
-from transformers import StableLMConfig, is_torch_available, set_seed
+from transformers import StableLmConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_flash_attn,
     require_torch,
     torch_device,
 )
@@ -36,14 +38,15 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        StableLMForCausalLM,
-        StableLMForSequenceClassification,
-        StableLMModel,
+        StableLmForCausalLM,
+        StableLmForSequenceClassification,
+        StableLmModel,
     )
 
 
-# Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->StableLM
-class StableLMModelTester:
+# Copied from transformers.tests.models.persimmon.test_modeling_persimmon.PersimmonModelTester with Persimmon -> StableLm
+class StableLmModelTester:
+    # Ignore copy
     def __init__(
         self,
         parent,
@@ -120,7 +123,7 @@ class StableLMModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return StableLMConfig(
+        return StableLmConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -140,7 +143,7 @@ class StableLMModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = StableLMModel(config=config)
+        model = StableLmModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -160,7 +163,7 @@ class StableLMModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = StableLMModel(config)
+        model = StableLmModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -189,7 +192,7 @@ class StableLMModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = StableLMForCausalLM(config=config)
+        model = StableLmForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -209,7 +212,7 @@ class StableLMModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = StableLMForCausalLM(config=config)
+        model = StableLmForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -273,30 +276,30 @@ class StableLMModelTester:
 
 
 @require_torch
-class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+# Copied from transformers.tests.persimmon.test_modeling_persimmon.PersimmonModelTest with Persimmon -> StableLm
+class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (StableLMModel, StableLMForCausalLM, StableLMForSequenceClassification) if is_torch_available() else ()
+        (StableLmModel, StableLmForCausalLM, StableLmForSequenceClassification) if is_torch_available() else ()
     )
-    # Copied from tests.models.persimmon.test_modeling_persimmon.PersimmonModelTest
     pipeline_model_mapping = (
         {
-            "feature-extraction": StableLMModel,
-            "text-classification": StableLMForSequenceClassification,
+            "feature-extraction": StableLmModel,
+            "text-classification": StableLmForSequenceClassification,
             # TODO (ydshieh): check why these two fail. Fix them or skip them in a better way.
-            # "text-generation": PersimmonForCausalLM,
-            # "zero-shot": PersimmonForSequenceClassification,
+            # "text-generation": StableLmForCausalLM,
+            # "zero-shot": StableLmForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
 
-    all_generative_model_classes = (StableLMForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (StableLmForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = StableLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=StableLMConfig, hidden_size=37)
+        self.model_tester = StableLmModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=StableLmConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -311,7 +314,7 @@ class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = StableLMForSequenceClassification(config)
+        model = StableLmForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -324,7 +327,7 @@ class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = StableLMForSequenceClassification(config)
+        model = StableLmForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -339,7 +342,7 @@ class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = StableLMForSequenceClassification(config)
+        model = StableLmForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
@@ -352,7 +355,7 @@ class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = StableLMModel(config)
+        original_model = StableLmModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -360,7 +363,7 @@ class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = StableLMModel(config)
+        scaled_model = StableLmModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -378,11 +381,12 @@ class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
 
 @require_torch
-class StableLMModelIntegrationTest(unittest.TestCase):
+class StableLmModelIntegrationTest(unittest.TestCase):
+    # @slow
     def test_model_stablelm_3b_4e1t_logits(self):
         input_ids = {"input_ids": torch.tensor([[510, 8588, 310, 1900, 9386]], dtype=torch.long, device=torch_device)}
 
-        model = StableLMForCausalLM.from_pretrained("jon-tow/stablelm-3b-4e1t-dev").to(torch_device)
+        model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t").to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
@@ -395,9 +399,10 @@ class StableLMModelIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([7.1030, -1.4195,  9.9206,  7.7008,  4.9891,  4.2169,  5.5426,  3.7878, 6.7593,  5.7360,  8.4691,  5.5448,  5.0544, 10.4129,  8.5573, 13.0405, 7.3265,  3.5868,  6.1106,  5.9406,  5.6376,  5.7490,  5.4850,  4.8124, 5.1991,  4.6419,  4.5719,  9.9588,  6.7222,  4.5070]).to(torch_device)  # fmt: skip
         self.assertTrue(torch.allclose(output[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4))
 
+    # @slow
     def test_model_stablelm_3b_4e1t_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained("jon-tow/stablelm-3b-4e1t-dev")
-        model = StableLMForCausalLM.from_pretrained("jon-tow/stablelm-3b-4e1t-dev")
+        tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+        model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
         input_ids = tokenizer.encode(
             "My favorite food has always been pizza, but lately",
             return_tensors="pt",
@@ -408,3 +413,20 @@ class StableLMModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = """My favorite food has always been pizza, but lately I’ve been craving something different. I’ve been trying to eat healthier and I’ve"""
         self.assertEqual(text, EXPECTED_TEXT_COMPLETION)
+
+    @require_bitsandbytes
+    # @slow
+    @require_flash_attn
+    def test_model_3b_long_prompt(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [3, 3, 3]
+        input_ids = [306, 338] * 2047
+        model = StableLmForCausalLM.from_pretrained(
+            "stabilityai/stablelm-3b-4e1t",
+            device_map="auto",
+            torch_dtype="auto",
+            load_in_4bit=True,
+            attn_implementation="flash_attention_2",
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-3:].tolist())

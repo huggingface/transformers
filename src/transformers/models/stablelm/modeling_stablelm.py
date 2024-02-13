@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_stablelm import StableLMConfig
+from .configuration_stablelm import StableLmConfig
 
 
 if is_flash_attn_2_available():
@@ -50,7 +50,7 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "StableLMConfig"
+_CONFIG_FOR_DOC = "StableLmConfig"
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -58,7 +58,7 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -66,8 +66,8 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->StableLM
-class StableLMRotaryEmbedding(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->StableLm
+class StableLmRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -103,9 +103,9 @@ class StableLMRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->StableLM
-class StableLMLinearScalingRotaryEmbedding(StableLMRotaryEmbedding):
-    """StableLMRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->StableLm
+class StableLmLinearScalingRotaryEmbedding(StableLmRotaryEmbedding):
+    """StableLmRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -123,9 +123,9 @@ class StableLMLinearScalingRotaryEmbedding(StableLMRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->StableLM
-class StableLMDynamicNTKScalingRotaryEmbedding(StableLMRotaryEmbedding):
-    """StableLMRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->StableLm
+class StableLmDynamicNTKScalingRotaryEmbedding(StableLmRotaryEmbedding):
+    """StableLmRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -158,7 +158,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -187,8 +187,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->StableLM
-class StableLMMLP(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->StableLm
+class StableLmMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -216,10 +216,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class StableLMAttention(nn.Module):
+class StableLmAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: StableLMConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: StableLmConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -253,10 +253,10 @@ class StableLMAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
 
-    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention with Persimmon->StableLM
+    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention._init_rope with Persimmon->StableLm
     def _init_rope(self):
         if self.config.rope_scaling is None:
-            self.rotary_emb = StableLMRotaryEmbedding(
+            self.rotary_emb = StableLmRotaryEmbedding(
                 int(self.partial_rotary_factor * self.head_dim),
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -265,14 +265,14 @@ class StableLMAttention(nn.Module):
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
-                self.rotary_emb = StableLMLinearScalingRotaryEmbedding(
+                self.rotary_emb = StableLmLinearScalingRotaryEmbedding(
                     int(self.partial_rotary_factor * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
-                self.rotary_emb = StableLMDynamicNTKScalingRotaryEmbedding(
+                self.rotary_emb = StableLmDynamicNTKScalingRotaryEmbedding(
                     int(self.partial_rotary_factor * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
@@ -374,9 +374,9 @@ class StableLMAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class StableLMFlashAttention2(StableLMAttention):
+class StableLmFlashAttention2(StableLmAttention):
     """
-    StableLM flash attention module. This module inherits from `StableLMAttention` as the weights of the module stays
+    StableLM flash attention module. This module inherits from `StableLmAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -400,7 +400,7 @@ class StableLMFlashAttention2(StableLMAttention):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # StableLMFlashAttention2 attention does not support output_attentions
+        # StableLmFlashAttention2 attention does not support output_attentions
 
         output_attentions = False
 
@@ -573,18 +573,17 @@ class StableLMFlashAttention2(StableLMAttention):
 
 
 ATTENTION_CLASSES = {
-    "eager": StableLMAttention,
-    "flash_attention_2": StableLMFlashAttention2,
+    "eager": StableLmAttention,
+    "flash_attention_2": StableLmFlashAttention2,
 }
 
 
-# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonDecoderLayer with Persimmon->StableLM
-class StableLMDecoderLayer(nn.Module):
-    def __init__(self, config: StableLMConfig, layer_idx: int):
+class StableLmDecoderLayer(nn.Module):
+    def __init__(self, config: StableLmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
-        self.mlp = StableLMMLP(config)
+        self.mlp = StableLmMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
@@ -662,7 +661,7 @@ STABLELM_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`StableLMConfig`]):
+        config ([`StableLmConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -670,14 +669,14 @@ STABLELM_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare StableLM Model outputting raw hidden-states without any specific head on top.",
+    "The bare StableLm Model outputting raw hidden-states without any specific head on top.",
     STABLELM_START_DOCSTRING,
 )
-class StableLMPreTrainedModel(PreTrainedModel):
-    config_class = StableLMConfig
+class StableLmPreTrainedModel(PreTrainedModel):
+    config_class = StableLmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["StableLMDecoderLayer"]
+    _no_split_modules = ["StableLmDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_cache_class = True
@@ -765,30 +764,29 @@ STABLELM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare StableLM Model outputting raw hidden-states without any specific head on top.",
+    "The bare StableLm Model outputting raw hidden-states without any specific head on top.",
     STABLELM_START_DOCSTRING,
 )
-# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonModel with PERSIMMON->STABLELM,Persimmon->StableLM
-class StableLMModel(StableLMPreTrainedModel):
+class StableLmModel(StableLmPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`StableLMDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`StableLmDecoderLayer`]
 
     Args:
-        config: StableLMConfig
+        config: StableLmConfig
     """
 
-    def __init__(self, config: StableLMConfig):
+    def __init__(self, config: StableLmConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [StableLMDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [StableLmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonModel.final_layernorm with final_layernorm->norm
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        self._attn_implementation = config._attn_implementation
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -857,13 +855,14 @@ class StableLMModel(StableLMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
+        if self._attn_implementation == "flash_attention_2":
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            # 4d mask is passed through the layers
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        )
 
         hidden_states = inputs_embeds
 
@@ -884,7 +883,6 @@ class StableLMModel(StableLMPreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
-                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -924,39 +922,47 @@ class StableLMModel(StableLMPreTrainedModel):
         )
 
 
-# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM with PERSIMMON->STABLELM,Persimmon->StableLM,persimmon->stablelm
-class StableLMForCausalLM(StableLMPreTrainedModel):
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM with PERSIMMON->STABLELM,Persimmon->StableLm
+class StableLmForCausalLM(StableLmPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with LLAMA->STABLELM,Llama->StableLm
     def __init__(self, config):
         super().__init__(config)
-        self.model = StableLMModel(config)
+        self.model = StableLmModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_input_embeddings
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_input_embeddings
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
     def set_decoder(self, decoder):
         self.model = decoder
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
     def get_decoder(self):
         return self.model
 
     @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -982,9 +988,9 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, StableLMForCausalLM
+        >>> from transformers import AutoTokenizer, StableLmForCausalLM
 
-        >>> model = StableLMForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
+        >>> model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
         >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
 
         >>> prompt = "The weather is always wonderful in"
@@ -993,7 +999,7 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'The weather is always wonderful in the San Juan Islands, and whether you're a vacationer or a resident, here are some ideas for fun!'
+        'The weather is always wonderful in the summer in the city of San Diego. The city is located on the coast of the Pacific Ocean and is surrounded by'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1002,7 +1008,6 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1017,7 +1022,6 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
@@ -1044,6 +1048,7 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
@@ -1084,6 +1089,12 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
+        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
+            # generation with static cache
+            seen_tokens = past_key_value.get_seq_length()
+            input_ids = input_ids[:, seen_tokens:]
+            position_ids = position_ids[:, seen_tokens:]
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1112,9 +1123,9 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The StableLM transformer with a sequence classification head on top (linear layer).
+    The StableLm transformer with a sequence classification head on top (linear layer).
 
-    [`StableLMForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    [`StableLmForSequenceClassification`] uses the last token in order to do the classification, as other causal
     models (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1125,12 +1136,12 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
     """,
     STABLELM_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLM
-class StableLMForSequenceClassification(StableLMPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLm
+class StableLmForSequenceClassification(StableLmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = StableLMModel(config)
+        self.model = StableLmModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

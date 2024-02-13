@@ -806,7 +806,7 @@ _import_structure = {
         "SqueezeBertConfig",
         "SqueezeBertTokenizer",
     ],
-    "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLMConfig"],
+    "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -3252,11 +3252,10 @@ else:
     )
     _import_structure["models.stablelm"].extend(
         [
-            "STABLELM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "StableLMForCausalLM",
-            "StableLMForSequenceClassification",
-            "StableLMModel",
-            "StableLMPreTrainedModel",
+            "StableLmForCausalLM",
+            "StableLmForSequenceClassification",
+            "StableLmModel",
+            "StableLmPreTrainedModel",
         ]
     )
     _import_structure["models.swiftformer"].extend(
@@ -5560,7 +5559,7 @@ if TYPE_CHECKING:
         SqueezeBertConfig,
         SqueezeBertTokenizer,
     )
-    from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLMConfig
+    from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -7671,11 +7670,10 @@ if TYPE_CHECKING:
             SqueezeBertPreTrainedModel,
         )
         from .models.stablelm import (
-            STABLELM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            StableLMForCausalLM,
-            StableLMForSequenceClassification,
-            StableLMModel,
-            StableLMPreTrainedModel,
+            StableLmForCausalLM,
+            StableLmForSequenceClassification,
+            StableLmModel,
+            StableLmPreTrainedModel,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

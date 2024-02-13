@@ -82,21 +82,21 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 ```
 
 
-## StableLMConfig
+## StableLmConfig
 
-[[autodoc]] StableLMConfig
+[[autodoc]] StableLmConfig
 
-## StableLMModel
+## StableLmModel
 
-[[autodoc]] StableLMModel
+[[autodoc]] StableLmModel
     - forward
 
-## StableLMForCausalLM
+## StableLmForCausalLM
 
-[[autodoc]] StableLMForCausalLM
+[[autodoc]] StableLmForCausalLM
     - forward
 
-## StableLMForSequenceClassification
+## StableLmForSequenceClassification
 
-[[autodoc]] StableLMForSequenceClassification
+[[autodoc]] StableLmForSequenceClassification
     - forward
