@@ -22,8 +22,6 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from accelerate import PartialState
-from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -35,6 +33,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_vision_available,
     logging,
@@ -50,6 +49,9 @@ if is_scipy_available():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
