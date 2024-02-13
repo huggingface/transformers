@@ -373,7 +373,7 @@ Assistant:
 따라서 사용자 정의 `chat` 프롬프트 템플릿의 예제에서도 이 형식을 사용하는 것이 중요합니다. 
 다음과 같이 인스턴스화 할 때 `chat` 템플릿을 덮어쓸 수 있습니다.
 
-```
+```python
 template = """ [...] """
 
 agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)

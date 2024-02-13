@@ -1066,7 +1066,7 @@ class TrainingArguments:
         },
     )
     # Do not touch this type annotation or it will stop working in CLI
-    fsdp_config: Optional[str] = field(
+    fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1310,7 +1310,7 @@ class TrainingArguments:
         },
     )
 
-    neftune_noise_alpha: float = field(
+    neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."

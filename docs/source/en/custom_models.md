@@ -310,7 +310,7 @@ Use `register_for_auto_class()` if you want the code files to be copied. If you 
 you don't need to call it. In cases where there's more than one auto class, you can modify the `config.json` directly using the 
 following structure:
 
-```
+```json
 "auto_map": {     
 	"AutoConfig": "<your-repo-name>--<config-name>",     
 	"AutoModel": "<your-repo-name>--<config-name>",
