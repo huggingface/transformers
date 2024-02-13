@@ -390,10 +390,7 @@ else:
             ),
             (
                 "stablelm",
-                (
-                    "GPTNeoXTokenizerFast" if is_sentencepiece_available() else None,
-                    "GPTNeoXTokenizerFastFast" if is_tokenizers_available() else None,
-                ),
+                ("GPTNeoXTokenizerFast" if is_sentencepiece_available() else None,),
             ),
             (
                 "switch_transformers",
