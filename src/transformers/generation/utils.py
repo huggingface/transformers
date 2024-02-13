@@ -441,7 +441,7 @@ class GenerationMixin:
             if isinstance(value, torch.Tensor):
                 batch_size = value.shape[0]
                 break
-        return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
+        return torch.ones((batch_size, 0), dtype=torch.long, device=self.device)
 
     def _prepare_attention_mask_for_generation(
         self,
@@ -1424,7 +1424,7 @@ class GenerationMixin:
         # adjust max_length when using `input_embeds` in decoder-only models
         elif model_input_name == "inputs_embeds" and inputs_tensor.shape[:-1] != input_ids.shape:
             if not self.config.is_encoder_decoder:
-                generation_config.max_length -= inputs_tensor.shape[1] - 1
+                generation_config.max_length -= inputs_tensor.shape[1]
 
         # if we don't pass `past_key_values` and a cache_implementation is specified
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(

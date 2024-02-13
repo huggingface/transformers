@@ -2742,7 +2742,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         input_len = input_ids.shape[-1]
         out_gen = model.generate(input_ids=input_ids, max_length=max_length)
         out_gen_embeds = model.generate(inputs_embeds=inputs_embeds, max_length=max_length)
-        self.assertEqual(out_gen.shape[-1], input_len + out_gen_embeds.shape[-1] - 1)
+        self.assertEqual(out_gen.shape[-1], input_len + out_gen_embeds.shape[-1])
 
     def test_custom_stopping_criteria_overload_error(self):
         # PT-only test: TF doesn't have StoppingCriteria
