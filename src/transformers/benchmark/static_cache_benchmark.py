@@ -98,6 +98,8 @@ class StaticCacheBenchMark(BenchMark):
         next_token = _next_token
         cache_position = _cache_position
 
+        print("hello" * 8)
+
         with torch.no_grad():
 
             for _ in range(self.prefill_num_iter, self.num_iter):
@@ -116,6 +118,7 @@ class StaticCacheBenchMark(BenchMark):
                 # input_pos+=1
                 cache_position += 1
 
+        print("hello" * 16)
 
         def target():
 
