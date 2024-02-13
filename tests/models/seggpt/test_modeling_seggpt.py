@@ -283,37 +283,6 @@ class SegGptModelIntegrationTest(unittest.TestCase):
             images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
         )
 
-        # Verify pixel values
-        expected_prompt_pixel_values = torch.tensor(
-            [
-                [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
-                [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
-                [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
-            ]
-        )
-
-        expected_pixel_values = torch.tensor(
-            [
-                [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
-                [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
-                [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
-            ]
-        )
-
-        expected_prompt_masks = torch.tensor(
-            [
-                [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
-                [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
-                [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
-            ]
-        )
-
-        self.assertTrue(torch.allclose(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, atol=1e-4))
-        self.assertTrue(
-            torch.allclose(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, atol=1e-4)
-        )
-        self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4))
-
         inputs = inputs.to(torch_device)
         # forward pass
         with torch.no_grad():

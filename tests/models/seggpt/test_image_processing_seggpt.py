@@ -18,11 +18,14 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from transformers import SegGptImageProcessor
@@ -83,6 +86,13 @@ class SegGptImageProcessingTester(unittest.TestCase):
 def prepare_mask():
     ds = load_dataset("EduardoPacheco/seggpt-example-data")["train"]
     return ds[0]["mask"].convert("L")
+
+
+def prepare_img():
+    ds = load_dataset("EduardoPacheco/seggpt-example-data")["train"]
+    images = [image.convert("RGB") for image in ds["image"]]
+    masks = [image.convert("RGB") for image in ds["mask"]]
+    return images, masks
 
 
 @require_torch
@@ -153,3 +163,47 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         self.assertTrue(check_two_colors(mask_duplicated, color2=(1, 1, 1)))
         self.assertTrue(check_two_colors(mask_painted, color2=(255, 255, 255)))
+
+    @slow
+    def test_pixel_values(self):
+        images, masks = prepare_img()
+        input_image = images[1]
+        prompt_image = images[0]
+        prompt_mask = masks[0]
+
+        image_processor = SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large")
+
+        inputs = image_processor(
+            images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
+        )
+
+        # Verify pixel values
+        expected_prompt_pixel_values = torch.tensor(
+            [
+                [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
+                [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
+                [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
+            ]
+        )
+
+        expected_pixel_values = torch.tensor(
+            [
+                [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
+                [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
+                [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
+            ]
+        )
+
+        expected_prompt_masks = torch.tensor(
+            [
+                [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
+                [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
+                [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
+            ]
+        )
+
+        self.assertTrue(torch.allclose(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, atol=1e-4)
+        )
+        self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4))
