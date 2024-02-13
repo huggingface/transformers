@@ -2048,7 +2048,7 @@ print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 ```
 
 让我们保存它为 `t0.py`并运行：
-```
+```bash
 $ deepspeed --num_gpus 2 t0.py
 rank0:
    in=Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy
@@ -2074,13 +2074,13 @@ rank1:
 
 要运行DeepSpeed测试，请至少运行以下命令：
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
 ```
 
 如果你更改了任何模型或PyTorch示例代码，请同时运行多模型测试。以下将运行所有DeepSpeed测试：
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed
 ```
 

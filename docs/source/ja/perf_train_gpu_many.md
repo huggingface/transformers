@@ -131,7 +131,7 @@ DPとDDPの他にも違いがありますが、この議論には関係ありま
 `NCCL_P2P_DISABLE=1`を使用して、対応するベンチマークでNVLink機能を無効にしました。
 
 
-```
+```bash
 
 # DP
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \

@@ -135,7 +135,7 @@ if _sklearn_available:
 _smdistributed_available = importlib.util.find_spec("smdistributed") is not None
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
-_sudachipy_available = _is_package_available("sudachipy")
+_sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
 _tensorflow_probability_available = _is_package_available("tensorflow_probability")
 _tensorflow_text_available = _is_package_available("tensorflow_text")
 _tf2onnx_available = _is_package_available("tf2onnx")
@@ -894,6 +894,19 @@ def is_decord_available():
 
 def is_sudachi_available():
     return _sudachipy_available
+
+
+def get_sudachi_version():
+    return _sudachipy_version
+
+
+def is_sudachi_projection_available():
+    if not is_sudachi_available():
+        return False
+
+    # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
+    # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
+    return version.parse(_sudachipy_version) >= version.parse("0.6.8")
 
 
 def is_jumanpp_available():
