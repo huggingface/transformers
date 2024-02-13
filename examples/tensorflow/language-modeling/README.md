@@ -41,7 +41,7 @@ can also be used by passing the name of the TPU resource with the `--tpu` argume
 This script trains a masked language model.
 
 ### Example command
-```
+```bash
 python run_mlm.py \
 --model_name_or_path distilbert-base-cased \
 --output_dir output \
@@ -50,7 +50,7 @@ python run_mlm.py \
 ```
 
 When using a custom dataset, the validation file can be separately passed as an input argument. Otherwise some split (customizable) of training data is used as validation.
-```
+```bash
 python run_mlm.py \
 --model_name_or_path distilbert-base-cased \
 --output_dir output \
@@ -62,7 +62,7 @@ python run_mlm.py \
 This script trains a causal language model.
 
 ### Example command
-```
+```bash
 python run_clm.py \
 --model_name_or_path distilgpt2 \
 --output_dir output \
@@ -72,7 +72,7 @@ python run_clm.py \
 
 When using a custom dataset, the validation file can be separately passed as an input argument. Otherwise some split (customizable) of training data is used as validation.
 
-```
+```bash
 python run_clm.py \
 --model_name_or_path distilgpt2 \
 --output_dir output \

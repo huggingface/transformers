@@ -130,7 +130,9 @@
   - local: custom_tools
     title: Custom Tools and Prompts
   - local: troubleshooting
-    title: Troubleshoot
+    title: Troubleshoot  
+  - local: hf_quantizer
+    title: Contribute new quantization method
   title: Developer guides
 - sections:
   - local: performance
@@ -144,6 +146,8 @@
       title: Multiple GPUs and parallelism
     - local: fsdp
       title: Fully Sharded Data Parallel
+    - local: deepspeed
+      title: DeepSpeed
     - local: perf_train_cpu
       title: Efficient training on CPU
     - local: perf_train_cpu_many
@@ -174,7 +178,7 @@
   title: Performance and scalability
 - sections:
   - local: contributing
-    title: How to contribute to transformers?
+    title: How to contribute to 🤗 Transformers?
   - local: add_new_model
     title: How to add a model to 🤗 Transformers?
   - local: add_tensorflow_model
@@ -253,7 +257,7 @@
     - local: main_classes/trainer
       title: Trainer
     - local: main_classes/deepspeed
-      title: DeepSpeed Integration
+      title: DeepSpeed
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor
@@ -525,6 +529,8 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/depth_anything
+        title: Depth Anything
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
@@ -583,14 +589,10 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
-      - local: model_doc/timesformer
-        title: TimeSformer
       - local: model_doc/upernet
         title: UperNet
       - local: model_doc/van
         title: VAN
-      - local: model_doc/videomae
-        title: VideoMAE
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vit_hybrid
@@ -603,8 +605,6 @@
         title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
-      - local: model_doc/vivit
-        title: ViViT
       - local: model_doc/yolos
         title: YOLOS
       title: Vision models
@@ -667,6 +667,15 @@
       - local: model_doc/xlsr_wav2vec2
         title: XLSR-Wav2Vec2
       title: Audio models
+    - isExpanded: false
+      sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: model_doc/videomae
+        title: VideoMAE
+      - local: model_doc/vivit
+        title: ViViT
+      title: Video models 
     - isExpanded: false
       sections:
       - local: model_doc/align

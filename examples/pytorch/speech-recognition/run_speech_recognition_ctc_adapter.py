@@ -146,7 +146,7 @@ class DataTrainingArguments:
                 " should be trained on in ISO 693-3 code, e.g. `tur` for Turkish"
                 " Wav2Vec2's MMS ISO codes can be looked up here: https://dl.fbaipublicfiles.com/mms/misc/language_coverage_mms.html"
                 " If you are not training the adapter layers on a language, simply choose"
-                " another accronym that fits your data."
+                " another acronym that fits your data."
             )
         },
     )
@@ -251,7 +251,7 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )

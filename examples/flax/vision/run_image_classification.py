@@ -179,7 +179,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -330,7 +330,7 @@ def main():
 
     # Initialize datasets and pre-processing transforms
     # We use torchvision here for faster pre-processing
-    # Note that here we are using some default pre-processing, for maximum accuray
+    # Note that here we are using some default pre-processing, for maximum accuracy
     # one should tune this part and carefully select what transformations to use.
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     train_dataset = torchvision.datasets.ImageFolder(

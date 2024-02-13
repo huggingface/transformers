@@ -20,6 +20,12 @@ Quantization techniques focus on representing data with less information while a
 
 Transformers supports several quantization schemes to help you run inference with large language models (LLMs) and finetune adapters on quantized models. This guide will show you how to use Activation-aware Weight Quantization (AWQ), AutoGPTQ, and bitsandbytes.
 
+<Tip>
+
+Interested in adding a new quantization method to Transformers? Read the [HfQuantizer](./hf_quantizer) guide to learn how!
+
+</Tip>
+
 ## AWQ
 
 <Tip>
@@ -30,7 +36,7 @@ Try AWQ quantization with this [notebook](https://colab.research.google.com/driv
 
 [Activation-aware Weight Quantization (AWQ)](https://hf.co/papers/2306.00978) doesn't quantize all the weights in a model, and instead, it preserves a small percentage of weights that are important for LLM performance. This significantly reduces quantization loss such that you can run models in 4-bit precision without experiencing any performance degradation.
 
-There are several libraries for quantizing models with the AWQ algorithm, such as [llm-awq](https://github.com/mit-han-lab/llm-awq), [autoawq](https://github.com/casper-hansen/AutoAWQ) or [optimum-intel](https://huggingface.co/docs/optimum/main/en/intel/optimization_inc). Transformers supports loading models quantized with the llm-awq and autoawq libraries. This guide will show you how to load models quantized with autoawq, but the processs is similar for llm-awq quantized models.
+There are several libraries for quantizing models with the AWQ algorithm, such as [llm-awq](https://github.com/mit-han-lab/llm-awq), [autoawq](https://github.com/casper-hansen/AutoAWQ) or [optimum-intel](https://huggingface.co/docs/optimum/main/en/intel/optimization_inc). Transformers supports loading models quantized with the llm-awq and autoawq libraries. This guide will show you how to load models quantized with autoawq, but the process is similar for llm-awq quantized models.
 
 Make sure you have autoawq installed:
 
@@ -208,7 +214,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="aut
 
 <Tip warning={true}>
 
-Depending on your hardware, it can take some time to quantize a model from scratch. It can take ~5 minutes to quantize the [faceboook/opt-350m]() model on a free-tier Google Colab GPU, but it'll take ~4 hours to quantize a 175B parameter model on a NVIDIA A100. Before you quantize a model, it is a good idea to check the Hub if a GPTQ-quantized version of the model already exists.
+Depending on your hardware, it can take some time to quantize a model from scratch. It can take ~5 minutes to quantize the [facebook/opt-350m](https://huggingface.co/facebook/opt-350m) model on a free-tier Google Colab GPU, but it'll take ~4 hours to quantize a 175B parameter model on a NVIDIA A100. Before you quantize a model, it is a good idea to check the Hub if a GPTQ-quantized version of the model already exists.
 
 </Tip>
 
@@ -577,7 +583,7 @@ The speed and throughput of fused and unfused modules were also tested with the 
 <div class="flex gap-4">
   <div>
     <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_forward_memory_plot.png" alt="generate throughput per batch size" />
-    <figcaption class="mt-2 text-center text-sm text-gray-500">foward peak memory/batch size</figcaption>
+    <figcaption class="mt-2 text-center text-sm text-gray-500">forward peak memory/batch size</figcaption>
   </div>
   <div>
     <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput_plot.png" alt="forward latency per batch size" />
