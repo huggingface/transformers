@@ -2416,7 +2416,6 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
-<<<<<<< HEAD
         if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
             logger.warning(
                 f"Checkpoint destination directory {output_dir} already exists and is non-empty. "
@@ -2426,15 +2425,12 @@ class Trainer:
         else:
             staging_output_dir = os.path.join(run_dir, f"tmp-{checkpoint_folder}")
         self.save_model(staging_output_dir, _internal_call=True)
-=======
-        self.save_model(output_dir, _internal_call=True)
         if self.is_deepspeed_enabled:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.model_wrapped.save_checkpoint(output_dir)
+            self.model_wrapped.save_checkpoint(staging_output_dir)
             if self.args.deepspeed_force_lr_scheduler_checkpointing and self.model_wrapped.lr_scheduler is None:
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
->>>>>>> ext/main
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(staging_output_dir, SCHEDULER_NAME))
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler

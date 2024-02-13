@@ -1289,7 +1289,6 @@ class TrainingArguments:
         },
     )
 
-<<<<<<< HEAD
     split_batches: Optional[bool] = field(
         default=False,
         metadata={
@@ -1315,6 +1314,8 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+        },
+    )
     
     deepspeed_force_lr_scheduler_checkpointing: bool = field(
         default=False,
