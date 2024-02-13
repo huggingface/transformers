@@ -553,13 +553,13 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->Deta
 class DetaMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, config: DetaConfig, num_heads: int, n_levels: int, n_points: int):
+    def __init__(self, config: DetaConfig, num_heads: int, n_points: int):
         super().__init__()
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -577,12 +577,12 @@ class DetaMultiscaleDeformableAttention(nn.Module):
         self.im2col_step = 64
 
         self.d_model = config.d_model
-        self.n_levels = n_levels
+        self.n_levels = config.num_feature_levels
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * n_levels * n_points)
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
