@@ -1493,7 +1493,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            return self.assisted_decoding(
+            generate_output = self.assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
@@ -1510,7 +1510,7 @@ class GenerationMixin:
             )
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
-            return self.greedy_search(
+            generate_output = self.greedy_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -1527,7 +1527,7 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
 
-            return self.contrastive_search(
+            generate_output = self.contrastive_search(
                 input_ids,
                 top_k=generation_config.top_k,
                 penalty_alpha=generation_config.penalty_alpha,
@@ -1556,7 +1556,7 @@ class GenerationMixin:
             )
 
             # 13. run sample
-            return self.sample(
+            generate_output = self.sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
@@ -1589,7 +1589,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.beam_search(
+            generate_output = self.beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1627,7 +1627,7 @@ class GenerationMixin:
             )
 
             # 14. run beam sample
-            return self.beam_sample(
+            generate_output = self.beam_sample(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1661,7 +1661,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.group_beam_search(
+            generate_output = self.group_beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1734,7 +1734,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.constrained_beam_search(
+            generate_output = self.constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1746,6 +1746,12 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
+
+        # Finally, reset the model cache if has one
+        if hasattr(self, "_reset_cache"):
+            self._reset_cache()
+
+        return generate_output
 
     @torch.no_grad()
     def contrastive_search(
