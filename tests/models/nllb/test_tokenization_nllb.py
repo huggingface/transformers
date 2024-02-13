@@ -317,11 +317,12 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             # testing that saving and loading the tokenizer preserves the new behaviour
             tok2.save_pretrained(tempdir)
-            tok3 = NllbTokenizer(f"{tempdir}/tokenizer.model")
-            self.assertEqual(len(tok3), tok3.vocab_size)
-
-            tok3 = NllbTokenizer(f"{tempdir}/tokenizer.model", additional_special_tokens=new_codes)
-            self.assertEqual(len(tok3), tok3.vocab_size + len(new_codes))
+            tok3 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=None)
+            self.assertEqual(len(tok3), 256204) #legacy
+            tok4 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[])
+            self.assertEqual(len(tok4), 256002)
+            tok5 = NllbTokenizer(f"{tempdir}/sentencepiece.bpe.model", additional_special_tokens=[code1, code2])
+            self.assertEqual(len(tok5), 256004)
 
 
 @require_torch
