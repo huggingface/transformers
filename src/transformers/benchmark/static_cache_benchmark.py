@@ -1,3 +1,5 @@
+import os
+
 import torch
 import inspect
 import json
@@ -49,8 +51,9 @@ class StaticCacheBenchMark(BenchMark):
         self.num_iter = num_iter
         self.device = device
 
-        self.tokenizer = AutoTokenizer.from_pretrained(repo_id, padding_side="left", pad_token="<s>")
-        self.model = AutoModelForCausalLM.from_pretrained(repo_id, torch_dtype=all_dtype, attn_implementation=attn_implementation).to(device, all_dtype).eval()
+        token = os.getenv("HF_HUB_READ_TOKEN", None)
+        self.tokenizer = AutoTokenizer.from_pretrained(repo_id, padding_side="left", pad_token="<s>", token=token)
+        self.model = AutoModelForCausalLM.from_pretrained(repo_id, torch_dtype=all_dtype, attn_implementation=attn_implementation, token=token).to(device, all_dtype).eval()
 
         # FRANCE_ARTICLE
         self.input_text = (
