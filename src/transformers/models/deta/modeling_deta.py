@@ -812,7 +812,6 @@ class DetaEncoderLayer(nn.Module):
         self.self_attn = DetaMultiscaleDeformableAttention(
             config,
             num_heads=config.encoder_attention_heads,
-            n_levels=config.num_feature_levels,
             n_points=config.encoder_n_points,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -913,7 +912,6 @@ class DetaDecoderLayer(nn.Module):
         self.encoder_attn = DetaMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
-            n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
