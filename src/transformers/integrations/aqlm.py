@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"AQLM (Additive Quantization of Languageg Model) integration file"
+"AQLM (Additive Quantization of Language Model) integration file"
 
 
 from ..utils import is_accelerate_available, is_aqlm_available, is_torch_available
