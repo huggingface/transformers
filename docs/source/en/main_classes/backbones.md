@@ -18,6 +18,9 @@ rendered properly in your Markdown viewer.
 
 A backbone is a model used for feature extraction for higher level computer vision tasks such as object detection and image classification. Transformers provides an [`AutoBackbone`] class for initializing a Transformers backbone from pretrained model weights, and two utility classes:
 
+* [`~utils.BackboneMixin`] enables initializing a backbone from Transformers or [timm](https://hf.co/docs/timm/index) and includes functions for returning the output features and indices.
+* [`~utils.BackboneConfigMixin`] sets the output features and indices of the backbone configuration.
+
 [timm](https://hf.co/docs/timm/index) models are loaded with the [`TimmBackbone`] and [`TimmBackboneConfig`] classes.
 
 Backbones are supported for the following models:
@@ -42,11 +45,11 @@ Backbones are supported for the following models:
 
 ## BackboneMixin
 
-[[autodoc]] utils.backbone_utils.BackboneMixin
+[[autodoc]] utils.BackboneMixin
 
 ## BackboneConfigMixin
 
-[[autodoc]] utils.backbone_utils.BackboneConfigMixin
+[[autodoc]] utils.BackboneConfigMixin
 
 ## TimmBackbone
 
