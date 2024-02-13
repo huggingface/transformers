@@ -144,13 +144,16 @@ class SpeedBenchMark(BenchMark):
 
         def wrapper():
 
-            # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(
-                func,
-                repeat=repeat,
-                number=number,
-            )
+            # # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
+            # runtimes = timeit.repeat(
+            #     func,
+            #     repeat=repeat,
+            #     number=number,
+            # )
+            #
+            # return {"time": min(runtimes) / number}
 
-            return {"time": min(runtimes) / number}
+            func()
+            return {}
 
         return wrapper
