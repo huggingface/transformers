@@ -95,6 +95,28 @@ class StaticCacheBenchMark(BenchMark):
         _next_token = next_token
         _cache_position = cache_position
 
+        next_token = _next_token
+        cache_position = _cache_position
+
+        with torch.no_grad():
+
+            for _ in range(self.prefill_num_iter, self.num_iter):
+                # torch.cuda.synchronize()
+
+                # _start = time.perf_counter()
+
+                with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+                    next_token = decode_one_tokens_compiled(self.model, next_token.clone(), None, cache_position)
+                    generated_ids.index_copy_(1, cache_position, next_token)
+                # torch.cuda.synchronize()
+
+                # _total_time = time.perf_counter() - _start
+                # print(_total_time, end="\t")
+
+                # input_pos+=1
+                cache_position += 1
+
+
         def target():
 
             return 1
