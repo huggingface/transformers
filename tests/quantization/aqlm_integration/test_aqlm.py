@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_aqlm,
     require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -165,3 +166,18 @@ class AqlmTest(unittest.TestCase):
 
             output = model.generate(**input_ids, max_new_tokens=40)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    @require_torch_multi_gpu
+    def test_quantized_model_multi_gpu(self):
+        """
+        Simple test that checks if the quantized model is working properly with multiple GPUs
+        """
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1, 2, 3})
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=40)
+
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
