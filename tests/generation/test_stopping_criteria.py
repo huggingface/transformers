@@ -110,14 +110,24 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(len(stopping_criteria), 1)
 
     def test_stop_string_criteria(self):
-        true_strings = ["<|im_start|><|im_end|>", "<|im_start|><|im_end|<|im_end|>", ">><|im_start|>>stop", "stop"]
+        true_strings = [
+            "<|im_start|><|im_end|>",
+            "<|im_start|><|im_end|<|im_end|>",
+            ">><|im_start|>>stop",
+            "stop",
+            "end",
+        ]
         false_strings = [
             "<|im_start|><|im_end|",
             "<|im_start|><|im_end|<|im_end|",
             "<|im_end|><|im_start|>",
             "<|im_end|<>stop<|im_end|",
         ]
-        too_short_strings = ["<|im_end|", "|im_end|>", "s", "end"]
+        too_short_strings = [
+            "<|im_end|",
+            "|im_end|>",
+            "s",
+        ]
 
         # Use a tokenizer that won't actually have special tokens for these
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -129,7 +139,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
         )
         scores = None
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop"])
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop", "end"])
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
@@ -145,7 +155,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         too_short_input_ids = tokenizer(
             too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
         )
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop"])
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop", "end"])
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
