@@ -34,7 +34,7 @@ Try AQLM on [Google Colab](https://colab.research.google.com/drive/1-xZmBRXT5Fm3
 
 Additive Quantization of Language Models ([AQLM](https://arxiv.org/abs/2401.06118)) is a Large Language Models compression method. It quantizes multiple weights together and take advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
 
-Inference support for AQLM is realised in the `aqlm` library. Make sure to install it to run the models:
+Inference support for AQLM is realised in the `aqlm` library. Make sure to install it to run the models (note aqlm works only with python>=3.10):
 ```bash
 pip install aqlm[gpu,cpu]
 ```

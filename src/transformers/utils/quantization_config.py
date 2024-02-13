@@ -748,7 +748,7 @@ class AqlmConfig(QuantizationConfigMixin):
             Number of codebooks for the Additive Quantization procedure.
         nbits_per_codebook (`int`, *optional*, defaults to 16):
             Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
-        linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*, default to `None`):
+        linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*):
             List of full paths of `nn.Linear` weight parameters that shall not be quantized.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
