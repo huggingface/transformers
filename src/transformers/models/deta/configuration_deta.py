@@ -187,6 +187,7 @@ class DetaConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
+        disable_custom_kernels=False,
         **kwargs,
     ):
         if use_pretrained_backbone:
@@ -248,6 +249,7 @@ class DetaConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
+        self.disable_custom_kernels = disable_custom_kernels
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
