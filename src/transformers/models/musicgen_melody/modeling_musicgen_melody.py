@@ -941,17 +941,15 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         if labels is not None:
             # since encoder hidden states have concatenated to hidden states, take the last hidden states corresponding to labels
             logits = lm_logits[:,:,-labels.shape[-1]:]
-            mask_logits = labels != -100
             
             loss_fct = CrossEntropyLoss()
             loss = torch.zeros([], device=self.device)
-            for codebook in range(self.config.num_codebooks):
-                logits_codebook = logits[:, codebook].contiguous().view(-1, self.config.vocab_size)
-                labels_codebook = labels.squeeze(1)[:, codebook].contiguous().view(-1)
-                mask_codebook = mask_logits.squeeze(1)[:, codebook].contiguous().view(-1)
-                loss += loss_fct(logits_codebook[mask_codebook], labels_codebook[mask_codebook])
-            # average cross entropy across codebooks
-            loss = loss / self.config.num_codebooks
+            
+            # per codebook cross-entropy
+            # -100 labels are ignored
+            # (bsz, vocab_size, seq_len, num_codebooks), (bsz, seq_len, num_codebooks)
+            loss = loss_fct(logits.transpose(1,3), labels.squeeze(1).transpose(1,2))
+            
 
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
         lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
