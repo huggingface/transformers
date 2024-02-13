@@ -154,7 +154,7 @@ def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_toke
 
 
 class WhisperGenerationMixin:
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None, segment=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
         map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
@@ -165,9 +165,14 @@ class WhisperGenerationMixin:
         """
         # Create a list with `decoder_layers` elements, each a tensor of shape
         # (batch size, attention_heads, output length, input length).
-        cross_attentions = []
-        for i in range(self.config.decoder_layers):
-            cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
+        if isinstance(generate_outputs, list):
+            num_layers = len(generate_outputs[0]["cross_attentions"][0])
+            num_gen = len(generate_outputs[0]["cross_attentions"])
+            cross_attentions = tuple(tuple(torch.cat([o["cross_attentions"][j][k] for o in generate_outputs]) for k in range(num_layers)) for j in range(num_gen))
+        else:
+            cross_attentions = generate_outputs.cross_attentions 
+
+        cross_attentions = [torch.cat([x[i] for x in cross_attentions], dim=2) for i in range(self.config.decoder_layers)]
 
         # Select specific cross-attention layers and heads. This is a tensor
         # of shape (batch size, num selected, output length, input length).
@@ -198,9 +203,12 @@ class WhisperGenerationMixin:
             )
 
         # make sure timestamps are as long as weights
-        input_length = weight_length or cross_attentions[0].shape[2]
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, : input_length + 1]
-        batch_size = timestamps.shape[0]
+        if segment is not None:
+            timestamps = torch.zeros_like(segment["tokens"], dtype=torch.float32)
+        else:
+            input_length = weight_length or cross_attentions[0].shape[2]
+            timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, : input_length + 1]
+            batch_size = timestamps.shape[0]
 
         if num_frames is not None:
             # two cases:
@@ -725,6 +733,15 @@ class WhisperGenerationMixin:
                 current_segments[prev_i] += segments
                 seek[prev_i] += segment_offset
 
+            if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+                # TODO(Sanchit): Need to take segments of all batches here - it's actually not super trivial 
+                # since different batches can have different amount of segments. Might be easier to just 
+                # do everthing on a per-batch basis
+                for segment in segments:
+                    seek_outputs["token_timestamps"] = self._extract_token_timestamps(
+                        seek_outputs, generation_config.alignment_heads, segment=segment
+                    )
+
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
         final_segments = (
@@ -873,12 +890,6 @@ class WhisperGenerationMixin:
             seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
             return seek_outputs, seek_outputs
 
-        if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            num_frames = getattr(generation_config, "num_frames", None)
-            seek_outputs["token_timestamps"] = self._extract_token_timestamps(
-                seek_outputs, generation_config.alignment_heads, num_frames=num_frames
-            )
-
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
         def split_by_batch_index(values, key, batch_idx):
@@ -886,9 +897,9 @@ class WhisperGenerationMixin:
                 # we don't save `past_key_values` as this is too costly
                 return None
             elif isinstance(values[batch_idx], list) and torch.is_tensor(values[batch_idx][0]):
-                return [v[batch_idx].cpu() for v in values[batch_idx]]
+                return list(list(w[batch_idx][None].cpu() for w in v) for v in values)
             elif isinstance(values[batch_idx], tuple) and torch.is_tensor(values[batch_idx][0]):
-                return (v[batch_idx].cpu() for v in values[batch_idx])
+                return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
 
             return values[batch_idx].cpu()
 
