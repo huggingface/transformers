@@ -382,7 +382,7 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
 @require_torch
 class StableLmModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_model_stablelm_3b_4e1t_logits(self):
         input_ids = {"input_ids": torch.tensor([[510, 8588, 310, 1900, 9386]], dtype=torch.long, device=torch_device)}
 
@@ -399,7 +399,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([7.1030, -1.4195,  9.9206,  7.7008,  4.9891,  4.2169,  5.5426,  3.7878, 6.7593,  5.7360,  8.4691,  5.5448,  5.0544, 10.4129,  8.5573, 13.0405, 7.3265,  3.5868,  6.1106,  5.9406,  5.6376,  5.7490,  5.4850,  4.8124, 5.1991,  4.6419,  4.5719,  9.9588,  6.7222,  4.5070]).to(torch_device)  # fmt: skip
         self.assertTrue(torch.allclose(output[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4))
 
-    # @slow
+    @slow
     def test_model_stablelm_3b_4e1t_generation(self):
         tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
         model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
@@ -415,7 +415,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         self.assertEqual(text, EXPECTED_TEXT_COMPLETION)
 
     @require_bitsandbytes
-    # @slow
+    @slow
     @require_flash_attn
     def test_model_3b_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [3, 3, 3]
