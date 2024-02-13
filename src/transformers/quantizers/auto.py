@@ -147,5 +147,8 @@ class AutoHfQuantizer:
                 setattr(quantization_config, attr, val)
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        warnings.warn(warning_msg)
+        if warning_msg != "":
+            warnings.warn(warning_msg)
+
+        return quantization_config
         return quantization_config
