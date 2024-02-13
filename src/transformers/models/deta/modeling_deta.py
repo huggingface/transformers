@@ -24,6 +24,8 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.autograd import Function
+from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -31,6 +33,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
 )
@@ -38,7 +41,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
+from ...utils import is_accelerate_available, is_ninja_available, is_torchvision_available, logging, requires_backends
 from ...utils.backbone_utils import load_backbone
 from .configuration_deta import DetaConfig
 from .load_custom import load_cuda_kernels
@@ -556,13 +559,13 @@ class DetaMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
+    def __init__(self, config: DetaConfig, num_heads: int, n_levels: int, n_points: int):
         super().__init__()
-        if embed_dim % num_heads != 0:
+        if config.d_model % num_heads != 0:
             raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {embed_dim} and {num_heads}"
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
             )
-        dim_per_head = embed_dim // num_heads
+        dim_per_head = config.d_model // num_heads
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
@@ -573,15 +576,15 @@ class DetaMultiscaleDeformableAttention(nn.Module):
 
         self.im2col_step = 64
 
-        self.d_model = embed_dim
+        self.d_model = config.d_model
         self.n_levels = n_levels
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * n_points)
-        self.value_proj = nn.Linear(embed_dim, embed_dim)
-        self.output_proj = nn.Linear(embed_dim, embed_dim)
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * n_levels * n_points)
+        self.value_proj = nn.Linear(config.d_model, config.d_model)
+        self.output_proj = nn.Linear(config.d_model, config.d_model)
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
@@ -807,7 +810,7 @@ class DetaEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = DetaMultiscaleDeformableAttention(
-            embed_dim=self.embed_dim,
+            config,
             num_heads=config.encoder_attention_heads,
             n_levels=config.num_feature_levels,
             n_points=config.encoder_n_points,
@@ -908,7 +911,7 @@ class DetaDecoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
         self.encoder_attn = DetaMultiscaleDeformableAttention(
-            embed_dim=self.embed_dim,
+            config,
             num_heads=config.decoder_attention_heads,
             n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
