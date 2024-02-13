@@ -8,8 +8,8 @@ from benchmark_utils_generic import BenchMark, SpeedBenchMark
 from typing import Optional
 from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
 
-torch._inductor.config.coordinate_descent_tuning = True
-torch._inductor.config.triton.unique_kernel_names = True
+# torch._inductor.config.coordinate_descent_tuning = True
+# torch._inductor.config.triton.unique_kernel_names = True
 
 
 def multinomial_sample_one_no_sync(probs_sort):  # Does multinomial sampling without a cuda synchronization
