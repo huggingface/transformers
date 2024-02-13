@@ -18,7 +18,7 @@ import warnings
 import torch
 
 from transformers import GemmaConfig, GemmaForCausalLM, GemmaTokenizer
-
+from accelerate import init_empty_weights
 
 try:
     from transformers import GemmaTokenizerFast
@@ -64,7 +64,7 @@ CONFIG_MAPPING = {"2B": gemma_2b_config, "7B": gemma_7b_config}
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 
-def write_model(save_path, input_base_path, config, safe_serialization=True):
+def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False):
     num_attn_heads = config.num_attention_heads
     hidden_size = config.hidden_size
     num_kv_heads = config.num_key_value_heads
@@ -83,14 +83,14 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size)
-                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size)
-                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size).clone()
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size).clone()
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0].clone()
             else:
                 q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
-                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size)
-                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size)
-                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size).clone()
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size).clone()
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj.clone()
 
         elif k == "embedder.weight":
             state_dict[LAYER_NAME_MAPPING[k]] = v
@@ -99,54 +99,43 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
             state_dict[k] = v
 
     print("Loading the checkpoint in a Gemma model.")
-    with torch.device("meta"):
+    with init_empty_weights():
         model = GemmaForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=False)
 
     model.config.torch_dtype = torch.float32
     del model.config._name_or_path
     print("Saving in the Transformers format.")
-    push_to_hub = True
+
     if push_to_hub:
         print(f"pushing the model to {save_path}")
-        response = input("Please enter yes or no: ").lower().strip()
-        result = response == "yes"
-        if result:
-            model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
-            print(f"Pushed float32")
-            
-            fp16_model = model.to(torch.float16)
-            fp16_model.push_to_hub(save_path, safe_serialization=safe_serialization, revision="float16", private=True)
-            del fp16_model
-            print(f"Pushed float16")
-            
-            bf16_model = model.to(torch.bfloat16)
-            bf16_model.push_to_hub(save_path, safe_serialization=safe_serialization, revision="bfloat16", private=True)
-            print(f"Pushed bfloat16")
+        model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
     else:
         model.save_pretrained(save_path, safe_serialization=safe_serialization)
-    
-            
 
 
-def write_tokenizer(input_tokenizer_path, save_path):
+
+def write_tokenizer(input_tokenizer_path, save_path, push_to_hub=False):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GemmaTokenizer  # if GemmaTokenizerFast is None else GemmaTokenizerFast
+    tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
-    tokenizer.save_pretrained(save_path)
+    if push_to_hub:
+        tokenizer.push_to_hub(save_path)
+    else:
+        tokenizer.save_pretrained(save_path)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--input_dir",
+        "--input_checkpoint",
         help="Absolute path to the target GoldenGate weights.",
         required=True,
     )
     parser.add_argument(
-        "--tokenizer_dir",
-        help="Location of GoldenGate tokenizer weights",
+        "--tokenizer_checkpoint",
+        help="Location of GoldenGate tokenizer model",
     )
     parser.add_argument(
         "--model_size",
@@ -171,21 +160,29 @@ def main():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--push_to_hub",
+        help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
 
     if args.convert_tokenizer:
-        if args.tokenizer_dir is None:
+        if args.tokenizer_checkpoint is None:
             raise ValueError("Path to the tokenizer is required when passing --convert_tokenizer")
 
-        spm_path = os.path.join(args.tokenizer_dir)
-        write_tokenizer(spm_path, args.output_dir)
+        spm_path = os.path.join(args.tokenizer_checkpoint)
+        write_tokenizer(spm_path, args.output_dir, args.push_to_hub)
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
         config=config,
-        input_base_path=args.input_dir,
+        input_base_path=args.input_checkpoint,
+        input_tokenizer_path=spm_path,
         save_path=args.output_dir,
         safe_serialization=not args.pickle_serialization,
+        push_to_hub=args.push_to_hub
     )
 
 
