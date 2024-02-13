@@ -24,7 +24,7 @@
   - isExpanded: false
     sections:
     - local: tasks/image_captioning
-      title: Subtítulos de imágenesg
+      title: Subtítulos de imágenes
     - local: tasks/question_answering
       title: Respuesta a preguntas
     - local: tasks/language_modeling

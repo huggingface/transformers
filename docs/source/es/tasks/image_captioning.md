@@ -18,8 +18,8 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-La subtítulos de imágenes es la tarea de predecir un subtítulo para una imagen dada. Las aplicaciones comunes en el mundo real incluyen
-ayudar a personas con discapacidad visual que les puede ayudar a navegar a través de diferentes situaciones. Por lo tanto, la subtítulos de imágenes
+Los subtítulos de imágenes es la tarea de predecir un subtítulo para una imagen dada. Las aplicaciones comunes en el mundo real incluyen
+ayudar a personas con discapacidad visual que les puede ayudar a navegar a través de diferentes situaciones. Por lo tanto, los subtítulos de imágenes
 ayuda a mejorar la accesibilidad del contenido para las personas describiéndoles imágenes.
 
 Esta guía te mostrará cómo:
@@ -64,11 +64,11 @@ DatasetDict({
 
 El conjunto de datos tiene dos características, `image` y `text`.
 
-<Consejo>
+<Tip>
 
 Muchos conjuntos de datos de subtítulos de imágenes contienen múltiples subtítulos por imagen. En esos casos, una estrategia común es muestrear aleatoriamente un subtítulo entre los disponibles durante el entrenamiento.
 
-</Consejo>
+</Tip>
 
 Divide el conjunto de entrenamiento del conjunto de datos en un conjunto de entrenamiento y de prueba con el método [`~datasets.Dataset.train_test_split`]:
 
