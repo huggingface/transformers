@@ -305,14 +305,23 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(tok2), len(tok1) + 2)
         tok2.tgt_lang = code1
         tok2.src_lang = code2
-        self.assertEqual(tok2("šumbrat!").input_ids[0], tok2.convert_tokens_to_ids(code2))
 
-        # testing that saving and loading the tokenizer preserves the new behaviour
-        tok2.save_pretrained("tmp_tok")
-        tok3 = NllbTokenizer.from_pretrained("tmp_tok")
-        self.assertEqual(tok2.get_vocab(), tok3.get_vocab())
-        tok3.src_lang = code2
-        self.assertEqual(tok3("šumbrat!").input_ids[0], tok3.convert_tokens_to_ids(code2))
+        self.assertEqual(tok2("šumbrat!").input_ids[0], tok2.convert_tokens_to_ids(code2))
+        with tempfile.TemporaryDirectory() as tempdir:
+            # testing that saving and loading the tokenizer preserves the new behaviour
+            tok2.save_pretrained(tempdir)
+            tok3 = NllbTokenizer.from_pretrained(tempdir)
+            self.assertEqual(tok2.get_vocab(), tok3.get_vocab())
+            tok3.src_lang = code2
+            self.assertEqual(tok3("šumbrat!").input_ids[0], tok3.convert_tokens_to_ids(code2))
+
+            # testing that saving and loading the tokenizer preserves the new behaviour
+            tok2.save_pretrained(tempdir)
+            tok3 = NllbTokenizer(f"{tempdir}/tokenizer.model")
+            self.assertEqual(len(tok3), tok3.vocab_size)
+
+            tok3 = NllbTokenizer(f"{tempdir}/tokenizer.model", additional_special_tokens=new_codes)
+            self.assertEqual(len(tok3), tok3.vocab_size + len(new_codes))
 
 
 @require_torch
