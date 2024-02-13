@@ -265,7 +265,7 @@ class TrainingArguments:
                 - `"steps"`: Logging is done every `logging_steps`.
 
         logging_first_step (`bool`, *optional*, defaults to `False`):
-            Whether to log and evaluate the first `global_step` or not.
+            Whether to log the first `global_step` or not.
         logging_steps (`int` or `float`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`. Should be an integer or a float in
             range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
@@ -1066,7 +1066,7 @@ class TrainingArguments:
         },
     )
     # Do not touch this type annotation or it will stop working in CLI
-    fsdp_config: Optional[str] = field(
+    fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1310,7 +1310,7 @@ class TrainingArguments:
         },
     )
 
-    neftune_noise_alpha: float = field(
+    neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
@@ -2421,9 +2421,9 @@ class TrainingArguments:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
                 The logging strategy to adopt during training. Possible values are:
 
-                    - `"no"`: No save is done during training.
-                    - `"epoch"`: Save is done at the end of each epoch.
-                    - `"steps"`: Save is done every `save_steps`.
+                    - `"no"`: No logging is done during training.
+                    - `"epoch"`: Logging is done at the end of each epoch.
+                    - `"steps"`: Logging is done every `logging_steps`.
 
             steps (`int`, *optional*, defaults to 500):
                 Number of update steps between two logs if `strategy="steps"`.
