@@ -1,4 +1,5 @@
 import torch
+import inspect
 import json
 
 from benchmark_utils_generic import BenchMark, SpeedBenchMark
@@ -37,7 +38,11 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position):
 
 class StaticCacheBenchMark(BenchMark):
 
+    # @foo
     def __init__(self, repo_id, prefill_num_iter=3, num_iter=100, device="cuda", attn_implementation="sdpa", all_dtype=torch.bfloat16):
+
+        # How do we enforce!
+        super().__init__()
 
         self.repo_id = "meta-llama/Llama-2-7b-chat-hf"
         self.prefill_num_iter = prefill_num_iter
@@ -122,17 +127,20 @@ if __name__ == "__main__":
     prefill_num_iter = 3
     num_iter = 100
 
-    benchmakr = StaticCacheSpeedBenchMark(repo_id, prefill_num_iter, num_iter)
+    benchmakr = StaticCacheSpeedBenchMark(repo_id=repo_id, prefill_num_iter=prefill_num_iter, num_iter=num_iter)
 
-    # for batch_size in [1, 2, 4]:
-    #     for max_cache_length in [4096, 2048, 1024, 512]:
-    #         for seq_length in [512, 1, 1024, 2048]:
-    #             print(f"{batch_size}, {seq_length}, {max_cache_length}")
+    # all_batch_size = [1, 2, 4]
+    # all_max_cache_length = [4096, 2048, 1024, 512]
+    # all_seq_length = [512, 1, 1024, 2048]
+
+    all_batch_size = [1, 2, 4]
+    all_max_cache_length = [16, 32, 64]
+    all_seq_length = [4, 8, 16, 32]
 
     results = []
-    for batch_size in [1, 2, 4]:
-        for max_cache_length in [16, 32, 64]:
-            for seq_length in [4, 8, 16, 32]:
+    for batch_size in all_batch_size:
+        for max_cache_length in all_max_cache_length:
+            for seq_length in all_seq_length:
                 print(f"{batch_size}, {seq_length}, {max_cache_length}")
 
                 run_kwargs = {
@@ -146,4 +154,3 @@ if __name__ == "__main__":
                 results.append(result)
 
     print(json.dumps(results, indent=4))
-

@@ -14,10 +14,64 @@
 """
 Benchmark
 """
+import inspect
 import timeit
 
 
+# def foo(func):
+#
+#     info = inspect.signature(func)
+#
+#     def wrapper(*args, **kwargs):
+#         self = args[0]
+#
+#         if not hasattr(self, "init_kwargs"):
+#
+#             parameters = info.parameters
+#
+#             pos_parameters = []
+#             keyword_parameters = {}
+#
+#             for parameter in parameters.values():
+#                 parameter_name = parameter.name
+#                 if parameter.default == inspect._empty:
+#                     pos_parameters.append(parameter_name)
+#                 else:
+#                     keyword_parameters[parameter_name] = parameter.default
+#
+#             parameter_names = pos_parameters + list(keyword_parameters.keys())
+#
+#             arguments = {}
+#
+#             if len(args) > 0:
+#                 for parameter_name, arg_value in zip(pos_parameters[:len(args)], args):
+#                     if parameter_name == "self":
+#                         continue
+#                     arguments[parameter_name] = arg_value
+#
+#             # sorted
+#             for parameter_name in parameter_names:
+#                 if parameter_name == "self":
+#                     continue
+#                 elif parameter_name in arguments:
+#                     continue
+#                 if parameter_name in kwargs:
+#                     arguments[parameter_name] = kwargs[parameter_name]
+#                 else:
+#                     arguments[parameter_name] = keyword_parameters[parameter_name]
+#
+#             self.init_kwargs = arguments
+#
+#         func(*args, **kwargs)
+#
+#     return wrapper
+
+
 class BenchMark:
+
+    # @foo
+    def __init__(self, *arg, **kwargs):
+        pass
 
     def measure(self, func, **measure_kwargs):
         raise NotImplementedError
@@ -41,13 +95,26 @@ class BenchMark:
 
         report = {"result": result}
         if not only_result:
+            report["init_kwargs"] = getattr(self, "init_kwargs", {})
             report["run_kwargs"] = run_info
 
         report = self._convert_to_json(report)
 
         return report
 
-    def run(self, measure_kwargs, target_kwargs, inputs_kwargs, report_kwargs):
+    def run(self, measure_kwargs=None, target_kwargs=None, inputs_kwargs=None, report_kwargs=None):
+
+        if measure_kwargs is None:
+            measure_kwargs = {}
+        if target_kwargs is None:
+            target_kwargs = {}
+        if inputs_kwargs is None:
+            inputs_kwargs = {}
+        if report_kwargs is None:
+            report_kwargs = {}
+        if measure_kwargs is None:
+            measure_kwargs = {}
+
         target = self.target(**target_kwargs)
 
         all_inputs_kwargs = [inputs_kwargs] if isinstance(inputs_kwargs, dict) else inputs_kwargs
