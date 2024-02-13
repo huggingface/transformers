@@ -2848,23 +2848,23 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         vision_features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        sources = []
+        feature_maps = []
         masks = []
         for level, (source, mask) in enumerate(vision_features):
-            sources.append(self.input_proj_vision[level](source))
+            feature_maps.append(self.input_proj_vision[level](source))
             masks.append(mask)
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
-        if self.config.num_feature_levels > len(sources):
-            _len_sources = len(sources)
+        if self.config.num_feature_levels > len(feature_maps):
+            _len_sources = len(feature_maps)
             for level in range(_len_sources, self.config.num_feature_levels):
                 if level == _len_sources:
                     source = self.input_proj_vision[level](vision_features[-1][0])
                 else:
-                    source = self.input_proj_vision[level](sources[-1])
+                    source = self.input_proj_vision[level](feature_maps[-1])
                 mask = nn.functional.interpolate(pixel_mask[None].float(), size=source.shape[-2:]).to(torch.bool)[0]
                 pos_l = self.backbone.position_embedding(source, mask).to(source.dtype)
-                sources.append(source)
+                feature_maps.append(source)
                 masks.append(mask)
                 position_embeddings_list.append(pos_l)
 
@@ -2878,7 +2878,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
-        for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
+        for level, (source, mask, pos_embed) in enumerate(zip(feature_maps, masks, position_embeddings_list)):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
             spatial_shapes.append(spatial_shape)
