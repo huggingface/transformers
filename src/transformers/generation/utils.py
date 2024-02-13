@@ -441,7 +441,10 @@ class GenerationMixin:
             if isinstance(value, torch.Tensor):
                 batch_size = value.shape[0]
                 break
-        return torch.ones((batch_size, 0), dtype=torch.long, device=self.device)
+
+        if "inputs_embeds" in model_kwargs:
+            return torch.ones((batch_size, 0), dtype=torch.long, device=self.device)
+        return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
         self,
