@@ -151,9 +151,10 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
     def _build_transforms(
         self,
         do_resize: bool,
-        size_dict: Dict[str, int],
+        size: Dict[str, int],
         resample: PILImageResampling,
         do_rescale: bool,
+        rescale_factor: float,  # dummy
         do_normalize: bool,
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
@@ -161,9 +162,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         transforms = []
         if do_resize:
             transforms.append(
-                Resize(
-                    (size_dict["height"], size_dict["width"]), interpolation=pil_torch_interpolation_mapping[resample]
-                )
+                Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
             )
         if do_rescale:
             transforms.append(ToTensor())
