@@ -64,6 +64,7 @@ from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
+from .fill_in_middle import FimPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
@@ -255,6 +256,15 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
+        "type": "text",
+    },
+    "fill-in-middle": {
+        "impl": FimPipeline,
+        "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
+        "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
+        "default": {
+            "model": {"pt": ("codellama/CodeLlama-7b-hf", "ec58a5b"), "tf": ("codellama/CodeLlama-7b-hf", "ec58a5b")}
+        },
         "type": "text",
     },
     "summarization": {

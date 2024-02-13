@@ -19,16 +19,16 @@ class ReturnType(enum.Enum):
     FULL_TEXT = 2
 
 
-# List of models that support FIM
-SUPPORTED_MODELS = [
-    "bigcode/starcoder",
-    "codellama/CodeLlama-7b-hf",
-    "codellama/CodeLlama-13b-hf",
-    "codellama/CodeLlama-34b-hf",
-    "codellama/CodeLlama-7b-Python-hf",
-    "codellama/CodeLlama-13b-Python-hf",
-    "codellama/CodeLlama-34b-Python-hf",
-]
+# List of models that support FIM and
+SUPPORTED_MODELS = {
+    "bigcode/starcoder": ("<fim_prefix>", "<fim_middle>", "<fim_suffix>"),
+    "codellama/CodeLlama-7b-hf": ("▁<PRE>", "▁<MID>", "▁<SUF>"),
+    "codellama/CodeLlama-13b-hf": ("▁<PRE>", "▁<MID>", "▁<SUF>"),
+    "codellama/CodeLlama-34b-hf": ("▁<PRE>", "▁<MID>", "▁<SUF>"),
+    "codellama/CodeLlama-7b-Python-hf": ("▁<PRE>", "▁<MID>", "▁<SUF>"),
+    "codellama/CodeLlama-13b-Python-hf": ("▁<PRE>", "▁<MID>", "▁<SUF>"),
+    "codellama/CodeLlama-34b-Python-hf": ("▁<PRE>", "▁<MID>", "▁<SUF>"),
+}
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -61,19 +61,21 @@ class FimPipeline(Pipeline):
     """
 
     # There are two modes in which infilling is supported: PSM (Prefix-Suffix-Middle) and SPM (Suffix-Prefix-Middle)
-    # The placement of prefix and suffix along with their respective sentinel tokens depends on whether the mode is SPM or PSM
+    # CodeLlama's HF implementation has a third mode called 'suffix-first' which is added here for total compatibility with CodeLlama family
+    # The placement of prefix and suffix along with their respective sentinel tokens depends on the mode
     # More information on this: https://arxiv.org/abs/2207.14255
     DEFAULT_INFILL_MODE = "psm"
     DEFAULT_INFILL_TOKEN = "<FILL_ME>"
-    DEFAULT_PREFIX_TOKEN = "<fim_prefix>"
-    DEFAULT_SUFFIX_TOKEN = "<fim_suffix>"
-    DEFAULT_MIDDLE_TOKEN = "<fim_middle>"
+    ALL_INFILL_MODES = ["psm", "spm", "suffix-first"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Check if the provided model is among the supported ones
         if self.model.name_or_path not in SUPPORTED_MODELS:
             raise ValueError(f"The model '{self.model.name_or_path}' is not supported for the Fill-in-Middle task.")
+
+        # Get the Prefix, Suffix and Middle tokens for the corresponding model
+        self.PREFIX_TOKEN, self.MIDDLE_TOKEN, self.SUFFIX_TOKEN = SUPPORTED_MODELS[self.model.name_or_path]
 
         self.check_model_type(
             TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
@@ -128,9 +130,11 @@ class FimPipeline(Pipeline):
         preprocess_params["infill_token"] = infill_token or self.DEFAULT_INFILL_TOKEN
 
         if mode is not None:
-            preprocess_params["mode"] = mode.lower() if mode.lower() in ["psm", "spm"] else self.DEFAULT_INFILL_MODE
+            preprocess_params["mode"] = (
+                mode.lower() if mode.lower() in self.ALL_INFILL_MODES else self.DEFAULT_INFILL_MODE
+            )
         else:
-            preprocess_params["mode"] = self.DEFAULT_MODE
+            preprocess_params["mode"] = self.DEFAULT_INFILL_MODE
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
@@ -192,22 +196,13 @@ class FimPipeline(Pipeline):
 
         # If the mode is Prefix-Suffix-Middle, arrange the components accordingly
         if mode == "psm":
-            prompt_text = (
-                self.DEFAULT_PREFIX_TOKEN
-                + input_prefix
-                + self.DEFAULT_SUFFIX_TOKEN
-                + input_suffix
-                + self.DEFAULT_MIDDLE_TOKEN
-            )
+            prompt_text = self.PREFIX_TOKEN + input_prefix + self.SUFFIX_TOKEN + input_suffix + self.MIDDLE_TOKEN
         # Change if the mode is Suffix-Prefix-Middle
-        else:
-            prompt_text = (
-                self.DEFAULT_SUFFIX_TOKEN
-                + input_suffix
-                + self.DEFAULT_PREFIX_TOKEN
-                + input_prefix
-                + self.DEFAULT_MIDDLE_TOKEN
-            )
+        elif mode == "spm":
+            prompt_text = self.SUFFIX_TOKEN + input_suffix + self.PREFIX_TOKEN + input_prefix + self.MIDDLE_TOKEN
+        # CodeLlama's Implementation has a Suffix-First mode which is different than SPM
+        elif mode == "suffix-first":
+            prompt_text = self.PREFIX_TOKEN + self.SUFFIX_TOKEN + input_suffix + self.MIDDLE_TOKEN + input_prefix
 
         inputs = self.tokenizer(
             prefix + prompt_text,
