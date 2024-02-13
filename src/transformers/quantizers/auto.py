@@ -129,10 +129,13 @@ class AutoHfQuantizer:
         """
         handles situations where both quantization_config from args and quantization_config from model config are present.
         """
-        warning_msg = (
-            "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
-            " already has a `quantization_config` attribute. The `quantization_config` from the model will be prevail."
-        )
+        if quantization_config_from_args is not None:
+            warning_msg = (
+                "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
+                " already has a `quantization_config` attribute. The `quantization_config` from the model will be prevail."
+            )
+        else:
+            warning_msg = ""
 
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
