@@ -1456,7 +1456,7 @@ class Trainer:
 
                 self.model = model = FSDPv2(
                     model,
-                    shard_output,
+                    shard_output = shard_output,
                     auto_wrap_policy=auto_wrap_policy,
                     auto_wrapper_callable=auto_wrapper_callable,
                 )
