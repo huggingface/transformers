@@ -696,8 +696,9 @@ class YolosImageProcessor(BaseImageProcessor):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
-            overridden by the `do_pad` parameter in the `preprocess` method.
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True` will pad the images in the batch to the largest height and width in the batch.
+            Padding will be applied to the bottom and right of the image with zeros.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -922,7 +923,7 @@ class YolosImageProcessor(BaseImageProcessor):
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
-        `[center_x, center_y, width, height]` format.
+        `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
         """
         return normalize_annotation(annotation, image_size=image_size)
 
@@ -1139,7 +1140,8 @@ class YolosImageProcessor(BaseImageProcessor):
                 boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
                 and in relative coordinates.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image.
+                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
+                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
