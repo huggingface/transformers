@@ -46,7 +46,7 @@ _CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "openai/clip-vit-base-patch32"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
 
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai/clip-vit-base-patch32",

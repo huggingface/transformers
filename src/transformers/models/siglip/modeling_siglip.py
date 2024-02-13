@@ -50,7 +50,7 @@ _CHECKPOINT_FOR_DOC = "google/siglip-base-patch16-224"
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/siglip-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_1"
 
 
 SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
