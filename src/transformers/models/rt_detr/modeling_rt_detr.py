@@ -1169,7 +1169,7 @@ class RTDetrEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.num_encoder_layers)])
+        self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
     def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
         hidden_states = src
@@ -1295,7 +1295,7 @@ class RTDetrHybridEncoder(nn.Module):
                 pos_embed = None
 
             memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
-            print('memory', memory.shape)
+            print("memory", memory.shape)
             hidden_states[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
 
         # broadcasting and fusion
@@ -1493,8 +1493,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for in_channel in config.encoder_in_channels:
             encoder_input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channel, config.d_model, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.d_model)
+                    nn.Conv2d(in_channel, config.d_model, kernel_size=1, bias=False), nn.BatchNorm2d(config.d_model)
                 )
             )
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
@@ -1586,7 +1585,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
-            print('anchors', height, width)
+            print("anchors", height, width)
         # define the valid range for anchor coordinates
         eps = 1e-2
         anchors = torch.concat(anchors, 1).to(device)
@@ -1676,7 +1675,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             spatial_shapes.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
-            print('source', source.shape)
+            print("source", source.shape)
         source_flatten = torch.cat(source_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
@@ -1942,7 +1941,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
                 outputs_loss["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs_loss["aux_outputs"].extend(self._set_aux_loss([outputs.enc_topk_logits], [outputs.enc_topk_bboxes]))
+                outputs_loss["aux_outputs"].extend(
+                    self._set_aux_loss([outputs.enc_topk_logits], [outputs.enc_topk_bboxes])
+                )
                 if self.training and dn_meta is not None:
                     outputs_loss["dn_aux_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
                     outputs_loss["dn_meta"] = dn_meta

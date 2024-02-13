@@ -58,7 +58,7 @@ class RTDetrConfig(PretrainedConfig):
             The ratio for all dropout layers.
         encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
-        num_encoder_layers (`int`, *optional*, defaults to 1):
+        encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
         pe_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
@@ -158,7 +158,7 @@ class RTDetrConfig(PretrainedConfig):
         d_model=256,
         encoder_in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
-        num_encoder_layers=1,
+        encoder_layers=1,
         encoder_ffn_dim=1024,
         encoder_attention_heads=8,
         dropout=0.0,
@@ -240,7 +240,7 @@ class RTDetrConfig(PretrainedConfig):
         self.dropout = dropout
         self.activation_dropout = activation_dropout
         self.encode_proj_layers = encode_proj_layers
-        self.num_encoder_layers = num_encoder_layers
+        self.encoder_layers = encoder_layers
         self.pe_temperature = pe_temperature
         self.eval_size = eval_size
         self.normalize_before = normalize_before
