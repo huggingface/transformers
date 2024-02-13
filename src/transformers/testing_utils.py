@@ -95,6 +95,7 @@ from .utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_sudachi_available,
+    is_sudachi_projection_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -1041,6 +1042,15 @@ def require_sudachi(test_case):
     Decorator marking a test that requires sudachi
     """
     return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_sudachi_projection(test_case):
+    """
+    Decorator marking a test that requires sudachi_projection
+    """
+    return unittest.skipUnless(is_sudachi_projection_available(), "test requires sudachi which supports projection")(
+        test_case
+    )
 
 
 def require_jumanpp(test_case):

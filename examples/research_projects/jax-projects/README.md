@@ -311,7 +311,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets
@@ -389,13 +389,13 @@ source ~/<your-venv-name>/bin/activate
 
 Next you should install JAX's TPU version on TPU by running the following command: 
 
-```
+```bash
 $ pip install requests
 ```
 
 and then:
 
-```
+```bash
 $ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
@@ -468,7 +468,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets
@@ -568,7 +568,7 @@ class ModelPyTorch:
 
 Instantiating an object `model_pytorch` of the class `ModelPyTorch` would actually allocate memory for the model weights and attach them to the attributes `self.key_proj`, `self.value_proj`, `self.query_proj`, and `self.logits.proj`. We could access the weights via:
 
-```
+```python
 key_projection_matrix = model_pytorch.key_proj.weight.data
 ```
 
@@ -1224,25 +1224,25 @@ Sometimes you might be using different libraries or a very specific application 
 
 A common use case is how to load files you have in your model repository in the Hub from the Streamlit demo. The `huggingface_hub` library is here to help you!
 
-```
+```bash
 pip install huggingface_hub
 ```
 
 Here is an example downloading (and caching!) a specific file directly from the Hub
-```
+```python
 from huggingface_hub import hf_hub_download
 filepath = hf_hub_download("flax-community/roberta-base-als", "flax_model.msgpack");
 ```
 
 In many cases you will want to download the full repository. Here is an example downloading all the files from a repo. You can even specify specific revisions!
 
-```
+```python
 from huggingface_hub import snapshot_download
 local_path = snapshot_download("flax-community/roberta-base-als");
 ```
 
 Note that if you're using 🤗 Transformers library, you can quickly load the model and tokenizer as follows
-```
+```python
 from transformers import AutoTokenizer, AutoModelForMaskedLM
   
 tokenizer = AutoTokenizer.from_pretrained("REPO_ID")

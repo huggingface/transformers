@@ -72,7 +72,7 @@ pip install 'transformers[tf-cpu]'
 M1 / ARM Users
 
 You will need to install the following before installing TensorFLow 2.0
-```
+```bash
 brew install cmake
 brew install pkg-config
 ```

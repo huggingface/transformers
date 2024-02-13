@@ -1,8 +1,12 @@
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
+from .configuration_utils import PretrainedConfig
 
+
+@dataclass
 class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
@@ -320,3 +324,91 @@ class SinkCache(Cache):
             self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
             device = self.value_cache[layer_idx].device
             self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+
+
+class StaticCache(Cache):
+    """
+    Static Cache class to be used with `torch.compile(model)`.
+
+    Parameters:
+        config (`PretrainedConfig):
+            The configuration file defining the `max_position_embeddings`, `hidden_size` and `num_attention_heads`
+            required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`torch.device`):
+            The device on which the cache should be initialized. Should be the same as the layer.
+        dtype (*optional*, defaults to `torch.float32`):
+            The default `dtype` to use when initializing the layer.
+    """
+
+    def __init__(
+        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=torch.float32
+    ) -> None:
+        super().__init__()
+        self.max_batch_size = max_batch_size
+        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_heads = config.num_attention_heads
+        self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
+
+        cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
+        self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.seen_tokens = 0
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+        It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for. Kept for backward compatibility
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. The `StaticCache` just needs the `q_len`
+                to know how much of the cache it should overwrite.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        new_cache_positions = cache_kwargs.get("position_ids")
+        k_out = self.key_cache
+        v_out = self.value_cache
+
+        k_out[:, :, new_cache_positions] = key_states
+        v_out[:, :, new_cache_positions] = value_states
+
+        self.seen_tokens += key_states.shape[-2]
+        return k_out, v_out
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
+        return self.seen_tokens
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
+        return self.max_cache_len
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        device = self.key_cache.device
+        self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
+        device = self.value_cache.device
+        self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
+
+    def to_legacy_cache(self):
+        """Dummy function for BC. We have to keep it because otherwise the call in the forward of models will break it"""
+        return None

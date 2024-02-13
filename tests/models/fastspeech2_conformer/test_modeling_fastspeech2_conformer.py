@@ -533,6 +533,8 @@ class FastSpeech2ConformerWithHifiGanTester:
         return config, inputs_dict
 
 
+@require_torch_accelerator
+@require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
     test_pruning = False

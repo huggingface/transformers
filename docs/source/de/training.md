@@ -229,10 +229,10 @@ tf.data"-Pipeline schreiben können, wenn Sie wollen, haben wir zwei bequeme Met
 - [`~TFPreTrainedModel.prepare_tf_dataset`]: Dies ist die Methode, die wir in den meisten Fällen empfehlen. Da es sich um eine Methode
 Ihres Modells ist, kann sie das Modell inspizieren, um automatisch herauszufinden, welche Spalten als Modelleingaben verwendet werden können, und
 verwirft die anderen, um einen einfacheren, leistungsfähigeren Datensatz zu erstellen.
-- [~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
+- [`~datasets.Dataset.to_tf_dataset`]: Diese Methode ist eher auf niedriger Ebene angesiedelt und ist nützlich, wenn Sie genau kontrollieren wollen, wie
 Dataset erstellt wird, indem man genau angibt, welche `columns` und `label_cols` einbezogen werden sollen.
 
-Bevor Sie [~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
+Bevor Sie [`~TFPreTrainedModel.prepare_tf_dataset`] verwenden können, müssen Sie die Tokenizer-Ausgaben als Spalten zu Ihrem Datensatz hinzufügen, wie in
 dem folgenden Codebeispiel:
 
 ```py
