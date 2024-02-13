@@ -1732,10 +1732,11 @@ class TrainingArguments:
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
-        if isinstance(self.accelerator_config, str):
-            self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
-        elif self.accelerator_config is None:
-            self.accelerator_config = AcceleratorConfig()
+        if not isinstance(self.accelerator_config, (AcceleratorConfig, dict)):
+            if self.accelerator_config is None:
+                self.accelerator_config = AcceleratorConfig()
+            else:
+                self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
         if self.dispatch_batches is not None:
             warnings.warn(
                 "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"

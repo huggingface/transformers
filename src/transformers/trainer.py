@@ -4040,8 +4040,6 @@ class Trainer:
                 # Some values may need to go through non-accelerate aligned defaults
                 # and we need to run the `__post_init__` to set them
                 accelerator_kwargs = AcceleratorConfig(**accelerator_kwargs).to_dict()
-            else:
-                accelerator_kwargs = AcceleratorConfig.from_json_file(accelerator_kwargs).to_dict()
 
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
