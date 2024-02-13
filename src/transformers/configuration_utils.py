@@ -31,6 +31,7 @@ from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipeline,
     cached_file,
     copy_func,
     download_url,
@@ -732,6 +733,11 @@ class PretrainedConfig(PushToHubMixin):
             config_dict["auto_map"] = add_model_info_to_auto_map(
                 config_dict["auto_map"], pretrained_model_name_or_path
             )
+        if "custom_pipelines" in config_dict and not is_local:
+            config_dict["custom_pipelines"] = add_model_info_to_custom_pipeline(
+                config_dict["custom_pipelines"], pretrained_model_name_or_path
+            )
+            pass
         return config_dict, kwargs
 
     @classmethod
