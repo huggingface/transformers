@@ -6,7 +6,7 @@ import torch
 from .configuration_utils import PretrainedConfig
 
 
-class ModelCache():
+class ModelCache:
     """
     A standalone class that holds multiple `Cache` instances, behaving exactly like the legacy cache format. Designed
     mostly for backwards compatibility purposes, it is used to set up the cache for models, or as an output type for
@@ -21,7 +21,9 @@ class ModelCache():
         self.caches = caches
         self.cache_cls = caches[0].__class__
         if not all(isinstance(cache, self.cache_cls) for cache in caches):
-            raise ValueError(f"All caches in `caches` must be of the same type. Got: {[cache.__class__ for cache in caches]}")
+            raise ValueError(
+                f"All caches in `caches` must be of the same type. Got: {[cache.__class__ for cache in caches]}"
+            )
 
     def __len__(self) -> int:
         """
@@ -182,7 +184,7 @@ class DynamicCache(Cache):
             self.key_cache = key_states
             self.value_cache = value_states
         else:
-            self.key_cache= torch.cat([self.key_cache, key_states], dim=-2)
+            self.key_cache = torch.cat([self.key_cache, key_states], dim=-2)
             self.value_cache = torch.cat([self.value_cache, value_states], dim=-2)
 
         return self.key_cache, self.value_cache
@@ -381,7 +383,13 @@ class StaticCache(Cache):
     """
 
     def __init__(
-        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=torch.float32, **unused_kwargs
+        self,
+        config: PretrainedConfig,
+        max_batch_size: int,
+        max_cache_len: int,
+        device,
+        dtype=torch.float32,
+        **unused_kwargs,
     ) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size

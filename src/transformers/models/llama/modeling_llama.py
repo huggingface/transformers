@@ -805,7 +805,9 @@ class LlamaPreTrainedModel(PreTrainedModel):
             for layer in model.layers:
                 layer.self_attn.past_key_value = cache_cls(**cache_kwargs)
         else:
-            raise ValueError("Error setting up the cache: `cache_cls` and `external_cache` are both None, one of them must be defined")
+            raise ValueError(
+                "Error setting up the cache: `cache_cls` and `external_cache` are both None, one of them must be defined"
+            )
 
         max_cache_len = model.layers[0].self_attn.past_key_value.get_max_length()
         if max_cache_len is not None:
@@ -1266,7 +1268,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1]:]
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
             # generation with static cache
