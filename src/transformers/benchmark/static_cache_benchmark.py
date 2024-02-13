@@ -97,7 +97,7 @@ class StaticCacheBenchMark(BenchMark):
 
         def target():
 
-            torch.cuda.synchronize()
+            #torch.cuda.synchronize()
             next_token = _next_token
             cache_position = _cache_position
 
@@ -119,7 +119,7 @@ class StaticCacheBenchMark(BenchMark):
                     # input_pos+=1
                     cache_position += 1
 
-            torch.cuda.synchronize()
+            #torch.cuda.synchronize()
 
         return target
 
