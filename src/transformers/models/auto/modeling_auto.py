@@ -29,7 +29,7 @@ from .configuration_auto import CONFIG_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
-_MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
+MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image mapping
         ("beit", "BeitModel"),
@@ -73,9 +73,9 @@ _MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
         ("vit_hybrid", "ViTHybridModel"),
+        ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
         ("vitdet", "VitDetModel"),
-        ("vit_mae", "ViTMAEModel"),
         ("vivit", "VivitModel"),
         ("yolos", "YolosModel"),
     ]
