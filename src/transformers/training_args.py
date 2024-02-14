@@ -2208,6 +2208,9 @@ class TrainingArguments:
                 d[k] = [x.value for x in v]
             if k.endswith("_token"):
                 d[k] = f"<{k.upper()}>"
+            # Handle the accelerator_config if passed
+            if is_accelerate_available() and isinstance(v, AcceleratorConfig):
+                d[k] = v.to_dict()
         return d
 
     def to_json_string(self):
