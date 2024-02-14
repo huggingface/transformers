@@ -3460,7 +3460,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
-
     @parameterized.expand(
         [
             (
@@ -3486,9 +3485,9 @@ class TokenHealingTestCase(unittest.TestCase):
             revision="main",
             use_cache=True,
         )
-        input_ids = self.tokenizer(input, return_tensors="pt").input_ids.to(self.completion_model.device)
+        input_ids = tokenizer(input, return_tensors="pt").input_ids.to(completion_model.device)
 
-        healed_ids = self.completion_model.heal_tokens(input_ids)
-        predicted = self.tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+        healed_ids = completion_model.heal_tokens(input_ids)
+        predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
 
         self.assertEqual(predicted, expected)
