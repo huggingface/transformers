@@ -61,6 +61,7 @@ else:
     MultiScaleDeformableAttention = None
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(

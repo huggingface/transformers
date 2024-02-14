@@ -122,6 +122,9 @@ class DetaConfig(PretrainedConfig):
             Whether to assign each prediction i to the highest overlapping ground truth object if the overlap is larger than a threshold 0.7.
         assign_second_stage (`bool`, *optional*, defaults to `True`):
             Whether to assign second assignment procedure in the second stage closely follows the first stage assignment procedure.
+        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+            kernels are not supported by PyTorch ONNX export.
 
     Examples:
 
@@ -187,7 +190,7 @@ class DetaConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
-        disable_custom_kernels=False,
+        disable_custom_kernels=True,
         **kwargs,
     ):
         if use_pretrained_backbone:
