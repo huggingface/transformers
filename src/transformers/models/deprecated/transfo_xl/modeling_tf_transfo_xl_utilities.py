@@ -20,11 +20,10 @@
 
 import tensorflow as tf
 
-from ....modeling_tf_utils import keras
 from ....tf_utils import shape_list
 
 
-class TFAdaptiveSoftmaxMask(keras.layers.Layer):
+class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
     def __init__(self, vocab_size, d_embed, d_proj, cutoffs, div_val=1, keep_order=False, **kwargs):
         super().__init__(**kwargs)
 

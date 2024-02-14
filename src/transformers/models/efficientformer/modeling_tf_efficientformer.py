@@ -30,7 +30,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -65,7 +64,7 @@ TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFEfficientFormerPatchEmbeddings(keras.layers.Layer):
+class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
     """
     This class performs downsampling between two stages. For the input tensor with the shape [batch_size, num_channels,
     height, width] it produces output tensor with the shape [batch_size, num_channels, height/stride, width/stride]
@@ -77,8 +76,8 @@ class TFEfficientFormerPatchEmbeddings(keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_channels = num_channels
 
-        self.padding = keras.layers.ZeroPadding2D(padding=config.downsample_pad)
-        self.projection = keras.layers.Conv2D(
+        self.padding = tf.keras.layers.ZeroPadding2D(padding=config.downsample_pad)
+        self.projection = tf.keras.layers.Conv2D(
             filters=embed_dim,
             kernel_size=config.downsample_patch_size,
             strides=config.downsample_stride,
@@ -87,7 +86,7 @@ class TFEfficientFormerPatchEmbeddings(keras.layers.Layer):
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
         self.norm = (
-            keras.layers.BatchNormalization(axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+            tf.keras.layers.BatchNormalization(axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
             if apply_norm
             else tf.identity
         )
@@ -115,7 +114,7 @@ class TFEfficientFormerPatchEmbeddings(keras.layers.Layer):
                     self.norm.build([None, None, None, self.embed_dim])
 
 
-class TFEfficientFormerSelfAttention(keras.layers.Layer):
+class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
     def __init__(
         self,
         dim: int,
@@ -137,10 +136,10 @@ class TFEfficientFormerSelfAttention(keras.layers.Layer):
         self.total_expanded_key_dim = int(self.expanded_key_dim * num_heads)
         hidden_size = self.total_expanded_key_dim + self.total_key_dim * 2
 
-        self.qkv = keras.layers.Dense(
+        self.qkv = tf.keras.layers.Dense(
             units=hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="qkv"
         )
-        self.projection = keras.layers.Dense(
+        self.projection = tf.keras.layers.Dense(
             units=dim, kernel_initializer=get_initializer(config.initializer_range), name="projection"
         )
         self.resolution = resolution
@@ -162,7 +161,7 @@ class TFEfficientFormerSelfAttention(keras.layers.Layer):
 
         self.attention_biases = self.add_weight(
             shape=(self.num_heads, len(attention_offsets)),
-            initializer=keras.initializers.zeros(),
+            initializer=tf.keras.initializers.zeros(),
             trainable=True,
             name="attention_biases",
         )
@@ -222,20 +221,20 @@ class TFEfficientFormerSelfAttention(keras.layers.Layer):
         return outputs
 
 
-class TFEfficientFormerConvStem(keras.layers.Layer):
+class TFEfficientFormerConvStem(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, out_channels: int, **kwargs):
         super().__init__(**kwargs)
 
-        self.padding = keras.layers.ZeroPadding2D(padding=1)
-        self.convolution1 = keras.layers.Conv2D(
+        self.padding = tf.keras.layers.ZeroPadding2D(padding=1)
+        self.convolution1 = tf.keras.layers.Conv2D(
             filters=out_channels // 2, kernel_size=3, strides=2, padding="valid", name="convolution1"
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
-        self.batchnorm_before = keras.layers.BatchNormalization(
+        self.batchnorm_before = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_before"
         )
 
-        self.convolution2 = keras.layers.Conv2D(
+        self.convolution2 = tf.keras.layers.Conv2D(
             filters=out_channels,
             kernel_size=3,
             strides=2,
@@ -243,11 +242,11 @@ class TFEfficientFormerConvStem(keras.layers.Layer):
             name="convolution2",
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
-        self.batchnorm_after = keras.layers.BatchNormalization(
+        self.batchnorm_after = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_after"
         )
 
-        self.activation = keras.layers.Activation(activation=keras.activations.relu, name="activation")
+        self.activation = tf.keras.layers.Activation(activation=tf.keras.activations.relu, name="activation")
         self.out_channels = out_channels
         self.config = config
 
@@ -279,10 +278,10 @@ class TFEfficientFormerConvStem(keras.layers.Layer):
                 self.activation.build(None)
 
 
-class TFEfficientFormerPooling(keras.layers.Layer):
+class TFEfficientFormerPooling(tf.keras.layers.Layer):
     def __init__(self, pool_size: int, **kwargs):
         super().__init__(**kwargs)
-        self.pool = keras.layers.AveragePooling2D(pool_size=pool_size, strides=1, padding="same")
+        self.pool = tf.keras.layers.AveragePooling2D(pool_size=pool_size, strides=1, padding="same")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         output = self.pool(hidden_states)
@@ -290,7 +289,7 @@ class TFEfficientFormerPooling(keras.layers.Layer):
         return output
 
 
-class TFEfficientFormerDenseMlp(keras.layers.Layer):
+class TFEfficientFormerDenseMlp(tf.keras.layers.Layer):
     def __init__(
         self,
         config: EfficientFormerConfig,
@@ -303,13 +302,13 @@ class TFEfficientFormerDenseMlp(keras.layers.Layer):
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
 
-        self.linear_in = keras.layers.Dense(
+        self.linear_in = tf.keras.layers.Dense(
             units=hidden_features, kernel_initializer=get_initializer(config.initializer_range), name="linear_in"
         )
         self.activation = ACT2FN[config.hidden_act]
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-        self.linear_out = keras.layers.Dense(
+        self.linear_out = tf.keras.layers.Dense(
             units=out_features, kernel_initializer=get_initializer(config.initializer_range), name="linear_out"
         )
         self.hidden_features = hidden_features
@@ -336,7 +335,7 @@ class TFEfficientFormerDenseMlp(keras.layers.Layer):
                 self.linear_out.build([None, None, self.hidden_features])
 
 
-class TFEfficientFormerConvMlp(keras.layers.Layer):
+class TFEfficientFormerConvMlp(tf.keras.layers.Layer):
     def __init__(
         self,
         config: EfficientFormerConfig,
@@ -350,7 +349,7 @@ class TFEfficientFormerConvMlp(keras.layers.Layer):
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
 
-        self.convolution1 = keras.layers.Conv2D(
+        self.convolution1 = tf.keras.layers.Conv2D(
             filters=hidden_features,
             kernel_size=1,
             name="convolution1",
@@ -359,21 +358,21 @@ class TFEfficientFormerConvMlp(keras.layers.Layer):
 
         self.activation = ACT2FN[config.hidden_act]
 
-        self.convolution2 = keras.layers.Conv2D(
+        self.convolution2 = tf.keras.layers.Conv2D(
             filters=out_features,
             kernel_size=1,
             name="convolution2",
             padding="valid",
         )
 
-        self.dropout = keras.layers.Dropout(rate=drop)
+        self.dropout = tf.keras.layers.Dropout(rate=drop)
 
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
-        self.batchnorm_before = keras.layers.BatchNormalization(
+        self.batchnorm_before = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_before"
         )
         # Use same default momentum and epsilon as PyTorch equivalent for BatchNormalization
-        self.batchnorm_after = keras.layers.BatchNormalization(
+        self.batchnorm_after = tf.keras.layers.BatchNormalization(
             axis=-1, epsilon=config.batch_norm_eps, momentum=0.9, name="batchnorm_after"
         )
         self.hidden_features = hidden_features
@@ -409,7 +408,7 @@ class TFEfficientFormerConvMlp(keras.layers.Layer):
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->EfficientFormer
-class TFEfficientFormerDropPath(keras.layers.Layer):
+class TFEfficientFormerDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
@@ -429,7 +428,7 @@ class TFEfficientFormerDropPath(keras.layers.Layer):
         return x
 
 
-class TFEfficientFormerFlat(keras.layers.Layer):
+class TFEfficientFormerFlat(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -439,7 +438,7 @@ class TFEfficientFormerFlat(keras.layers.Layer):
         return hidden_states
 
 
-class TFEfficientFormerMeta3D(keras.layers.Layer):
+class TFEfficientFormerMeta3D(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, dim: int, drop_path: float = 0.0, **kwargs):
         super().__init__(**kwargs)
 
@@ -455,8 +454,8 @@ class TFEfficientFormerMeta3D(keras.layers.Layer):
         self.dim = dim
         self.config = config
 
-        self.layernorm1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm1")
-        self.layernorm2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm2")
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm1")
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm2")
         mlp_hidden_dim = int(dim * config.mlp_expansion_ratio)
         self.mlp = TFEfficientFormerDenseMlp(config, in_features=dim, hidden_features=mlp_hidden_dim, name="mlp")
 
@@ -464,7 +463,7 @@ class TFEfficientFormerMeta3D(keras.layers.Layer):
         self.drop_path = (
             TFEfficientFormerDropPath(drop_path)
             if drop_path > 0.0
-            else keras.layers.Activation("linear", name="drop_path")
+            else tf.keras.layers.Activation("linear", name="drop_path")
         )
         self.config = config
 
@@ -475,13 +474,13 @@ class TFEfficientFormerMeta3D(keras.layers.Layer):
         if self.config.use_layer_scale:
             self.layer_scale_1 = self.add_weight(
                 shape=(self.dim,),
-                initializer=keras.initializers.Constant(value=self.config.layer_scale_init_value),
+                initializer=tf.keras.initializers.Constant(value=self.config.layer_scale_init_value),
                 trainable=True,
                 name="layer_scale_1",
             )
             self.layer_scale_2 = self.add_weight(
                 shape=(self.dim,),
-                initializer=keras.initializers.Constant(value=self.config.layer_scale_init_value),
+                initializer=tf.keras.initializers.Constant(value=self.config.layer_scale_init_value),
                 trainable=True,
                 name="layer_scale_2",
             )
@@ -539,7 +538,7 @@ class TFEfficientFormerMeta3D(keras.layers.Layer):
         return outputs
 
 
-class TFEfficientFormerMeta3DLayers(keras.layers.Layer):
+class TFEfficientFormerMeta3DLayers(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, **kwargs):
         super().__init__(**kwargs)
         drop_paths = [
@@ -582,7 +581,7 @@ class TFEfficientFormerMeta3DLayers(keras.layers.Layer):
                     layer.build(None)
 
 
-class TFEfficientFormerMeta4D(keras.layers.Layer):
+class TFEfficientFormerMeta4D(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, dim: int, drop_path: float = 0.0, **kwargs):
         super().__init__(**kwargs)
         pool_size = config.pool_size if config.pool_size is not None else 3
@@ -596,7 +595,7 @@ class TFEfficientFormerMeta4D(keras.layers.Layer):
         self.drop_path = (
             TFEfficientFormerDropPath(drop_path, name="drop_path")
             if drop_path > 0.0
-            else keras.layers.Activation("linear", name="drop_path")
+            else tf.keras.layers.Activation("linear", name="drop_path")
         )
         self.config = config
 
@@ -607,13 +606,13 @@ class TFEfficientFormerMeta4D(keras.layers.Layer):
         if self.config.use_layer_scale:
             self.layer_scale_1 = self.add_weight(
                 shape=(self.dim),
-                initializer=keras.initializers.Constant(value=self.config.layer_scale_init_value),
+                initializer=tf.keras.initializers.Constant(value=self.config.layer_scale_init_value),
                 trainable=True,
                 name="layer_scale_1",
             )
             self.layer_scale_2 = self.add_weight(
                 shape=(self.dim),
-                initializer=keras.initializers.Constant(value=self.config.layer_scale_init_value),
+                initializer=tf.keras.initializers.Constant(value=self.config.layer_scale_init_value),
                 trainable=True,
                 name="layer_scale_2",
             )
@@ -655,7 +654,7 @@ class TFEfficientFormerMeta4D(keras.layers.Layer):
         return layer_output
 
 
-class TFEfficientFormerMeta4DLayers(keras.layers.Layer):
+class TFEfficientFormerMeta4DLayers(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, stage_idx: int, **kwargs):
         super().__init__(**kwargs)
         num_layers = (
@@ -687,7 +686,7 @@ class TFEfficientFormerMeta4DLayers(keras.layers.Layer):
                     layer.build(None)
 
 
-class TFEfficientFormerIntermediateStage(keras.layers.Layer):
+class TFEfficientFormerIntermediateStage(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, index: int, **kwargs):
         super().__init__(**kwargs)
         self.meta4D_layers = TFEfficientFormerMeta4DLayers(config=config, stage_idx=index, name="meta4D_layers")
@@ -705,7 +704,7 @@ class TFEfficientFormerIntermediateStage(keras.layers.Layer):
                 self.meta4D_layers.build(None)
 
 
-class TFEfficientFormerLastStage(keras.layers.Layer):
+class TFEfficientFormerLastStage(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, **kwargs):
         super().__init__(**kwargs)
         self.meta4D_layers = TFEfficientFormerMeta4DLayers(config=config, stage_idx=-1, name="meta4D_layers")
@@ -738,7 +737,7 @@ class TFEfficientFormerLastStage(keras.layers.Layer):
                 self.meta3D_layers.build(None)
 
 
-class TFEfficientFormerEncoder(keras.layers.Layer):
+class TFEfficientFormerEncoder(tf.keras.layers.Layer):
     def __init__(self, config: EfficientFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -819,7 +818,7 @@ class TFEfficientFormerEncoder(keras.layers.Layer):
 
 
 @keras_serializable
-class TFEfficientFormerMainLayer(keras.layers.Layer):
+class TFEfficientFormerMainLayer(tf.keras.layers.Layer):
     config_class = EfficientFormerConfig
 
     def __init__(self, config: EfficientFormerConfig, **kwargs) -> None:
@@ -828,7 +827,7 @@ class TFEfficientFormerMainLayer(keras.layers.Layer):
 
         self.patch_embed = TFEfficientFormerConvStem(config, config.hidden_sizes[0], name="patch_embed")
         self.encoder = TFEfficientFormerEncoder(config, name="encoder")
-        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
 
     @unpack_inputs
     def call(
@@ -849,7 +848,7 @@ class TFEfficientFormerMainLayer(keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # When running on CPU, keras.layers.Conv2D and keras.layers.AveragePool2D do not
+        # When running on CPU, tf.keras.layers.Conv2D and tf.keras.layers.AveragePool2D do not
         # support channels first NCHW format. A number of blocks contain both.
         # So change the input format from (batch_size, num_channels, height, width) to
         # (batch_size, height, width, num_channels) here.
@@ -915,7 +914,7 @@ class TFEfficientFormerPreTrainedModel(TFPreTrainedModel):
 
 EFFICIENTFORMER_START_DOCSTRING = r"""
     This model is a TensorFlow
-    [keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer). Use it as a regular
+    [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer). Use it as a regular
     TensorFlow Module and refer to the TensorFlow documentation for all matter related to general usage and behavior.
 
 
@@ -1002,9 +1001,9 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
 
         # Classifier head
         self.classifier = (
-            keras.layers.Dense(config.num_labels, name="classifier")
+            tf.keras.layers.Dense(config.num_labels, name="classifier")
             if config.num_labels > 0
-            else keras.layers.Activation("linear", name="classifier")
+            else tf.keras.layers.Activation("linear", name="classifier")
         )
         self.config = config
 
@@ -1120,14 +1119,14 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
 
         # Classifier heads
         self.classifier = (
-            keras.layers.Dense(config.num_labels, name="classifier")
+            tf.keras.layers.Dense(config.num_labels, name="classifier")
             if config.num_labels > 0
-            else keras.layers.Activation("linear", name="classifier")
+            else tf.keras.layers.Activation("linear", name="classifier")
         )
         self.distillation_classifier = (
-            keras.layers.Dense(config.num_labels, name="distillation_classifier")
+            tf.keras.layers.Dense(config.num_labels, name="distillation_classifier")
             if config.num_labels > 0
-            else keras.layers.Activation("linear", name="distillation_classifier")
+            else tf.keras.layers.Activation("linear", name="distillation_classifier")
         )
 
     @unpack_inputs

@@ -373,7 +373,3 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - get_seq_length
     - reorder_cache
-
-[[autodoc]] StaticCache
-    - update
-    - get_seq_length

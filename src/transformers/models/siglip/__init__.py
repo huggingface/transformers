@@ -61,7 +61,6 @@ else:
         "SiglipPreTrainedModel",
         "SiglipTextModel",
         "SiglipVisionModel",
-        "SiglipForImageClassification",
     ]
 
 
@@ -98,7 +97,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_siglip import (
             SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SiglipForImageClassification,
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,

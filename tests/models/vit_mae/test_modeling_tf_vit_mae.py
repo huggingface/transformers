@@ -41,7 +41,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFViTMAEForPreTraining, TFViTMAEModel
-    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
@@ -189,9 +188,9 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -302,7 +301,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
-            and keras.layers.Layer in module_member.__bases__
+            and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         }
 
@@ -315,17 +314,19 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
 
-            model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = keras.models.load_model(filepath, custom_objects={main_layer_class.__name__: main_layer_class})
-                assert isinstance(model, keras.Model)
+                model = tf.keras.models.load_model(
+                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                )
+                assert isinstance(model, tf.keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 

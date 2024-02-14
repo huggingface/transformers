@@ -541,6 +541,7 @@ TensorFlow でモデルを微調整するには、次の手順に従います。
 
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
+```
 
 </pt>
 </frameworkcontent>

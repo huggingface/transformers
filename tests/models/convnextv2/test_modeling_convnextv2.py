@@ -180,7 +180,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": ConvNextV2Model, "image-classification": ConvNextV2ForImageClassification}
+        {"feature-extraction": ConvNextV2Model, "image-classification": ConvNextV2ForImageClassification}
         if is_torch_available()
         else {}
     )

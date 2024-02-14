@@ -976,7 +976,7 @@ Some decorators like `@parameterized` rewrite test names, therefore `@slow` and 
 `@require_*` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 ```python no-style
-@parameterized.expand(...)
+@parameteriz ed.expand(...)
 @slow
 def test_integration_foo():
 ```

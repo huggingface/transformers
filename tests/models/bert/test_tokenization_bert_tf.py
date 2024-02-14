@@ -10,8 +10,6 @@ from transformers.testing_utils import require_tensorflow_text, require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_utils import keras
-
 if is_tensorflow_text_available():
     from transformers.models.bert import TFBertTokenizer
 
@@ -20,9 +18,8 @@ TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():
-    from transformers.modeling_tf_utils import keras
 
-    class ModelToSave(keras.Model):
+    class ModelToSave(tf.keras.Model):
         def __init__(self, tokenizer):
             super().__init__()
             self.tokenizer = tokenizer

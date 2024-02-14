@@ -190,7 +190,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": EfficientFormerModel,
+            "feature-extraction": EfficientFormerModel,
             "image-classification": (
                 EfficientFormerForImageClassification,
                 EfficientFormerForImageClassificationWithTeacher,

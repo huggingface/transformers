@@ -21,9 +21,10 @@ import re
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
+from tensorflow.keras.layers import Dense
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_tf_utils import TFPreTrainedModel, keras, unpack_inputs
+from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -158,7 +159,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 # Copied from transformers.models.clip.modeling_tf_clip.contrastive_loss
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
-        keras.metrics.sparse_categorical_crossentropy(
+        tf.keras.metrics.sparse_categorical_crossentropy(
             y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
         )
     )
@@ -216,8 +217,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
 
-        self.visual_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="visual_projection")
-        self.text_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="text_projection")
+        self.visual_projection = Dense(self.projection_dim, use_bias=False, name="visual_projection")
+        self.text_projection = Dense(self.projection_dim, use_bias=False, name="text_projection")
         self.logit_scale = None
         self.config = config
 
@@ -226,7 +227,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             return
         self.built = True
         # Build in the build() method to make sure the names are right
-        initializer = keras.initializers.Constant(self.config.logit_scale_init_value)
+        initializer = tf.keras.initializers.Constant(self.config.logit_scale_init_value)
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
 
         if getattr(self, "visual_projection", None) is not None:

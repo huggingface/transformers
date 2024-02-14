@@ -44,7 +44,6 @@ if is_torch_available():
     from transformers import (
         CodeLlamaTokenizer,
         LlamaForCausalLM,
-        LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
         LlamaModel,
         LlamaTokenizer,
@@ -279,11 +278,7 @@ class LlamaModelTester:
 
 @require_torch
 class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForQuestionAnswering)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -291,7 +286,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "text-classification": LlamaForSequenceClassification,
             "text-generation": LlamaForCausalLM,
             "zero-shot": LlamaForSequenceClassification,
-            "question-answering": LlamaForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -362,7 +356,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @parameterized.expand([("linear",), ("dynamic",)])
-    @unittest.skip("TODO @gante fix this for Llama")
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -508,19 +501,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
             res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+
             res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
-
-    @unittest.skip("TODO @gante fix this for Llama")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
+            self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
 
 @require_torch

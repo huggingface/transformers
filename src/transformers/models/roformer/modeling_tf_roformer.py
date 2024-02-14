@@ -45,7 +45,6 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFTokenClassificationLoss,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -75,7 +74,7 @@ TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):
+class TFRoFormerSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
@@ -131,7 +130,7 @@ class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):
         return tf.gather(self.weight, positions)
 
 
-class TFRoFormerEmbeddings(keras.layers.Layer):
+class TFRoFormerEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config: RoFormerConfig, **kwargs):
@@ -140,8 +139,8 @@ class TFRoFormerEmbeddings(keras.layers.Layer):
         self.config = config
         self.embedding_size = config.embedding_size
         self.initializer_range = config.initializer_range
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -198,7 +197,7 @@ class TFRoFormerEmbeddings(keras.layers.Layer):
         return final_embeddings
 
 
-class TFRoFormerSelfAttention(keras.layers.Layer):
+class TFRoFormerSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -213,16 +212,16 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = keras.layers.Dense(
+        self.query = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = keras.layers.Dense(
+        self.key = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = keras.layers.Dense(
+        self.value = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
         self.rotary_value = config.rotary_value
         self.config = config
 
@@ -330,15 +329,15 @@ class TFRoFormerSelfAttention(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RoFormer
-class TFRoFormerSelfOutput(keras.layers.Layer):
+class TFRoFormerSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -360,7 +359,7 @@ class TFRoFormerSelfOutput(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFRoFormerAttention(keras.layers.Layer):
+class TFRoFormerAttention(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -407,11 +406,11 @@ class TFRoFormerAttention(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->RoFormer
-class TFRoFormerIntermediate(keras.layers.Layer):
+class TFRoFormerIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -437,15 +436,15 @@ class TFRoFormerIntermediate(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->RoFormer
-class TFRoFormerOutput(keras.layers.Layer):
+class TFRoFormerOutput(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -467,7 +466,7 @@ class TFRoFormerOutput(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFRoFormerLayer(keras.layers.Layer):
+class TFRoFormerLayer(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -516,7 +515,7 @@ class TFRoFormerLayer(keras.layers.Layer):
                 self.roformer_output.build(None)
 
 
-class TFRoFormerEncoder(keras.layers.Layer):
+class TFRoFormerEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_positions = TFRoFormerSinusoidalPositionalEmbedding(
@@ -583,11 +582,11 @@ class TFRoFormerEncoder(keras.layers.Layer):
                     layer.build(None)
 
 
-class TFRoFormerPredictionHeadTransform(keras.layers.Layer):
+class TFRoFormerPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.embedding_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -598,7 +597,7 @@ class TFRoFormerPredictionHeadTransform(keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -620,8 +619,8 @@ class TFRoFormerPredictionHeadTransform(keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.embedding_size])
 
 
-class TFRoFormerLMPredictionHead(keras.layers.Layer):
-    def __init__(self, config: RoFormerConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFRoFormerLMPredictionHead(tf.keras.layers.Layer):
+    def __init__(self, config: RoFormerConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -643,7 +642,7 @@ class TFRoFormerLMPredictionHead(keras.layers.Layer):
             with tf.name_scope(self.transform.name):
                 self.transform.build(None)
 
-    def get_output_embeddings(self) -> keras.layers.Layer:
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -669,8 +668,8 @@ class TFRoFormerLMPredictionHead(keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->RoFormer
-class TFRoFormerMLMHead(keras.layers.Layer):
-    def __init__(self, config: RoFormerConfig, input_embeddings: keras.layers.Layer, **kwargs):
+class TFRoFormerMLMHead(tf.keras.layers.Layer):
+    def __init__(self, config: RoFormerConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFRoFormerLMPredictionHead(config, input_embeddings, name="predictions")
@@ -690,7 +689,7 @@ class TFRoFormerMLMHead(keras.layers.Layer):
 
 
 @keras_serializable
-class TFRoFormerMainLayer(keras.layers.Layer):
+class TFRoFormerMainLayer(tf.keras.layers.Layer):
     config_class = RoFormerConfig
 
     def __init__(self, config: RoFormerConfig, add_pooling_layer: bool = True, **kwargs):
@@ -700,11 +699,11 @@ class TFRoFormerMainLayer(keras.layers.Layer):
 
         self.embeddings = TFRoFormerEmbeddings(config, name="embeddings")
         if config.embedding_size != config.hidden_size:
-            self.embeddings_project = keras.layers.Dense(config.hidden_size, name="embeddings_project")
+            self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
 
         self.encoder = TFRoFormerEncoder(config, name="encoder")
 
-    def get_input_embeddings(self) -> keras.layers.Layer:
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -834,7 +833,7 @@ ROFORMER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -987,7 +986,7 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
         self.mlm = TFRoFormerMLMHead(config, input_embeddings=self.roformer.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     @unpack_inputs
@@ -1067,7 +1066,7 @@ class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingL
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
         self.mlm = TFRoFormerMLMHead(config, input_embeddings=self.roformer.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> keras.layers.Layer:
+    def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
     @unpack_inputs
@@ -1138,17 +1137,17 @@ class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingL
                 self.mlm.build(None)
 
 
-class TFRoFormerClassificationHead(keras.layers.Layer):
+class TFRoFormerClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
-        self.dense = keras.layers.Dense(
+        self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.out_proj = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.out_proj = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
@@ -1272,7 +1271,7 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
         self.sequence_summary = TFSequenceSummary(config, config.initializer_range, name="sequence_summary")
-        self.classifier = keras.layers.Dense(
+        self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1380,8 +1379,8 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
         self.num_labels = config.num_labels
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
-        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = keras.layers.Dense(
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1463,7 +1462,7 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
         self.num_labels = config.num_labels
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
-        self.qa_outputs = keras.layers.Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

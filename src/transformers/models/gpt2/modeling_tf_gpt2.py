@@ -37,7 +37,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFSequenceSummary,
     get_initializer,
-    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -68,7 +67,7 @@ TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFAttention(keras.layers.Layer):
+class TFAttention(tf.keras.layers.Layer):
     def __init__(self, nx, config, scale=False, is_cross_attention=False, **kwargs):
         super().__init__(**kwargs)
 
@@ -89,8 +88,8 @@ class TFAttention(keras.layers.Layer):
             self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
 
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
-        self.attn_dropout = keras.layers.Dropout(config.attn_pdrop)
-        self.resid_dropout = keras.layers.Dropout(config.resid_pdrop)
+        self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
+        self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
         self.pruned_heads = set()
         self.embed_dim = n_state
 
@@ -223,14 +222,14 @@ class TFAttention(keras.layers.Layer):
                 self.q_attn.build([None, None, self.embed_dim])
 
 
-class TFMLP(keras.layers.Layer):
+class TFMLP(tf.keras.layers.Layer):
     def __init__(self, n_state, config, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
         self.act = get_tf_activation(config.activation_function)
-        self.dropout = keras.layers.Dropout(config.resid_pdrop)
+        self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
         self.intermediate_size = n_state
         self.embed_dim = nx
 
@@ -252,18 +251,18 @@ class TFMLP(keras.layers.Layer):
                 self.c_proj.build([None, None, self.embed_dim])
 
 
-class TFBlock(keras.layers.Layer):
+class TFBlock(tf.keras.layers.Layer):
     def __init__(self, config, scale=False, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         inner_dim = config.n_inner if config.n_inner is not None else 4 * nx
-        self.ln_1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
+        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.attn = TFAttention(nx, config, scale, name="attn")
-        self.ln_2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
+        self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
         if config.add_cross_attention:
             self.crossattention = TFAttention(nx, config, scale, name="crossattention", is_cross_attention=True)
-            self.ln_cross_attn = keras.layers.LayerNormalization(
+            self.ln_cross_attn = tf.keras.layers.LayerNormalization(
                 epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
             )
 
@@ -355,7 +354,7 @@ class TFBlock(keras.layers.Layer):
 
 
 @keras_serializable
-class TFGPT2MainLayer(keras.layers.Layer):
+class TFGPT2MainLayer(tf.keras.layers.Layer):
     config_class = GPT2Config
 
     def __init__(self, config, *inputs, **kwargs):
@@ -372,21 +371,21 @@ class TFGPT2MainLayer(keras.layers.Layer):
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
 
-        self.wte = keras.layers.Embedding(
+        self.wte = tf.keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="wte",
         )
-        self.wpe = keras.layers.Embedding(
+        self.wpe = tf.keras.layers.Embedding(
             input_dim=config.n_positions,
             output_dim=config.n_embd,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="wpe",
         )
-        self.drop = keras.layers.Dropout(config.embd_pdrop)
+        self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
-        self.ln_f = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+        self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
         self.embed_dim = config.hidden_size
 
     def get_input_embeddings(self):
@@ -650,7 +649,7 @@ GPT2_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1135,7 +1134,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.score = keras.layers.Dense(
+        self.score = tf.keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="score",

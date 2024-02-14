@@ -67,7 +67,6 @@ else:
         "CLIPTextModelWithProjection",
         "CLIPVisionModel",
         "CLIPVisionModelWithProjection",
-        "CLIPForImageClassification",
     ]
 
 try:
@@ -137,7 +136,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CLIPForImageClassification,
             CLIPModel,
             CLIPPreTrainedModel,
             CLIPTextModel,

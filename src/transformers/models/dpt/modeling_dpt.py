@@ -41,7 +41,7 @@ from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, logging
-from ...utils.backbone_utils import load_backbone
+from ..auto import AutoBackbone
 from .configuration_dpt import DPTConfig
 
 
@@ -131,10 +131,12 @@ class DPTViTHybridEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config.backbone_config)
         feature_dim = self.backbone.channels[-1]
-        if len(self.backbone.channels) != 3:
-            raise ValueError(f"Expected backbone to have 3 output features, got {len(self.backbone.channels)}")
+        if len(config.backbone_config.out_features) != 3:
+            raise ValueError(
+                f"Expected backbone to have 3 output features, got {len(config.backbone_config.out_features)}"
+            )
         self.residual_feature_map_index = [0, 1]  # Always take the output of the first and second backbone stage
 
         if feature_size is None:
@@ -1080,7 +1082,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         self.backbone = None
         if config.backbone_config is not None and config.is_hybrid is False:
-            self.backbone = load_backbone(config)
+            self.backbone = AutoBackbone.from_config(config.backbone_config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
 

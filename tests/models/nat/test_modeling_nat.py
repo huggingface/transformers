@@ -204,7 +204,7 @@ class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": NatModel, "image-classification": NatForImageClassification}
+        {"feature-extraction": NatModel, "image-classification": NatForImageClassification}
         if is_torch_available()
         else {}
     )
