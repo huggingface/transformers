@@ -3842,7 +3842,10 @@ class Trainer:
         # Add additional tags in the case the model has already some tags and users pass
         # "tags" argument to `push_to_hub` so that trainer automatically handles internal tags
         # from all models since Trainer does not call `model.push_to_hub`.
-        if "tags" in kwargs and getattr(self.model, "model_tags", None) is not None:
+        if getattr(self.model, "model_tags", None) is not None:
+            if "tags" not in kwargs:
+                kwargs["tags"] = []
+
             # If it is a string, convert it to a list
             if isinstance(kwargs["tags"], str):
                 kwargs["tags"] = [kwargs["tags"]]
