@@ -3477,6 +3477,15 @@ class TokenHealingTestCase(unittest.TestCase):
         ]
     )
     def test_prompts(self, name, input, expected):
+        model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
+        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+        completion_model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            device_map="auto",
+            trust_remote_code=False,
+            revision="main",
+            use_cache=True,
+        )
         input_ids = self.tokenizer(input, return_tensors="pt").input_ids.to(self.completion_model.device)
 
         healed_ids = self.completion_model.heal_tokens(input_ids)
