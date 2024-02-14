@@ -435,6 +435,8 @@ class LlamaFlashAttention2(LlamaAttention):
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            if cache_position is not None:
+                key_states, value_states = key_states[:, :, :cache_position[-1]+1, :], value_states[:, :, :cache_position[-1]+1, :]
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -1038,9 +1040,11 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def _update_causal_mask(self, attention_mask, input_tensor):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
+            # since the static cache is padded, you have to pass the attention mask raw.
+            # similar to https://github.com/facebookresearch/llama/commit/e9077bd24177a74aa79f406bef7d4b57fe393157
+            if attention_mask is not None and 0.0 not in attention_mask:
+                return None
+            return attention_mask
 
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
