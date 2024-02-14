@@ -55,6 +55,9 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops
 
+# Add aqlm for quantization testing
+RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.1
+
 # Add autoawq for quantization testing
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.1.8/autoawq-0.1.8+cu118-cp38-cp38-linux_x86_64.whl
 
