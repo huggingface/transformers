@@ -159,7 +159,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm.py
-            --model_type openai-community/gpt2
+            --model_type gpt2
             --tokenizer_name openai-community/gpt2
             --train_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
@@ -315,7 +315,7 @@ class ExamplesTests(TestCasePlus):
             testargs.append("--fp16")
 
         model_type, model_name = (
-            "--model_type=openai-community/gpt2",
+            "--model_type=gpt2",
             "--model_name_or_path=sshleifer/tiny-gpt2",
         )
         with patch.object(sys, "argv", testargs + [model_type, model_name]):

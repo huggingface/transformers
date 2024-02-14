@@ -110,7 +110,7 @@ class OpenAIGPTConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "openai-community/openai-gpt"
+    model_type = "openai-gpt"
     attribute_map = {
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",
