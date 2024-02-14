@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -349,7 +349,8 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+            if cache_position is not None:
+                causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -465,6 +466,9 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
+        if attention_mask is not None and 0.0 not in attention_mask and key_states.shape[2] <= q_len:
+            attention_mask = None
+        
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
@@ -632,9 +636,9 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        causal_mask = None
-        if attention_mask is not None:
-            causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+        causal_mask = attention_mask
+        if attention_mask is not None and cache_position is not None:
+                causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -940,11 +944,10 @@ class LlamaModel(LlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache and past_key_values is not None and not isinstance(past_key_values, Cache):
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_usable_length(
-                inputs_embeds.shape[1]
-            )  # kept for BC (cache positions)
+        if use_cache: # kept for BC (cache positions)
+            if not isinstance(past_key_values, (StaticCache)):
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_seen_tokens = past_key_values.get_seq_length() 
 
         if cache_position is None:
             cache_position = torch.arange(
@@ -1021,11 +1024,6 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def _update_causal_mask(self, attention_mask, input_tensor):
         if self.config._attn_implementation == "flash_attention_2":
-            causal_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-            # since the static cache is padded, you have to pass the attention mask raw.
-            # similar to https://github.com/facebookresearch/llama/commit/e9077bd24177a74aa79f406bef7d4b57fe393157
-            if input_tensor.shape[1] == 1 :
-                return None
             return attention_mask
 
         batch_size, seq_length = input_tensor.shape[:2]
