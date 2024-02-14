@@ -2732,7 +2732,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     def test_max_length_if_input_embeds(self):
         # PT-only test: TF doesn't have StoppingCriteria
-        article = "Hey, are you conscious?"
+        article = "Today a dragon flew over Paris."
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
