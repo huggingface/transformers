@@ -977,6 +977,9 @@ class GemmaModel(GemmaPreTrainedModel):
                 padding_mask, torch.finfo(dtype).min
             )
 
+        if self.config._attn_implementation == "sdpa":
+            causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
+
         return causal_mask
 
 
