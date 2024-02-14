@@ -896,6 +896,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.mlm_score.decoder = new_embeddings
+        self.mlm_score.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1040,6 +1041,9 @@ class ViltMLMHead(nn.Module):
             self.decoder.weight = weight
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, x):
