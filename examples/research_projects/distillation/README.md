@@ -183,7 +183,7 @@ Happy distillation!
 
 If you find the resource useful, you should cite the following paper:
 
-```
+```bibtex
 @inproceedings{sanh2019distilbert,
   title={DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter},
   author={Sanh, Victor and Debut, Lysandre and Chaumond, Julien and Wolf, Thomas},

@@ -140,7 +140,7 @@ Here is the benchmarking code and outputs:
 
 **DP**
 
-```
+```bash
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 python examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
@@ -151,7 +151,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 
 **DDP w/ NVlink**
 
-```
+```bash
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
@@ -162,7 +162,7 @@ torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 
 **DDP w/o NVlink**
 
-```
+```bash
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
 torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
