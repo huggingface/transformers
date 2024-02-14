@@ -565,7 +565,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     )
 
     @unittest.skip("Cannot be initialized on meta device as some weights are modified during the initialization")
-    def test_save_and_load_low_cpu_mem_usage(self):
+    def test_save_load_low_cpu_mem_usage(self):
         pass
 
     def test_two_stage_training(self):
