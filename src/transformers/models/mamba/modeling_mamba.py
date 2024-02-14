@@ -660,6 +660,7 @@ class MambaModel(MambaPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,  # noqa
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[List[torch.FloatTensor]] = None,
+        inference_params: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -681,7 +682,7 @@ class MambaModel(MambaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
         # TODO better to call _set_cache
-        if use_cache and cache is None:
+        if use_cache and inference_params is None:
             shape = (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers)
             dtype = inputs_embeds.dtype if i <= 1 else torch.float32
             cache = [torch.zeros(*shape, dtype=dtype, device=inputs_embeds.device)for i in range(5)]
