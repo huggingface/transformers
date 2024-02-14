@@ -413,7 +413,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
-        image_sizes: Optional[List[Tuple[int, int]]] = None,
+        image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -477,7 +477,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                # TODO support llava 1.6 here
                 if pixel_values.ndim == 5:
                     concat_images = torch.cat(list(pixel_values), dim=0)
                     image_features = self.vision_tower(concat_images, output_hidden_states=True)

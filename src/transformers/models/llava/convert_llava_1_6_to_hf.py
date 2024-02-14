@@ -150,7 +150,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         dim=0,
     )
 
-    device = "cuda:0"
+    device = "cuda:3"
     model.to(device)
 
     # TODO verify input_ids
@@ -178,7 +178,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # verify single forward pass
     # TODO make sure image_sizes is not a list
-    image_sizes = [(1024, 899)]
+    image_sizes = torch.tensor([[1024, 899]])  # (batch_size, 2)
     print("Single forward pass")
     with torch.inference_mode():
         # TODO use processor instead
