@@ -690,7 +690,7 @@ class Qwen2SdpaAttention(Qwen2Attention):
         ):  # user defined causal mask
             causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
             # this one liner is equivalent to the pad_unpad function
-            causal_mask.mul_(~torch.eq(causal_mask, causal_mask.min()).all(dim=-1)[..., None])
+            causal_mask = causal_mask * (~torch.eq(causal_mask, causal_mask.min()).all(dim=-1)[..., None])
         else:
             causal_mask = None
 
