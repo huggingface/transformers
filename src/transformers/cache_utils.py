@@ -344,15 +344,26 @@ class StaticCache(Cache):
             The default `dtype` to use when initializing the layer.
     """
 
+<<<<<<< HEAD
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
+=======
+    def __init__(
+        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None
+    ) -> None:
+>>>>>>> 9aa667e03 (correct dtype inference when init)
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
+<<<<<<< HEAD
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
+=======
+        self.num_heads = config.num_attention_heads
+        self.dtype = dtype if dtype is not None else torch.float32
+>>>>>>> 9aa667e03 (correct dtype inference when init)
 
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
