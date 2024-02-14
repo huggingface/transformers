@@ -73,6 +73,8 @@
       title: Depth estimation
     - local: tasks/image_to_image
       title: Image-to-Image
+    - local: tasks/mask_generation
+      title: Mask Generation
     - local: tasks/knowledge_distillation_for_image_classification
       title: Knowledge Distillation for Computer Vision
     title: Computer Vision
