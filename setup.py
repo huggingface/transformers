@@ -259,7 +259,7 @@ extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["torch"] = deps_list("torch", "accelerate", "pygtrie")
+extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 
 if os.name == "nt":  # windows
@@ -269,6 +269,7 @@ else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
+extras["generate"] = deps_list("pygtrie")
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
@@ -344,6 +345,7 @@ extras["all"] = (
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
+    + extras["generate"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
@@ -369,6 +371,7 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["generate"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
@@ -382,6 +385,7 @@ extras["dev-tensorflow"] = (
     + extras["modelcreation"]
     + extras["onnx"]
     + extras["tf-speech"]
+    + extras["generate"]
 )
 extras["dev"] = (
     extras["all"]
