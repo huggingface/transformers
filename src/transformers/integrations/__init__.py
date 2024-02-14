@@ -78,6 +78,7 @@ _import_structure = {
         "run_hp_search_wandb",
     ],
     "peft": ["PeftAdapterMixin"],
+    "qaunto": ["replace_with_quanto_layers"],
 }
 
 if TYPE_CHECKING:

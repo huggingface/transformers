@@ -39,6 +39,7 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    QUANTO = "quanto"
 
 
 class AWQLinearVersion(str, Enum):
@@ -792,3 +793,35 @@ class AqlmConfig(QuantizationConfigMixin):
 
         if self.linear_weights_not_to_quantize is None:
             self.linear_weights_not_to_quantize = []
+
+
+@dataclass
+class QuantoConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `quanto`.
+
+    Args:
+        weights (`torch.dtype`, *optional*, defaults to `torch.int8`):
+            The dtype of the quantized weights
+        activations (`torch.dtype`, *optional*, defaults to `None`):
+            The dtype of the quantized activations
+    """
+
+    def __init__(
+        self,
+        weights=torch.int8,
+        activations=None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.QUANTO
+        # TODO: I think that we can keep the naming but it will be easier for the user to set str and not torch.int8 or quanto.int4 for ex
+        self.weights = weights
+        self.activations = activations
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass
