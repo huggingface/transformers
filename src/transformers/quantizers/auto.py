@@ -151,4 +151,3 @@ class AutoHfQuantizer:
             warnings.warn(warning_msg)
 
         return quantization_config
-        return quantization_config
