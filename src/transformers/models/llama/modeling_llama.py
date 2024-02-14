@@ -432,8 +432,6 @@ class LlamaFlashAttention2(LlamaAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if attention_mask is not None and 0.0 not in attention_mask and key_states.shape[2] <= query_states.shape[2]:
-            attention_mask = None
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -1026,6 +1024,10 @@ class LlamaModel(LlamaPreTrainedModel):
 
     def _update_causal_mask(self, attention_mask, input_tensor):
         if self.config._attn_implementation == "flash_attention_2":
+            # since the static cache is padded, you have to pass the attention mask raw.
+            # similar to https://github.com/facebookresearch/llama/commit/e9077bd24177a74aa79f406bef7d4b57fe393157
+            if input_tensor.shape[1] == 1 :
+                return None
             return attention_mask
 
         batch_size, seq_length = input_tensor.shape[:2]
