@@ -435,7 +435,7 @@ class LlamaFlashAttention2(LlamaAttention):
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            if cache_position is not None:
+            if cache_position is not None: # we slice for static kv cache to be supported in FA2. Not sure it's a must as compile fails
                 key_states, value_states = key_states[:, :, :cache_position[-1]+1, :], value_states[:, :, :cache_position[-1]+1, :]
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
