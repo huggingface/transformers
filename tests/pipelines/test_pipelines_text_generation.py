@@ -218,7 +218,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch
+    @require_tf
     def test_small_chat_model_tf(self):
         text_generator = pipeline(
             task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="tf"
