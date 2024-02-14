@@ -643,7 +643,7 @@ class MambaModel(MambaPreTrainedModel):
         # TODO better to call _set_cache
         if use_cache and inference_params is None:
             shape = (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers)
-            dtype = inputs_embeds.dtype if i <= 1 else torch.float32
+            dtype = inputs_embeds.dtype
             cache = [torch.zeros(*shape, dtype=dtype, device=inputs_embeds.device)for i in range(5)]
 
         if self.gradient_checkpointing and self.training:
