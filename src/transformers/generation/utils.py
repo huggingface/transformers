@@ -1426,9 +1426,9 @@ class GenerationMixin:
 
         # otherwise the total length [inputs-embeds-len + new-tokens-len] will go beyond indicated `max_length``
         elif (
-            model_input_name == "inputs_embeds" and 
-            inputs_tensor.shape[:-1] != input_ids.shape and
-            not self.config.is_encoder_decoder
+            model_input_name == "inputs_embeds"
+            and inputs_tensor.shape[:-1] != input_ids.shape
+            and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
 
