@@ -977,16 +977,6 @@ class GemmaModel(GemmaPreTrainedModel):
                 padding_mask, torch.finfo(dtype).min
             )
 
-        if self.config._attn_implementation == "sdpa":
-            if attention_mask is None:
-                return None
-            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-            if not is_tracing and (torch.all(attention_mask == 1)):
-                return None
-            if is_tracing and seq_length == 1:
-                return None
-            causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
-
         return causal_mask
 
 
