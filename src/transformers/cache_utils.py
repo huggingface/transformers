@@ -345,14 +345,14 @@ class StaticCache(Cache):
     """
 
     def __init__(
-        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=torch.float32
+        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None
     ) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
+        self.dtype = dtype if dtype is not None else torch.float32
 
         cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)

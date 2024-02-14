@@ -432,7 +432,7 @@ class LlamaFlashAttention2(LlamaAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if attention_mask is not None and 0.0 not in attention_mask and key_states.shape[2] <= q_len:
+        if attention_mask is not None and 0.0 not in attention_mask and key_states.shape[2] <= query_states.shape[2]:
             attention_mask = None
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -794,8 +794,9 @@ class LlamaPreTrainedModel(PreTrainedModel):
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
+            weights = layer.self_attn.o_proj.weight
             layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device
+                self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
             )
 
     def _reset_cache(self):
