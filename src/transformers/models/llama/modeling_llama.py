@@ -468,7 +468,7 @@ class LlamaFlashAttention2(LlamaAttention):
 
         if attention_mask is not None and 0.0 not in attention_mask and key_states.shape[2] <= q_len:
             attention_mask = None
-        
+
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
@@ -638,7 +638,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
-                causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -944,10 +944,10 @@ class LlamaModel(LlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache: # kept for BC (cache positions)
+        if use_cache:  # kept for BC (cache positions)
             if not isinstance(past_key_values, (StaticCache)):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length() 
+            past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
             cache_position = torch.arange(
@@ -1238,7 +1238,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)
         if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
+            cache_position = torch.arange(
+                past_length, past_length + position_ids.shape[-1], device=position_ids.device
+            )
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
