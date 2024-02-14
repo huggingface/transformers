@@ -498,6 +498,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Image Classification mapping
         ("beit", "BeitForImageClassification"),
         ("bit", "BitForImageClassification"),
+        ("clip", "CLIPForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
         ("convnextv2", "ConvNextV2ForImageClassification"),
         ("cvt", "CvtForImageClassification"),
@@ -540,6 +541,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetForImageClassification"),
         ("resnet", "ResNetForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
+        ("siglip", "SiglipForImageClassification"),
         ("swiftformer", "SwiftFormerForImageClassification"),
         ("swin", "SwinForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
