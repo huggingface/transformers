@@ -181,7 +181,7 @@ class StopStringCriteria(StoppingCriteria):
                 matching_positions = []
                 possible_end_lengths = []
                 for i in range(1 - len(token), len(stop_string)):
-                    tok = token[::-1].replace("▁", " ")
+                    tok = token[::-1].replace("▁", " ").replace("Ġ", " ")
                     stop = stop_string[::-1]
                     if i < 0:
                         tok = tok[-i:]
