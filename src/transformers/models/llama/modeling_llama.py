@@ -470,6 +470,9 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
+        if attention_mask is not None and 0.0 not in attention_mask and key_states.shape[2] <= q_len:
+            attention_mask = None
+
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
