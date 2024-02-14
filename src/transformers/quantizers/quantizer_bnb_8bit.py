@@ -205,7 +205,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             unexpected_keys.remove(fp16_statistics_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model._is_quantized_training_enabled = self.is_trainable
         model.is_loaded_in_8bit = True
         model.is_8bit_serializable = self.is_serializable
         return model

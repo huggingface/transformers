@@ -804,6 +804,7 @@ src/transformers/models/speecht5/number_normalizer.py
 src/transformers/models/splinter/configuration_splinter.py
 src/transformers/models/splinter/modeling_splinter.py
 src/transformers/models/squeezebert/modeling_squeezebert.py
+src/transformers/models/stablelm/modeling_stablelm.py
 src/transformers/models/swiftformer/configuration_swiftformer.py
 src/transformers/models/swiftformer/convert_swiftformer_original_to_hf.py
 src/transformers/models/swiftformer/modeling_swiftformer.py

@@ -420,6 +420,9 @@ class Trainer:
         _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
             model, "_hf_peft_config_loaded", False
         )
+        _quantization_method_supports_training = (
+            getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
+        )
 
         # At this stage the model is already loaded
         if _is_quantized_and_base_model and not _is_peft_model(model):
@@ -428,10 +431,11 @@ class Trainer:
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
                 " for more details"
             )
-        elif _is_quantized_and_base_model and not getattr(model, "_is_quantized_training_enabled", False):
+        elif _is_quantized_and_base_model and not _quantization_method_supports_training:
             raise ValueError(
-                "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                f"The model you are trying to fine-tune is quantized with {model.hf_quantizer.quantization_config.quant_method}"
+                " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"
+                f" to request the support for training support for {model.hf_quantizer.quantization_config.quant_method}"
             )
 
         self.is_fsdp_xla_enabled = args.fsdp_config["xla"]
