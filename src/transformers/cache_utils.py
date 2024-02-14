@@ -354,7 +354,7 @@ class StaticCache(Cache):
         self.num_heads = (
             config.num_attention_heads if not hasattr(config, "num_key_value_heads") else config.num_key_value_heads
         )
-        self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
+        self.dtype = dtype
 
         cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)

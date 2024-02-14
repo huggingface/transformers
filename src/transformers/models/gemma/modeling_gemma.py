@@ -555,6 +555,9 @@ class GemmaSdpaAttention(GemmaAttention):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        value_states = value_states.to(hidden_states.dtype)
+        key_states = key_states.to(hidden_states.dtype)
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}
@@ -724,7 +727,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
 
         for layer in self.model.layers:
             layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device
+                self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device, dtype=layer.self_attn.o_proj.weight.dtype
             )
 
     def _reset_cache(self):
