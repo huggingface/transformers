@@ -344,9 +344,7 @@ class StaticCache(Cache):
             The default `dtype` to use when initializing the layer.
     """
 
-    def __init__(
-        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None
-    ) -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
