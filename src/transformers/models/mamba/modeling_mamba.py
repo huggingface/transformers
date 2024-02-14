@@ -249,28 +249,28 @@ class MambaMixer(nn.Module):
 
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.d_model = config.d_model
-        self.d_state = config.d_state
-        self.d_conv = config.d_conv
+        self.d_model = config.hidden_size
+        self.d_state = config.state_size
+        self.d_conv = config.conv_kernel
         self.expand = config.expand
         self.d_inner = int(self.expand * self.d_model)
         self.time_step_rank = math.ceil(self.d_model / 16) if config.time_step_rank == "auto" else config.time_step_rank
-        self.use_fast_path = config.use_fast_path
+        # self.use_fast_path = config.use_fast_path
         self.layer_idx = layer_idx
 
-        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=config.bias)
+        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=config.use_bias)
 
         self.conv1d = nn.Conv1d(
             in_channels=self.d_inner,
             out_channels=self.d_inner,
-            bias=config.conv_bias,
-            kernel_size=config.d_conv,
+            bias=config.use_conv_bias,
+            kernel_size=config.conv_kernel,
             groups=self.d_inner,
-            padding=config.d_conv - 1,
+            padding=config.conv_kernel - 1,
         )
 
-        self.activation = config.activation
-        self.act = ACT2FN[config.activation]
+        self.activation = config.hidden_act
+        self.act = ACT2FN[config.hidden_act]
 
         # selective projection used to make dt, B and C input dependant
         self.x_proj = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
@@ -279,7 +279,7 @@ class MambaMixer(nn.Module):
         # THe core is to load them, compute the discrete states, then write the updates state.
         # Keeps the memory bounded
         what_is_this = torch.arange(1, self.d_state + 1, dtype=torch.float32)
-        A = torch.repeat(what_is_this,d=self.d_inner).contiguous()
+        A = what_is_this.repeat(self.d_inner).contiguous()
         A_log = torch.log(A)  # Keep A_log in fp32
         self.A_log = nn.Parameter(A_log)
         self.A_log._no_weight_decay = True
@@ -287,7 +287,7 @@ class MambaMixer(nn.Module):
         # D "skip" parameter
         self.D = nn.Parameter(torch.ones(self.d_inner))  # Keep in fp32
         self.D._no_weight_decay = True
-        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.bias)
+        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_conv_bias)
 
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
         """
@@ -296,7 +296,7 @@ class MambaMixer(nn.Module):
         """
         _, seqlen, _ = hidden_states.shape
         conv_state, ssm_state = inference_params.key_value_memory_dict[self.layer_idx]
-
+        return None
         projected_states = self.in_proj(hidden_states).transpose(1,2)
         hidden_states, z = projected_states.chunk(2, dim=1)
 
@@ -367,9 +367,10 @@ class MambaSlowMixer(MambaMixer):
             conv_state = infer_params.update_conv_states(hidden_states)
 
         # TODO replace with simple conv call
-        hidden_states = torch.sum(conv_state * torch.rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
-        if self.conv1d.bias is not None:
-            hidden_states = hidden_states + self.conv1d.bias
+        hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
+        # hidden_states = torch.sum(conv_state * torch.rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
+        # if self.conv1d.bias is not None:
+        #     hidden_states = hidden_states + self.conv1d.bias
         hidden_states = self.act(hidden_states).to(dtype=hidden_states.dtype)
 
         # 3. State Space Model sequence transformation
@@ -377,13 +378,17 @@ class MambaSlowMixer(MambaMixer):
         x_dbl = self.x_proj(torch.rearrange(hidden_states, "b d l -> (b l) d"))  # (bl d)
         dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
         dt = self.dt_proj.weight @ dt.t()
-        dt = torch.rearrange(dt, "d (b l) -> b d l", l=seq_len)
+        
+        dt = dt.transpose(0,1)
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
-        B = torch.rearrange(B, "(b l) dstate -> b dstate l", l=seq_len).contiguous()
-        C = torch.rearrange(C, "(b l) dstate -> b dstate l", l=seq_len).contiguous()
+        
+        B = B.permute(0,2,1).contiguous()
+        C = C.permute(0,2,1).contiguous()
 
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         dt = nn.functional.softplus(dt + self.dt_proj.bias.to(dtype=dt.dtype))
+        
+        # TODO replace einsums
         dA = torch.exp(torch.einsum("bd,dn->bdn", dt, A))
         dB = torch.einsum("bd,bn->bdn", dt, B)
 
@@ -403,20 +408,49 @@ class MambaSlowMixer(MambaMixer):
         return attn_outputs, conv_state, y
 
 
+        _xz = self.in_proj(hidden_states)
+        _x, _z = _xz.chunk(2, dim=-1)  # (B D)
+        conv_state_new = torch.cat([conv_state, _x.transpose(1,2)], dim=-1)
+        conv_out = causal_conv1d_fn( 
+            x=conv_state_new, 
+            weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)), 
+            bias=self.conv1d.bias, 
+            activation=self.activation
+        )
+        conv_state = conv_state_new[:, :, 1:]
+        bsz, seqlen, dim = hidden_states.shape
+        output_tensor = torch.zeros(
+            (bsz, seqlen, dim),
+            device=hidden_states.device, 
+            dtype=hidden_states.dtype
+        )
+        for i in range(0, bsz):
+            x = conv_out[i:i+1,:,-1]
+            z = _z[i:i+1, -1, :]
+            x_db = self.x_proj(x)
+            dt, B, C = torch.split(x_db, [self.dt_rank, self.d_state, self.d_state], dim=-1)
+            dt = F.linear(dt, self.dt_proj.weight)
+            y = selective_state_update(
+                ssm_state[i:i+1,:,:], x, dt, self.negA, B, C, self.D, z=z, dt_bias=self.dt_proj.bias, dt_softplus=True
+            )
+            out = self.out_proj(y)
+            output_tensor[i] = out
+            
+
 class MambaBlock(nn.Module):
-    def __init__(self, config, layer_id):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
-        self.layer_id = layer_id
-        self.residual_in_fp32 = config.residual_in_fp32
+        self.layer_idx = layer_idx
+        # self.residual_in_fp32 = config.residual_in_fp32
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = MambaMixer(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.mixer = MambaMixer(config, layer_idx = layer_idx)
 
     def forward(self, hidden_states, residual=None, inference_params=None):
         residual = (hidden_states + residual) if residual is not None else hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.residual_in_fp32:
-            residual = residual.to(torch.float32)
+        # if self.residual_in_fp32:
+        #     residual = residual.to(torch.float32)
 
         hidden_states = self.mixer(hidden_states, inference_params=inference_params)
         outputs = (hidden_states, residual)
@@ -482,25 +516,8 @@ class MambaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, std=self.config.initializer_range)
 
-        if self.config.rescale_prenorm_residual:
-            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-            #
-            # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-            for name, p in module.named_parameters():
-                if name in ["out_proj.weight", "fc2.weight"]:
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
-                    nn.init.kaiming_uniform_(p, a=math.sqrt(5))
-                    with torch.no_grad():
-                        p /= math.sqrt(self.config.n_residuals_per_layer * self.config.n_layer)
 
-        def _setup_cache(self, batch_size, max_seqlen, dtype):
-            raise NotImplementedError
+
 
 @dataclass
 class MambaOutput(ModelOutput):
@@ -633,7 +650,7 @@ class MambaModel(MambaPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([MambaBlock(config, layer_id=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
         self.norm_f = nn.LayerNorm(config.hidden_size) # ir use ALL_LAYER_NORM[config.hidden_states]
 
         self.layers_are_rescaled = False
