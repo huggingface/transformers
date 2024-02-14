@@ -565,11 +565,18 @@ class BridgeTowerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower
+BRIDGE_TOWER_SELF_ATTENTION_CLASSES = {
+    "eager": BridgeTowerSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower,BERT->BRIDGE_TOWER
 class BridgeTowerAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BridgeTowerSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = BRIDGE_TOWER_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = BridgeTowerSelfOutput(config)
         self.pruned_heads = set()
 

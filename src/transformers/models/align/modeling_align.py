@@ -886,11 +886,18 @@ class AlignTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->AlignText
+ALIGN_TEXT_SELF_ATTENTION_CLASSES = {
+    "eager": AlignTextSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->AlignText,BERT->ALIGN_TEXT
 class AlignTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = AlignTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ALIGN_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = AlignTextSelfOutput(config)
         self.pruned_heads = set()
 

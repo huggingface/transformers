@@ -667,7 +667,6 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     an input to the forward pass. .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRobertaXL
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -700,7 +699,6 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

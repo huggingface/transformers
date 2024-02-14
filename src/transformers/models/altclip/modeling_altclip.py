@@ -436,11 +436,18 @@ class AltRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->AltRoberta
+ALT_ROBERTA_SELF_ATTENTION_CLASSES = {
+    "eager": AltRobertaSelfAttention,
+}
+
+
+# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->AltRoberta,ROBERTA->ALT_ROBERTA
 class AltRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = AltRobertaSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ALT_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = AltRobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1207,7 +1214,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
     config_class = AltCLIPTextConfig
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1234,7 +1240,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

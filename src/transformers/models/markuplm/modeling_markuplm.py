@@ -470,11 +470,18 @@ class MarkupLMSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->MarkupLM
+MARKUPLM_SELF_ATTENTION_CLASSES = {
+    "eager": MarkupLMSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->MarkupLM,BERT->MARKUPLM
 class MarkupLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MarkupLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = MARKUPLM_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = MarkupLMSelfOutput(config)
         self.pruned_heads = set()
 
@@ -800,7 +807,6 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMModel(MarkupLMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->MarkupLM
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
