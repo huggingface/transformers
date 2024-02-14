@@ -179,7 +179,7 @@ plt.show()
 
 You can also do box prompting in a similar fashion to point prompting. You can simply pass the input box in the format of a list
 `[x_min, y_min, x_max, y_max]` format along with the image to the `processor`. Take the processor output and directly pass it 
-to the model, then postprocess the output again.
+to the model, then post-process the output again.
 
 
 ```python
