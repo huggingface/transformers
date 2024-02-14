@@ -60,6 +60,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
@@ -76,6 +77,7 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
+    AcceleratorConfig,
     DistributedTensorGatherer,
     IterableDatasetShard,
     LabelSmoother,
@@ -169,6 +171,8 @@ if is_datasets_available():
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
+    import torch_xla.distributed.spmd as xs
+    import torch_xla.runtime as xr
 
 
 if is_sagemaker_mp_enabled():
@@ -633,6 +637,13 @@ class Trainer:
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
+
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config["xla_fsdp_v2"]
+        if self.is_fsdp_xla_v2_enabled:
+            # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
+            # Tensor axis is just a placeholder where it will not be used in FSDPv2.
+            num_devices = xr.global_runtime_device_count()
+            xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
 
     def _activate_neftune(self, model):
         r"""
@@ -1384,6 +1395,11 @@ class Trainer:
                     size_based_auto_wrap_policy,
                     transformer_auto_wrap_policy,
                 )
+
+                if self.is_fsdp_xla_v2_enabled:
+                    from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
+                        SpmdFullyShardedDataParallel as FSDPv2,
+                    )
             except ImportError:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
@@ -1415,15 +1431,40 @@ class Trainer:
             if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
                 # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                 def auto_wrapper_callable(m, *args, **kwargs):
-                    return FSDP(checkpoint_module(m), *args, **kwargs)
+                    target_cls = FSDP if not self.is_fsdp_xla_v2_enabled else FSDPv2
+                    return target_cls(checkpoint_module(m), *args, **kwargs)
 
             # Wrap the base model with an outer FSDP wrapper
-            self.model = model = FSDP(
-                model,
-                auto_wrap_policy=auto_wrap_policy,
-                auto_wrapper_callable=auto_wrapper_callable,
-                **fsdp_kwargs,
-            )
+            if self.is_fsdp_xla_v2_enabled:
+
+                def shard_output(output, mesh):
+                    from .modeling_outputs import CausalLMOutputWithPast
+
+                    real_output = None
+                    if isinstance(output, torch.Tensor):
+                        real_output = output
+                    elif isinstance(output, tuple):
+                        real_output = output[0]
+                    elif isinstance(output, CausalLMOutputWithPast):
+                        real_output = output.logits
+
+                    if real_output is None:
+                        raise ValueError("Something went wrong, the output of the model shouldn't be `None`")
+                    xs.mark_sharding(real_output, mesh, ("fsdp", None, None))
+
+                self.model = model = FSDPv2(
+                    model,
+                    shard_output=shard_output,
+                    auto_wrap_policy=auto_wrap_policy,
+                    auto_wrapper_callable=auto_wrapper_callable,
+                )
+            else:
+                self.model = model = FSDP(
+                    model,
+                    auto_wrap_policy=auto_wrap_policy,
+                    auto_wrapper_callable=auto_wrapper_callable,
+                    **fsdp_kwargs,
+                )
 
             # Patch `xm.optimizer_step` should not reduce gradients in this case,
             # as FSDP does not need gradient reduction over sharded parameters.
@@ -1592,6 +1633,8 @@ class Trainer:
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
+        if self.is_fsdp_xla_v2_enabled:
+            train_dataloader = tpu_spmd_dataloader(train_dataloader)
 
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
@@ -1961,6 +2004,11 @@ class Trainer:
                     self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
+                    # PyTorch/XLA relies on the data loader to insert the mark_step for
+                    # each step. Since we are breaking the loop early, we need to manually
+                    # insert the mark_step here.
+                    if is_torch_tpu_available():
+                        xm.mark_step()
                     break
             if step < 0:
                 logger.warning(
@@ -2944,6 +2992,7 @@ class Trainer:
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
+
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
         model.to("cpu")
@@ -3142,6 +3191,9 @@ class Trainer:
         self._memory_tracker.start()
 
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
+        if self.is_fsdp_xla_v2_enabled:
+            eval_dataloader = tpu_spmd_dataloader(eval_dataloader)
+
         start_time = time.time()
 
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
@@ -3790,7 +3842,10 @@ class Trainer:
         # Add additional tags in the case the model has already some tags and users pass
         # "tags" argument to `push_to_hub` so that trainer automatically handles internal tags
         # from all models since Trainer does not call `model.push_to_hub`.
-        if "tags" in kwargs and getattr(self.model, "model_tags", None) is not None:
+        if getattr(self.model, "model_tags", None) is not None:
+            if "tags" not in kwargs:
+                kwargs["tags"] = []
+
             # If it is a string, convert it to a list
             if isinstance(kwargs["tags"], str):
                 kwargs["tags"] = [kwargs["tags"]]
@@ -4029,11 +4084,21 @@ class Trainer:
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
+        accelerator_kwargs = {}
+        if self.args.accelerator_config is not None:
+            accelerator_kwargs = self.args.accelerator_config
+            # dict and AcceleratorConfigs are parseable, json files are not
+            if isinstance(accelerator_kwargs, AcceleratorConfig):
+                accelerator_kwargs = accelerator_kwargs.to_dict()
+            elif isinstance(accelerator_kwargs, dict):
+                # Some values may need to go through non-accelerate aligned defaults
+                # and we need to run the `__post_init__` to set them
+                accelerator_kwargs = AcceleratorConfig(**accelerator_kwargs).to_dict()
+
         self.accelerator = Accelerator(
-            dispatch_batches=self.args.dispatch_batches,
-            split_batches=self.args.split_batches,
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
+            **accelerator_kwargs,
         )
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
