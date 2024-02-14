@@ -171,6 +171,7 @@ for ax in axes:
 
 plt.show()
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/masks.png" alt="Visualized"/>
 </div>
