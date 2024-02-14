@@ -102,6 +102,10 @@ class MambaConfig(PretrainedConfig):
         expand=2,
         dt_rank="auto",
         tie_word_embeddings=True,
+        use_bias=False,
+        use_conv_bias=False,
+        hidden_act="silu",
+        initializer_range=0.1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -110,13 +114,17 @@ class MambaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.layer_norm_epsilon = layer_norm_epsilon
         self.d_inner = hidden_size * 2
-        self.d_conv = 4
+        self.conv_kernel = 4
         self.state_size = state_size
         self.expand = expand
         self.time_step_rank = math.ceil(self.hidden_size / 16) if dt_rank == "auto" else dt_rank
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.use_bias = use_bias
+        self.use_conv_bias = use_conv_bias
+        self.hidden_act=hidden_act
+        self.initializer_range = initializer_range
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
