@@ -273,11 +273,11 @@ class MambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         # projection of the input hidden states
-        self.input_projection = nn.Linear(self.d_model, self.d_inner * 2, bias=config.use_bias)
+        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependant
-        self.discrete_projection = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
+        self.x_proj = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
         # time step projection (discretization)
-        self.time_step_projection = nn.Linear(self.time_step_rank, self.d_inner, bias=True)
+        self.dt_proj = nn.Linear(self.time_step_rank, self.d_inner, bias=True)
         # S4D real initialization. These are not discretized!
         # THe core is to load them, compute the discrete states, then write the updates state.
         # Keeps the memory bounded
@@ -375,7 +375,7 @@ class MambaSlowMixer(MambaMixer):
         batch_size, seq_len, _ = hidden_states.shape
 
         # 1. Gated MLP's linear projection
-        projected_states = self.input_projection(hidden_states).transpose(1,2)
+        projected_states = self.in_proj(hidden_states).transpose(1,2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -391,9 +391,9 @@ class MambaSlowMixer(MambaMixer):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        x_dbl = self.discrete_projection(hidden_states.transpose(1,2))
+        x_dbl = self.x_proj(hidden_states.transpose(1,2))
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
-        discrete_time_step = self.time_step_projection(time_step)
+        discrete_time_step = self.dt_proj(time_step)
 
         # discrete_time_step = discrete_time_step.transpose(0,1)
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
