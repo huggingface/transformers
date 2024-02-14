@@ -3480,15 +3480,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
-    model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
-    completion_model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        device_map="auto",
-        trust_remote_code=False,
-        revision="main",
-        use_cache=True,
-    )
 
     @parameterized.expand(
         [
