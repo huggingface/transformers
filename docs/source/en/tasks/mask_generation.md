@@ -69,10 +69,7 @@ image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="Example Image"/>
 </div>
 
-Let's segment everything. `points-per-batch` enables parallel inference of points in
-segment everything mode. This enables faster inference, but consumes more memory.
-Moreover, SAM only enables batching over points and not the images. `pred_iou_thresh` is
-the IoU confidence threshold where only the masks above that certain threshold are returned.
+Let's segment everything. `points-per-batch` enables parallel inference of points in segment everything mode. This enables faster inference, but consumes more memory. Moreover, SAM only enables batching over points and not the images. `pred_iou_thresh` is the IoU confidence threshold where only the masks above that certain threshold are returned.
 
 ```python
 masks = mask_generator(image, points_per_batch=128, pred_iou_thresh=0.88)
