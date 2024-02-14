@@ -1963,7 +1963,7 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(
                 outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids[:, 1:].tolist(),
+                outputs_from_embeds_wo_ids.tolist(),
             )
 
     def test_generate_continue_from_past_key_values(self):
