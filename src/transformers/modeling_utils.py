@@ -4190,6 +4190,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.warning_once(warn_string)
 
+    @property
+    def _is_quantized_training_enabled(self):
+        logger.warning(
+            "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
+            FutureWarning,
+        )
+
+        if not hasattr(self, "hf_quantizer"):
+            return False
+
+        return self.hf_quantizer.is_trainable
+
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:
