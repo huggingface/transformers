@@ -442,7 +442,7 @@ class StaticCache(Cache):
         """Returns the sequence length of the cached states that were seen by the model."""
         return self.seen_tokens
 
-    def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
+    def get_usable_length(self, new_sequence_length=None) -> int:
         return self.seen_tokens
 
     def get_max_length(self) -> Optional[int]:

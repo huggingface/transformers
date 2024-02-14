@@ -147,10 +147,14 @@ class CacheTest(unittest.TestCase):
         mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
 <<<<<<< HEAD
+<<<<<<< HEAD
             *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
 =======
             *_random_kvs(mha_config), cache_kwargs={"position_ids": torch.arange(1)}
 >>>>>>> 7e8652f6d (tmp commit)
+=======
+            *_random_kvs(mha_config), cache_kwargs={"cache_position": torch.arange(1)}
+>>>>>>> 1f88b6d90 (tmp commit)
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
@@ -159,10 +163,14 @@ class CacheTest(unittest.TestCase):
         gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
 <<<<<<< HEAD
+<<<<<<< HEAD
             *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
 =======
             *_random_kvs(gqa_config), cache_kwargs={"position_ids": torch.arange(1)}
 >>>>>>> 7e8652f6d (tmp commit)
+=======
+            *_random_kvs(gqa_config), cache_kwargs={"cache_position": torch.arange(1)}
+>>>>>>> 1f88b6d90 (tmp commit)
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
@@ -171,10 +179,14 @@ class CacheTest(unittest.TestCase):
         mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
 <<<<<<< HEAD
+<<<<<<< HEAD
             *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
 =======
             *_random_kvs(mqa_config), cache_kwargs={"position_ids": torch.arange(1)}
 >>>>>>> 7e8652f6d (tmp commit)
+=======
+            *_random_kvs(mqa_config), cache_kwargs={"cache_position": torch.arange(1)}
+>>>>>>> 1f88b6d90 (tmp commit)
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
@@ -224,7 +236,8 @@ class CacheIntegrationTest(unittest.TestCase):
             model.device
         )
 
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
+        external_dynamic_cache = ModelCache([DynamicCache() for _ in range(model.config.num_hidden_layers)])
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=external_dynamic_cache)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
         self.assertListEqual(decoded, expected_text)
@@ -259,8 +272,10 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
         # without a SinkCache, the last few tokens are gibberish (ends in "of the of the of a of a of")
-        cache = SinkCache(window_length=508, num_sink_tokens=4)
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=cache)
+        external_sink_cache = ModelCache(
+            [SinkCache(window_length=508, num_sink_tokens=4) for _ in range(model.config.num_hidden_layers)]
+        )
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=external_sink_cache)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertTrue(decoded[0].endswith("to perform a variety of tasks. The Transformer is a neural network"))
 
@@ -276,7 +291,9 @@ class CacheIntegrationTest(unittest.TestCase):
         )
 
         # Prepare generation settings
-        cache = SinkCache(window_length=256, num_sink_tokens=4)
+        external_sink_cache = ModelCache(
+            [SinkCache(window_length=256, num_sink_tokens=4) for _ in range(model.config.num_hidden_layers)]
+        )
         input_ids = torch.tensor([], device=model.device, dtype=torch.int)
         for _ in range(3):
             # Tokenize the prompt with the correct chat template
@@ -288,12 +305,12 @@ class CacheIntegrationTest(unittest.TestCase):
 
             # Perform the generation
             gen_out = model.generate(
-                input_ids, do_sample=False, max_new_tokens=100, past_key_values=cache, use_cache=True
+                input_ids, do_sample=False, max_new_tokens=100, past_key_values=external_sink_cache, use_cache=True
             )
             input_ids = gen_out
 
         # We went well beyond the cache length
-        self.assertTrue(input_ids.shape[1] > cache.get_max_length() * 1.5)
+        self.assertTrue(input_ids.shape[1] > external_sink_cache.get_max_length() * 1.5)
 
         # And it still produces a coherent english
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
@@ -361,7 +378,7 @@ class CacheIntegrationTest(unittest.TestCase):
             "NousResearch/Llama-2-7b-chat-hf",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
-        ).to("cuda:1")
+        ).to(torch_device)
         inputs = tokenizer(
             ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
         ).to(model.device)

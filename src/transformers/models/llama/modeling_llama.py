@@ -294,7 +294,6 @@ class LlamaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -328,14 +327,12 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
         if self.past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = self.past_key_value.update(key_states, value_states, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -396,7 +393,6 @@ class LlamaFlashAttention2(LlamaAttention):
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -420,16 +416,17 @@ class LlamaFlashAttention2(LlamaAttention):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
-
-        if past_key_value is not None:
+        if self.past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            if cache_position is not None: # we slice for static kv cache to be supported in FA2. Not sure it's a must as compile fails
-                key_states, value_states = key_states[:, :, :cache_position[-1]+1, :], value_states[:, :, :cache_position[-1]+1, :]
+            key_states, value_states = self.past_key_value.update(key_states, value_states, cache_kwargs)
+            if (
+                cache_position is not None
+            ):  # we slice for static kv cache to be supported in FA2. Not sure it's a must as compile fails
+                key_states, value_states = (
+                    key_states[:, :, : cache_position[-1] + 1, :],
+                    value_states[:, :, : cache_position[-1] + 1, :],
+                )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -589,7 +586,6 @@ class LlamaSdpaAttention(LlamaAttention):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -623,12 +619,10 @@ class LlamaSdpaAttention(LlamaAttention):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
-
         if self.past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = self.past_key_value.update(key_states, value_states, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -684,7 +678,6 @@ class LlamaDecoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -715,7 +708,6 @@ class LlamaDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache_position=cache_position,
-            past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -815,14 +807,38 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
                 self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
+    def _setup_cache_from_past_key_values(self, past_key_values: List[torch.FloatTensor] | ModelCache):
+        """
+        Sets the model cache from the `past_key_values` argument, if needed.
+
+        Cache setting priority, when `use_cache` is `True`
+        1. if `past_key_values` is passed, setup the cache using it. Note that if it is not a `ModelCache`, it is
+           assumed the user expect the legacy API, where the model instance does NOT hold the cache.
+        2. if `past_key_values` is not passed, use a previously set up cache when it exists
+        3. otherwise, set up a new dynamic cache
+        """
+        if past_key_values is not None:
+            if not isinstance(past_key_values, ModelCache):
+                past_key_values = ModelCache.from_legacy_cache(past_key_values)
+            self._setup_cache(external_cache=past_key_values)
+        elif self._get_cache() is None:
+            self._setup_cache(cache_cls=DynamicCache)
+
     def _reset_cache(self):
         model = getattr(self, "model", self)
         for layer in model.layers:
             layer.self_attn.past_key_value = None
 
-    def _has_cache(self):
+    def _get_cache(self, all_layers: bool = False) -> Cache | ModelCache:
+        """
+        Returns the `Cache` from the first layer or, if `all_layers` is `True`, a `ModelCache` instance containing
+        all layers' caches
+        """
         model = getattr(self, "model", self)
-        return model.layers[0].self_attn.past_key_value is not None
+        if all_layers:
+            return ModelCache([layer.self_attn.past_key_value for layer in model.layers])
+        else:
+            return model.layers[0].self_attn.past_key_value
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -936,7 +952,7 @@ class LlamaModel(LlamaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor] | ModelCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -962,29 +978,14 @@ class LlamaModel(LlamaPreTrainedModel):
             )
             use_cache = False
 
-        # Cache setting priority, when `use_cache` is `True`
-        # 1. if `past_key_values` is passed, setup the cache using it. Note that if it is not a `ModelCache`, it is
-        #    assumed the user expect the legacy API, where the model instance does NOT hold the cache.
-        # 2. if `past_key_values` is not passed, use a previously set up cache
-        # 3. otherwise, set up a dynamic cache
-        legacy_cache = False
+        legacy_cache = past_key_values is not None and not isinstance(past_key_values, ModelCache)
+        past_seen_tokens = 0
         if use_cache:
-            if past_key_values is not None:
-                if not isinstance(past_key_values, ModelCache):
-                    past_key_values = ModelCache.from_legacy_cache(past_key_values)
-                    legacy_cache = True
-                self._setup_cache(external_cache=past_key_values)
-            elif not self._has_cache():
-                self._setup_cache(cache_cls=DynamicCache)
+            self._setup_cache_from_past_key_values(past_key_values)
+            past_seen_tokens = self._get_cache().get_seq_length()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
             cache_position = torch.arange(
@@ -1014,7 +1015,6 @@ class LlamaModel(LlamaPreTrainedModel):
                     causal_mask,
                     position_ids,
                     cache_position,
-                    past_key_values,
                     output_attentions,
                     use_cache,
                     cache_position,
@@ -1025,7 +1025,6 @@ class LlamaModel(LlamaPreTrainedModel):
                     attention_mask=causal_mask,
                     position_ids=position_ids,
                     cache_position=cache_position,
-                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
@@ -1043,10 +1042,9 @@ class LlamaModel(LlamaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
-        # if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
         if use_cache:
-            next_cache = ModelCache([layer.self_attn.past_key_value for layer in self.layers])
-            if legacy_cache:
+            next_cache = self._get_cache(all_layers=True)
+            if legacy_cache:  # Legacy behavior: the model does NOT hold the cache between forward passes
                 self._reset_cache()
 
         if not return_dict:
@@ -1232,16 +1230,13 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
-        past_length = 0
-        if past_key_values is not None:
-            if isinstance(past_key_values, ModelCache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+        self._setup_cache_from_past_key_values(past_key_values)
+        cache = self._get_cache()
+        cache_length = cache.get_seq_length()  # number of valid tokens in the cache
+        past_length = cache.seen_tokens  # number of tokens that went through the model (may be > than `cache_length`)
+        max_cache_length = cache.get_max_length()  # cache maximum length, if it is a limited size cache
 
+        if past_length > 0:
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
@@ -1269,12 +1264,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
-            # generation with static cache
-            past_length = past_key_value.get_seq_length()
-            input_ids = input_ids[:, past_length:]
-            position_ids = position_ids[:, past_length:]
 
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.

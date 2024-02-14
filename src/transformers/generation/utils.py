@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, ModelCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -2741,17 +2741,17 @@ class GenerationMixin:
         # Exception 1: code path for models using the legacy cache format
         if isinstance(past_key_values, (tuple, list)):
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
-        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
+        # Exception 2: models with different cache formats. These are limited to `DynamicCache` caches until their
         # cache format is standardized, to avoid adding complexity to the codebase.
         elif "bloom" in model_class or "gptbigcode" in model_class:
-            if not isinstance(past_key_values, DynamicCache):
+            if not isinstance(past_key_values.caches[0], DynamicCache):
                 raise ValueError(
                     f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
                     "legacy tuple format or `DynamicCache`"
                 )
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-        # Standard code path: use the `Cache.reorder_cache`
+            past_key_values = ModelCache.from_legacy_cache(past_key_values)
+        # Standard code path: use the cache's `.reorder_cache`
         else:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
