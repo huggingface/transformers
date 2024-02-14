@@ -22,14 +22,13 @@ if is_torch_available():
 def replace_with_quanto_layers(
     model,
     quantization_config=None,
-    current_key_name=None,
     modules_to_not_convert=None,
+    current_key_name=None,
     has_been_replaced=False,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.
-    `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
 
     Args:
         model (`torch.nn.Module`):
