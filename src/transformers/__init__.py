@@ -1762,6 +1762,7 @@ else:
     _import_structure["models.clip"].extend(
         [
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLIPForImageClassification",
             "CLIPModel",
             "CLIPPreTrainedModel",
             "CLIPTextModel",
@@ -3200,6 +3201,7 @@ else:
     _import_structure["models.siglip"].extend(
         [
             "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipForImageClassification",
             "SiglipModel",
             "SiglipPreTrainedModel",
             "SiglipTextModel",
@@ -6447,6 +6449,7 @@ if TYPE_CHECKING:
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLIPForImageClassification,
             CLIPModel,
             CLIPPreTrainedModel,
             CLIPTextModel,
@@ -7625,6 +7628,7 @@ if TYPE_CHECKING:
         )
         from .models.siglip import (
             SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipForImageClassification,
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,
