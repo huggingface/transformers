@@ -5,7 +5,7 @@ import numpy as np
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, logging
-from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -43,7 +43,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return sequence_pairs, sequences
 
 
-@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
+@add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotClassificationPipeline(ChunkPipeline):
     """
     NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural

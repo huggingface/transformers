@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
-from ...utils.backbone_utils import load_backbone
+from ..auto import AutoBackbone
 from .configuration_deta import DetaConfig
 
 
@@ -338,7 +338,7 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
@@ -401,7 +401,7 @@ class DetaSinePositionEmbedding(nn.Module):
             y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -526,7 +526,7 @@ class DetaMultiscaleDeformableAttention(nn.Module):
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / self.n_heads)
+        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -947,7 +947,6 @@ class DetaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DetaBackboneWithPositionalEncodings", r"DetaEncoderLayer", r"DetaDecoderLayer"]
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1044,7 +1043,6 @@ class DetaEncoder(DetaPreTrainedModel):
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([DetaEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1267,13 +1265,9 @@ class DetaDecoder(DetaPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    position_embeddings,
-                    reference_points_input,
-                    spatial_shapes,
-                    level_start_index,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    output_attentions,
+                    None,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1453,7 +1447,7 @@ class DetaModel(DetaPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).float()
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
         dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
         # batch_size, num_queries, 4
         proposals = proposals.sigmoid() * scale
@@ -1718,11 +1712,6 @@ class DetaModel(DetaPreTrainedModel):
             init_reference_points = reference_points
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
             query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
-
-            topk_feats = torch.stack(
-                [object_query_embedding[b][topk_proposals[b]] for b in range(batch_size)]
-            ).detach()
-            target = target + self.pix_trans_norm(self.pix_trans(topk_feats))
         else:
             query_embed, target = torch.split(query_embeds, num_channels, dim=1)
             query_embed = query_embed.unsqueeze(0).expand(batch_size, -1, -1)

@@ -37,7 +37,6 @@ if is_tf_available():
         TFEfficientFormerForImageClassificationWithTeacher,
         TFEfficientFormerModel,
     )
-    from transformers.modeling_tf_utils import keras
     from transformers.models.efficientformer.modeling_tf_efficientformer import (
         TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -356,7 +355,7 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
             # These are maximally general inputs for the model, with multiple None dimensions
             # Hopefully this will catch any conditionals that fail for flexible shapes
             functional_inputs = {
-                key: keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
                 for key, val in model.input_signature.items()
                 if key in model.dummy_inputs
             }

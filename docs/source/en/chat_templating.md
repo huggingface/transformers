@@ -343,15 +343,6 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`ConversationalPipeline`] class, so 
 once you set the correct chat template, your model will automatically become compatible with [`ConversationalPipeline`].
 
-<Tip>
-If you're fine-tuning a model for chat, in addition to setting a chat template, you should probably add any new chat
-control tokens as special tokens in the tokenizer. Special tokens are never split, 
-ensuring that your control tokens are always handled as single tokens rather than being tokenized in pieces. You 
-should also set the tokenizer's `eos_token` attribute to the token that marks the end of assistant generations in your
-template. This will ensure that text generation tools can correctly figure out when to stop generating text.
-</Tip>
-
-
 ### What are "default" templates?
 
 Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
@@ -390,7 +381,7 @@ If your model expects those, they won't be added automatically by `apply_chat_te
 text will be tokenized with `add_special_tokens=False`. This is to avoid potential conflicts between the template and
 the `add_special_tokens` logic. If your model expects special tokens, make sure to add them to the template!
 
-```python
+```
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 ```
 

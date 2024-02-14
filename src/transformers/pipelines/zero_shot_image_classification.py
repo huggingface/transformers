@@ -9,7 +9,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import Pipeline, build_pipeline_init_args
+from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
@@ -29,7 +29,7 @@ if is_tf_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
+@add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotImageClassificationPipeline(Pipeline):
     """
     Zero shot image classification pipeline using `CLIPModel`. This pipeline predicts the class of an image when you
@@ -40,7 +40,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="google/siglip-so400m-patch14-384")
+    >>> classifier = pipeline(model="openai/clip-vit-large-patch14")
     >>> classifier(
     ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
     ...     candidate_labels=["animals", "humans", "landscape"],

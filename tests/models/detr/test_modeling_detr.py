@@ -182,7 +182,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": DetrModel,
+            "feature-extraction": DetrModel,
             "image-segmentation": DetrForSegmentation,
             "object-detection": DetrForObjectDetection,
         }

@@ -140,9 +140,3 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 [[autodoc]] SiglipVisionModel
     - forward
-
-
-## SiglipForImageClassification
-
-[[autodoc]] SiglipForImageClassification
-    - forward

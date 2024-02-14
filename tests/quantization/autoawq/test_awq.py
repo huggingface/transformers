@@ -55,15 +55,8 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
-
-        if major < 8:
-            # LLMAWQ does not work on a T4
-            with self.assertRaises(ValueError):
-                AwqConfig(bits=4, backend="llm-awq")
-        else:
-            # LLMAWQ should work on an A100
+        # LLMAWQ does not work on a T4
+        with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):

@@ -43,7 +43,6 @@ if is_tf_available():
         TFMinLengthLogitsProcessor,
         tf_top_k_top_p_filtering,
     )
-    from transformers.modeling_tf_utils import keras
 
 if is_tensorflow_text_available():
     import tensorflow_text as text
@@ -255,7 +254,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             # file needed to load the TF tokenizer
             hf_hub_download(repo_id="google/flan-t5-small", filename="spiece.model", local_dir=tmp_dir)
 
-            class CompleteSentenceTransformer(keras.layers.Layer):
+            class CompleteSentenceTransformer(tf.keras.layers.Layer):
                 def __init__(self):
                     super().__init__()
                     self.tokenizer = text.SentencepieceTokenizer(
@@ -272,9 +271,9 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
                     return self.tokenizer.detokenize(outputs)
 
             complete_model = CompleteSentenceTransformer()
-            inputs = keras.layers.Input(shape=(1,), dtype=tf.string, name="inputs")
+            inputs = tf.keras.layers.Input(shape=(1,), dtype=tf.string, name="inputs")
             outputs = complete_model(inputs)
-            keras_model = keras.Model(inputs, outputs)
+            keras_model = tf.keras.Model(inputs, outputs)
             keras_model.save(tmp_dir)
 
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):

@@ -190,7 +190,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": MobileViTV2Model,
+            "feature-extraction": MobileViTV2Model,
             "image-classification": MobileViTV2ForImageClassification,
             "image-segmentation": MobileViTV2ForSemanticSegmentation,
         }

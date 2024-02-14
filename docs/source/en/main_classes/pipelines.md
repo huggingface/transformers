@@ -469,12 +469,6 @@ Pipelines available for multimodal tasks include the following.
     - __call__
     - all
 
-### ImageFeatureExtractionPipeline
-
-[[autodoc]] ImageFeatureExtractionPipeline
-    - __call__
-    - all
-
 ### ImageToTextPipeline
 
 [[autodoc]] ImageToTextPipeline

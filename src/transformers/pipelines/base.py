@@ -41,7 +41,6 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
-    is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
@@ -703,33 +702,14 @@ class _ScikitCompat(ABC):
         raise NotImplementedError()
 
 
-def build_pipeline_init_args(
-    has_tokenizer: bool = False,
-    has_feature_extractor: bool = False,
-    has_image_processor: bool = False,
-    supports_binary_output: bool = True,
-) -> str:
-    docstring = r"""
+PIPELINE_INIT_ARGS = r"""
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow."""
-    if has_tokenizer:
-        docstring += r"""
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`]."""
-    if has_feature_extractor:
-        docstring += r"""
-        feature_extractor ([`SequenceFeatureExtractor`]):
-            The feature extractor that will be used by the pipeline to encode data for the model. This object inherits from
-            [`SequenceFeatureExtractor`]."""
-    if has_image_processor:
-        docstring += r"""
-        image_processor ([`BaseImageProcessor`]):
-            The image processor that will be used by the pipeline to encode data for the model. This object inherits from
-            [`BaseImageProcessor`]."""
-    docstring += r"""
+            [`PreTrainedTokenizer`].
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
         framework (`str`, *optional*):
@@ -752,22 +732,10 @@ def build_pipeline_init_args(
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too
-        torch_dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`)"""
-    if supports_binary_output:
-        docstring += r"""
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
-            Flag indicating if the output the pipeline should happen in a serialized format (i.e., pickle) or as
-            the raw output data e.g. text."""
-    return docstring
-
-
-PIPELINE_INIT_ARGS = build_pipeline_init_args(
-    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, supports_binary_output=True
-)
-
+            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
+"""
 
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
@@ -778,7 +746,7 @@ if is_torch_available():
     )
 
 
-@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_feature_extractor=True, has_image_processor=True))
+@add_end_docstrings(PIPELINE_INIT_ARGS)
 class Pipeline(_ScikitCompat):
     """
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across
@@ -853,8 +821,6 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device("cpu")
             elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
-            elif is_torch_npu_available():
-                self.device = torch.device(f"npu:{device}")
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
             else:

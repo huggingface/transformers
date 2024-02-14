@@ -11,7 +11,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import Pipeline, build_pipeline_init_args
+from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
@@ -48,7 +48,7 @@ class ClassificationFunction(ExplicitEnum):
 
 
 @add_end_docstrings(
-    build_pipeline_init_args(has_image_processor=True),
+    PIPELINE_INIT_ARGS,
     r"""
         function_to_apply (`str`, *optional*, defaults to `"default"`):
             The function to apply to the model outputs in order to retrieve the scores. Accepts four different values:
@@ -57,7 +57,8 @@ class ClassificationFunction(ExplicitEnum):
               has several labels, will apply the softmax function on the output.
             - `"sigmoid"`: Applies the sigmoid function on the output.
             - `"softmax"`: Applies the softmax function on the output.
-            - `"none"`: Does not apply any function on the output.""",
+            - `"none"`: Does not apply any function on the output.
+    """,
 )
 class ImageClassificationPipeline(Pipeline):
     """
