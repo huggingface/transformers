@@ -388,6 +388,7 @@ else:
                 "squeezebert",
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
+            ("stablelm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "switch_transformers",
                 (
