@@ -1026,7 +1026,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             # since the static cache is padded, you have to pass the attention mask raw.
             # similar to https://github.com/facebookresearch/llama/commit/e9077bd24177a74aa79f406bef7d4b57fe393157
-            if input_tensor.shape[1] == 1:
+            if attention_mask is not None and 0.0 not in attention_mask:
                 return None
             return attention_mask
 
