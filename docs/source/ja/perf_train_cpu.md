@@ -36,7 +36,7 @@ IPEXのリリースはPyTorchに従っており、pipを使用してインスト
 | 1.11              |  1.11.200+cpu  |
 | 1.10              |  1.10.100+cpu  |
 
-```
+```bash
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
 

@@ -3748,11 +3748,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     _loaded_keys = loaded_keys
                 not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
-                # if we're about to tie the output embeds to the input embeds we don't need to init them
+                # If we're about to tie the output embeds to the input embeds we don't need to init them
                 if hasattr(model.config, "tie_word_embeddings") and model.config.tie_word_embeddings:
                     output_embeddings = model.get_output_embeddings()
                     if output_embeddings is not None:
-                        output_embeddings._is_hf_initialized = True
+                        # Still need to initialize if there is a bias term since biases are not tied.
+                        if not hasattr(output_embeddings, "bias") or output_embeddings.bias is None:
+                            output_embeddings._is_hf_initialized = True
             else:
                 not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
@@ -4187,6 +4189,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             logger.warning_once(warn_string)
+
+    @property
+    def _is_quantized_training_enabled(self):
+        warnings.warn(
+            "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
+            FutureWarning,
+        )
+
+        if not hasattr(self, "hf_quantizer"):
+            return False
+
+        return self.hf_quantizer.is_trainable
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

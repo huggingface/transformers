@@ -64,7 +64,7 @@ Next let's have a look at one of the most important aspects when having multiple
 
 If you use multiple GPUs the way cards are inter-connected can have a huge impact on the total training time. If the GPUs are on the same physical node, you can run:
 
-```
+```bash
 nvidia-smi topo -m
 ```
 

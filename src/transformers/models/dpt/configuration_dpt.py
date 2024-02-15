@@ -120,6 +120,9 @@ class DPTConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
 
     Example:
 
@@ -173,6 +176,7 @@ class DPTConfig(PretrainedConfig):
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
+        backbone_kwargs=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -230,9 +234,13 @@ class DPTConfig(PretrainedConfig):
         if use_autobackbone and backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
         self.num_attention_heads = None if use_autobackbone else num_attention_heads
         self.intermediate_size = None if use_autobackbone else intermediate_size

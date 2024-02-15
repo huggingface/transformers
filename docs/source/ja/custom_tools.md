@@ -385,7 +385,7 @@ Assistant:
 
 したがって、カスタム`chat`プロンプトテンプレートの例もこのフォーマットを使用することが重要です。以下のように、インスタンス化時に`chat`テンプレートを上書きできます。
 
-```
+```python
 template = """ [...] """
 
 agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)
