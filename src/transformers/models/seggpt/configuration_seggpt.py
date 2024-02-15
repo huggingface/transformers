@@ -61,7 +61,7 @@ class SegGptConfig(PretrainedConfig):
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         mlp_dim (`int`, *optional*):
-            The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to
+            The dimensionality of the MLP layer in the Transformer encoder. If unset, defaults to
             `hidden_size` * 4.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The drop path rate for the dropout layers.
@@ -70,7 +70,7 @@ class SegGptConfig(PretrainedConfig):
         decoder_hidden_size (`int`, *optional*, defaults to 64):
             Hidden size for decoder.
         use_relative_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to use relative position encoding in the Attention
+            Whether to use relative position encoding in the attention layer
         merge_index (`int`, *optional*, defaults to 2):
             The index of the encoder layer to merge the embeddings.
         intermediate_feature_indices (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):

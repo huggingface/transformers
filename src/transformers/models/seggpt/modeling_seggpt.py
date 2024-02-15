@@ -834,7 +834,7 @@ class SegGptModel(SegGptPreTrainedModel):
         pixel_values = torch.cat((prompt_pixel_values, pixel_values), dim=2)
         prompt_pixel_values = torch.cat((prompt_masks, prompt_masks), dim=2)
 
-        # We concat on heigth axis so SegGPT can handle as a single image, hence we need to mask the portion
+        # We concat on height axis so SegGPT can handle as a single image, hence we need to mask the portion
         # of the prompt pixels that will be destinated to the prediction as they don't add any information.
         if bool_masked_pos is None:
             num_patches = self.embeddings.patch_embeddings.num_patches
