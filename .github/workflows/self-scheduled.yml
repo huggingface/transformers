@@ -358,7 +358,8 @@ jobs:
       run_examples_gpu,
       run_pipelines_tf_gpu,
       run_pipelines_torch_gpu,
-      run_all_tests_torch_cuda_extensions_gpu
+      run_all_tests_torch_cuda_extensions_gpu,
+      run_tests_quantization_torch_gpu,
     ]
     steps:
       - name: Checkout transformers
@@ -406,6 +407,7 @@ jobs:
       run_pipelines_tf_gpu,
       run_pipelines_torch_gpu,
       run_all_tests_torch_cuda_extensions_gpu,
+      run_tests_quantization_torch_gpu,
       run_extract_warnings
     ]
     steps:
