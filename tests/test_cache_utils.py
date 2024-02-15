@@ -36,7 +36,7 @@ if is_torch_available():
         AutoTokenizer,
         DynamicCache,
         LlamaConfig,
-        LlamaForCausalLM,
+        MistralForCausalLM,
         ModelCache,
         SinkCache,
         StaticCache,
@@ -96,7 +96,7 @@ class CacheTest(unittest.TestCase):
 
     def test_reorder_cache_retrocompatibility(self):
         """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
-        legacy_reorder_fn = LlamaForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
+        legacy_reorder_fn = MistralForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
 
         num_layers = 10
         legacy_cache = ()
