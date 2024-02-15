@@ -139,6 +139,8 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "<|im_start|><|im_end|<|im_end|",
             "<|im_end|><|im_start|>",
             "<|im_end|<>stop<|im_end|",
+            "en d",
+            "eNd",
         ]
         too_short_strings = [
             "<|im_end|",
