@@ -147,6 +147,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             "|im_end|>",
             "s",
         ]
+        stop_strings = ["<|im_end|>", "stop", "end"]
 
         # Use a tokenizer that won't actually have special tokens for these
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -158,7 +159,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
         )
         scores = None
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop", "end"])
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
@@ -174,7 +175,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         too_short_input_ids = tokenizer(
             too_short_strings, return_tensors="pt", padding="longest", add_special_tokens=False
         )
-        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["<|im_end|>", "stop", "end"])
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
         for i in range(len(true_strings)):
             self.assertTrue(criteria(true_input_ids["input_ids"][i : i + 1], scores))
         for i in range(len(false_strings)):
