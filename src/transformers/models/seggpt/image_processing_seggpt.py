@@ -67,7 +67,7 @@ def build_palette(num_labels: int) -> List[Tuple[int, int]]:
 
 def get_num_channels(image: np.ndarray, input_data_format: ChannelDimension) -> int:
     if image.ndim == 2:
-        return 1
+        return 0
 
     channel_idx = get_channel_dimension_axis(image, input_data_format)
     return image.shape[channel_idx]
@@ -79,23 +79,20 @@ def mask_to_rgb(
     input_data_format: Optional[ChannelDimension] = None,
     data_format: Optional[ChannelDimension] = None,
 ) -> np.ndarray:
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(mask) if mask.ndim > 2 else ChannelDimension.LAST
+    if input_data_format is None and mask.ndim > 2:
+        input_data_format = infer_channel_dimension_format(mask)
+
+    data_format = data_format if data_format is not None else input_data_format
 
     num_channels = get_num_channels(mask, input_data_format)
 
     if num_channels == 3:
         return to_channel_dimension_format(mask, data_format, input_data_format) if data_format is not None else mask
 
-    mask = mask[0] if mask.ndim == 3 else mask
-
     if palette is not None:
         height, width = mask.shape
 
-        if input_data_format == ChannelDimension.LAST:
-            rgb_mask = np.zeros((height, width, 3), dtype=np.uint8)
-        else:
-            rgb_mask = np.zeros((3, height, width), dtype=np.uint8)
+        rgb_mask = np.zeros((3, height, width), dtype=np.uint8)
 
         classes_in_mask = np.unique(mask)
 
@@ -104,16 +101,17 @@ def mask_to_rgb(
             class_mask = (mask == class_idx).astype(np.uint8)
             class_mask = np.expand_dims(class_mask, axis=-1)
             class_rgb_mask = class_mask * np.array(rgb_value)
+            class_rgb_mask = np.moveaxis(class_rgb_mask, -1, 0)
             rgb_mask += class_rgb_mask.astype(np.uint8)
 
         rgb_mask = np.clip(rgb_mask, 0, 255).astype(np.uint8)
-    else:
-        if input_data_format == ChannelDimension.FIRST:
-            rgb_mask = np.repeat(mask[None, ...], 3, axis=0)
-        else:
-            rgb_mask = np.repeat(mask[..., None], 3, axis=-1)
 
-    return rgb_mask
+    else:
+        rgb_mask = np.repeat(mask[None, ...], 3, axis=0)
+
+    return (
+        to_channel_dimension_format(rgb_mask, data_format, input_data_format) if data_format is not None else rgb_mask
+    )
 
 
 class SegGptImageProcessor(BaseImageProcessor):
@@ -376,17 +374,17 @@ class SegGptImageProcessor(BaseImageProcessor):
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
-        if input_data_format is None:
+        if input_data_format is None and not is_mask:
             # We assume that all images have the same channel dimension format.
-            # If mask is PIL could have 2 or 3 dimensions, hence the if-else check
-            input_data_format = (
-                infer_channel_dimension_format(images[0]) if images[0].ndim > 2 else ChannelDimension.LAST
-            )
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if is_mask:
             palette = self.get_palette(num_labels) if num_labels is not None else None
-            # Since this is the input for the next steps and transformation
-            images = [self.mask_to_rgb(image, palette, input_data_format=input_data_format) for image in images]
+            # Since this is the input for the next transformations its format should be the same as the input_data_format
+            images = [
+                self.mask_to_rgb(image=image, palette=palette, data_format=ChannelDimension.FIRST) for image in images
+            ]
+            input_data_format = ChannelDimension.FIRST
 
         if do_resize:
             images = [

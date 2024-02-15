@@ -158,7 +158,8 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         mask = (mask > 0).astype(np.uint8)
 
         def check_two_colors(image, color1=(0, 0, 0), color2=(255, 255, 255)):
-            unique_colors = np.unique(image.reshape(-1, 3), axis=0)
+            pixels = image.transpose(1, 2, 0).reshape(-1, 3)
+            unique_colors = np.unique(pixels, axis=0)
             if len(unique_colors) == 2 and (color1 in unique_colors) and (color2 in unique_colors):
                 return True
             else:
