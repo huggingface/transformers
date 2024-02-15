@@ -228,7 +228,7 @@ Contributions that implement this command for other distributed hardware setups 
 When using `run_eval.py`, the following features can be useful:
 
 * if you running the script multiple times and want to make it easier to track what arguments produced that output, use `--dump-args`. Along with the results it will also dump any custom params that were passed to the script. For example if you used: `--num_beams 8 --early_stopping true`, the output will be:
-   ```
+   ```json
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True}
    ```
 
@@ -236,13 +236,13 @@ When using `run_eval.py`, the following features can be useful:
 
    If using `--dump-args --info`, the output will be:
 
-   ```
+   ```json
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': '2020-09-13 18:44:43'}
    ```
 
    If using `--dump-args --info "pair:en-ru chkpt=best`, the output will be:
 
-   ```
+   ```json
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': 'pair=en-ru chkpt=best'}
    ```
 

@@ -84,7 +84,7 @@ python run_clm_igf.py\
 
 If you find the resource useful, please cite the following paper
 
-```
+```bibtex
 @inproceedings{antonello-etal-2021-selecting,
     title = "Selecting Informative Contexts Improves Language Model Fine-tuning",
     author = "Antonello, Richard and Beckage, Nicole and Turek, Javier and Huth, Alexander",

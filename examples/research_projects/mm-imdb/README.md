@@ -6,7 +6,7 @@ Based on the script [`run_mmimdb.py`](https://github.com/huggingface/transformer
 
 ### Training on MM-IMDb
 
-```
+```bash
 python run_mmimdb.py \
     --data_dir /path/to/mmimdb/dataset/ \
     --model_type bert \
