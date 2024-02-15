@@ -30,12 +30,12 @@ from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_visi
 if is_torch_available():
     import torch
 
-    if is_vision_available():
-        from transformers import GroundingDinoImageProcessor
-        from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+    from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 if is_vision_available():
     from PIL import Image
+
+    from transformers import GroundingDinoImageProcessor
 
 
 @require_torch
