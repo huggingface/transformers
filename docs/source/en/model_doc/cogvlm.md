@@ -26,39 +26,39 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use [`CogVLMProcessor`] to prepare images and text for the model.
+- One can use [`CogvlmProcessor`] to prepare images and text for the model.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/THUDM/CogVLM).
 
 
-## CogVLMConfig
+## CogvlmConfig
 
-[[autodoc]] CogVLMConfig
+[[autodoc]] CogvlmConfig
 
-## CogVLMVisionConfig
+## CogvlmVisionConfig
 
-[[autodoc]] CogVLMVisionConfig
+[[autodoc]] CogvlmVisionConfig
 
-## CogVLMProcessor
+## CogvlmProcessor
 
-[[autodoc]] CogVLMProcessor
+[[autodoc]] CogvlmProcessor
 
-## CogVLMVisionModel
+## CogvlmVisionModel
 
-[[autodoc]] CogVLMVisionModel
+[[autodoc]] CogvlmVisionModel
     - forward
 
-## CogVLMModel
+## CogvlmModel
 
-[[autodoc]] CogVLMModel
+[[autodoc]] CogvlmModel
     - forward
     - get_text_features
     - get_image_features
     - get_qformer_features
 
-## CogVLMForCausalLM
+## CogvlmForCausalLM
 
-[[autodoc]] CogVLMForCausalLM
+[[autodoc]] CogvlmForCausalLM
     - forward
     - generate

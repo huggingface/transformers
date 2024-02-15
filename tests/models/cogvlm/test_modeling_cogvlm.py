@@ -20,7 +20,7 @@ import unittest
 
 import requests
 
-from transformers import CogVLMConfig, CogVLMVisionConfig
+from transformers import CogvlmConfig, CogvlmVisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -41,17 +41,17 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import CogVLMForCausalLM, CogVLMModel
+    from transformers import CogvlmForCausalLM, CogvlmModel
     from transformers.models.cogvlm.modeling_cogvlm import COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CogVLMProcessor
+    from transformers import CogvlmProcessor
 
 
-class CogVLMModelTester:
+class CogvlmModelTester:
     def __init__(
         self,
         parent,
@@ -119,7 +119,7 @@ class CogVLMModelTester:
         return config, input_ids, attention_mask, token_type_ids, pixel_values, labels
 
     def get_vision_config(self):
-        return CogVLMVisionConfig(
+        return CogvlmVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -132,7 +132,7 @@ class CogVLMModelTester:
         )
 
     def get_config(self):
-        return CogVLMConfig(
+        return CogvlmConfig(
             vision_config=self.get_vision_config().to_dict(),
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -144,7 +144,7 @@ class CogVLMModelTester:
         )
 
     def create_and_check_for_causal_lm(self, config, input_ids, attention_mask, token_type_ids, pixel_values, labels):
-        model = CogVLMForCausalLM(config).to(torch_device).eval()
+        model = CogvlmForCausalLM(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(
                 pixel_values=pixel_values,
@@ -175,10 +175,10 @@ class CogVLMModelTester:
 
 
 @require_torch
-class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (CogVLMForCausalLM, CogVLMModel) if is_torch_available() else ()
+class CogvlmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (CogvlmForCausalLM, CogvlmModel) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": CogVLMModel, "image-to-text": CogVLMForCausalLM} if is_torch_available() else {}
+        {"feature-extraction": CogvlmModel, "image-to-text": CogvlmForCausalLM} if is_torch_available() else {}
     )
 
     fx_compatible = False
@@ -188,12 +188,12 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = CogVLMModelTester(self)
+        self.model_tester = CogvlmModelTester(self)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
         if return_labels:
-            if model_class.__name__ == "CogVLMForCausalLM":
+            if model_class.__name__ == "CogvlmForCausalLM":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
@@ -212,7 +212,7 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = CogVLMForCausalLM.from_pretrained(model_name)
+            model = CogvlmForCausalLM.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -226,10 +226,10 @@ def prepare_img():
 @require_vision
 @require_torch
 @slow
-class CogVLMModelIntegrationTest(unittest.TestCase):
+class CogvlmModelIntegrationTest(unittest.TestCase):
     def test_inference_opt(self):
-        processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
-        model = CogVLMForCausalLM.from_pretrained("THUDM/cogvlm-chat-hf", torch_dtype=torch.float16).to(torch_device)
+        processor = CogvlmProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
+        model = CogvlmForCausalLM.from_pretrained("THUDM/cogvlm-chat-hf", torch_dtype=torch.float16).to(torch_device)
 
         # prepare image
         image = prepare_img()

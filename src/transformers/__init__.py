@@ -290,9 +290,9 @@ _import_structure = {
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.cogvlm": [
         "COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CogVLMConfig",
-        "CogVLMProcessor",
-        "CogVLMVisionConfig",
+        "CogvlmConfig",
+        "CogvlmProcessor",
+        "CogvlmVisionConfig",
     ],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
@@ -1795,9 +1795,9 @@ else:
     _import_structure["models.cogvlm"].extend(
         [
             "COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CogVLMForCausalLM",
-            "CogVLMModel",
-            "CogVLMPreTrainedModel",
+            "CogvlmForCausalLM",
+            "CogvlmModel",
+            "CogvlmPreTrainedModel",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -5041,9 +5041,9 @@ if TYPE_CHECKING:
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.cogvlm import (
         COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CogVLMConfig,
-        CogVLMProcessor,
-        CogVLMVisionConfig,
+        CogvlmConfig,
+        CogvlmProcessor,
+        CogvlmVisionConfig,
     )
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
@@ -6466,9 +6466,9 @@ if TYPE_CHECKING:
         )
         from .models.cogvlm import (
             COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CogVLMForCausalLM,
-            CogVLMModel,
-            CogVLMPreTrainedModel,
+            CogvlmForCausalLM,
+            CogvlmModel,
+            CogvlmPreTrainedModel,
         )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,

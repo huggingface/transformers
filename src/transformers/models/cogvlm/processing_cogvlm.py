@@ -25,12 +25,12 @@ from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextI
 from ...utils import TensorType
 
 
-class CogVLMProcessor(ProcessorMixin):
+class CogvlmProcessor(ProcessorMixin):
     r"""
     Constructs a CogVLM processor which wraps a CLIP image processor and a LLaMa tokenizer into a single processor.
 
-    [`CogVLMProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the docstring
-    of [`~CogVLMProcessor.__call__`] and [`~CogVLMProcessor.decode`] for more information.
+    [`CogvlmProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the docstring
+    of [`~CogvlmProcessor.__call__`] and [`~CogvlmProcessor.decode`] for more information.
 
     Args:
         image_processor (`CLIPImageProcessor`):

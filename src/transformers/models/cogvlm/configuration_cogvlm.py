@@ -28,9 +28,9 @@ COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class CogVLMVisionConfig(PretrainedConfig):
+class CogvlmVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CogVLMVisionModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`CogvlmVisionModel`]. It is used to instantiate a
     CogVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration defaults will yield a similar configuration to that of the CogVLM
     [THUDM/cogvlm-chat-hf](https://huggingface.co/THUDM/cogvlm-chat-hf) architecture.
@@ -67,13 +67,13 @@ class CogVLMVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CogVLMVisionConfig, CogVLMVisionModel
+    >>> from transformers import CogvlmVisionConfig, CogvlmVisionModel
 
-    >>> # Initializing a CogVLMVisionConfig with THUDM/cogvlm-chat-hf style configuration
-    >>> configuration = CogVLMVisionConfig()
+    >>> # Initializing a CogvlmVisionConfig with THUDM/cogvlm-chat-hf style configuration
+    >>> configuration = CogvlmVisionConfig()
 
-    >>> # Initializing a CogVLMVisionModel (with random weights) from the THUDM/cogvlm-chat-hf style configuration
-    >>> model = CogVLMVisionModel(configuration)
+    >>> # Initializing a CogvlmVisionModel (with random weights) from the THUDM/cogvlm-chat-hf style configuration
+    >>> model = CogvlmVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -116,7 +116,7 @@ class CogVLMVisionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from CogVLMConfig
+        # get the vision config dict if we are loading from CogvlmConfig
         if config_dict.get("model_type") == "cogvlm":
             config_dict = config_dict["vision_config"]
 
@@ -129,9 +129,9 @@ class CogVLMVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class CogVLMConfig(PretrainedConfig):
+class CogvlmConfig(PretrainedConfig):
     r"""
-    [`CogVLMConfig`] is the configuration class to store the configuration of a [`CogVLMForCausalLM`]. It is
+    [`CogvlmConfig`] is the configuration class to store the configuration of a [`CogvlmForCausalLM`]. It is
     used to instantiate a CogVLM model according to the specified arguments, defining the vision model
     and language model configs. Instantiating a configuration with the defaults will yield a similar configuration to
     that of the CogVLM [THUDM/cogvlm-chat-hf](https://huggingface.co/THUDM/cogvlm-chat-hf) architecture.
@@ -141,10 +141,10 @@ class CogVLMConfig(PretrainedConfig):
 
     Args:
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CogVLMVisionConfig`].
+            Dictionary of configuration options used to initialize [`CogvlmVisionConfig`].
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the CogVLM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CogVLMModel`].
+            `inputs_ids` passed when calling [`CogvlmModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -176,13 +176,13 @@ class CogVLMConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CogVLMConfig, CogVLMForCausalLM
+    >>> from transformers import CogvlmConfig, CogvlmForCausalLM
 
-    >>> # Initializing a CogVLMConfig with THUDM/cogvlm-chat-hf style configuration
-    >>> configuration = CogVLMConfig()
+    >>> # Initializing a CogvlmConfig with THUDM/cogvlm-chat-hf style configuration
+    >>> configuration = CogvlmConfig()
 
-    >>> # Initializing a CogVLMForCausalLM (with random weights) from the THUDM/cogvlm-chat-hf style configuration
-    >>> model = CogVLMForCausalLM(configuration)
+    >>> # Initializing a CogvlmForCausalLM (with random weights) from the THUDM/cogvlm-chat-hf style configuration
+    >>> model = CogvlmForCausalLM(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -211,9 +211,9 @@ class CogVLMConfig(PretrainedConfig):
     ):
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the CogVLMVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the CogvlmVisionConfig with default values.")
 
-        self.vision_config = CogVLMVisionConfig(**vision_config)
+        self.vision_config = CogvlmVisionConfig(**vision_config)
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

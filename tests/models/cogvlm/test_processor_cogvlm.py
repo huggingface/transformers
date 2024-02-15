@@ -28,15 +28,15 @@ if is_vision_available():
     from transformers import (
         AutoProcessor,
         CLIPImageProcessor,
-        CogVLMProcessor,
+        CogvlmProcessor,
         LlamaTokenizer,
         PreTrainedTokenizerFast,
     )
 
 
 @require_vision
-# Copied from tests.models.blip_2.test_processor_blip_2.Blip2ProcessorTest with Blip2->CogVLM, BlipImageProcessor->CLIPImageProcessor
-class CogVLMProcessorTest(unittest.TestCase):
+# Copied from tests.models.blip_2.test_processor_blip_2.Blip2ProcessorTest with Blip2->Cogvlm, BlipImageProcessor->CLIPImageProcessor
+class CogvlmProcessorTest(unittest.TestCase):
     # Ignore copy
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -44,7 +44,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = CLIPImageProcessor()
         tokenizer = LlamaTokenizer.from_pretrained("stas/tiny-random-llama-2")
 
-        processor = CogVLMProcessor(image_processor, tokenizer)
+        processor = CogvlmProcessor(image_processor, tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -69,13 +69,13 @@ class CogVLMProcessorTest(unittest.TestCase):
         return image_inputs
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CogVLMProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = CogvlmProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = CogVLMProcessor.from_pretrained(
+        processor = CogvlmProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -89,7 +89,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogVLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -103,7 +103,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogVLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
 
@@ -119,7 +119,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogVLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -136,7 +136,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogVLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -150,7 +150,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogVLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

@@ -19,10 +19,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_cogvlm": [
         "COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CogVLMConfig",
-        "CogVLMVisionConfig",
+        "CogvlmConfig",
+        "CogvlmVisionConfig",
     ],
-    "processing_cogvlm": ["CogVLMProcessor"],
+    "processing_cogvlm": ["CogvlmProcessor"],
 }
 
 try:
@@ -33,18 +33,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_cogvlm"] = [
         "COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CogVLMModel",
-        "CogVLMForCausalLM",
-        "CogVLMPreTrainedModel",
+        "CogvlmModel",
+        "CogvlmForCausalLM",
+        "CogvlmPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_cogvlm import (
         COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CogVLMConfig,
-        CogVLMVisionConfig,
+        CogvlmConfig,
+        CogvlmVisionConfig,
     )
-    from .processing_cogvlm import CogVLMProcessor
+    from .processing_cogvlm import CogvlmProcessor
 
     try:
         if not is_torch_available():
@@ -54,9 +54,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_cogvlm import (
             COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CogVLMForCausalLM,
-            CogVLMModel,
-            CogVLMPreTrainedModel,
+            CogvlmForCausalLM,
+            CogvlmModel,
+            CogvlmPreTrainedModel,
         )
 
 else:

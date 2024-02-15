@@ -28,7 +28,7 @@ from transformers.utils.logging import get_logger
 
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from .configuration_cogvlm import CogVLMConfig
+from .configuration_cogvlm import CogvlmConfig
 
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ logger = get_logger(__name__)
 LANGUAGE_TOKEN_TYPE = 0
 VISION_TOKEN_TYPE = 1
 
-_CONFIG_FOR_DOC = "CogVLMConfig"
+_CONFIG_FOR_DOC = "CogvlmConfig"
 
 
 COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -59,7 +59,7 @@ COGVLM_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`CogVLMConfig`]): Model configuration class with all the parameters of the model.
+        config ([`CogvlmConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -114,7 +114,7 @@ COGVLM_INPUTS_DOCSTRING = r"""
 """
 
 
-class CogVLMPatchEmbedding(nn.Module):
+class CogvlmPatchEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -134,7 +134,7 @@ class CogVLMPatchEmbedding(nn.Module):
         return embeddings
 
 
-class CogVLMVisionAttention(nn.Module):
+class CogvlmVisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_heads = config.num_attention_heads
@@ -167,7 +167,7 @@ class CogVLMVisionAttention(nn.Module):
         return output
 
 
-class CogVLMVisionMLP(nn.Module):
+class CogvlmVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -182,12 +182,12 @@ class CogVLMVisionMLP(nn.Module):
         return hidden_state
 
 
-class CogVLMVisionTransformerLayer(nn.Module):
+class CogvlmVisionTransformerLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = CogVLMVisionAttention(config)
-        self.mlp = CogVLMVisionMLP(config)
+        self.attention = CogvlmVisionAttention(config)
+        self.mlp = CogvlmVisionMLP(config)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
@@ -200,10 +200,10 @@ class CogVLMVisionTransformerLayer(nn.Module):
         return output
 
 
-class CogVLMVisionTransformer(nn.Module):
+class CogvlmVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layers = nn.ModuleList([CogVLMVisionTransformerLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([CogvlmVisionTransformerLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states):
         for layer_module in self.layers:
@@ -211,7 +211,7 @@ class CogVLMVisionTransformer(nn.Module):
         return hidden_states
 
 
-class CogVLMVisionGLU(nn.Module):
+class CogvlmVisionGLU(nn.Module):
     def __init__(self, config, in_features):
         super().__init__()
         self.linear_proj = nn.Linear(in_features, config.hidden_size, bias=False)
@@ -230,13 +230,13 @@ class CogVLMVisionGLU(nn.Module):
         return hidden_state
 
 
-class CogVLMVisionModel(nn.Module):
-    def __init__(self, config: CogVLMConfig):
+class CogvlmVisionModel(nn.Module):
+    def __init__(self, config: CogvlmConfig):
         super().__init__()
 
-        self.patch_embedding = CogVLMPatchEmbedding(config.vision_config)
-        self.transformer = CogVLMVisionTransformer(config.vision_config)
-        self.linear_proj = CogVLMVisionGLU(config, in_features=config.vision_config.hidden_size)
+        self.patch_embedding = CogvlmPatchEmbedding(config.vision_config)
+        self.transformer = CogvlmVisionTransformer(config.vision_config)
+        self.linear_proj = CogvlmVisionGLU(config, in_features=config.vision_config.hidden_size)
         # parameters for beginning of image (boi) and end of image (eoi)
         self.boi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.eoi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -252,11 +252,11 @@ class CogVLMVisionModel(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->CogVLM
-class CogVLMRMSNorm(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Cogvlm
+class CogvlmRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        CogVLMRMSNorm is equivalent to T5LayerNorm
+        CogvlmRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -270,8 +270,8 @@ class CogVLMRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->CogVLM
-class CogVLMMLP(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Cogvlm
+class CogvlmMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -294,11 +294,11 @@ def get_expert_mask(token_type_ids: torch.LongTensor) -> (torch.BoolTensor, torc
     return vision_token_mask, language_token_mask
 
 
-class CogVLMVisionExpertMLP(nn.Module):
+class CogvlmVisionExpertMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.language_mlp = CogVLMMLP(config)
-        self.vision_mlp = CogVLMMLP(config)
+        self.language_mlp = CogvlmMLP(config)
+        self.vision_mlp = CogvlmMLP(config)
 
     def forward(self, hidden_states: torch.FloatTensor, token_type_ids: torch.LongTensor):
         output = torch.empty(hidden_states.shape, dtype=hidden_states.dtype, device=hidden_states.device)
@@ -308,8 +308,8 @@ class CogVLMVisionExpertMLP(nn.Module):
         return output
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->CogVLM
-class CogVLMRotaryEmbedding(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Cogvlm
+class CogvlmRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -345,7 +345,7 @@ class CogVLMRotaryEmbedding(nn.Module):
         )
 
 
-class CogVLMVisionExpertAttention(nn.Module):
+class CogvlmVisionExpertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -354,7 +354,7 @@ class CogVLMVisionExpertAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
 
-        self.rotary_emb = CogVLMRotaryEmbedding(dim=self.head_dim)
+        self.rotary_emb = CogvlmRotaryEmbedding(dim=self.head_dim)
         self.vision_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.vision_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.language_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
@@ -472,14 +472,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class CogVLMDecoderLayer(nn.Module):
+class CogvlmDecoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = CogVLMVisionExpertAttention(config=config)
-        self.mlp = CogVLMVisionExpertMLP(config)
-        self.input_layernorm = CogVLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = CogVLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = CogvlmVisionExpertAttention(config=config)
+        self.mlp = CogvlmVisionExpertMLP(config)
+        self.input_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -524,11 +524,11 @@ class CogVLMDecoderLayer(nn.Module):
         return outputs
 
 
-class CogVLMPreTrainedModel(PreTrainedModel):
-    config_class = CogVLMConfig
+class CogvlmPreTrainedModel(PreTrainedModel):
+    config_class = CogvlmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["CogVLMDecoderLayer", "CogVLMVisionTransformerLayer"]
+    _no_split_modules = ["CogvlmDecoderLayer", "CogvlmVisionTransformerLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -579,20 +579,20 @@ def build_position_ids(
     """,
     COGVLM_START_DOCSTRING,
 )
-class CogVLMModel(CogVLMPreTrainedModel):
+class CogvlmModel(CogvlmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.vision = CogVLMVisionModel(config)
+        self.vision = CogvlmVisionModel(config)
         self.num_vision_tokens = (
             self.config.vision_config.image_size // self.config.vision_config.patch_size
         ) ** 2 + 2
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([CogVLMDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = CogVLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList([CogvlmDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -629,13 +629,13 @@ class CogVLMModel(CogVLMPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import CogVLMProcessor, CogVLMModel
+        >>> from transformers import CogvlmProcessor, CogvlmModel
         >>> import torch
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
-        >>> model = CogVLMModel.from_pretrained("THUDM/cogvlm-chat-hf")
+        >>> processor = CogvlmProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
+        >>> model = CogvlmModel.from_pretrained("THUDM/cogvlm-chat-hf")
 
         >>> # load image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -841,12 +841,12 @@ class CogVLMModel(CogVLMPreTrainedModel):
     """,
     COGVLM_START_DOCSTRING,
 )
-class CogVLMForCausalLM(CogVLMPreTrainedModel):
+class CogvlmForCausalLM(CogvlmPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = CogVLMModel(config)
+        self.model = CogvlmModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -899,13 +899,13 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import CogVLMProcessor, CogVLMForCausalLM
+        >>> from transformers import CogvlmProcessor, CogvlmForCausalLM
         >>> import torch
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
-        >>> model = CogVLMForCausalLM.from_pretrained("THUDM/cogvlm-chat-hf")
+        >>> processor = CogvlmProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
+        >>> model = CogvlmForCausalLM.from_pretrained("THUDM/cogvlm-chat-hf")
 
         >>> # load image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

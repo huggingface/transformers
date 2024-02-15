@@ -26,9 +26,9 @@ from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
     CLIPImageProcessor,
-    CogVLMConfig,
-    CogVLMForCausalLM,
-    CogVLMProcessor,
+    CogvlmConfig,
+    CogvlmForCausalLM,
+    CogvlmProcessor,
     LlamaTokenizer,
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
@@ -106,9 +106,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # rename in_channels to num_channels for sake of consistency
     original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
 
-    config = CogVLMConfig(**original_model.config.to_dict())
+    config = CogvlmConfig(**original_model.config.to_dict())
     with init_empty_weights():
-        model = CogVLMForCausalLM(config)
+        model = CogvlmForCausalLM(config)
 
     # load state dict
     missing_keys, unexpected_keys = model.load_state_dict(original_model.state_dict(), strict=False, assign=True)
@@ -129,7 +129,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
     )
-    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = CogvlmProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # original_inputs = gather_inputs(inputs, device=hf_device)
     # original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
