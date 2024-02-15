@@ -4776,8 +4776,9 @@ def _split_model_inputs(
     # Here we can have four types of values: tensors, tuples of tensors and booleans, and encoder_outputs which is a
     # ModelOutput object.
     # bool should not be split but replicated for each split
-    bool_keys = [k for k in keys if isinstance(model_input[k], bool)]
-    non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and not k == "encoder_outputs"]
+    bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
+    keys_to_ignore = ["cache_position", "encoder_outputs"]
+    non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
     # we split the tensors and tuples of tensors
     data_split_list = [
