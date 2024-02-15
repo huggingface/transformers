@@ -890,7 +890,7 @@ class SegGptLoss(nn.Module):
                 Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
         Returns:
-            _type_: _description_
+            `torch.FloatTensor`: The mean L1 loss between the predicted masks and the ground truth masks.
         """
         mask = bool_masked_pos[:, :, None].repeat(1, 1, self.patch_size**2 * 3)
         mask = unpatchify(mask, pixel_values.shape[1] // self.patch_size, pixel_values.shape[2] // self.patch_size)
