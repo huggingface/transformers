@@ -210,7 +210,7 @@ class StopStringCriteria(StoppingCriteria):
                     strings_to_end_lengths[stop_string][token] = possible_end_lengths
         return strings_to_valid_positions, strings_to_end_lengths
 
-    def create_embedding_vecs(self):
+    def create_embedding_vecs(self) -> Dict[str, torch.tensor]:
         """
         This function builds an embedding matrix for each stop string, consisting of possible valid positions
         and possible end lengths for each token, and the total length of the token string. When tokens have
