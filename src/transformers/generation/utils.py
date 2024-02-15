@@ -135,7 +135,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
 @dataclass
 class GenerateEncoderDecoderOutput(ModelOutput):
     """
-    Outputs of encoder-decider generation models, when using non-beam methods.
+    Outputs of encoder-decoder generation models, when using non-beam methods.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
