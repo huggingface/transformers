@@ -1144,6 +1144,10 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             self.assertNotIn(config.pad_token_id, output_generate)
 
+    @unittest.skip("Fails with - TypeError: _weight_norm_interface() missing 1 required positional argument: 'dim'")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
     """Produces a series of 'bip bip' sounds at a given frequency."""
@@ -1399,10 +1403,6 @@ class MusicgenIntegrationTests(unittest.TestCase):
             output_values.shape == (2, 1, 36480)
         )  # input values take shape 32000 and we generate from there
         self.assertTrue(torch.allclose(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, atol=1e-4))
-
-    @unittest.skip("Fails with - TypeError: _weight_norm_interface() missing 1 required positional argument: 'dim'")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
 
 
 @require_torch
