@@ -330,7 +330,7 @@ def main():
 
     # Initialize datasets and pre-processing transforms
     # We use torchvision here for faster pre-processing
-    # Note that here we are using some default pre-processing, for maximum accuray
+    # Note that here we are using some default pre-processing, for maximum accuracy
     # one should tune this part and carefully select what transformations to use.
     normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     train_dataset = torchvision.datasets.ImageFolder(

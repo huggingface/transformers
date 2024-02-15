@@ -38,7 +38,7 @@ IPEX release is following PyTorch, to install via pip:
 | 1.12              |  1.12.300+cpu  |
 
 Please run `pip list | grep torch` to get your `pytorch_version`, so you can get the `IPEX version_name`.
-```
+```bash
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
 You can check the latest versions in [ipex-whl-stable-cpu](https://developer.intel.com/ipex-whl-stable-cpu) if needed.

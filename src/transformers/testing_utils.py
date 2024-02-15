@@ -53,6 +53,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
+    is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
@@ -95,6 +96,7 @@ from .utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_sudachi_available,
+    is_sudachi_projection_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -955,6 +957,13 @@ def require_apex(test_case):
     return unittest.skipUnless(is_apex_available(), "test requires apex")(test_case)
 
 
+def require_aqlm(test_case):
+    """
+    Decorator marking a test that requires aqlm
+    """
+    return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
 def require_bitsandbytes(test_case):
     """
     Decorator for bits and bytes (bnb) dependency
@@ -1041,6 +1050,15 @@ def require_sudachi(test_case):
     Decorator marking a test that requires sudachi
     """
     return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_sudachi_projection(test_case):
+    """
+    Decorator marking a test that requires sudachi_projection
+    """
+    return unittest.skipUnless(is_sudachi_projection_available(), "test requires sudachi which supports projection")(
+        test_case
+    )
 
 
 def require_jumanpp(test_case):
