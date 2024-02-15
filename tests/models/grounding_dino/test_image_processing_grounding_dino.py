@@ -27,11 +27,12 @@ from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProc
 if is_torch_available():
     import torch
 
+    if is_vision_available():
+        from transformers import GroundingDinoImageProcessor
+        from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+
 if is_vision_available():
     from PIL import Image
-
-    from transformers import GroundingDinoImageProcessor
-    from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
 # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester with DeformableDetr->GroundingDino

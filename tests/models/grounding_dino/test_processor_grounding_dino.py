@@ -23,20 +23,22 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
 
 if is_torch_available():
     import torch
 
+    if is_vision_available():
+        from transformers import GroundingDinoImageProcessor
+        from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GroundingDinoImageProcessor
-    from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
-
+@require_torch
 @require_vision
 class GroundingDinoProcessorTest(unittest.TestCase):
     def setUp(self):
