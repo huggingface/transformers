@@ -425,7 +425,22 @@ class MambaSlowMixer(MambaMixer):
         return attn_outputs, None, ssm_state, y
         return attn_outputs, conv_state, ssm_state, y
 
-            
+class MambaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LlamaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
 
 class MambaBlock(nn.Module):
     def __init__(self, config, layer_idx):
@@ -433,7 +448,7 @@ class MambaBlock(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         # self.residual_in_fp32 = config.residual_in_fp32
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = MambaSlowMixer(config, layer_idx = layer_idx)
 
     def forward(self, hidden_states, inference_params=None):
@@ -595,7 +610,6 @@ class MambaModel(MambaPreTrainedModel):
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
-        self.norm_f = nn.LayerNorm(config.hidden_size)
 
         self.layers_are_rescaled = False
         self.gradient_checkpointing = False
@@ -671,8 +685,6 @@ class MambaModel(MambaPreTrainedModel):
 
             if output_attentions:
                 all_self_attentions = all_last_states + (ssm_state,)
-
-        hidden_states = self.norm_f(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
