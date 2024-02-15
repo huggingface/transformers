@@ -29,6 +29,42 @@ Tips:
 - It's highly advisable to pass `num_labels` (not considering background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
 - When doing infenrece with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
 
+Here's how to use the model for one-shot semantic segmentation:
+
+```python
+import torch
+from datasets import load_dataset
+from transformers import SegGptImageProcessor, SegGptForImageSegmentation
+
+model_id = "EduardoPacheco/seggpt-vit-large"
+image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
+model = SegGptForImageSegmentation.from_pretrained(checkpoint)
+
+dataset_id = "EduardoPacheco/FoodSeg103"
+ds = load_dataset(dataset_id, split="train")
+# Number of labels in FoodSeg103 (not including background)
+num_labels = 103
+
+image_input = ds[4]["image"]
+ground_truth = ds[4]["label"]
+image_prompt = ds[29]["image"]
+mask_prompt = ds[29]["label"]
+
+inputs = image_processor(
+    images=image_input, 
+    prompt_images=image_prompt,
+    prompt_masks=mask_prompt, 
+    num_labels=num_labels,
+    return_tensors="pt"
+)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+target_sizes = [image_input.size[::-1]]
+mask = image_processor.post_process_semantic_segmentation(outputs, target_sizes, num_labels=num_labels)[0]
+```
+
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).
 The original code can be found [here]([(https://github.com/baaivision/Painter/tree/main)).
 
