@@ -33,18 +33,21 @@ def replace_with_quanto_layers(
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        quantization_config (`AqlmConfig`):
+        quantization_config (`AqlmConfig`, defaults to `None`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list`, *optional*):
+        modules_to_not_convert (`list`, *optional*, defaults to `None`):
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
-        current_key_name (`list`, *optional*):
+        current_key_name (`list`, *optional*, defaults to `None`):
             A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*):
+        has_been_replaced (`bool`, *optional*, defaults to `None`):
             A boolean that indicates if the conversion has been successful or not. This is used for recursion and
             should not be passed by the user.
     """
     from quanto import QLayerNorm, QLinear
+
+    if modules_to_not_convert is None:
+        modules_to_not_convert = []
 
     for name, module in model.named_children():
         if current_key_name is None:

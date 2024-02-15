@@ -19,7 +19,7 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import replace_with_quanto_linear
+from ..integrations import replace_with_quanto_layers
 from ..utils import is_quanto_available, is_torch_available, logging
 from ..utils.quantization_config import QuantoConfig
 
@@ -42,7 +42,7 @@ class QuantoHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
-        if is_quanto_available():
+        if not is_quanto_available():
             raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
@@ -61,14 +61,20 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:
-            replace_with_quanto_linear(model, quantization_config=self.quantization_config)
+            replace_with_quanto_layers(model, quantization_config=self.quantization_config)
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model):
         if not self.pre_quantized:
             from quanto import freeze, quantize
 
-            quantize(model, weights=self.quantization_config.weights, activations=self.quantization_config)
+            mapping = {"torch.int8": torch.int8, None: None}
+
+            quantize(
+                model,
+                weights=mapping[self.quantization_config.weights],
+                activations=mapping[self.quantization_config.activations],
+            )
             freeze(model)
 
     @property

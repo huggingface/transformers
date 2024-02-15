@@ -88,6 +88,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quanto_available,
     is_rjieba_available,
     is_safetensors_available,
     is_scipy_available,
@@ -997,6 +998,13 @@ def require_auto_awq(test_case):
     Decorator for auto_awq dependency
     """
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
+
+
+def require_quanto(test_case):
+    """
+    Decorator for quanto dependency
+    """
+    return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
 
 
 def require_phonemizer(test_case):
