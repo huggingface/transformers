@@ -166,7 +166,7 @@ class StopStringCriteria(StoppingCriteria):
         self.embedding_vecs = self.create_embedding_vecs()
 
     @staticmethod
-    def get_matching_positions(vocab, stop_strings):
+    def get_matching_positions(vocab: List[str], stop_strings: List[str]) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
         valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
