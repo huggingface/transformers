@@ -697,14 +697,12 @@ def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
     """
     Adds the information of the repo_id to a given custom pipeline.
     """
-    try : 
-        for task in custom_pipeline.keys():
-            if "impl" in custom_pipeline[task]:
-                module = custom_pipeline[task]["impl"]
-                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
-        return custom_pipeline
-    except:
-        raise ValueError(f"Could not add model information to custom pipeline {custom_pipeline}.")
+    # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
+    for task in custom_pipeline.keys():
+        if "impl" in custom_pipeline[task]:
+            module = custom_pipeline[task]["impl"]
+            custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
+    return custom_pipeline
 
 
 def infer_framework(model_class):
