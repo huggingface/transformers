@@ -959,7 +959,7 @@ class MLflowCallback(TrainerCallback):
             remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
             [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
             storage will just copy the files to your artifact location.
-        - **MLFLOW_TRACKING_URI** (`str`, *optional*, defaults to `None`):
+        - **MLFLOW_TRACKING_URI** (`str`, *optional*, defaults to `""`):
             Whether to store runs at a specific path or remote server. Default to an empty string which will store runs
             at `./mlruns` locally.
         - **MLFLOW_EXPERIMENT_NAME** (`str`, *optional*, defaults to `None`):
