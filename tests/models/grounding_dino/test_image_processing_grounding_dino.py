@@ -35,7 +35,6 @@ if is_vision_available():
     from PIL import Image
 
 
-# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester with DeformableDetr->GroundingDino
 class GroundingDinoImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
@@ -71,6 +70,7 @@ class GroundingDinoImageProcessingTester(unittest.TestCase):
         self.num_queries = 5
         self.embed_dim = 5
 
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.prepare_image_processor_dict with DeformableDetr->GroundingDino
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
@@ -83,6 +83,7 @@ class GroundingDinoImageProcessingTester(unittest.TestCase):
             "do_pad": self.do_pad,
         }
 
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.get_expected_values with DeformableDetr->GroundingDino
     def get_expected_values(self, image_inputs, batched=False):
         """
         This function computes the expected height and width when providing images to GroundingDinoImageProcessor,
@@ -114,6 +115,7 @@ class GroundingDinoImageProcessingTester(unittest.TestCase):
 
         return expected_height, expected_width
 
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.expected_output_image_shape with DeformableDetr->GroundingDino
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
@@ -125,6 +127,7 @@ class GroundingDinoImageProcessingTester(unittest.TestCase):
             logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
         )
 
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.prepare_image_inputs with DeformableDetr->GroundingDino
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
@@ -139,7 +142,6 @@ class GroundingDinoImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest with DeformableDetr->GroundingDino
 class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GroundingDinoImageProcessor if is_vision_available() else None
 
@@ -150,6 +152,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_image_processor_properties with DeformableDetr->GroundingDino
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "image_mean"))
@@ -160,6 +163,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
         self.assertTrue(hasattr(image_processing, "do_pad"))
         self.assertTrue(hasattr(image_processing, "size"))
 
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_image_processor_from_dict_with_kwargs with DeformableDetr->GroundingDino
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
@@ -188,6 +192,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
         self.assertTrue(torch.allclose(results[0]["boxes"][0], expected_box_slice, atol=1e-4))
 
     @slow
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_call_pytorch_with_coco_detection_annotations with DeformableDetr->GroundingDino
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -289,6 +294,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
         self.assertTrue(torch.allclose(encoding["labels"][1]["size"], expected_size))
 
     @slow
+    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_call_pytorch_with_coco_panoptic_annotations with DeformableDetr->GroundingDino
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
