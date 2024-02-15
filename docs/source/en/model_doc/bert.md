@@ -65,7 +65,7 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 PyTorch includes a native scaled dot-product attention operator (SDPA) as part of `torch.nn.functional`. This function 
 encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
 for more information.
 
 To load a model that uses SPDA, pass the argument `attn_implementation="sdpa"` to `.from_pretrained`. For the best 
