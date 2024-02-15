@@ -26,6 +26,7 @@ from transformers import is_torch_available, pipeline, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
+    require_auto_gptq,
     require_torch,
     require_torch_multi_accelerator,
     slow,
@@ -3475,6 +3476,7 @@ class TokenHealingTestCase(unittest.TestCase):
             ("empty_prompt", "", ""),
         ]
     )
+    @require_auto_gptq
     def test_prompts(self, name, input, expected):
         model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
