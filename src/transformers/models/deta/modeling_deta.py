@@ -1549,15 +1549,15 @@ class DetaModel(DetaPreTrainedModel):
             param.requires_grad_(True)
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_valid_ratio
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
         valid_height = torch.sum(mask[:, :, 0], 1)
         valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio_height = valid_height.to(dtype) / height
+        valid_ratio_width = valid_width.to(dtype) / width
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_proposal_pos_embed
