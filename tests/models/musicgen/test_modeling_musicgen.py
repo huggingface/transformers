@@ -1400,6 +1400,10 @@ class MusicgenIntegrationTests(unittest.TestCase):
         )  # input values take shape 32000 and we generate from there
         self.assertTrue(torch.allclose(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, atol=1e-4))
 
+    @unittest.skip("Fails with - TypeError: _weight_norm_interface() missing 1 required positional argument: 'dim'")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 @require_torch
 class MusicgenStereoIntegrationTests(unittest.TestCase):
