@@ -1138,11 +1138,12 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> import requests
         >>> import torch
         >>> import numpy as np
+        >>> from io import BytesIO
 
         >>> url = (
         ...     "https://cdn.britannica.com/79/232779-050-6B0411D7/German-Shepherd-dog-Alsatian.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = Image.open(BytesIO(requests.get(url).content))
 
         >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
