@@ -380,7 +380,7 @@ class GenerationMixin:
 
         if not self._supports_cache_class:
             raise ValueError(
-                "This model do not currently support switching between cache implementations. Please raise an error on GitHub for adding"
+                "This model do not currently support switching between cache implementations. Please raise a feature request on GitHub for adding"
                 " the request to support this model: https://github.com/huggingface/transformers"
             )
 
