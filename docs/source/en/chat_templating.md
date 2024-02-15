@@ -137,7 +137,7 @@ messages = [
     },
     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
 ]
-print(pipe(messages, max_new_tokens=128, do_sample=False)[0]['generated_text'][-1])  # Print the assistant's response
+print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1])  # Print the assistant's response
 ```
 
 ```text
