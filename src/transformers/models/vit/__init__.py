@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
     _import_structure["image_processing_vit"] = ["ViTImageProcessor"]
+    _import_structure["image_processing_vit_fast"] = ["ViTImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_vit import ViTFeatureExtractor
         from .image_processing_vit import ViTImageProcessor
+        from .image_processing_vit_fast import ViTImageProcessorFast
 
     try:
         if not is_torch_available():

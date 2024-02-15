@@ -1268,7 +1268,9 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_utils"] = ["ImageProcessingMixin"]
+    _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
+    _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
+    _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
@@ -1319,7 +1321,7 @@ else:
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
-    _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
+    _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor", "ViTImageProcessorFast"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
@@ -5992,7 +5994,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_vision_objects import *
     else:
-        from .image_processing_utils import ImageProcessingMixin
+        from .image_processing_base import ImageProcessingMixin
+        from .image_processing_utils import BaseImageProcessor
+        from .image_processing_utils_fast import BaseImageProcessorFast
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
@@ -6070,7 +6074,7 @@ if TYPE_CHECKING:
         from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
-        from .models.vit import ViTFeatureExtractor, ViTImageProcessor
+        from .models.vit import ViTFeatureExtractor, ViTImageProcessor, ViTImageProcessorFast
         from .models.vit_hybrid import ViTHybridImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
