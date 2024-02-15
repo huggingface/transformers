@@ -27,6 +27,8 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_torch_available():
     import torch
 
+    from transformers.models.seggpt.modeling_seggpt import SegGptImageSegmentationOutput
+
 if is_vision_available():
     from transformers import SegGptImageProcessor
 
@@ -70,6 +72,15 @@ class SegGptImageProcessingTester(unittest.TestCase):
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
+
+    def expected_post_processed_shape(self):
+        return self.size["height"] // 2, self.size["width"]
+
+    def get_fake_image_segmentation_output(self):
+        torch.manual_seed(42)
+        return SegGptImageSegmentationOutput(
+            pred_masks=torch.rand(self.batch_size, self.num_channels, self.size["height"], self.size["width"])
+        )
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -163,6 +174,16 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         self.assertTrue(check_two_colors(mask_duplicated, color2=(1, 1, 1)))
         self.assertTrue(check_two_colors(mask_painted, color2=(255, 255, 255)))
+
+    def test_post_processing_semantic_segmentation(self):
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        outputs = self.image_processor_tester.get_fake_image_segmentation_output()
+        post_processed = image_processor.post_process_semantic_segmentation(outputs)
+
+        self.assertEqual(len(post_processed), self.image_processor_tester.batch_size)
+
+        expected_semantic_map_shape = self.image_processor_tester.expected_post_processed_shape()
+        self.assertEqual(post_processed[0].shape, expected_semantic_map_shape)
 
     @slow
     def test_pixel_values(self):

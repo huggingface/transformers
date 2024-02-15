@@ -221,6 +221,7 @@ class SegGptImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
     def resize(
         self,
         image: np.ndarray,

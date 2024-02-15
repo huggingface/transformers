@@ -26,7 +26,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -80,7 +79,7 @@ def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> tor
 
 
 @dataclass
-class SegGptEncoderOutput(BaseModelOutput):
+class SegGptEncoderOutput(ModelOutput):
     """
     Output type of [`SegGptEncoderOutput`].
     Args:
@@ -98,6 +97,9 @@ class SegGptEncoderOutput(BaseModelOutput):
             Additionaly, each feature passes through a LayerNorm.
     """
 
+    last_hidden_state: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     intermediate_features: Optional[Tuple[torch.FloatTensor]] = None
 
 
