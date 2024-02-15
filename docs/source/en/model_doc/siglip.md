@@ -98,8 +98,6 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP.
 
-<PipelineTag pipeline="zero-shot-image-classification"/>
-
 - [Zero-shot image classification task guide](../tasks/zero_shot_image_classification_md)
 - Demo notebooks for SigLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SigLIP). 🌎
 
