@@ -81,7 +81,6 @@ class TextGenerationPipeline(Pipeline):
     """
 
     def __init__(self, *args, **kwargs):
-        # TODO Matt: Find out why ConversationalPipeline and TextGeneration give slighly different (but valid) results
         super().__init__(*args, **kwargs)
         self.check_model_type(
             TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
