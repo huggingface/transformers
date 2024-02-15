@@ -18,13 +18,14 @@ import copy
 import inspect
 import warnings
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -91,6 +92,13 @@ logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
+
+
+class CacheImplementation(str, Enum):
+    DYNAMIC = "dynamic"
+    STATIC = "static"
+    SINK = "sink"
+
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
@@ -350,6 +358,43 @@ class GenerationMixin:
         raise NotImplementedError(
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
         )
+
+    def switch_cache_implementation(self, cache_implementation: Union[CacheImplementation, str], **kwargs):
+        """
+        Simple API to switch cache implementation in a model. Users could also do
+        `model.config.generation_config.cache_implementation = xxx` but they will most likely unexpected
+        behaviour
+
+        Args:
+            cache_implementation (`Union[CacheImplementation, str]`):
+                The target cache implementation
+            kwargs (`dict`, *optional*):
+                Optional key word arguments to be passed. E.g. for SinkCache, it is required to
+                pass `window_length` and `num_sink_tokens`.
+        """
+        if cache_implementation.upper() not in CacheImplementation.__members__:
+            raise ValueError(
+                f"Unrecognized cache implementation - you passed {cache_implementation}. Supported cache implementations are"
+                f" {CacheImplementation.__members__}"
+            )
+
+        if not self._supports_cache_class:
+            raise ValueError(
+                "This model do not currently support switching between cache implementations. Please raise an error on GitHub for adding"
+                " the request to support this model: https://github.com/huggingface/transformers"
+            )
+
+        if cache_implementation == CacheImplementation.SINK:
+            if "window_length" not in kwargs and "num_sink_tokens" not in kwargs:
+                raise ValueError(
+                    "You asked to switch to Sink cache implementation but you did not passed `window_length` and `num_sink_tokens` to "
+                    "`switch_cache_implementation`. Try again with passing these arguments to the method. (e.g. `model.switch_cache_implementation('sink', window_length=window_length=508, num_sink_tokens=4)`"
+                )
+            else:
+                self.generation_config.sink_window_length = kwargs.get("window_length")
+                self.generation_config.num_sink_tokens = kwargs.get("num_sink_tokens")
+
+        self.generation_config.cache_implementation = cache_implementation.lower()
 
     def _prepare_model_inputs(
         self,
@@ -1191,6 +1236,18 @@ class GenerationMixin:
                     UserWarning,
                 )
 
+    def _sanitize_kwargs(self, generation_config: GenerationConfig, kwargs: dict):
+        """
+        Sanitize the kwargs for generation
+        """
+        if getattr(generation_config, "cache_implementation", "") == CacheImplementation.SINK:
+            if "past_key_values" not in kwargs:
+                kwargs["past_key_values"] = SinkCache(
+                    window_length=generation_config.sink_window_length,
+                    num_sink_tokens=generation_config.num_sink_tokens,
+                )
+        return kwargs
+
     @torch.no_grad()
     def generate(
         self,
@@ -1326,6 +1383,7 @@ class GenerationMixin:
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
+        kwargs = self._sanitize_kwargs(generation_config, kwargs)
 
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
