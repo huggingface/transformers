@@ -17,7 +17,7 @@
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict, Any
 
 import torch
 import torch.utils.checkpoint
@@ -342,10 +342,19 @@ class MambaMixer(nn.Module):
 
 
 class MambaCache:
+    def __init__(self, config,  batch_size, conv_dtype=torch.float32, ssm_dtype=torch.float32, device=None):
+        self.seqlen_offset = 0
+        d_model = config.hidden_size
+        d_state = config.state_size
+        expand = config.expand
+        d_conv = config.conv_kernel
 
-    def __init__(self):
-        self.conv_state = None
-        self.ssm_state = None
+        self.conv_states = { i: torch.zeros(
+            batch_size, d_model * expand, d_conv, device=device, dtype=conv_dtype
+        ) for i in range(config.num_hidden_layers)}
+        self.ssm_states = { i:  torch.zeros(
+            batch_size, d_model * expand, d_state, device=device, dtype=ssm_dtype
+        )for i in range(config.num_hidden_layers)}
 
     def update_conv_state(self, hidden_states):
         self.conv_state.copy_(torch.roll(self.conv_state, shifts=-1, dims=-1))  # Update state (B D W)
@@ -379,15 +388,29 @@ class MambaSlowMixer(MambaMixer):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
-        if inference_params is not None:
-            conv_state = inference_params.update_conv_states(hidden_states)
+        if inference_params.seqlen_offset > 0:
+            conv_state = inference_params.conv_states[self.layer_idx]
+            conv_state.copy_(torch.roll(conv_state, shifts=-1, dims=-1))
+            conv_state[:, :, -1] = hidden_states[:,:,0]
+            # out, conv_state, ssm_state = self.step(hidden_states, conv_state, ssm_state)
+            # return out, conv_state, ssm_state
+        else:
+            conv_state = hidden_states
+            inference_params.conv_states[self.layer_idx].copy_(nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0)))
 
-        # conv_state.copy_(self.conv1d(hidden_states)[..., :seq_len])
+        ssm_state = inference_params.ssm_states[self.layer_idx]
 
-        hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
-        # hidden_states = torch.sum(conv_state * torch.rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
+        # conv_state.copy_(torch.roll(conv_state, shifts=-1, dims=-1))  # Update state (B D W)
+        # conv_state[:, :, -1] = hidden_states
+
+        # when you have the first iter, use conv_state
+        hidden_states = self.act(self.conv1d(conv_state)[..., :seq_len])
+
+        # x = torch.sum(conv_state * rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
         # if self.conv1d.bias is not None:
-        #     hidden_states = hidden_states + self.conv1d.bias
+        #     x = x + self.conv1d.bias
+        # x = self.act(x).to(dtype=dtype)
+
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
@@ -405,25 +428,21 @@ class MambaSlowMixer(MambaMixer):
         #     [batch_size, d, l, 1]   [b, d, l, 1]  ->  [batch_size, d, l, 1]  X  [batch_size, 1, l, n] -> [batch_size, d, l, n]
         deltaB_u = (discrete_time_step[:, :, :, None] * hidden_states[:, :, :, None]) * B[:, None, :, :]
 
-        ssm_state = torch.zeros((batch_size, self.d_inner, self.d_state), device=A.device)
-        # ssm_state = inference_params.ssm_state
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-
         ys = []
         for i in range(seq_len):
             ssm_state.copy_(ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :])
             #    [b, d, n]   X  [b, n] -> [b, d]
             y = torch.matmul(ssm_state, C[:,i,:].unsqueeze(-1))
             ys.append(y[:,:,0])
-        y = torch.stack(ys, dim=1)  # shape (b, l, d)
+        y = torch.stack(ys, dim=-1)  # shape (b, l, d)
 
-        y = y + (hidden_states * self.D.to(hidden_states.dtype)[None,:,None]).transpose(1,2)
-        y = y * self.act(gate).transpose(1,2)  # (B D)
+        y = y + (hidden_states * self.D.to(hidden_states.dtype)[None,:,None])
+        y = y * self.act(gate) # (B D)
 
         # 4. Final linear projection
-        attn_outputs = self.out_proj(y)
-        return attn_outputs, None, ssm_state, y
-        return attn_outputs, conv_state, ssm_state, y
+        attn_outputs = self.out_proj(y.transpose(1,2))
+        return attn_outputs, conv_state, ssm_state
 
 class MambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -449,7 +468,7 @@ class MambaBlock(nn.Module):
         self.layer_idx = layer_idx
         # self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = MambaSlowMixer(config, layer_idx = layer_idx)
+        self.mixer = MambaSlowMixer(config, layer_idx=layer_idx)
 
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
@@ -457,9 +476,9 @@ class MambaBlock(nn.Module):
         # if self.residual_in_fp32:
         #     residual = residual.to(torch.float32)
 
-        hidden_states, con_states, ssm_state, y = self.mixer(hidden_states, inference_params=inference_params)
+        hidden_states, conv_states, ssm_state = self.mixer(hidden_states, inference_params=inference_params)
         hidden_states = residual + hidden_states
-        return hidden_states
+        return hidden_states, conv_states, ssm_state
 
 
 class MambaPreTrainedModel(PreTrainedModel):
@@ -611,7 +630,6 @@ class MambaModel(MambaPreTrainedModel):
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
-        self.layers_are_rescaled = False
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -654,11 +672,8 @@ class MambaModel(MambaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        # TODO better to call _set_cache
         if use_cache and inference_params is None:
-            shape = (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers)
-            dtype = inputs_embeds.dtype
-            cache = [torch.zeros(*shape, dtype=dtype, device=inputs_embeds.device)for i in range(5)]
+            inference_params = MambaCache(self.config, inputs_embeds.size(0),  device=inputs_embeds.device)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -668,23 +683,23 @@ class MambaModel(MambaPreTrainedModel):
                 use_cache = False
 
         hidden_states = inputs_embeds
-
-
         all_last_states = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for idx, layer in enumerate(self.layers):
-            ssm_state = None
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(layer.__call__, hidden_states, inference_params)
+                hidden_states, conv_state, ssm_state = self._gradient_checkpointing_func(layer.__call__, hidden_states, inference_params)
             else:
-                hidden_states = layer(hidden_states, inference_params=inference_params)
-                # inference_params.conv_state_memory_dict[block.mamba_block.layer_idx] = (conv_state, ssm_state)
+                hidden_states, conv_state, ssm_state = layer(hidden_states, inference_params=inference_params)
+                # inference_params.update_conv_state(conv_state)
+                # inference_params.update_ssm_state(ssm_state)
+                inference_params.seqlen_offset += inputs_embeds.shape[1]
+                inference_params.ssm_states[idx].copy_(ssm_state)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if output_attentions:
-                all_self_attentions = all_last_states + (ssm_state,)
+                all_last_states = all_last_states + (ssm_state,)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -730,6 +745,16 @@ class MambaForCausalLM(MambaPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
+
+    def _update_model_kwargs_for_generation(self,outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        is_encoder_decoder: bool = False,
+        standardize_cache_format: bool = False,
+    ) -> Dict[str, Any]:
+
+        model_kwargs["inference_params"] = outputs["inference_params"]
+        return model_kwargs
+
 
     def prepare_inputs_for_generation(self, input_ids, inference_params=None, inputs_embeds=None, attention_mask=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.
