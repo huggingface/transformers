@@ -138,12 +138,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_checkpoint",
-        help="Absolute path to the target GoldenGate weights.",
+        help="Absolute path to the target Gemma weights.",
         required=True,
     )
     parser.add_argument(
         "--tokenizer_checkpoint",
-        help="Location of GoldenGate tokenizer model",
+        help="Location of Gemma tokenizer model",
     )
     parser.add_argument(
         "--model_size",
