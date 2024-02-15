@@ -4192,7 +4192,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @property
     def _is_quantized_training_enabled(self):
-        logger.warning(
+        warnings.warn(
             "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
             FutureWarning,
         )
