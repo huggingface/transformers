@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+import contextlib
 import functools
 import importlib.metadata
 import importlib.util
@@ -574,6 +575,24 @@ def rewrite_logs(d):
         else:
             new_d["train/" + k] = v
     return new_d
+
+
+@contextlib.contextmanager
+def preserve_neptune_kwargs(callback: "NeptuneCallback") -> None:
+    tmp_kwargs = callback._init_run_kwargs.copy()
+
+    callback._init_run_kwargs = {
+        k: v for k, v in tmp_kwargs.items() if k not in {
+            "capture_stdout",
+            "capture_stderr",
+            "capture_hardware_metrics",
+            "capture_traceback",
+        }
+    }
+
+    yield
+
+    callback._init_run_kwargs = tmp_kwargs
 
 
 class TensorBoardCallback(TrainerCallback):
@@ -1263,14 +1282,15 @@ class NeptuneCallback(TrainerCallback):
             self._use_initial_run()
         else:
             if not self._run:
-                self._initialize_run(
-                    with_id=self._run_id,
-                    capture_stdout=False,
-                    capture_stderr=False,
-                    capture_hardware_metrics=False,
-                    capture_traceback=False,
-                )
-                self._is_monitoring_run = False
+                with preserve_neptune_kwargs(callback=self):
+                    self._initialize_run(
+                        with_id=self._run_id,
+                        capture_stdout=False,
+                        capture_stderr=False,
+                        capture_hardware_metrics=False,
+                        capture_traceback=False,
+                    )
+                    self._is_monitoring_run = False
 
     @property
     def run(self):
