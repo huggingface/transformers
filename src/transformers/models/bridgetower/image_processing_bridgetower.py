@@ -197,8 +197,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_center_crop: Optional[bool] = True,
-        do_pad: Optional[bool] = True,
+        do_center_crop: bool = True,
+        do_pad: bool = True,
         pad_and_return_pixel_mask: Optional[bool] = None,
         return_tensors: Optional[bool] = None,
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
