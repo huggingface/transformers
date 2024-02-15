@@ -3604,14 +3604,14 @@ class ModelTesterMixin:
 
                                     # TODO: never an `attention_mask` arg here?
                                     processed_inputs = {
-                                        "input_ids": dummy_input,
+                                        model.main_input_name: dummy_input,
                                         "decoder_input_ids": decoder_input_ids,
                                         "decoder_attention_mask": dummy_attention_mask,
                                         "output_hidden_states": True,
                                     }
                                 else:
                                     processed_inputs = {
-                                        "input_ids": dummy_input,
+                                        model.main_input_name: dummy_input,
                                         "output_hidden_states": True,
                                     }
 
