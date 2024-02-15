@@ -359,7 +359,7 @@ class GenerationMixin:
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
         )
 
-    def switch_cache_implementation(self, cache_implementation: Union[CacheImplementation, str], **kwargs):
+    def set_cache_implementation(self, cache_implementation: Union[CacheImplementation, str], **kwargs):
         """
         Simple API to switch cache implementation in a model. Users could also do
         `model.config.generation_config.cache_implementation = xxx` but they will most likely unexpected
@@ -388,7 +388,7 @@ class GenerationMixin:
             if "window_length" not in kwargs and "num_sink_tokens" not in kwargs:
                 raise ValueError(
                     "You asked to switch to the Sink cache implementation, but you did not pass `window_length` and `num_sink_tokens` to "
-                    "`switch_cache_implementation`. Try again with passing these arguments to the method. (e.g. `model.switch_cache_implementation('sink', window_length=window_length=508, num_sink_tokens=4)`"
+                    "`set_cache_implementation`. Try again with passing these arguments to the method. (e.g. `model.set_cache_implementation('sink', window_length=window_length=508, num_sink_tokens=4)`"
                 )
             else:
                 self.generation_config.sink_window_length = kwargs.get("window_length")
