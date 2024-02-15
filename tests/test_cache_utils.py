@@ -301,7 +301,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
-    def test_static_cache_greedy_sampling_pad_left(self, attn_implementation):
+    def test_static_cache_greedy_decoding_pad_left(self, attn_implementation):
         EXPECTED_GENERATION = [
             "The best color is the one that complements the subject you are photograph",
             "We should not undermind the issues at hand.\nWe should not undermind the issues",
@@ -341,14 +341,14 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
-    def test_static_cache_greedy_sampling_pad_right(self, attn_implementation):
+    def test_static_cache_greedy_decoding_pad_right(self, attn_implementation):
         EXPECTED_GENERATION = [
             "The best color is\n\n\n\n\n\n\n\n\n\n",
             "We should not undermind the issues at hand, but address them head on.\nI think",
         ]
 
         tokenizer = AutoTokenizer.from_pretrained(
-            "NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>"
+            "NousResearch/Llama-2-7b-chat-hf", padding_side="right", pad_token="<s>"
         )
         model = AutoModelForCausalLM.from_pretrained(
             "NousResearch/Llama-2-7b-chat-hf",

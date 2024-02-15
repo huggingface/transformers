@@ -135,7 +135,8 @@ def rotate_half(x):
 
 
 # copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-# TODO @Arthur no longer copied from LLama after static cache
+
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 

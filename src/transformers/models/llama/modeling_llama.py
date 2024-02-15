@@ -768,19 +768,21 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
 
+        if external_cache is not None and (cache_cls is not None or cache_kwargs is not None):
+            raise ValueError(
+                "Error setting up the cache: (`external_cache`) and (`cache_cls`, `cache_kwargs`) are simulatenously "
+                "defined, only one of the sets can be defined at once."
+            )
+
         model = getattr(self, "model", self)
         if external_cache is not None:
             for layer_idx, layer in enumerate(model.layers):
                 layer.self_attn.past_key_value = external_cache.caches[layer_idx]
-        elif cache_cls is not None:
+        else:  # cache_cls is not None:
             if cache_kwargs is None:
                 cache_kwargs = {}
             for layer in model.layers:
                 layer.self_attn.past_key_value = cache_cls(**cache_kwargs)
-        else:
-            raise ValueError(
-                "Error setting up the cache: `cache_cls` and `external_cache` are both None, one of them must be defined"
-            )
 
         max_cache_len = model.layers[0].self_attn.past_key_value.get_max_length()
         if max_cache_len is not None:
