@@ -1737,7 +1737,7 @@ class Trainer:
         
         # deepspeed ckpt loading
         if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
-            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint, load_module_strict=False)
             if self.args.deepspeed_force_lr_scheduler_checkpointing and self.model_wrapped.lr_scheduler is None:
                 if os.path.isfile(os.path.join(resume_from_checkpoint, SCHEDULER_NAME)):
                     with warnings.catch_warnings(record=True) as caught_warnings:
