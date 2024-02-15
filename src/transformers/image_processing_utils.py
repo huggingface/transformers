@@ -319,9 +319,10 @@ class ImageProcessingMixin(PushToHubMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
+        resolved_image_processor_file = None
         if os.path.isdir(pretrained_model_name_or_path):
             image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
-        if os.path.isfile(pretrained_model_name_or_path):
+        elif os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
@@ -329,6 +330,8 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
             image_processor_file = IMAGE_PROCESSOR_NAME
+
+        if resolved_image_processor_file is None:
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_image_processor_file = cached_file(
