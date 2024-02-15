@@ -1084,7 +1084,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
+    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
@@ -1124,12 +1124,6 @@ class PhiForCausalLM(PhiPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
-            # generation with static cache
-            seen_tokens = past_key_value.get_seq_length()
-            input_ids = input_ids[:, seen_tokens:]
-            position_ids = position_ids[:, seen_tokens:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
