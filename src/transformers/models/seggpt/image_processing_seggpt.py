@@ -425,10 +425,10 @@ class SegGptImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        num_labels: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_labels: Optional[int] = None,
         **kwargs,
     ):
         """
