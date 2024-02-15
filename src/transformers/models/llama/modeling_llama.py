@@ -785,12 +785,10 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-
         if self.config.attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
             raise ValueError(
                 "`static` cache implementation is not compatible with `config.attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            
             )
 
         if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
