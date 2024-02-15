@@ -1140,7 +1140,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> import numpy as np
 
         >>> url = (
-        ...     "https://datasets-server.huggingface.co/assets/HuggingFaceM4/VQAv2/--/default/train/8/image/image.jpg"
+        ...     "https://cdn.britannica.com/79/232779-050-6B0411D7/German-Shepherd-dog-Alsatian.jpg"
         ... )
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
