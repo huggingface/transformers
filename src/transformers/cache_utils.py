@@ -8,9 +8,9 @@ from .configuration_utils import PretrainedConfig
 
 class ModelCache:
     """
-    A standalone class that holds multiple `Cache` instances, behaving exactly like the legacy cache format. Designed
-    mostly for backwards compatibility purposes, it is used to set up the cache for models, or as an output type for
-    the `forward` method of models that use caches.
+    A standalone class that holds multiple `Cache` instances, behaving exactly like the legacy cache format.
+    Designed mostly for backwards compatibility purposes, it is used to set up the cache for models, or as an output
+    type for the `forward` method of models that use caches.
 
     Parameters:
         caches (`List[Cache]`):
@@ -224,8 +224,8 @@ class SinkCache(Cache):
     """
 
     def __init__(self, window_length: int, num_sink_tokens: int, **unused_kwargs) -> None:
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.key_cache: Optional[torch.Tensor] = None
+        self.value_cache: Optional[torch.Tensor] = None
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
@@ -265,12 +265,12 @@ class SinkCache(Cache):
             )
         return self.cos_sin_cache[key_states.shape[-2]]
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    # Copied from transformers.cache_utils.DynamicCache.get_seq_length
+    def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
-        if len(self.key_cache) <= layer_idx:
+        if self.key_cache is None:
             return 0
-        return self.key_cache[layer_idx].shape[-2]
+        return self.key_cache.shape[-2]
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
@@ -280,19 +280,16 @@ class SinkCache(Cache):
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+        Updates the cache with the new `key_states` and `value_states` for a given layer.
 
         Parameters:
             key_states (`torch.Tensor`):
                 The new key states to cache.
             value_states (`torch.Tensor`):
                 The new value states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. The following arguments can be used in `SinkCache`: `sin`,
                 `cos` and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the
@@ -309,25 +306,22 @@ class SinkCache(Cache):
         using_rope = cos is not None and sin is not None
 
         # Update the number of seen tokens
-        if layer_idx == 0:
-            self.seen_tokens += key_states.shape[-2]
+        self.seen_tokens += key_states.shape[-2]
 
         # [bsz, num_heads, seq_len, head_dim]
-        if len(self.key_cache) <= layer_idx:
+        if self.key_cache is None:
             # Empty cache
-            self.key_cache.append(key_states)
-            self.value_cache.append(value_states)
+            self.key_cache = key_states
+            self.value_cache = value_states
 
-        elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
+        elif key_states.shape[-2] + self.get_seq_length() < self.window_length:
             # Growing cache
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            self.key_cache = torch.cat([self.key_cache, key_states], dim=-2)
+            self.value_cache = torch.cat([self.value_cache, value_states], dim=-2)
 
         else:
             # Shifting cache
-            keys_to_keep = self.key_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
-            ]
+            keys_to_keep = self.key_cache[:, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :]
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
@@ -344,29 +338,29 @@ class SinkCache(Cache):
                     keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
 
             # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
-            sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
-            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
+            sink_keys = self.key_cache[:, :, : self.num_sink_tokens]
+            self.key_cache = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
 
-            sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
-            values_to_keep = self.value_cache[layer_idx][
+            sink_values = self.value_cache[:, :, : self.num_sink_tokens]
+            values_to_keep = self.value_cache[
                 :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
             ]
-            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
+            self.value_cache = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
 
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        return self.key_cache, self.value_cache
 
+    # Copied from transformers.cache_utils.DynamicCache.reorder_cache
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+        device = self.key_cache.device
+        self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
+        device = self.value_cache.device
+        self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
 
 
 class StaticCache(Cache):
     """
-    Static Cache class to be used with `torch.compile(model)`.
+    Static cache class to be used with `torch.compile(model)`.
 
     Parameters:
         config (`PretrainedConfig):
@@ -449,6 +443,7 @@ class StaticCache(Cache):
         """Returns the maximum sequence length of the cached states."""
         return self.max_cache_len
 
+    # Copied from transformers.cache_utils.DynamicCache.reorder_cache
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         device = self.key_cache.device
