@@ -954,6 +954,12 @@ class PretrainedConfig(PushToHubMixin):
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
+    def clone(self):
+        """
+        Return a copy of this configuration (using a deep copy)
+        """
+        return self.__class__(**copy.deepcopy(self.__dict__))
+    
     def update(self, config_dict: Dict[str, Any]):
         """
         Updates attributes of this class with attributes from `config_dict`.
