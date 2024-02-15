@@ -579,17 +579,16 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         loss = model(**inputs).loss
         loss.backward()
 
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = MT5Model(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+    def create_and_check_model_fp16_forward(self):
+        model_class = DeformableDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
 
