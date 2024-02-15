@@ -1013,7 +1013,6 @@ class LlamaModel(LlamaPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = None
-        # if use_cache and isinstance(next_decoder_cache, (DynamicCache, SinkCache)):
         if use_cache:
             next_cache = (
                 next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
