@@ -24,13 +24,17 @@ import pytest
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import GroundingDinoImageProcessor
+    from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
 @require_vision
@@ -56,6 +60,11 @@ class GroundingDinoProcessorTest(unittest.TestCase):
         self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
+
+        self.batch_size = 7
+        self.num_queries = 5
+        self.embed_dim = 5
+        self.seq_length = 5
 
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
     def get_tokenizer(self, **kwargs):
@@ -84,6 +93,41 @@ class GroundingDinoProcessorTest(unittest.TestCase):
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
 
         return image_inputs
+
+    def get_fake_grounding_dino_output(self):
+        torch.manual_seed(42)
+        return GroundingDinoObjectDetectionOutput(
+            pred_boxes=torch.rand(self.batch_size, self.num_queries, 4),
+            logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
+        )
+
+    def get_fake_grounding_dino_input_ids(self):
+        input_ids = torch.tensor([101, 1037, 4937, 1012, 102])
+        return torch.stack([input_ids] * self.batch_size, dim=0)
+
+    def test_post_process_grounded_object_detection(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        grounding_dino_output = self.get_fake_grounding_dino_output()
+        grounding_dino_input_ids = self.get_fake_grounding_dino_input_ids()
+
+        post_processed = processor.post_process_grounded_object_detection(
+            grounding_dino_output, grounding_dino_input_ids
+        )
+
+        self.assertEqual(len(post_processed), self.batch_size)
+        self.assertEqual(list(post_processed[0].keys()), ["scores", "labels", "boxes"])
+        self.assertEqual(post_processed[0]["boxes"].shape, (self.num_queries, 4))
+        self.assertEqual(post_processed[0]["scores"].shape, (self.num_queries,))
+
+        expected_scores = torch.tensor([0.7050, 0.7222, 0.7222, 0.6829, 0.7220])
+        self.assertTrue(torch.allclose(post_processed[0]["scores"], expected_scores, atol=1e-4))
+
+        expected_box_slice = torch.tensor([0.6908, 0.4354, 1.0737, 1.3947])
+        self.assertTrue(torch.allclose(post_processed[0]["boxes"][0], expected_box_slice, atol=1e-4))
 
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_default(self):
