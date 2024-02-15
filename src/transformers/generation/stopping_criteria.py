@@ -244,8 +244,6 @@ class StopStringCriteria(StoppingCriteria):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        # TODO Joao - I'm not using the scores at all and just checking the most recent tokens in input_ids
-        #      Is this correct? Should I be sampling from scores?
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
         # *shorter* than the global max, and the code below should be ready for that
         maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
