@@ -20,6 +20,7 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
+from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
@@ -105,6 +106,7 @@ from .import_utils import (
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
@@ -163,6 +165,7 @@ from .import_utils import (
     is_spacy_available,
     is_speech_available,
     is_sudachi_available,
+    is_sudachi_projection_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,

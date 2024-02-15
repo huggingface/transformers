@@ -435,7 +435,7 @@ See [`TokenClassificationPipeline`] for all details.
     - __call__
     - all
 
-## 多模态 
+## 多模态
 
 可用于多模态任务的pipeline包括以下几种。
 
@@ -448,6 +448,12 @@ See [`TokenClassificationPipeline`] for all details.
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
+    - __call__
+    - all
+
+### ImageFeatureExtractionPipeline
+
+[[autodoc]] ImageFeatureExtractionPipeline
     - __call__
     - all
 

@@ -191,7 +191,7 @@ class DeformableDetrModelTester:
 class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
+        {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -563,6 +563,10 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @unittest.skip("Cannot be initialized on meta device as some weights are modified during the initialization")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
 
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection

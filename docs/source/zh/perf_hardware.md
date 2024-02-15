@@ -64,7 +64,7 @@ rendered properly in your Markdown viewer.
 
 如果您使用多个GPU，则卡之间的互连方式可能会对总训练时间产生巨大影响。如果GPU位于同一物理节点上，您可以运行以下代码：
 
-```
+```bash
 nvidia-smi topo -m
 ```
 

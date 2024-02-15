@@ -14,7 +14,7 @@ from .base import GenericTensor, Pipeline, build_pipeline_init_args
 )
 class FeatureExtractionPipeline(Pipeline):
     """
-    Feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
+    Feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
 
     Example:

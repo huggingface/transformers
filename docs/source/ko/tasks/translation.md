@@ -232,7 +232,7 @@ pip install transformers datasets evaluate sacrebleu
 ... )
 
 >>> trainer.train()
-````
+```
 
 학습이 완료되면 [`~transformers.Trainer.push_to_hub`] 메서드로 모델을 Hub에 공유하세요. 이러면 누구나 모델을 사용할 수 있게 됩니다:
 

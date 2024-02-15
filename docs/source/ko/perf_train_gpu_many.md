@@ -133,7 +133,7 @@ DP와 DDP 사이에는 다른 차이점이 있지만, 이 토론과는 관련이
 
 해당 벤치마크에서 `NCCL_P2P_DISABLE=1`을 사용하여 NVLink 기능을 비활성화했습니다.
 
-```
+```bash
 
 # DP
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \

@@ -217,7 +217,7 @@ class DetaModelTester:
 class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torchvision_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
+        {"image-feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
         if is_torchvision_available()
         else {}
     )
@@ -519,6 +519,10 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @unittest.skip("Cannot be initialized on meta device as some weights are modified during the initialization")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
 
 
 TOLERANCE = 1e-4
