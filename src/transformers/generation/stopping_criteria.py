@@ -2,7 +2,7 @@ import time
 import warnings
 from abc import ABC
 from copy import deepcopy
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple, Dict
 
 import numpy as np
 import torch
@@ -172,17 +172,19 @@ class StopStringCriteria(StoppingCriteria):
         valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
         end of the stop string."""
         tok_list = list(vocab.keys())
+        reversed_filtered_tok_list = [token[::-1].replace("▁", " ").replace("Ġ", " ") for token in tok_list]
         strings_to_valid_positions = {}
         strings_to_end_lengths = {}
         for stop_string in stop_strings:
+            reversed_stop_string = stop_string[::-1]
             strings_to_valid_positions[stop_string] = {}
             strings_to_end_lengths[stop_string] = {}
-            for token in tok_list:
+            for token, reversed_filtered_token in zip(tok_list, reversed_filtered_tok_list):
                 matching_positions = []
                 possible_end_lengths = []
                 for i in range(1 - len(token), len(stop_string)):
-                    tok = token[::-1].replace("▁", " ").replace("Ġ", " ")
-                    stop = stop_string[::-1]
+                    tok = reversed_filtered_token
+                    stop = reversed_stop_string
                     if i < 0:
                         tok = tok[-i:]
                         if not tok:
