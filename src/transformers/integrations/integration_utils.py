@@ -582,7 +582,10 @@ def preserve_neptune_kwargs(callback: "NeptuneCallback") -> None:
     tmp_kwargs = callback._init_run_kwargs.copy()
 
     callback._init_run_kwargs = {
-        k: v for k, v in tmp_kwargs.items() if k not in {
+        k: v
+        for k, v in tmp_kwargs.items()
+        if k
+        not in {
             "capture_stdout",
             "capture_stderr",
             "capture_hardware_metrics",
