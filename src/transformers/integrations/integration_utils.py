@@ -580,18 +580,7 @@ def rewrite_logs(d):
 @contextlib.contextmanager
 def preserve_neptune_kwargs(callback: "NeptuneCallback") -> None:
     tmp_kwargs = callback._init_run_kwargs.copy()
-
-    callback._init_run_kwargs = {
-        k: v
-        for k, v in tmp_kwargs.items()
-        if k
-        not in {
-            "capture_stdout",
-            "capture_stderr",
-            "capture_hardware_metrics",
-            "capture_traceback",
-        }
-    }
+    callback._init_run_kwargs = {k: v for k, v in tmp_kwargs.items() if k not in callback.params_to_preserve}
 
     yield
 
@@ -1182,6 +1171,9 @@ class NeptuneCallback(TrainerCallback):
     trial_params_key = "trial_params"
     trainer_parameters_key = "trainer_parameters"
     flat_metrics = {"train/epoch"}
+    params_to_preserve = frozenset(
+        ["capture_stdout", "capture_stderr", "capture_hardware_metrics", "capture_traceback"]
+    )
 
     def __init__(
         self,
