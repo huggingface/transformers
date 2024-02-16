@@ -131,6 +131,52 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
+    @require_torch
+    def test_small_chat_model_pt(self):
+        text_generator = pipeline(
+            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_text": expected_chat1},
+            ],
+        )
+
+        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
+            ],
+        )
+
     @require_tf
     def test_small_model_tf(self):
         text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="tf")
@@ -169,6 +215,52 @@ class TextGenerationPipelineTests(unittest.TestCase):
                         )
                     }
                 ],
+            ],
+        )
+
+    @require_tf
+    def test_small_chat_model_tf(self):
+        text_generator = pipeline(
+            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="tf"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+            {"role": "assistant", "content": "This is a reply"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_text": expected_chat1},
+            ],
+        )
+
+        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
             ],
         )
 
