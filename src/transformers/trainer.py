@@ -223,7 +223,14 @@ def _is_peft_model(model):
             from peft import PeftMixedModel
 
             classes_to_check = (*classes_to_check, PeftMixedModel)
-        return isinstance(model, classes_to_check)
+
+        model_to_check = model
+
+        # Handle torch.compile models
+        if hasattr(model, "_orig_mod"):
+            model_to_check = model._orig_mod
+
+        return isinstance(model_to_check, classes_to_check)
     return False
 
 
