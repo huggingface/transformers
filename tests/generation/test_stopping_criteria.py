@@ -190,7 +190,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
                         # This token runs off the start of the string
                         self.assertTrue(stop_string.startswith(token[trim_length:]))
                     else:
-                        self.assertTrue(stop_string[-position - len(token) : -position] == token)
+                        self.assertTrue(stop_string[-position - len(token):].startswith(token))
             for token, end_overlaps in token_end_overlaps.items():
                 token = token.replace("▁", " ").replace("Ġ", " ")
                 for overlap in end_overlaps:
