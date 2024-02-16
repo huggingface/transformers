@@ -27,7 +27,6 @@ MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class MambaConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MambaModel`]. It is used to instantiate a MAMBA
@@ -123,7 +122,7 @@ class MambaConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.use_bias = use_bias
         self.use_conv_bias = use_conv_bias
-        self.hidden_act=hidden_act
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
         super().__init__(

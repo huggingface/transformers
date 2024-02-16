@@ -434,20 +434,27 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m", vocab_size=50280, num_hidden_layers=24, torch_dtype=torch.float16)
+        model = MambaForCausalLM.from_pretrained(
+            "state-spaces/mamba-130m", vocab_size=50280, num_hidden_layers=24, torch_dtype=torch.float16
+        )
         model.to(torch_device)
         model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
 
-        logits = model(input_ids = input_ids)
+        logits = model(input_ids=input_ids)
 
-        EXPECTED_LOGITS = torch.tensor([ -6.7070, -24.7656,  -6.4766,  -6.0078,  -9.7812, -13.0703, -11.4688, -10.6562,  -9.3359,  -9.4766,  -9.1719,  -7.9102, -13.0469,  -8.7266, -8.4297,  -8.4766,  -9.1094, -11.5234, -11.1250, -11.7812, -12.1562,  -12.8359, -12.1797, -13.4062, -13.6406, -13.4141, -13.6562,  -9.2344,   -7.9805,  -7.2188,  -9.9219,  -9.1719,  -7.8438,  -9.1250, -10.1094,  -10.2344, -10.2266,  -9.7578, -11.0000, -10.6406], device='cuda:0',dtype=torch.float16) # fmt: skip
+        EXPECTED_LOGITS = torch.tensor([ -6.7070, -24.7656,  -6.4766,  -6.0078,  -9.7812, -13.0703, -11.4688, -10.6562,  -9.3359,  -9.4766,  -9.1719,  -7.9102, -13.0469,  -8.7266, -8.4297,  -8.4766,  -9.1094, -11.5234, -11.1250, -11.7812, -12.1562,  -12.8359, -12.1797, -13.4062, -13.6406, -13.4141, -13.6562,  -9.2344,   -7.9805,  -7.2188,  -9.9219,  -9.1719,  -7.8438,  -9.1250, -10.1094,  -10.2344, -10.2266,  -9.7578, -11.0000, -10.6406], device='cuda:0',dtype=torch.float16)  # fmt: skip
 
         torch.testing.assert_allclose(logits, EXPECTED_LOGITS)
 
         out = model.generate(input_ids, max_new_tokens=10)
-        output_sentence = tokenizer.decode(out[0,:])
-        self.assertEqual(output_sentence, ["Hey how are you doing?\n\nI'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm"])
+        output_sentence = tokenizer.decode(out[0, :])
+        self.assertEqual(
+            output_sentence,
+            [
+                "Hey how are you doing?\n\nI'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm"
+            ],
+        )
 
     def test_simple_generate_bf16(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"

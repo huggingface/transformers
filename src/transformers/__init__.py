@@ -570,6 +570,7 @@ _import_structure = {
         "LxmertTokenizer",
     ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
+    "models.mamba": ["MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MambaConfig"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -747,7 +748,6 @@ _import_structure = {
         "RoFormerTokenizer",
     ],
     "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
-    "models.mamba": ["MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MambaConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -2552,6 +2552,14 @@ else:
             "M2M100PreTrainedModel",
         ]
     )
+    _import_structure["models.mamba"].extend(
+        [
+            "MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MambaForCausalLM",
+            "MambaModel",
+            "MambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
     _import_structure["models.markuplm"].extend(
         [
@@ -3129,14 +3137,6 @@ else:
             "RwkvForCausalLM",
             "RwkvModel",
             "RwkvPreTrainedModel",
-        ]
-    )
-    _import_structure["models.mamba"].extend(
-        [
-            "MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MambaForCausalLM",
-            "MambaModel",
-            "MambaPreTrainedModel",
         ]
     )
     _import_structure["models.sam"].extend(

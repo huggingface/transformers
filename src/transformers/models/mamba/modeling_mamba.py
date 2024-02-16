@@ -24,19 +24,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-
-is_causal_conv_1d_available = None
-if is_causal_conv_1d_available():
-    from causal_conv1d import causal_conv1d_update, causal_conv1d_fn
-else :
-    causal_conv1d_update, causal_conv1d_fn =  None, None
-
-is_kernel_compiled = None
-if is_kernel_compiled():
-    from causal_conv1d import causal_conv1d_update, causal_conv1d_fn
-else :
-    selective_scan_update, selective_scan_fn = None, None
-
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -49,6 +36,18 @@ from ...utils import (
 from .configuration_mamba import MambaConfig
 
 
+is_causal_conv_1d_available = None
+if is_causal_conv_1d_available():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    causal_conv1d_update, causal_conv1d_fn = None, None
+
+is_kernel_compiled = None
+if is_kernel_compiled():
+    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+else:
+    selective_scan_update, selective_scan_fn = None, None
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m"
@@ -60,8 +59,8 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 mamba_cuda_kernel = None
+
 
 # Copied from transformers.models.mamba.modeling_mamba.load_mamba_cuda_kernel with mamba->MAMBA,mamba->mamba
 def load_mamba_cuda_kernel(context_length):
@@ -97,7 +96,6 @@ def load_mamba_cuda_kernel(context_length):
 
 
 class MambaMixer(nn.Module):
-
     def __init__(self, config, layer_idx):
         super().__init__()
         self.d_model = config.hidden_size
@@ -105,7 +103,9 @@ class MambaMixer(nn.Module):
         self.d_conv = config.conv_kernel
         self.expand = config.expand
         self.d_inner = int(self.expand * self.d_model)
-        self.time_step_rank = math.ceil(self.d_model / 16) if config.time_step_rank == "auto" else config.time_step_rank
+        self.time_step_rank = (
+            math.ceil(self.d_model / 16) if config.time_step_rank == "auto" else config.time_step_rank
+        )
         self.layer_idx = layer_idx
 
         self.conv1d = nn.Conv1d(
@@ -129,7 +129,7 @@ class MambaMixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # THe core is to load them, compute the discrete states, then write the updates state.
         # Keeps the memory bounded
-        A = torch.arange(1, self.d_state + 1, dtype=torch.float32)[None,:].expand(self.d_inner, -1).contiguous()
+        A = torch.arange(1, self.d_state + 1, dtype=torch.float32)[None, :].expand(self.d_inner, -1).contiguous()
         A_log = torch.log(A)  # Keep A_log in fp32
         self.A_log = nn.Parameter(A_log)
         self.A_log._no_weight_decay = True
@@ -142,7 +142,7 @@ class MambaMixer(nn.Module):
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
         batch_size, seq_len, _ = hidden_states.shape
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1,2)
+        projected_states = self.in_proj(hidden_states).transpose(1, 2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -166,29 +166,48 @@ class MambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        x_dbl = self.x_proj(hidden_states.transpose(1,2))
+        x_dbl = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
         discrete_time_step = self.dt_proj(time_step)
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1,2)
+        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
         if inference_params is not None and inference_params.seq_offset > 0:
             y, _ = selective_scan_update(
-                ssm_state, hidden_states, discrete_time_step, self.negA, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True
+                ssm_state,
+                hidden_states,
+                discrete_time_step,
+                self.negA,
+                B,
+                C,
+                self.D,
+                z=gate,
+                dt_bias=self.dt_proj.bias,
+                dt_softplus=True,
             )
         else:
             y, last_state = selective_scan_fn(
-                hidden_states, discrete_time_step, self.negA, B, C, self.D.float(),z=gate,delta_bias=self.dt_proj.bias.float(),delta_softplus=True,return_last_state=True,
+                hidden_states,
+                discrete_time_step,
+                self.negA,
+                B,
+                C,
+                self.D.float(),
+                z=gate,
+                delta_bias=self.dt_proj.bias.float(),
+                delta_softplus=True,
+                return_last_state=True,
             )
 
         # 4. Final linear projection
-        attn_outputs = self.out_proj(y.transpose(1,2))
+        attn_outputs = self.out_proj(y.transpose(1, 2))
         return attn_outputs, conv_state, ssm_state
 
+
 class MambaCache:
-    def __init__(self, config,  batch_size, conv_dtype=torch.float32, ssm_dtype=torch.float32, device=None):
+    def __init__(self, config, batch_size, conv_dtype=torch.float32, ssm_dtype=torch.float32, device=None):
         self.seqlen_offset = 0
 
         d_model = config.hidden_size
@@ -196,12 +215,17 @@ class MambaCache:
         expand = config.expand
         d_conv = config.conv_kernel
 
-        self.conv_states = { i: torch.zeros(batch_size, d_model * expand, d_conv, device=device, dtype=conv_dtype) for i in range(config.num_hidden_layers)}
-        self.ssm_states = { i:  torch.zeros(batch_size, d_model * expand, d_state, device=device, dtype=ssm_dtype)for i in range(config.num_hidden_layers)}
+        self.conv_states = {
+            i: torch.zeros(batch_size, d_model * expand, d_conv, device=device, dtype=conv_dtype)
+            for i in range(config.num_hidden_layers)
+        }
+        self.ssm_states = {
+            i: torch.zeros(batch_size, d_model * expand, d_state, device=device, dtype=ssm_dtype)
+            for i in range(config.num_hidden_layers)
+        }
 
 
 class MambaMixerSlow(MambaMixer):
-
     def forward(self, hidden_states, inference_params=None):
         """
 
@@ -220,31 +244,33 @@ class MambaMixerSlow(MambaMixer):
         batch_size, seq_len, _ = hidden_states.shape
 
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1,2)
+        projected_states = self.in_proj(hidden_states).transpose(1, 2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
         if inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
             conv_state.copy_(torch.roll(conv_state, shifts=-1, dims=-1))
-            conv_state[:, :, -1].copy_(hidden_states[:,:,0])
+            conv_state[:, :, -1].copy_(hidden_states[:, :, 0])
 
-            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)  + self.conv1d.bias)
+            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + self.conv1d.bias)
             hidden_states = hidden_states.unsqueeze(-1)
 
         else:
-            inference_params.conv_states[self.layer_idx].copy_(nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0)))
+            inference_params.conv_states[self.layer_idx].copy_(
+                nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
+            )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        x_dbl = self.x_proj(hidden_states.transpose(1,2))
+        x_dbl = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
         discrete_time_step = self.dt_proj(time_step)
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
 
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1,2)
+        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
         #                [batch_size, d, l, 1]     X        [1, d, 1, n] ->  [batch_size, d, l, n]
         dA = torch.exp(discrete_time_step[:, :, :, None] * A[None, :, None, :])
         #     [batch_size, d, l, 1]   [b, d, l, 1]  ->  [batch_size, d, l, 1]  X  [batch_size, 1, l, n] -> [batch_size, d, l, n]
@@ -256,14 +282,15 @@ class MambaMixerSlow(MambaMixer):
         for i in range(seq_len):
             ssm_state.copy_(ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :])
             #    [b, d, n]   X  [b, n] -> [b, d]
-            y = torch.matmul(ssm_state, C[:,i,:].unsqueeze(-1))
-            ys.append(y[:,:,0])
+            y = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1))
+            ys.append(y[:, :, 0])
         y = torch.stack(ys, dim=-1)  # shape (b, l, d)
-        y = y + (hidden_states * self.D.to(hidden_states.dtype)[None,:,None])
-        y = y * self.act(gate) # (B D)
+        y = y + (hidden_states * self.D.to(hidden_states.dtype)[None, :, None])
+        y = y * self.act(gate)  # (B D)
         # 4. Final linear projection
-        attn_outputs = self.out_proj(y.transpose(1,2))
+        attn_outputs = self.out_proj(y.transpose(1, 2))
         return attn_outputs, None, ssm_state
+
 
 class MambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -528,7 +555,7 @@ class MambaModel(MambaPreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
 
         if use_cache and inference_params is None:
-            inference_params = MambaCache(self.config, inputs_embeds.size(0),  device=inputs_embeds.device)
+            inference_params = MambaCache(self.config, inputs_embeds.size(0), device=inputs_embeds.device)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -542,7 +569,9 @@ class MambaModel(MambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for idx, layer in enumerate(self.layers):
             if self.gradient_checkpointing and self.training:
-                hidden_states, conv_state, ssm_state = self._gradient_checkpointing_func(layer.__call__, hidden_states, inference_params)
+                hidden_states, conv_state, ssm_state = self._gradient_checkpointing_func(
+                    layer.__call__, hidden_states, inference_params
+                )
             else:
                 hidden_states, conv_state, ssm_state = layer(hidden_states, inference_params=inference_params)
                 inference_params.ssm_states[idx].copy_(ssm_state)
@@ -562,7 +591,11 @@ class MambaModel(MambaPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(hidden_states for hidden_states in [hidden_states, inference_params, all_hidden_states, all_last_states] if hidden_states is not None)
+            return tuple(
+                hidden_states
+                for hidden_states in [hidden_states, inference_params, all_hidden_states, all_last_states]
+                if hidden_states is not None
+            )
 
         return MambaOutput(
             last_hidden_state=hidden_states,
@@ -603,17 +636,19 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
-    def _update_model_kwargs_for_generation(self,outputs: ModelOutput,
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
-
         model_kwargs["inference_params"] = outputs["inference_params"]
         return model_kwargs
 
-
-    def prepare_inputs_for_generation(self, input_ids, inference_params=None, inputs_embeds=None, attention_mask=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, inference_params=None, inputs_embeds=None, attention_mask=None, **kwargs
+    ):
         # only last token for inputs_ids if the state is passed along.
         if inference_params is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -637,7 +672,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        inference_params:  Optional[torch.FloatTensor] = None,
+        inference_params: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
