@@ -165,8 +165,8 @@ class RTDetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         encode_proj_layers=[2],
         pe_temperature=10000,
-        encoder_activation_function="silu",
-        activation_function="gelu",
+        encoder_activation_function="gelu",
+        activation_function="silu",
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
