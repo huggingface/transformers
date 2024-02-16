@@ -30,7 +30,7 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, list_repo_commits, list_repo_files
+from huggingface_hub import HfFolder, ModelCard, delete_repo, list_repo_commits, list_repo_files
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -118,6 +118,7 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.modeling_utils import unwrap_model
+    from transformers.trainer_pt_utils import AcceleratorConfig
 
     if is_safetensors_available():
         import safetensors.torch
@@ -176,8 +177,8 @@ class DynamicShapesDataset:
         np.random.seed(seed)
         sizes = np.random.randint(1, 20, (length // batch_size,))
         # For easy batching, we make every batch_size consecutive samples the same size.
-        self.xs = [np.random.normal(size=(s,)) for s in sizes.repeat(batch_size)]
-        self.ys = [np.random.normal(size=(s,)) for s in sizes.repeat(batch_size)]
+        self.xs = [np.random.normal(size=(s,)).astype(np.float32) for s in sizes.repeat(batch_size)]
+        self.ys = [np.random.normal(size=(s,)).astype(np.float32) for s in sizes.repeat(batch_size)]
 
     def __len__(self):
         return self.length
@@ -547,7 +548,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
-        y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,))
+        y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,)).astype(np.float32)
         train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y})
 
         # Base training. Should have the same results as test_reproducible_training
@@ -2412,6 +2413,146 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             execute_subprocess_async(command)
             # successful return here == success - any errors would have caused an error or a timeout in the sub-call
 
+    def test_accelerator_config_empty(self):
+        # Checks that a config can be made with the defaults if not passed
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves one option as something *not* basic
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, False)
+            self.assertEqual(trainer.accelerator.dispatch_batches, None)
+            self.assertEqual(trainer.accelerator.even_batches, True)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+    def test_accelerator_config_from_dict(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves all options as something *not* basic
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config={
+                    "split_batches": True,
+                    "dispatch_batches": True,
+                    "even_batches": False,
+                    "use_seedable_sampler": True,
+                },
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+    def test_accelerator_config_from_yaml(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path_file = Path(tmp_dir) / "accelerator_config.json"
+            with open(path_file, "w") as f:
+                accelerator_config = {
+                    "split_batches": True,
+                    "dispatch_batches": True,
+                    "even_batches": False,
+                    "use_seedable_sampler": False,
+                }
+                json.dump(accelerator_config, f)
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves all options as something *not* basic
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=path_file)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+
+    def test_accelerator_config_from_dataclass(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        accelerator_config = AcceleratorConfig(
+            split_batches=True, dispatch_batches=True, even_batches=False, use_seedable_sampler=False
+        )
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+
+    def test_accelerator_config_from_partial(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves one option as something *not* basic
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config={
+                    "split_batches": True,
+                },
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, None)
+            self.assertEqual(trainer.accelerator.even_batches, True)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+    def test_accelerator_config_from_dict_with_deprecated_args(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        # and maintains the deprecated args if passed in
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves all options as something *not* basic
+            with self.assertWarns(FutureWarning) as cm:
+                args = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    accelerator_config={
+                        "split_batches": True,
+                    },
+                    dispatch_batches=False,
+                )
+                self.assertIn("dispatch_batches", str(cm.warnings[0].message))
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.dispatch_batches, False)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            with self.assertWarns(FutureWarning) as cm:
+                args = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    accelerator_config={
+                        "even_batches": False,
+                    },
+                    split_batches=True,
+                )
+                self.assertIn("split_batches", str(cm.warnings[0].message))
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.dispatch_batches, None)
+
 
 @require_torch
 @is_staging_test
@@ -2423,7 +2564,13 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step", "test-trainer-tensorboard"]:
+        for model in [
+            "test-trainer",
+            "test-trainer-epoch",
+            "test-trainer-step",
+            "test-trainer-tensorboard",
+            "test-trainer-tags",
+        ]:
             try:
                 delete_repo(token=cls._token, repo_id=model)
             except HTTPError:
@@ -2553,6 +2700,31 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 found_log = True
 
         assert found_log is True, "No tensorboard log found in repo"
+
+    def test_push_to_hub_tags(self):
+        # Checks if `trainer.push_to_hub()` works correctly by adding the desired
+        # tag without having to pass `tags` in `push_to_hub`
+        # see:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer-tags"),
+                push_to_hub=True,
+                hub_token=self._token,
+            )
+
+            trainer.model.add_model_tags(["test-trainer-tags"])
+
+            url = trainer.push_to_hub()
+
+            # Extract repo_name from the url
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+
+            self.assertEqual(repo_name, f"{USER}/test-trainer-tags")
+
+            model_card = ModelCard.load(repo_name)
+            self.assertTrue("test-trainer-tags" in model_card.data.tags)
 
 
 @require_torch

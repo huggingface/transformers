@@ -172,6 +172,11 @@ The resource should ideally demonstrate something new instead of duplicating an 
 [[autodoc]] CLIPVisionModel
     - forward
 
+## CLIPForImageClassification
+
+[[autodoc]] CLIPForImageClassification
+    - forward
+
 </pt>
 <tf>
 

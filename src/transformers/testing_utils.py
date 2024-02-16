@@ -53,6 +53,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
+    is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
@@ -956,11 +957,26 @@ def require_apex(test_case):
     return unittest.skipUnless(is_apex_available(), "test requires apex")(test_case)
 
 
+def require_aqlm(test_case):
+    """
+    Decorator marking a test that requires aqlm
+    """
+    return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
 def require_bitsandbytes(test_case):
     """
-    Decorator for bits and bytes (bnb) dependency
+    Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+    if is_bitsandbytes_available() and is_torch_available():
+        try:
+            import pytest
+
+            return pytest.mark.bitsandbytes(test_case)
+        except ImportError:
+            return test_case
+    else:
+        return unittest.skip("test requires bitsandbytes and torch")(test_case)
 
 
 def require_optimum(test_case):
