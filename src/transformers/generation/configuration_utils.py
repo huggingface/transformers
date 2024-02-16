@@ -115,6 +115,8 @@ class GenerationConfig(PushToHubMixin):
         max_time(`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
+        stop_strings(`str or List[str]`, *optional*):
+            A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
 
@@ -306,6 +308,7 @@ class GenerationConfig(PushToHubMixin):
         self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.max_time = kwargs.pop("max_time", None)
+        self.stop_strings = kwargs.pop("stop_strings", None)
 
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", False)
