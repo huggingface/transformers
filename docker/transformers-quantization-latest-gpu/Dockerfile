@@ -10,8 +10,6 @@ SHELL ["sh", "-lc"]
 # to be used as arguments for docker build (so far).
 
 ARG PYTORCH='2.1.1'
-ARG TORCH_VISION=''
-ARG TORCH_AUDIO=''
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu118'
 
@@ -22,9 +20,11 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA
-RUN [ ${#TORCH_VISION} -gt 0 ] && VERSION='torchvision=='TORCH_VISION'.*' ||  VERSION='torchvision'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA
-RUN [ ${#TORCH_AUDIO} -gt 0 ] && VERSION='torchaudio=='TORCH_AUDIO'.*' ||  VERSION='torchaudio'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
+RUN echo torch=$VERSION
+# `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
+# Currently, let's just use their latest releases (when `torch` is installed with a release version)
+RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 
