@@ -1755,17 +1755,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     padding=padding,
                     truncation=truncation,
                     max_length=max_length,
-                    return_tensors=return_tensors,
                     add_special_tokens=False,
+                    return_tensors=return_tensors,
                     **tokenizer_kwargs,
                 )
             else:
                 return self.encode(
                     rendered,
-                    add_special_tokens=False,
                     padding=padding,
                     truncation=truncation,
                     max_length=max_length,
+                    add_special_tokens=False,
                     return_tensors=return_tensors,
                     **tokenizer_kwargs,
                 )
