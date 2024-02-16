@@ -80,7 +80,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/text-classification/run_glue_no_trainer.py
-            --model_name_or_path distilbert-base-uncased
+            --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
@@ -105,7 +105,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/language-modeling/run_clm_no_trainer.py
-            --model_name_or_path distilgpt2
+            --model_name_or_path distilbert/distilgpt2
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --block_size 128
@@ -133,7 +133,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/language-modeling/run_mlm_no_trainer.py
-            --model_name_or_path distilroberta-base
+            --model_name_or_path distilbert/distilroberta-base
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
@@ -156,7 +156,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/token-classification/run_ner_no_trainer.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
@@ -181,7 +181,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/question-answering/run_qa_no_trainer.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -209,7 +209,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/multiple-choice/run_swag_no_trainer.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
             --output_dir {tmp_dir}
@@ -232,7 +232,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/summarization/run_summarization_no_trainer.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}

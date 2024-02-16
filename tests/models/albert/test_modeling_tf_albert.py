@@ -311,7 +311,7 @@ class TFAlbertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 class TFAlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
+        model = TFAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

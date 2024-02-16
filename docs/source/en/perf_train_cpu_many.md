@@ -90,7 +90,7 @@ The following command enables training with 2 processes on one Xeon node, with o
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -119,7 +119,7 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -210,7 +210,7 @@ spec:
                 - torchrun
                 - /workspace/transformers/examples/pytorch/question-answering/run_qa.py
                 - --model_name_or_path
-                - "bert-large-uncased"
+                - "google-bert/bert-large-uncased"
                 - --dataset_name
                 - "squad"
                 - --do_train

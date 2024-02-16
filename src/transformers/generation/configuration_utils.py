@@ -636,8 +636,7 @@ class GenerationConfig(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
             config_file_name (`str` or `os.PathLike`, *optional*, defaults to `"generation_config.json"`):
@@ -691,7 +690,7 @@ class GenerationConfig(PushToHubMixin):
         >>> from transformers import GenerationConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
+        >>> generation_config = GenerationConfig.from_pretrained("openai-community/gpt2")
 
         >>> # E.g. config was saved using *save_pretrained('./test/saved_model/')*
         >>> generation_config.save_pretrained("./test/saved_model/")
@@ -704,7 +703,7 @@ class GenerationConfig(PushToHubMixin):
         >>> # If you'd like to try a minor variation to an existing configuration, you can also pass generation
         >>> # arguments to `.from_pretrained()`. Be mindful that typos and unused arguments will be ignored
         >>> generation_config, unused_kwargs = GenerationConfig.from_pretrained(
-        ...     "gpt2", top_k=1, foo=False, do_sample=True, return_unused_kwargs=True
+        ...     "openai-community/gpt2", top_k=1, foo=False, do_sample=True, return_unused_kwargs=True
         ... )
         >>> generation_config.top_k
         1
