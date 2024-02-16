@@ -216,6 +216,29 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
     print(outputs)
 
+    # stack the input_ids and pixel_values
+    original_input_ids = original_input_ids.repeat(4, 1)
+    original_pixel_values = original_pixel_values.repeat(4, 1, 1, 1, 1)
+    image_sizes = image_sizes.repeat(4, 1)
+
+    # TODO verify batched generation
+    print("Batched generation...")
+    output_ids = model.generate(
+        input_ids=original_input_ids.to(device),
+        attention_mask=torch.ones_like(original_input_ids),
+        pixel_values=original_pixel_values.to(device),
+        image_sizes=image_sizes,
+        do_sample=False,
+        temperature=0,
+        top_p=None,
+        num_beams=1,
+        max_new_tokens=512,
+        use_cache=True,
+    )
+
+    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    print(outputs)
+
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
