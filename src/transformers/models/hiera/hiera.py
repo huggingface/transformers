@@ -20,7 +20,7 @@
 
 import math
 from functools import partial
-from typing import List, Tuple, Callable, Optional
+from typing import List, Tuple, Callable, Optional, Union
 from .configuration_hiera import HieraConfig
 import torch
 import torch.nn as nn
@@ -29,36 +29,34 @@ from dataclasses import dataclass
 
 from timm.models.layers import DropPath, Mlp
 from ...modeling_utils import PreTrainedModel
-# from ...modeling_outputs import BaseModelOutput
-# from ...utils import (
-#     ModelOutput,
-#     add_start_docstrings,
-#     add_start_docstrings_to_model_forward,
-#     logging,
-#     replace_return_docstrings,
-# )
+from ...modeling_outputs import BaseModelOutput
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 
 from .hiera_utils import conv_nd, do_pool, do_masked_conv, Unroll, Reroll
 
-# @dataclass
-# class HieraModelOutput(ModelOutput):
-#     """
-#     Base class for Hiera model's outputs.
+@dataclass
+class HieraModelOutput(ModelOutput):
+    """
+    Base class for HieraModel model's outputs, conforming to Hugging Face's ModelOutput.
 
-#     Args:
-#         last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)): 
-#             Last layer hidden-states.
-#         attentions (tuple(torch.FloatTensor), optional, returned when output_attentions=True): 
-#             Attentions weights from the model, one for each layer.
-#         hidden_states (tuple(torch.FloatTensor), optional, returned when output_hidden_states=True): 
-#             Hidden states of the model at the output of each layer.
-#         intermediates (list[torch.Tensor], optional): 
-#             Intermediate representations or features from the model, if applicable.
-#     """
-#     last_hidden_state: torch.FloatTensor
-#     attentions: Optional[Tuple[torch.FloatTensor]] = None
-#     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-#     intermediates: Optional[list[torch.Tensor]] = None
+    Args:
+        last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)): 
+            Last layer hidden-states.
+        attentions (Tuple[torch.FloatTensor], optional, returned when output_attentions=True): 
+            Attentions weights from the model, one for each layer.
+        hidden_states (Tuple[torch.FloatTensor], optional, returned when output_hidden_states=True): 
+            Hidden states of the model at the output of each layer.
+        intermediates (List[torch.Tensor], optional): 
+            Intermediate representations or features from the model, if applicable.
+    """
+    last_hidden_state: torch.FloatTensor
+    intermediates: Optional[List[torch.Tensor]] = None
 
 
 class MaskUnitAttention(nn.Module):
@@ -102,15 +100,15 @@ class MaskUnitAttention(nn.Module):
         self.window_size = window_size
         self.use_mask_unit_attention = use_mask_unit_attention
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         """ Input should be of shape [batch, tokens, channels]. """
-        batch_size , num_channels , _ = x.shape
+        batch_size , num_channels , _ = embeddings.shape
         num_windows = (
             (num_channels  // (self.q_stride * self.window_size)) if self.use_mask_unit_attention else 1
         )
 
         qkv = (
-            self.qkv(x)
+            self.qkv(embeddings)
             .reshape(batch_size , -1, num_windows, 3, self.number_of_heads, self.head_dim)
             .permute(3, 0, 4, 2, 1, 5)
         )
@@ -126,15 +124,15 @@ class MaskUnitAttention(nn.Module):
 
         if hasattr(F, "scaled_dot_product_attention"):
             # Note: the original paper did *not* use SDPA, it's a free boost!
-            x = F.scaled_dot_product_attention(q, k, v)
+            embeddings = F.scaled_dot_product_attention(q, k, v)
         else:
             attention = (q * self.scale) @ k.transpose(-1, -2)
             attention = attention.softmax(dim=-1)
-            x = (attention @ v)
+            embeddings = (attention @ v)
 
-        x = x.transpose(1, 3).reshape(batch_size , -1, self.output_dim)
-        x = self.projection(x)
-        return x
+        embeddings = embeddings.transpose(1, 3).reshape(batch_size , -1, self.output_dim)
+        embeddings = self.projection(embeddings)
+        return embeddings
 
 
 class HieraBlock(nn.Module):
@@ -168,16 +166,16 @@ class HieraBlock(nn.Module):
         if input_dim != output_dim:
             self.projection = nn.Linear(input_dim, output_dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         # Attention + Q Pooling
-        normalized_input = self.norm1(x)
+        normalized_embeddings = self.norm1(embeddings)
         if self.input_dim != self.output_dim:
-            x = do_pool(self.projection(normalized_input), stride=self.attention.q_stride)
-        x = x + self.drop_path(self.attention(normalized_input))
+            embeddings = do_pool(self.projection(normalized_embeddings), stride=self.attention.q_stride)
+        embeddings = embeddings + self.drop_path(self.attention(normalized_embeddings))
 
         # MLP
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
+        embeddings = embeddings + self.drop_path(self.mlp(self.norm2(embeddings)))
+        return embeddings
 
 
 class Head(nn.Module):
@@ -226,17 +224,36 @@ class PatchEmbedding(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, mask: Optional[torch.Tensor] = None
+        self, pixel_values: torch.Tensor, mask: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        x = do_masked_conv(x, self.projection, mask)
-        x = x.reshape(x.shape[0], x.shape[1], -1).transpose(2, 1)
-        return x
+        embeddings = do_masked_conv(pixel_values, self.projection, mask)
+        embeddings = embeddings.reshape(embeddings.shape[0], embeddings.shape[1], -1).transpose(2, 1)
+        return embeddings
 
 
-class Hiera(PreTrainedModel):
+class HireaModel(PreTrainedModel):
+    """
+    Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
+
+    This model is a PyTorch implementation of the Hiera architecture for image classification.
+
+    The model can be used as follows:
+
+    Args:
+        config (HieraConfig): Configuration class instance for `Hiera`.
+
+    Example usage:
+        >>> from your_model_file import Hiera, HieraConfig
+        >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
+
+        >>> model = Hiera(config)
+        >>> inputs = torch.rand((1, 3, 224, 224))
+        >>> outputs = model(inputs)
+    """
+
     config_class = HieraConfig
     base_model_prefix = "hiera"
-    main_input_name = "x"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def __init__(self, config: HieraConfig):
@@ -417,52 +434,56 @@ class Hiera(PreTrainedModel):
 
     def forward(
         self,
-        x: torch.Tensor,
+        pixel_values: torch.Tensor,
         mask: torch.Tensor = None,
+        return_dict: Optional[bool] = True,
         return_intermediates: bool = False,
-    ) -> torch.Tensor:
+    ) -> Union[Tuple[torch.Tensor], HieraModelOutput]:
         """
         mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
         Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
         """
         # Slowfast training passes in a list
-        if isinstance(x, list):
-            x = x[0]
+        if isinstance(pixel_values, list):
+            pixel_values = pixel_values[0]
         intermediates = []
 
-        x = self.patch_embedding(
-            x,
+        pached_embeddings = self.patch_embedding(
+            pixel_values,
             mask=mask.view(
-                x.shape[0], 1, *self.mask_spatial_shape
+                pixel_values.shape[0], 1, *self.mask_spatial_shape
             )  # batch_size , C, *mask_spatial_shape
             if mask is not None
             else None,
         )
-        x = x + self.get_position_embeddings()
-        x = self.unroll(x)
+        embeddings = pached_embeddings + self.get_position_embeddings()
+        embeddings = self.unroll(embeddings)
 
         # Discard masked tokens
         if mask is not None:
-            x = x[mask[..., None].tile(1, self.mu_size, x.shape[2])].view(
-                x.shape[0], -1, x.shape[-1]
+            embeddings = embeddings[mask[..., None].tile(1, self.mu_size, embeddings.shape[2])].view(
+                embeddings.shape[0], -1, embeddings.shape[-1]
             )
 
-        for i, blk in enumerate(self.blocks):
-            x = blk(x)
+        for i, block in enumerate(self.blocks):
+            embeddings = block(embeddings)
 
             if return_intermediates and i in self.stage_ends:
-                intermediates.append(self.reroll(x, i, mask=mask))
+                intermediates.append(self.reroll(embeddings, i, mask=mask))
 
         if mask is None:
-            x = x.mean(dim=1)
-            x = self.norm(x)
-            x = self.head(x)
+            embeddings = embeddings.mean(dim=1)
+            embeddings = self.norm(embeddings)
+            embeddings = self.head(embeddings)
 
-        # x may not always be in spatial order here.
+        # embeddings may not always be in spatial order here.
         # e.g. if q_pool = 2, mask_unit_size = (8, 8), and
         # q_stride = (2, 2), not all unrolls were consumed,
-        # intermediates[-1] is x in spatial order
-        if return_intermediates:
-            return x, intermediates
-
-        return x
+        # intermediates[-1] is embeddings in spatial order
+        if not return_dict:
+            return tuple(v for v in [embeddings, intermediates] if v is not None)
+        
+        return HieraModelOutput(
+            last_hidden_state=embeddings,
+            intermediates=intermediates if return_intermediates else None,
+        )

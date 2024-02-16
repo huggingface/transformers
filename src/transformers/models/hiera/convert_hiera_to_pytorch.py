@@ -3,10 +3,10 @@ import argparse
 import requests
 import torch
 from PIL import Image
-from transformers.models.hiera.configuration_hiera import HieraConfig
-from transformers.models.hiera.hiera import Hiera
-from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
-# from transformers import HieraConfig, Hiera
+# from transformers.models.hiera.configuration_hiera import HieraConfig
+# from transformers.models.hiera.hiera import HieraModel
+# from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
+# from transformers import HieraConfig, HieraModel
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -176,7 +176,7 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
                 del state_dict["model_state"]["head.projection.weight"]
                 del state_dict["model_state"]["head.projection.bias"]
 
-    model = Hiera(config=config)
+    model = HieraModel(config=config)
     if pretrained:
         # Disable being strict when trying to load a encoder-decoder model into an encoder-only model
         if "decoder_position_embeddings" in state_dict["model_state"] and not hasattr(model, "decoder_position_embeddings"):
