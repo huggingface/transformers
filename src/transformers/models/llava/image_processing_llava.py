@@ -543,21 +543,21 @@ class LlavaImageProcessor(BaseImageProcessor):
 
             # preprocess patches
             pixel_values = self.preprocess_image_patches(
-                    image_patches,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_center_crop=do_center_crop,
-                    crop_size=crop_size,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    do_convert_rgb=do_convert_rgb,
-                    return_tensors=return_tensors,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
+                image_patches,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_center_crop=do_center_crop,
+                crop_size=crop_size,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_convert_rgb=do_convert_rgb,
+                return_tensors=return_tensors,
+                data_format=data_format,
+                input_data_format=input_data_format,
             ).pixel_values
 
             new_images.append(pixel_values)

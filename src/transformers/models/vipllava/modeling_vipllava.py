@@ -241,7 +241,6 @@ VIPLLAVA_INPUTS_DOCSTRING = r"""
     """The VIPLLAVA model which consists of a vision backbone and a language model.""",
     VIPLLAVA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->VIPLLAVA,Llava->VipLlava
 class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
