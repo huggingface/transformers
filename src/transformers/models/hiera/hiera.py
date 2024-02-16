@@ -25,11 +25,40 @@ from .configuration_hiera import HieraConfig
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dataclasses import dataclass
 
 from timm.models.layers import DropPath, Mlp
+from ...modeling_utils import PreTrainedModel
+# from ...modeling_outputs import BaseModelOutput
+# from ...utils import (
+#     ModelOutput,
+#     add_start_docstrings,
+#     add_start_docstrings_to_model_forward,
+#     logging,
+#     replace_return_docstrings,
+# )
 
-from .hiera_utils import pretrained_model, conv_nd, do_pool, do_masked_conv, Unroll, Reroll
+from .hiera_utils import conv_nd, do_pool, do_masked_conv, Unroll, Reroll
 
+# @dataclass
+# class HieraModelOutput(ModelOutput):
+#     """
+#     Base class for Hiera model's outputs.
+
+#     Args:
+#         last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)): 
+#             Last layer hidden-states.
+#         attentions (tuple(torch.FloatTensor), optional, returned when output_attentions=True): 
+#             Attentions weights from the model, one for each layer.
+#         hidden_states (tuple(torch.FloatTensor), optional, returned when output_hidden_states=True): 
+#             Hidden states of the model at the output of each layer.
+#         intermediates (list[torch.Tensor], optional): 
+#             Intermediate representations or features from the model, if applicable.
+#     """
+#     last_hidden_state: torch.FloatTensor
+#     attentions: Optional[Tuple[torch.FloatTensor]] = None
+#     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+#     intermediates: Optional[list[torch.Tensor]] = None
 
 
 class MaskUnitAttention(nn.Module):
@@ -204,86 +233,110 @@ class PatchEmbedding(nn.Module):
         return x
 
 
-class Hiera(nn.Module):
-    def __init__(self, config: HieraConfig):
-        super().__init__()
-        self.config = config
-        super().__init__()
-        norm_layer = partial(nn.LayerNorm, eps=1e-6)  # Example, adjust as needed
-        self.config = config
-        depth = sum(self.config.stages)
-        self.tokens_spatial_shape = [i // s for i, s in zip(self.config.input_size, self.config.patch_stride)]
-        num_tokens = math.prod(self.tokens_spatial_shape)
-        flat_mu_size = math.prod(self.config.mask_unit_size)
-        flat_q_stride = math.prod(self.config.q_stride)
+class Hiera(PreTrainedModel):
+    config_class = HieraConfig
+    base_model_prefix = "hiera"
+    main_input_name = "x"
+    supports_gradient_checkpointing = True
 
-        assert self.config.q_pool < len(self.config.stages)
-        self.q_pool, self.q_stride = self.config.q_pool, self.config.q_stride
-        self.mu_size, self.mask_unit_size = flat_mu_size, self.config.mask_unit_size
+    def __init__(self, config: HieraConfig):
+        self.input_size = config.input_size
+        self.in_chans = config.in_chans
+        self.embedding_dimension = config.embedding_dimension
+        self.number_of_heads = config.number_of_heads
+        self.num_classes = config.num_classes
+        self.stages = config.stages
+        self.q_pool = config.q_pool
+        self.q_stride = config.q_stride
+        self.mask_unit_size = config.mask_unit_size
+        self.mask_unit_attn = config.mask_unit_attn
+        self.dim_mul = config.dim_mul
+        self.head_mul = config.head_mul
+        self.patch_kernel = config.patch_kernel
+        self.patch_stride = config.patch_stride
+        self.patch_padding = config.patch_padding
+        self.mlp_ratio = config.mlp_ratio
+        self.drop_path_rate = config.drop_path_rate
+        self.head_dropout = config.head_dropout
+        self.head_init_scale = config.head_init_scale
+        self.sep_position_embeddings = config.sep_position_embeddings
+
+        super().__init__(config)
+        self.config = config
+        norm_layer = partial(nn.LayerNorm, eps=1e-6)  # Example, adjust as needed
+        depth = sum(self.stages)
+        self.tokens_spatial_shape = [i // s for i, s in zip(self.input_size, self.patch_stride)]
+        num_tokens = math.prod(self.tokens_spatial_shape)
+        flat_mu_size = math.prod(self.mask_unit_size)
+        flat_q_stride = math.prod(self.q_stride)
+
+        assert self.q_pool < len(self.stages)
+        self.q_pool, self.q_stride = self.q_pool, self.q_stride
+        self.mu_size, self.mask_unit_size = flat_mu_size, self.mask_unit_size
         self.mask_spatial_shape = [
             i // s for i, s in zip(self.tokens_spatial_shape, self.mask_unit_size)
         ]
-        self.stage_ends = [sum(self.config.stages[:i]) - 1 for i in range(1, len(self.config.stages) + 1)]
+        self.stage_ends = [sum(self.stages[:i]) - 1 for i in range(1, len(self.stages) + 1)]
 
         self.patch_embedding = PatchEmbedding(
-            self.config.in_chans, self.config.embedding_dimension, self.config.patch_kernel, self.config.patch_stride, self.config.patch_padding
+            self.in_chans, self.embedding_dimension, self.patch_kernel, self.patch_stride, self.patch_padding
         )
 
-        if self.config.sep_position_embeddings:
+        if self.sep_position_embeddings:
             self.position_embeddings_spatial = nn.Parameter(
                 torch.zeros(
                     1,
                     self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2],
-                    self.config.embedding_dimension,
+                    self.embedding_dimension,
                 )
             )
             self.position_embeddings_temporal = nn.Parameter(
-                torch.zeros(1, self.tokens_spatial_shape[0], self.config.embedding_dimension)
+                torch.zeros(1, self.tokens_spatial_shape[0], self.embedding_dimension)
             )
         else:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_tokens, self.config.embedding_dimension))
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_tokens, self.embedding_dimension))
 
         # Setup roll and reroll modules
         self.unroll = Unroll(
-            self.config.input_size, self.config.patch_stride, [self.config.q_stride] * len(self.stage_ends[:-1])
+            self.input_size, self.patch_stride, [self.q_stride] * len(self.stage_ends[:-1])
         )
         self.reroll = Reroll(
-            self.config.input_size,
-            self.config.patch_stride,
-            [self.config.q_stride] * len(self.stage_ends[:-1]),
+            self.input_size,
+            self.patch_stride,
+            [self.q_stride] * len(self.stage_ends[:-1]),
             self.stage_ends,
-            self.config.q_pool,
+            self.q_pool,
         )
         # q_pool locations
-        q_pool_blocks = [x + 1 for x in self.stage_ends[:self.config.q_pool]]
+        q_pool_blocks = [x + 1 for x in self.stage_ends[:self.q_pool]]
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, self.config.drop_path_rate, depth)]
+        dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, depth)]
 
         # Transformer blocks
         cur_stage = 0
         self.blocks = nn.ModuleList()
 
         for i in range(depth):
-            output_dim = self.config.embedding_dimension
+            output_dim = self.embedding_dimension
             # Mask unit or global attention.
             # Lag by 1 block, so that global attention,
             # applied post pooling on lower resolution
-            use_mask_unit_attention = self.config.mask_unit_attn[cur_stage]
+            use_mask_unit_attention = self.mask_unit_attn[cur_stage]
 
             if i - 1 in self.stage_ends:
-                output_dim = int(self.config.embedding_dimension * self.config.dim_mul)
-                number_of_heads = int(self.config.number_of_heads * self.config.head_mul)
+                output_dim = int(self.embedding_dimension * self.dim_mul)
+                number_of_heads = int(self.number_of_heads * self.head_mul)
                 cur_stage += 1
                 if i in q_pool_blocks:
                     flat_mu_size //= flat_q_stride
             else:
-                number_of_heads = self.config.number_of_heads
+                number_of_heads = self.number_of_heads
 
             block = HieraBlock(
-                input_dim=self.config.embedding_dimension,
+                input_dim=self.embedding_dimension,
                 output_dim=output_dim,
                 number_of_heads=number_of_heads,
-                mlp_ratio=self.config.mlp_ratio,
+                mlp_ratio=self.mlp_ratio,
                 drop_path=dpr[i],
                 norm_layer=norm_layer,
                 q_stride=(flat_q_stride if i in q_pool_blocks else 1),
@@ -291,21 +344,22 @@ class Hiera(nn.Module):
                 use_mask_unit_attention=use_mask_unit_attention,
             )
 
-            self.config.embedding_dimension = output_dim
+            self.embedding_dimension = output_dim
             self.blocks.append(block)
 
-        self.norm = norm_layer(self.config.embedding_dimension)
-        self.head = Head(self.config.embedding_dimension, self.config.num_classes, dropout_rate=self.config.head_dropout)
+        self.norm = norm_layer(self.embedding_dimension)
+        self.head = Head(self.embedding_dimension, self.num_classes, dropout_rate=self.head_dropout)
 
         # Initialize everything
-        if self.config.sep_position_embeddings:
+        if self.sep_position_embeddings:
             nn.init.trunc_normal_(self.position_embeddings_spatial, std=0.02)
             nn.init.trunc_normal_(self.position_embeddings_temporal, std=0.02)
         else:
             nn.init.trunc_normal_(self.position_embeddings, std=0.02)
         self.apply(partial(self._init_weights))
-        self.head.projection.weight.data.mul_(self.config.head_init_scale)
-        self.head.projection.bias.data.mul_(self.config.head_init_scale)
+        self.head.projection.weight.data.mul_(self.head_init_scale)
+        self.head.projection.bias.data.mul_(self.head_init_scale)
+        self.post_init()
 
     def _init_weights(self, m, init_bias=0.02):
         if isinstance(m, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
@@ -318,7 +372,7 @@ class Hiera(nn.Module):
 
     @torch.jit.ignore
     def no_weight_decay(self):
-        if self.config.sep_position_embeddings:
+        if self.sep_position_embeddings:
             return ["position_embeddings_spatial", "position_embeddings_temporal"]
         else:
             return ["position_embeddings"]
@@ -350,7 +404,7 @@ class Hiera(nn.Module):
         return mask.bool()
 
     def get_position_embeddings(self) -> torch.Tensor:
-        if self.config.sep_position_embeddings:
+        if self.sep_position_embeddings:
             return self.position_embeddings_spatial.repeat(
                 1, self.tokens_spatial_shape[0], 1
             ) + torch.repeat_interleave(
@@ -412,105 +466,3 @@ class Hiera(nn.Module):
             return x, intermediates
 
         return x
-
-
-# Image models
-
-@pretrained_model({
-    "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_tiny_224.pth",
-    "mae_in1k": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_tiny_224.pth",
-}, default="mae_in1k_ft_in1k")
-def hiera_tiny_224(**kwargs):
-    config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(1, 2, 7, 2), **kwargs)
-    return Hiera(config)
-
-
-@pretrained_model({
-    "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_small_224.pth",
-    "mae_in1k": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_small_224.pth",
-}, default="mae_in1k_ft_in1k")
-def hiera_small_224(**kwdargs):
-    return Hiera(embedding_dimension=96, number_of_heads=1, stages=(1, 2, 11, 2), **kwdargs)
-
-
-@pretrained_model({
-    "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_base_224.pth",
-    "mae_in1k": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_base_224.pth",
-}, default="mae_in1k_ft_in1k")
-def hiera_base_224(**kwargs):
-    config = HieraConfig(embedding_dimention=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
-    return Hiera(config)
-
-
-@pretrained_model({
-    "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_base_plus_224.pth",
-    "mae_in1k": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_base_plus_224.pth",
-}, default="mae_in1k_ft_in1k")
-def hiera_base_plus_224(**kwdargs):
-    return Hiera(embedding_dimension=112, number_of_heads=2, stages=(2, 3, 16, 3), **kwdargs)
-
-
-@pretrained_model({
-    "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_large_224.pth",
-    "mae_in1k": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_large_224.pth",
-}, default="mae_in1k_ft_in1k")
-def hiera_large_224(**kwdargs):
-    return Hiera(embedding_dimension=144, number_of_heads=2, stages=(2, 6, 36, 4), **kwdargs)
-
-
-@pretrained_model({
-    "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_huge_224.pth",
-    "mae_in1k": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_huge_224.pth",
-}, default="mae_in1k_ft_in1k")
-def hiera_huge_224(**kwdargs):
-    return Hiera(embedding_dimension=256, number_of_heads=4, stages=(2, 6, 36, 4), **kwdargs)
-
-
-# Video models
-
-@pretrained_model({
-    "mae_k400_ft_k400": "https://dl.fbaipublicfiles.com/hiera/hiera_base_16x224.pth",
-    "mae_k400": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_base_16x224.pth",
-}, default="mae_k400_ft_k400")
-def hiera_base_16x224(num_classes: int = 400, **kwdargs):
-    return Hiera(
-        num_classes=num_classes,  # K400 has 400 classes
-        input_size=(16, 224, 224),
-        q_stride=(1, 2, 2),
-        mask_unit_size=(1, 8, 8),
-        patch_kernel=(3, 7, 7),
-        patch_stride=(2, 4, 4),
-        patch_padding=(1, 3, 3),
-        sep_position_embeddings=True,
-        **kwdargs
-    )
-
-
-@pretrained_model({
-    "mae_k400_ft_k400": "https://dl.fbaipublicfiles.com/hiera/hiera_base_plus_16x224.pth",
-    "mae_k400": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_base_plus_16x224.pth",
-}, default="mae_k400_ft_k400")
-def hiera_base_plus_16x224(**kwdargs):
-    return hiera_base_16x224(
-        embedding_dimension=112, number_of_heads=2, stages=(2, 3, 16, 3), **kwdargs
-    )
-
-
-@pretrained_model({
-    "mae_k400_ft_k400": "https://dl.fbaipublicfiles.com/hiera/hiera_large_16x224.pth",
-    "mae_k400": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_large_16x224.pth",
-}, default="mae_k400_ft_k400")
-def hiera_large_16x224(**kwdargs):
-    return hiera_base_16x224(
-        embedding_dimension=144, number_of_heads=2, stages=(2, 6, 36, 4), **kwdargs
-    )
-
-
-@pretrained_model({
-    "mae_k400_ft_k400": "https://dl.fbaipublicfiles.com/hiera/hiera_huge_16x224.pth",
-    "mae_k400": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_huge_16x224.pth",
-}, default="mae_k400_ft_k400")
-def hiera_huge_16x224(**kwdargs):
-    return hiera_base_16x224(
-        embedding_dimension=256, number_of_heads=4, stages=(2, 6, 36, 4), **kwdargs
-    )

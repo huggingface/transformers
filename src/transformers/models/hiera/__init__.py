@@ -47,6 +47,9 @@ if TYPE_CHECKING:
             HieraBlock,
             MaskUnitAttention,
         )
+        from .hiera_image_processor import (
+            HieraImageProcessor
+        )
 
 else:
     import sys

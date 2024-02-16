@@ -117,7 +117,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("graphormer", "GraphormerConfig"),
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
-        ("hiera","HieraConfig")
+        ("hiera","HieraConfig"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("imagegpt", "ImageGPTConfig"),
@@ -353,7 +353,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("graphormer", "GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("groupvit", "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("hiera","HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP")
+        ("hiera","HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("idefics", "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -590,7 +590,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("graphormer", "Graphormer"),
         ("groupvit", "GroupViT"),
         ("herbert", "HerBERT"),
-        ("hiera","Hiera")
+        ("hiera","Hiera"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),

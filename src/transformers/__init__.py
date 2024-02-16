@@ -4148,6 +4148,13 @@ else:
             "TFGroupViTVisionModel",
         ]
     )
+    _import_structure["models.hiera"].extend(
+        [
+            "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Hiera",
+            
+        ]
+    )
     _import_structure["models.hubert"].extend(
         [
             "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",

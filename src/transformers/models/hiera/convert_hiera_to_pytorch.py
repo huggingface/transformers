@@ -3,8 +3,9 @@ import argparse
 import requests
 import torch
 from PIL import Image
-# from .configuration_hiera import HieraConfig
-# from .hiera import Hiera
+from transformers.models.hiera.configuration_hiera import HieraConfig
+from transformers.models.hiera.hiera import Hiera
+from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
 # from transformers import HieraConfig, Hiera
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
@@ -35,33 +36,8 @@ def convert_state_dict(orig_state_dict, config):
     return updated_model_state
 
 
-
-class HieraImageProcessor:
-    def __init__(self, size):
-        self.size = size
-        self.transform_list = [
-            transforms.Resize(int((256 / 224) * self.size), interpolation=InterpolationMode.BICUBIC),
-            transforms.CenterCrop(self.size)
-        ]
-        self.transform_vis = transforms.Compose(self.transform_list)
-        self.transform_norm = transforms.Compose(self.transform_list + [
-            transforms.ToTensor(),
-            transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
-        ])
-    
-    def process_image(self, image_url):
-        # Load the image
-        img = Image.open(requests.get(image_url, stream=True).raw)
-        
-        # Apply transformations
-        img_vis = self.transform_vis(img)
-        img_norm = self.transform_norm(img)
-        
-        return img_norm
-
-
-
-def convert_Hiera_checkpoint( checkpoint_url, pytorch_dump_folder_path):
+def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
+    strict = True
     pretrained_models_links = {
         "hiera_tiny_224": {
             "mae_in1k_ft_in1k": "https://dl.fbaipublicfiles.com/hiera/hiera_tiny_224.pth",
@@ -121,9 +97,8 @@ def convert_Hiera_checkpoint( checkpoint_url, pytorch_dump_folder_path):
         checkpoint = pretrained_models_links["hiera_small_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_base_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=96, 
-                            number_of_heads=1, 
-                            stages=(2, 3, 16, 3),)
+        config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
+
         checkpoints = pretrained_models_links["hiera_base_224"]
         checkpoint = pretrained_models_links["hiera_base_224"]["mae_in1k_ft_in1k"]
 
@@ -180,7 +155,8 @@ def convert_Hiera_checkpoint( checkpoint_url, pytorch_dump_folder_path):
                             stages=(2, 6, 36, 4) )
         checkpoints = pretrained_models_links["hiera_huge_16x224"]
         checkpoint = pretrained_models_links["hiera_huge_16x224"]["mae_k400_ft_k400"]
-
+    elif checkpoint not in checkpoints:
+        raise RuntimeError(f"Invalid checkpoint specified ({checkpoint}). Options are: {list(checkpoints.keys())}.")
 
     pretrained = True
     if pretrained:
@@ -188,10 +164,8 @@ def convert_Hiera_checkpoint( checkpoint_url, pytorch_dump_folder_path):
             raise RuntimeError("This model currently doesn't have pretrained weights available.")
         elif checkpoint is None:
             raise RuntimeError("No checkpoint specified.")
-        elif checkpoint not in checkpoints:
-            raise RuntimeError(f"Invalid checkpoint specified ({checkpoint}). Options are: {list(checkpoints.keys())}.")
 
-        state_dict = torch.hub.load_state_dict_from_url(checkpoints[checkpoint], map_location="cpu")
+        state_dict = torch.hub.load_state_dict_from_url(checkpoint, map_location="cpu")
         state_dict["model_state"] = convert_state_dict(state_dict["model_state"],{})
         if "head.projection.weight" in state_dict["model_state"]:
             # Set the number of classes equal to the state_dict only if the user doesn't want to overwrite it
@@ -202,24 +176,24 @@ def convert_Hiera_checkpoint( checkpoint_url, pytorch_dump_folder_path):
                 del state_dict["model_state"]["head.projection.weight"]
                 del state_dict["model_state"]["head.projection.bias"]
 
-    model = Hiera(config)
+    model = Hiera(config=config)
     if pretrained:
         # Disable being strict when trying to load a encoder-decoder model into an encoder-only model
         if "decoder_position_embeddings" in state_dict["model_state"] and not hasattr(model, "decoder_position_embeddings"):
             strict = False
 
-        model.load_state_dict(state_dict["model_state"], strict=strict)
+        model.load_state_dict(state_dict["model_state"])
+        # model.load_state_dict(state_dict["model_state"], strict=strict)
     
 
 
 
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
-    image = Image.open(requests.get(url, stream=True).raw)
 
     
-    image_processor = HieraImageProcessor(size=config.image_size)
-    inputs = image_processor.process_image(images=image, return_tensors="pt")
+    image_processor = HieraImageProcessor(size=224)
+    inputs = image_processor.process_image(image_url=url)
 
     # forward pass
     out = model(inputs[None, ...])
