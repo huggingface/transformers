@@ -948,7 +948,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             # per codebook cross-entropy
             # -100 labels are ignored
             # (bsz, vocab_size, seq_len, num_codebooks), (bsz, seq_len, num_codebooks)
-            loss = loss_fct(logits.transpose(1,3), labels.squeeze(1).transpose(1,2))
+            labels = labels.squeeze(1).transpose(1,2)
+            labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
+            loss = loss_fct(logits.transpose(1,3), labels)
             
 
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
