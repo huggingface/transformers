@@ -1810,6 +1810,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         local_files_only: bool = False,
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
+        trust_remote_code=False,
         **kwargs,
     ):
         r"""
@@ -1853,6 +1854,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 facebook/rag-token-base), specify it here.
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__` method.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the Tokenizer `__init__` method. Can be used to set special tokens like `bos_token`,
                 `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
@@ -2036,6 +2041,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             local_files_only=local_files_only,
             _commit_hash=commit_hash,
             _is_local=is_local,
+            trust_remote_code=trust_remote_code,
             **kwargs,
         )
 
@@ -2051,6 +2057,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         local_files_only=False,
         _commit_hash=None,
         _is_local=False,
+        trust_remote_code=False,
         **kwargs,
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -2099,6 +2106,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if config_tokenizer_class is None:
+            # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
+            #       If not, it raises a warning, but otherwise continues. Since we mostly load tokenizers with
+            #       AutoTokenizer these days, it seems like a lot of work (and a source of bugs) for little gain.
+            #       Maybe we can just remove this entirely?
             from .models.auto.configuration_auto import AutoConfig  # tests_ignore
 
             # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
@@ -2108,6 +2119,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     token=token,
                     cache_dir=cache_dir,
                     local_files_only=local_files_only,
+                    trust_remote_code=trust_remote_code,
                     _commit_hash=_commit_hash,
                 )
                 config_tokenizer_class = config.tokenizer_class

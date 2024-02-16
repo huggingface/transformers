@@ -800,7 +800,9 @@ class AutoTokenizer:
             _ = kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
                 tokenizer_class.register_for_auto_class()
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return tokenizer_class.from_pretrained(
+                pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
+            )
         elif config_tokenizer_class is not None:
             tokenizer_class = None
             if use_fast and not config_tokenizer_class.endswith("Fast"):
