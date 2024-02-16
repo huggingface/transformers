@@ -7,21 +7,25 @@ from PIL import Image
 
 
 def rename_key(name):
-    if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "patch_embed.projection")
+    # if "patch_embed.proj" in name:
+    #     name = name.replace("patch_embed.proj", "patch_embed.projection")
+    # # elif "block.proj" in name:
+    # #     name = name.replace("block.proj", "block.projection")
+    # elif "attn.proj" in name:
+    #     name = name.replace("attn.proj", "attn.projection")
+    if ".proj." in name:
+        name = name.replace(".proj.", ".projection.")
+    if "attn" in name:
+        name = name.replace("attn", "attention")
+    if "pos_embed" in name:
+        name = name.replace("pos_embed", "position_embeddings")
+    if "patch_embed" in name:
+        name = name.replace("patch_embed", "patch_embedding")
     return name
 
 
-def e(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
-        val = orig_state_dict.pop(key)
-
-        if "qkv" in key:
-           pass
-        else:
-            new_name = rename_key(key)
-            orig_state_dict[new_name] = val
-
-    return orig_state_dict
+def convert_state_dict(orig_state_dict, config):
+    updated_model_state = {rename_key(k): v for k, v in orig_state_dict.items()}
+    return updated_model_state
 
 

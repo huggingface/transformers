@@ -24,7 +24,7 @@ from typing import List, Tuple, Optional, Type, Callable, Dict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .convert_hiera_to_pytorch import e
+from .convert_hiera_to_pytorch import convert_state_dict
 
 def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callable:
     """ Loads a Hiera model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint. """
@@ -40,7 +40,7 @@ def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callab
                     raise RuntimeError(f"Invalid checkpoint specified ({checkpoint}). Options are: {list(checkpoints.keys())}.")
 
                 state_dict = torch.hub.load_state_dict_from_url(checkpoints[checkpoint], map_location="cpu")
-                # state_dict["model_state"] = e(state_dict["model_state"],{})
+                state_dict["model_state"] = convert_state_dict(state_dict["model_state"],{})
                 if "head.projection.weight" in state_dict["model_state"]:
                     # Set the number of classes equal to the state_dict only if the user doesn't want to overwrite it
                     if "num_classes" not in kwdargs:
@@ -53,7 +53,7 @@ def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callab
             model = model_func(**kwdargs)
             if pretrained:
                 # Disable being strict when trying to load a encoder-decoder model into an encoder-only model
-                if "decoder_pos_embed" in state_dict["model_state"] and not hasattr(model, "decoder_pos_embed"):
+                if "decoder_position_embeddings" in state_dict["model_state"] and not hasattr(model, "decoder_position_embeddings"):
                     strict = False
 
                 model.load_state_dict(state_dict["model_state"], strict=strict)
