@@ -496,6 +496,15 @@ class SamImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
+
+            if not valid_images(segmentation_maps):
+                raise ValueError(
+                    "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                    "torch.Tensor, tf.Tensor or jax.ndarray."
+                )
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
