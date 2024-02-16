@@ -536,15 +536,14 @@ class LlavaImageProcessor(BaseImageProcessor):
             images = [images]
 
         new_images = []
+        image_sizes = [image.size for image in images]
         for image in images:
             # convert image into a list of patches
             image_patches = self.get_image_patches(image, image_grid_pinpoints)
 
             # preprocess patches
-            # TODO can we not just feed all patches at once?
-            preprocessed_patches = [
-                self.preprocess_image_patches(
-                    image,
+            pixel_values = self.preprocess_image_patches(
+                    image_patches,
                     do_resize=do_resize,
                     size=size,
                     resample=resample,
@@ -559,20 +558,11 @@ class LlavaImageProcessor(BaseImageProcessor):
                     return_tensors=return_tensors,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                ).pixel_values[0]
-                for image in image_patches
-            ]
-
-            # stack preprocessed_patches patches
-            pixel_values = (
-                torch.stack(preprocessed_patches, dim=0)
-                if return_tensors == "pt"
-                else np.stack(preprocessed_patches, axis=0)
-            )
+            ).pixel_values
 
             new_images.append(pixel_values)
 
         new_images = torch.stack(new_images, dim=0) if return_tensors == "pt" else np.stack(new_images, axis=0)
 
-        data = {"pixel_values": new_images}
+        data = {"pixel_values": new_images, "image_sizes": image_sizes}
         return BatchFeature(data=data, tensor_type=return_tensors)
