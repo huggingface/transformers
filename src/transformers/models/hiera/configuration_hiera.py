@@ -13,8 +13,8 @@ HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class HieraConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`hiera`]. It is used to instantiate an Hiera model according to the specified arguments, defining the model architecture. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the Hiera
+    This is the configuration class to store the configuration of a [`hiera`]. It is used to instantiate an HieraModel model according to the specified arguments, defining the model architecture. Instantiating a configuration with
+    the defaults will yield a similar configuration to that of the HieraModel
     [facebookresearch/hiera](https://github.com/facebookresearch/hiera) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -46,13 +46,13 @@ class HieraConfig(PretrainedConfig):
     
         Example:
         ```python
-        >>> from transformers import HieraConfig, Hiera
+        >>> from transformers import HieraConfig, HieraModel
 
         >>> # Initializing a ViT MAE vit-mae-base style configuration
         >>> configuration = HieraConfig()
 
         >>> # Initializing a model (with random weights) from the vit-mae-base style configuration
-        >>> model = Hiera(configuration)
+        >>> model = HieraModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config

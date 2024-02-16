@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 # --------------------------------------------------------
 #
-# Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles
+# HieraModel: A Hierarchical Vision Transformer without the Bells-and-Whistles
 #
 # Chaitanya Ryali, Yuan-Ting Hu, Daniel Bolya, Chen Wei, Haoqi Fan,
 # Po-Yao Huang, Vaibhav Aggarwal, Arkabandhu Chowdhury, Omid Poursaeed,
@@ -27,7 +27,7 @@ import torch.nn.functional as F
 from .convert_hiera_to_pytorch import convert_state_dict
 
 def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callable:
-    """ Loads a Hiera model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint. """
+    """ Loads a HieraModel model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint. """
 
     def inner(model_func: Callable) -> Callable:
         def model_def(pretrained: bool = False, checkpoint: str = default, strict: bool = True, **kwdargs) -> nn.Module:
@@ -69,7 +69,7 @@ def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callab
 def conv_nd(n: int) -> Type[nn.Module]:
     """
     Returns a conv with nd (e.g., Conv2d for n=2). Work up to n=3.
-    If you wanted a 4d Hiera, you could probably just implement this for n=4. (no promises)
+    If you wanted a 4d HieraModel, you could probably just implement this for n=4. (no promises)
     """
     return [nn.Identity, nn.Conv1d, nn.Conv2d, nn.Conv3d][n]
 

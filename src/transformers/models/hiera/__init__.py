@@ -42,7 +42,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .hiera import (
-            Hiera,
+            HieraModel,
             Head,
             HieraBlock,
             MaskUnitAttention,

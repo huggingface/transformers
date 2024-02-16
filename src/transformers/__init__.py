@@ -4120,7 +4120,7 @@ else:
     _import_structure["models.hiera"].extend(
         [
             "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Hiera",
+            "HieraModel",
             
         ]
     )
@@ -6951,7 +6951,7 @@ if TYPE_CHECKING:
             HubertPreTrainedModel,
         )
         from .models.hiera import (
-            Hiera,
+            HieraModel,
             HieraBlock
         )
         from .models.ibert import (

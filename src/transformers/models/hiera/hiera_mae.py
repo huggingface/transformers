@@ -17,7 +17,7 @@ import math
 import torch
 import torch.nn as nn
 
-from .hiera import Hiera, HieraBlock
+from .hiera import HieraModel, HieraBlock
 from .hiera_utils import pretrained_model, undo_windowing, conv_nd
 
 
@@ -36,8 +36,8 @@ def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-class MaskedAutoencoderHiera(Hiera):
-    """Masked Autoencoder with Hiera backbone"""
+class MaskedAutoencoderHiera(HieraModel):
+    """Masked Autoencoder with HieraModel backbone"""
 
     def __init__(
         self,
