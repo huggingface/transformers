@@ -249,8 +249,9 @@ class GenerationConfig(PushToHubMixin):
 
         num_assistant_tokens_schedule (`str`, *optional*, defaults to `"heuristic"`):
             Defines the schedule at which max assistant tokens shall be changed during inference.
-            - `"_heuristic_`: When all _speculative_ tokens are correct, increase `num_assistant_tokens` by 2 else
-              reduce by 1
+            - `"heuristic"`: When all speculative tokens are correct, increase `num_assistant_tokens` by 2 else
+              reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
+            - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
 
         > Parameters specific to the caching mechanism:
