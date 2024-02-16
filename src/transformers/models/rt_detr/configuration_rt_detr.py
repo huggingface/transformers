@@ -17,7 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..timm_backbone import TimmBackboneConfig
 
 
 logger = logging.get_logger(__name__)
@@ -206,31 +206,26 @@ class RTDetrConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        if not use_timm_backbone and use_pretrained_backbone:
+        # backbone
+        self.use_timm_backbone = use_timm_backbone
+        if backbone_config is None:
+            logger.info("Initializing the config with a `TimmBackbone` backbone.")
+            backbone_config = {
+                "backbone": backbone,
+                "out_indices": [2, 3, 4],
+                "freeze_batch_norm_2d": True,
+            }
+            self.backbone_config = TimmBackboneConfig(**backbone_config)
+        elif isinstance(backbone_config, dict):
+            logger.info("Initializing the config with a `TimmBackbone` backbone.")
+            self.backbone_config = TimmBackboneConfig(**backbone_config)
+        elif isinstance(backbone_config, PretrainedConfig):
+            self.backbone_config = backbone_config
+        else:
             raise ValueError(
-                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
+                f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
             )
 
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
-
-        if not use_timm_backbone:
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_config = backbone_config
-        self.num_channels = num_channels
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.dilation = dilation
         # encoder
         self.d_model = d_model
         self.encoder_in_channels = encoder_in_channels

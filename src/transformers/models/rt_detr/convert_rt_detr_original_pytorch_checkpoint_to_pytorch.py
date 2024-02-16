@@ -14,14 +14,14 @@
 # limitations under the License.
 """Convert RT Detr checkpoints with Timm backbone"""
 
-import json
 import argparse
+import json
 from pathlib import Path
 
 import requests
 import torch
-from PIL import Image
 from huggingface_hub import hf_hub_download
+from PIL import Image
 
 from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
 from transformers.utils import logging
@@ -76,11 +76,11 @@ def create_rename_keys(config):
 
     rename_keys.append(("backbone.conv1.conv1_2.conv.weight", "model.backbone.model.conv1.3.weight"))
     for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_2.norm.{last}", f"model.backbone.model.conv1.3.{last}"))
+        rename_keys.append((f"backbone.conv1.conv1_2.norm.{last}", f"model.backbone.model.conv1.4.{last}"))
 
     rename_keys.append(("backbone.conv1.conv1_3.conv.weight", "model.backbone.model.conv1.6.weight"))
     for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model.conv1.3.{last}"))
+        rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model.bn1.{last}"))
 
     # stages
     # TO DO : make this as function
@@ -96,6 +96,13 @@ def create_rename_keys(config):
                             f"model.backbone.model.layer{stage_idx+1}.0.downsample.1.weight",
                         )
                     )
+                    for last in last_key:
+                        rename_keys.append(
+                            (
+                                f"backbone.res_layers.{stage_idx}.blocks.0.short.norm.{last}",
+                                f"model.backbone.model.layer{stage_idx+1}.0.downsample.2.{last}",
+                            )
+                        )
                 else:
                     rename_keys.append(
                         (
@@ -103,6 +110,13 @@ def create_rename_keys(config):
                             f"model.backbone.model.layer{stage_idx+1}.0.downsample.1.weight",
                         )
                     )
+                    for last in last_key:
+                        rename_keys.append(
+                            (
+                                f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.norm.{last}",
+                                f"model.backbone.model.layer{stage_idx+1}.0.downsample.2.{last}",
+                            )
+                        )
 
             rename_keys.append(
                 (
@@ -112,7 +126,7 @@ def create_rename_keys(config):
             )
             for last in last_key:
                 rename_keys.append((
-                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2a.norm.{last}", 
+                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2a.norm.{last}",
                     f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn1.{last}",
                     ))
 
@@ -124,7 +138,7 @@ def create_rename_keys(config):
             )
             for last in last_key:
                 rename_keys.append((
-                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2b.norm.{last}", 
+                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2b.norm.{last}",
                     f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn2.{last}",
                     ))
 
@@ -136,7 +150,7 @@ def create_rename_keys(config):
             )
             for last in last_key:
                 rename_keys.append((
-                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.norm.{last}", 
+                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.norm.{last}",
                     f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn3.{last}",
                     ))
     # fmt: on
@@ -205,13 +219,9 @@ def create_rename_keys(config):
         )
 
     for j in range(0, 3):
-        rename_keys.append(
-            (f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight")
-        )
+        rename_keys.append((f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight"))
         for last in last_key:
-            rename_keys.append(
-                (f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}")
-            )
+            rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
@@ -221,12 +231,13 @@ def create_rename_keys(config):
             )
             for last in last_key:
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.conv{j}.norm.{last}", f"model.encoder.fpn_blocks.{i}.conv{j}.norm.{last}")
+                    (
+                        f"encoder.fpn_blocks.{i}.conv{j}.norm.{last}",
+                        f"model.encoder.fpn_blocks.{i}.conv{j}.norm.{last}",
+                    )
                 )
 
-        rename_keys.append(
-            (f"encoder.lateral_convs.{i}.conv.weight", f"model.encoder.lateral_convs.{i}.conv.weight")
-        )
+        rename_keys.append((f"encoder.lateral_convs.{i}.conv.weight", f"model.encoder.lateral_convs.{i}.conv.weight"))
         for last in last_key:
             rename_keys.append(
                 (f"encoder.lateral_convs.{i}.norm.{last}", f"model.encoder.lateral_convs.{i}.norm.{last}")
@@ -254,7 +265,10 @@ def create_rename_keys(config):
             )
             for last in last_key:
                 rename_keys.append(
-                    (f"encoder.pan_blocks.{i}.conv{j}.norm.{last}", f"model.encoder.pan_blocks.{i}.conv{j}.norm.{last}")
+                    (
+                        f"encoder.pan_blocks.{i}.conv{j}.norm.{last}",
+                        f"model.encoder.pan_blocks.{i}.conv{j}.norm.{last}",
+                    )
                 )
 
         for j in range(3):
@@ -280,7 +294,6 @@ def create_rename_keys(config):
             rename_keys.append(
                 (f"encoder.downsample_convs.{i}.norm.{last}", f"model.encoder.downsample_convs.{i}.norm.{last}")
             )
-    
 
     for i in range(config.decoder_layers):
         # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
@@ -347,7 +360,9 @@ def create_rename_keys(config):
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm1.weight", f"model.decoder.layers.{i}.self_attn_layer_norm.weight")
         )
-        rename_keys.append((f"decoder.decoder.layers.{i}.norm1.bias", f"model.decoder.layers.{i}.self_attn_layer_norm.bias"))
+        rename_keys.append(
+            (f"decoder.decoder.layers.{i}.norm1.bias", f"model.decoder.layers.{i}.self_attn_layer_norm.bias")
+        )
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm2.weight", f"model.decoder.layers.{i}.encoder_attn_layer_norm.weight")
         )
@@ -531,15 +546,14 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    prefix = ""
     for key in state_dict.copy().keys():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
         # for two_stage
-        if 'bbox_embed' in key or ('class_embed' in key and 'denoising_' not in key):
-            state_dict[key.split('model.decoder.')[-1]] = state_dict[key]
-        if 'query_pos_head' in key:
-            state_dict['model.' + key.split('model.decoder.')[-1]] = state_dict[key]
+        if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
+            state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
+        if "query_pos_head" in key:
+            state_dict["model." + key.split("model.decoder.")[-1]] = state_dict[key]
 
     # finally, create HuggingFace model and load state dict
     model = RTDetrForObjectDetection(config)
@@ -593,8 +607,8 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-3)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)

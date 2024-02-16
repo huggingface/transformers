@@ -27,6 +27,8 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
+from transformers import AutoBackbone
+
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -43,7 +45,6 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 from .load_custom import load_cuda_kernels
 
@@ -114,7 +115,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    from timm import create_model
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -461,42 +462,13 @@ class RTDetrConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
+        backbone = AutoBackbone.from_config(config.backbone_config)
 
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            kwargs = {}
-            if config.dilation:
-                kwargs["output_stride"] = 16
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
-                in_chans=config.num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
-
-        # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
-        self.model = backbone
+        self.model = backbone._backbone
         self.intermediate_channel_sizes = (
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
 
-        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
-        if "resnet" in backbone_model_type:
-            for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
-
-    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->RTDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
@@ -1681,15 +1653,15 @@ class RTDetrModel(RTDetrPreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         # prepare denoising training
-        if self.training and self.num_denoising > 0 and labels is not None:
+        if self.training and self.config.num_denoising > 0 and labels is not None:
             denoising_class, denoising_bbox_unact, mask_flatten, dn_meta = get_contrastive_denoising_training_group(
                 targets=labels,
                 num_classes=self.config.num_labels,
-                num_queries=self.num_queries,
+                num_queries=self.config.num_queries,
                 class_embed=self.denoising_class_embed,
-                num_denoising_queries=self.num_denoising,
-                label_noise_ratio=self.label_noise_ratio,
-                box_noise_scale=self.box_noise_scale,
+                num_denoising_queries=self.config.num_denoising,
+                label_noise_ratio=self.config.label_noise_ratio,
+                box_noise_scale=self.config.box_noise_scale,
             )
         else:
             denoising_class, denoising_bbox_unact, mask_flatten, dn_meta = None, None, None, None
