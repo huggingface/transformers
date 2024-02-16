@@ -30,6 +30,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
 )
 from ...utils import TensorType, logging
 
@@ -70,6 +71,16 @@ class GLPNImageProcessor(BaseImageProcessor):
         self.size_divisor = size_divisor
         self.resample = resample
         super().__init__(**kwargs)
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -177,6 +188,8 @@ class GLPNImageProcessor(BaseImageProcessor):
             raise ValueError("size_divisor is required for resizing")
 
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError("Invalid image(s)")

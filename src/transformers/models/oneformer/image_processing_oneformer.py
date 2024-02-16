@@ -42,6 +42,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -466,6 +467,25 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.repo_path = repo_path
         self.metadata = prepare_metadata(load_metadata(repo_path, class_info_file))
         self.num_text = num_text
+        self._valid_processor_keys = [
+            "images",
+            "task_inputs",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "do_reduce_labels",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -707,6 +727,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if do_resize is not None and size is None:
             raise ValueError("If `do_resize` is True, `size` must be provided.")

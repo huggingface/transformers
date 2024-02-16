@@ -48,6 +48,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
+    validate_kwargs,
 )
 from ...utils import (
     TensorType,
@@ -827,6 +828,26 @@ class DetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self._valid_processor_keys = [
+            "images",
+            "annotations",
+            "return_segmentation_masks",
+            "masks_path",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "do_convert_annotations",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "format",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -1269,6 +1290,8 @@ class DetrImageProcessor(BaseImageProcessor):
 
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
         if annotations is not None and isinstance(annotations, dict):

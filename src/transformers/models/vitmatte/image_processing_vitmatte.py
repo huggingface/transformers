@@ -31,6 +31,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
 )
 from ...utils import TensorType, logging
 
@@ -86,6 +87,20 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.size_divisibility = size_divisibility
+        self._valid_processor_keys = [
+            "images",
+            "trimaps",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "size_divisibility",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def pad_image(
         self,
@@ -196,6 +211,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
         trimaps = make_list_of_images(trimaps, expected_ndims=2)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

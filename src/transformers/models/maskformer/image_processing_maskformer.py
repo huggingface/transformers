@@ -39,6 +39,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -447,6 +448,25 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.do_reduce_labels = do_reduce_labels
+        self._valid_processor_keys = [
+            "images",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "do_reduce_labels",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -723,6 +743,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if do_resize is not None and size is None or size_divisor is None:
             raise ValueError("If `do_resize` is True, `size` and `size_divisor` must be provided.")
