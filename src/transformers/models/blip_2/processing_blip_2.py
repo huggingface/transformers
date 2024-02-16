@@ -81,7 +81,6 @@ class Blip2Processor(ProcessorMixin):
         text_encoding = None
 
         if text is not None:
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,

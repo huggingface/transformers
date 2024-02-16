@@ -106,7 +106,6 @@ class BridgeTowerProcessor(ProcessorMixin):
             verbose=verbose,
         )
         # add pixel_values + pixel_mask
-        print(size)
         encoding_image_processor = self.image_processor(
             images,
             do_resize=do_resize,
