@@ -353,7 +353,7 @@ class MambaCache:
         self.ssm_states = { i:  torch.zeros(batch_size, d_model * expand, d_state, device=device, dtype=ssm_dtype)for i in range(config.num_hidden_layers)}
 
 
-class MambaSlowMixer(MambaMixer):
+class MambaMixerSlow(MambaMixer):
 
     def forward(self, hidden_states, inference_params=None):
         """
@@ -374,7 +374,6 @@ class MambaSlowMixer(MambaMixer):
 
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1,2)
-        # self.in_proj(hidden_states.squeeze(0))
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -443,7 +442,7 @@ class MambaBlock(nn.Module):
         self.layer_idx = layer_idx
         # self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = MambaSlowMixer(config, layer_idx=layer_idx)
+        self.mixer = MambaMixerSlow(config, layer_idx=layer_idx)
 
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
