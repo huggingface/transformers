@@ -18,8 +18,8 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
-from ..clip.configuration_clip import CLIPVisionConfig
 from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
+from ..clip.configuration_clip import CLIPVisionConfig
 from ..siglip.configuration_siglip import SiglipVisionConfig
 
 
@@ -99,7 +99,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         else:
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
             if hasattr(self.vision_config, "vision_config"):
-              self.vision_config = self.vision_config.vision_config
+                self.vision_config = self.vision_config.vision_config
 
         self.text_config = AutoConfig.for_model(text_model_type, **text_config)
 
