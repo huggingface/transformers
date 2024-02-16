@@ -30,7 +30,9 @@ CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
         "LinWeizheDragon/PreFLMR_ViT-L": (
             "https://huggingface.co/LinWeizheDragon/PreFLMR_ViT-L/resolve/main/context_tokenizer/vocab.txt"
         ),
-        "LinWeizheDragon/FLMR": ("https://huggingface.co/LinWeizheDragon/FLMR/resolve/main/context_tokenizer/vocab.txt"),
+        "LinWeizheDragon/FLMR": (
+            "https://huggingface.co/LinWeizheDragon/FLMR/resolve/main/context_tokenizer/vocab.txt"
+        ),
     },
     "tokenizer_file": {
         "LinWeizheDragon/PreFLMR_ViT-L": (
@@ -52,7 +54,9 @@ QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
         "LinWeizheDragon/PreFLMR_ViT-L": (
             "https://huggingface.co/LinWeizheDragon/PreFLMR_ViT-L/resolve/main/query_tokenizer/tokenizer_config.json"
         ),
-        "LinWeizheDragon/FLMR": ("https://huggingface.co/LinWeizheDragon/FLMR/resolve/main/query_tokenizer/tokenizer_config.json"),
+        "LinWeizheDragon/FLMR": (
+            "https://huggingface.co/LinWeizheDragon/FLMR/resolve/main/query_tokenizer/tokenizer_config.json"
+        ),
     },
 }
 

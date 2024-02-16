@@ -708,44 +708,44 @@ class FLMRModelForRetrieval(FLMRPretrainedModelForRetrieval):
         output_hidden_states: bool = None,
     ) -> Union[FLMRModelForRetrievalOutput, Tuple[Tensor, ...]]:
         r"""
-         Return:
+          Return:
 
-         Examples:
+          Examples:
 
-         ```python
-         >>> import torch
-         >>> from transformers import FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, AutoImageProcessor
+          ```python
+          >>> import torch
+          >>> from transformers import FLMRQueryEncoderTokenizer, FLMRContextEncoderTokenizer, FLMRModelForRetrieval, AutoImageProcessor
 
-         >>> checkpoint_path = "LinWeizheDragon/PreFLMR_ViT-L"
-         >>> image_processor_name = "openai/clip-vit-large-patch14"
-         >>> query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path, subfolder="query_tokenizer")
-         >>> context_tokenizer = FLMRContextEncoderTokenizer.from_pretrained(checkpoint_path, subfolder="context_tokenizer")
+          >>> checkpoint_path = "LinWeizheDragon/PreFLMR_ViT-L"
+          >>> image_processor_name = "openai/clip-vit-large-patch14"
+          >>> query_tokenizer = FLMRQueryEncoderTokenizer.from_pretrained(checkpoint_path, subfolder="query_tokenizer")
+          >>> context_tokenizer = FLMRContextEncoderTokenizer.from_pretrained(checkpoint_path, subfolder="context_tokenizer")
 
-         >>> model = FLMRModelForRetrieval.from_pretrained(checkpoint_path,
-                                                         query_tokenizer=query_tokenizer,
-                                                         context_tokenizer=context_tokenizer,
-                                                         ).to("cuda")
-         >>> image_processor = AutoImageProcessor.from_pretrained(image_processor_name)
+          >>> model = FLMRModelForRetrieval.from_pretrained(checkpoint_path,
+                                                          query_tokenizer=query_tokenizer,
+                                                          context_tokenizer=context_tokenizer,
+                                                          ).to("cuda")
+          >>> image_processor = AutoImageProcessor.from_pretrained(image_processor_name)
 
-         >>> Q_encoding = query_tokenizer(["Using the provided image, obtain documents that address the subsequent question: What is the capital of France?", "Extract documents linked to the question provided in conjunction with the image: What is the capital of China?"])
-         >>> D_encoding = context_tokenizer(["Paris is the capital of France.", "Beijing is the capital of China.",
-                                     "Paris is the capital of France.", "Beijing is the capital of China."])
-         >>> Q_pixel_values = torch.zeros(2, 3, 224, 224)
-         >>> inputs = dict(
-                 query_input_ids=Q_encoding['input_ids'],
-                 query_attention_mask=Q_encoding['attention_mask'],
-                 query_pixel_values=Q_pixel_values,
-                 context_input_ids=D_encoding['input_ids'],
-                 context_attention_mask=D_encoding['attention_mask'],
-                 use_in_batch_negatives=True,
-             )
+          >>> Q_encoding = query_tokenizer(["Using the provided image, obtain documents that address the subsequent question: What is the capital of France?", "Extract documents linked to the question provided in conjunction with the image: What is the capital of China?"])
+          >>> D_encoding = context_tokenizer(["Paris is the capital of France.", "Beijing is the capital of China.",
+                                      "Paris is the capital of France.", "Beijing is the capital of China."])
+          >>> Q_pixel_values = torch.zeros(2, 3, 224, 224)
+          >>> inputs = dict(
+                  query_input_ids=Q_encoding['input_ids'],
+                  query_attention_mask=Q_encoding['attention_mask'],
+                  query_pixel_values=Q_pixel_values,
+                  context_input_ids=D_encoding['input_ids'],
+                  context_attention_mask=D_encoding['attention_mask'],
+                  use_in_batch_negatives=True,
+              )
 
-         >>> model.forward(**inputs)
-         FLMRModelForRetrievalOutput(loss=tensor(4.5000, device='cuda:0', dtype=torch.float16,
-       grad_fn=<NllLossBackward0>), scores=tensor([[44.2188, 40.6562],
-        [39.4375, 48.4062]], device='cuda:0', dtype=torch.float16,
-        grad_fn=<ViewBackward0>), in_batch_negative_loss=tensor(5.1994, device='cuda:0', grad_fn=<NllLossBackward0>), query_late_interaction_output=tensor(...), context_late_interaction_output=tensor(...)
-         ```
+          >>> model.forward(**inputs)
+          FLMRModelForRetrievalOutput(loss=tensor(4.5000, device='cuda:0', dtype=torch.float16,
+        grad_fn=<NllLossBackward0>), scores=tensor([[44.2188, 40.6562],
+         [39.4375, 48.4062]], device='cuda:0', dtype=torch.float16,
+         grad_fn=<ViewBackward0>), in_batch_negative_loss=tensor(5.1994, device='cuda:0', grad_fn=<NllLossBackward0>), query_late_interaction_output=tensor(...), context_late_interaction_output=tensor(...)
+          ```
         """
 
         if query_concat_output_from_vision_encoder is None:

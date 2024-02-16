@@ -77,9 +77,8 @@ def query_index(args, ds, passage_contents, flmr_model: FLMRModelForRetrieval):
             query_embeddings = query_embeddings.detach().cpu()
 
             # search
-            custom_quries = {
-                question_id: question for question_id, question in zip(batch["question_id"], batch["question"])
-            }
+            custom_quries = dict(zip(batch["question_id"], batch["question"]))
+
             # print(custom_quries)
             queries = Queries(data=custom_quries)
             ranking = searcher._search_all_Q(
