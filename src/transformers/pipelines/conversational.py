@@ -1,4 +1,5 @@
 import uuid
+import warnings
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
@@ -232,6 +233,10 @@ class ConversationalPipeline(Pipeline):
     """
 
     def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "`ConversationalPipeline` is now deprecated, and the functionality has been moved to the standard `text-generation` pipeline, which now accepts lists of message dicts as well as strings. This class will be removed in v4.42.",
+            DeprecationWarning,
+        )
         super().__init__(*args, **kwargs)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
