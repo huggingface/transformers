@@ -257,7 +257,8 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-        )  # All transformations expect numpy arrays.
+        )  
+        # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
