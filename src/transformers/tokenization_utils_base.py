@@ -916,8 +916,8 @@ class SpecialTokensMixin:
 
         ```python
         # Let's see how to add a new classification token to GPT-2
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2Model.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2Model.from_pretrained("openai-community/gpt2")
 
         special_tokens_dict = {"cls_token": "<CLS>"}
 
@@ -1005,8 +1005,8 @@ class SpecialTokensMixin:
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
-        model = BertModel.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizerFast.from_pretrained("google-bert/bert-base-uncased")
+        model = BertModel.from_pretrained("google-bert/bert-base-uncased")
 
         num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
         print("We have added", num_added_toks, "tokens")
@@ -1821,8 +1821,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Can be either:
 
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                  Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                  user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                   using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
@@ -1871,7 +1869,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ```python
         # We can't instantiate directly the base class *PreTrainedTokenizerBase* so let's show our examples on a derived class: BertTokenizer
         # Download vocabulary from huggingface.co and cache.
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         # Download vocabulary from huggingface.co (user-uploaded) and cache.
         tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
@@ -1883,7 +1881,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer = BertTokenizer.from_pretrained("./test/saved_model/my_vocab.txt")
 
         # You can link tokens to special vocabulary when instantiating
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", unk_token="<unk>")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", unk_token="<unk>")
         # You should be sure '<unk>' is in the vocabulary when doing that.
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
         assert tokenizer.unk_token == "<unk>"

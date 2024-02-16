@@ -73,11 +73,11 @@ class TokenizerUtilTester(unittest.TestCase):
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
-        _ = GPT2TokenizerFast.from_pretrained("gpt2")
+        _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
         with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
-            _ = GPT2TokenizerFast.from_pretrained("gpt2")
+            _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
 
@@ -86,7 +86,7 @@ class TokenizerUtilTester(unittest.TestCase):
         try:
             tmp_file = tempfile.mktemp()
             with open(tmp_file, "wb") as f:
-                http_get("https://huggingface.co/albert-base-v1/resolve/main/spiece.model", f)
+                http_get("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model", f)
 
             _ = AlbertTokenizer.from_pretrained(tmp_file)
         finally:
@@ -101,7 +101,7 @@ class TokenizerUtilTester(unittest.TestCase):
             with open("tokenizer.json", "wb") as f:
                 http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
             tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-            # The tiny random BERT has a vocab size of 1024, tiny gpt2 as a vocab size of 1000
+            # The tiny random BERT has a vocab size of 1024, tiny openai-community/gpt2 as a vocab size of 1000
             self.assertEqual(tokenizer.vocab_size, 1000)
             # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
 
@@ -110,7 +110,7 @@ class TokenizerUtilTester(unittest.TestCase):
 
     def test_legacy_load_from_url(self):
         # This test is for deprecated behavior and can be removed in v5
-        _ = AlbertTokenizer.from_pretrained("https://huggingface.co/albert-base-v1/resolve/main/spiece.model")
+        _ = AlbertTokenizer.from_pretrained("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model")
 
 
 @is_staging_test

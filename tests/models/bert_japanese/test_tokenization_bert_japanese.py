@@ -488,7 +488,7 @@ class BertTokenizerMismatchTest(unittest.TestCase):
                     " is called from."
                 )
             )
-        EXAMPLE_BERT_ID = "bert-base-cased"
+        EXAMPLE_BERT_ID = "google-bert/bert-base-cased"
         with self.assertLogs("transformers", level="WARNING") as cm:
             BertJapaneseTokenizer.from_pretrained(EXAMPLE_BERT_ID)
             self.assertTrue(

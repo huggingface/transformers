@@ -630,7 +630,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_end_to_end_mask_fill(self):
-        tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+        tokenizer = XLMRobertaTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
         model = XmodForMaskedLM.from_pretrained("facebook/xmod-base", default_language="en_XX")
         model.to(torch_device)
 

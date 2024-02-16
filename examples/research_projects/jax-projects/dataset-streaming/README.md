@@ -31,7 +31,7 @@ without ever having to download the full dataset.
 In the following, we demonstrate how to train a bi-directional transformer model 
 using masked language modeling objective as introduced in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
 More specifically, we demonstrate how JAX/Flax and dataset streaming can be leveraged 
-to pre-train [**`roberta-base`**](https://huggingface.co/roberta-base)
+to pre-train [**`FacebookAI/roberta-base`**](https://huggingface.co/FacebookAI/roberta-base)
 in English on a single TPUv3-8 pod for 10000 update steps.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
@@ -80,8 +80,8 @@ from transformers import RobertaTokenizerFast, RobertaConfig
 
 model_dir = "./english-roberta-base-dummy"
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
-config = RobertaConfig.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
+config = RobertaConfig.from_pretrained("FacebookAI/roberta-base")
 
 tokenizer.save_pretrained(model_dir)
 config.save_pretrained(model_dir)

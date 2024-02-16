@@ -87,7 +87,7 @@ Importe [`pipeline`] e especifique a tarefa que deseja completar:
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-A pipeline baixa and armazena um [modelo pré-treinado](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) padrão e tokenizer para análise sentimental. Agora você pode usar `classifier` no texto alvo: 
+A pipeline baixa and armazena um [modelo pré-treinado](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) padrão e tokenizer para análise sentimental. Agora você pode usar `classifier` no texto alvo: 
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")

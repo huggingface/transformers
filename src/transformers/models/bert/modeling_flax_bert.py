@@ -52,7 +52,7 @@ from .configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 
 remat = nn_partitioning.remat
@@ -1114,8 +1114,8 @@ FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxBertForPreTraining
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    >>> model = FlaxBertForPreTraining.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    >>> model = FlaxBertForPreTraining.from_pretrained("google-bert/bert-base-uncased")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)
@@ -1269,8 +1269,8 @@ FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxBertForNextSentencePrediction
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    >>> model = FlaxBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    >>> model = FlaxBertForNextSentencePrediction.from_pretrained("google-bert/bert-base-uncased")
 
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
     >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
