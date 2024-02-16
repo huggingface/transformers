@@ -25,14 +25,14 @@ def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     if isinstance(head, nn.Identity):
         return x
 
-    B, num_mask_units = x.shape[0:2]
-    # Apply head, e.g [B, #MUs, My, Mx, C] -> head([B * #MUs, C, My, Mx])
+    batch_size , num_mask_units = x.shape[0:2]
+    # Apply head, e.g [batch_size , #MUs, My, Mx, C] -> head([batch_size  * #MUs, C, My, Mx])
     permute = [0] + [len(x.shape) - 2] + list(range(1, len(x.shape) - 2))
-    x = head(x.reshape(B * num_mask_units, *x.shape[2:]).permute(permute))
+    x = head(x.reshape(batch_size  * num_mask_units, *x.shape[2:]).permute(permute))
 
-    # Restore original layout, e.g. [B * #MUs, C', My', Mx'] -> [B, #MUs, My', Mx', C']
+    # Restore original layout, e.g. [batch_size  * #MUs, C', My', Mx'] -> [batch_size , #MUs, My', Mx', C']
     permute = [0] + list(range(2, len(x.shape))) + [1]
-    x = x.permute(permute).reshape(B, num_mask_units, *x.shape[2:], x.shape[1])
+    x = x.permute(permute).reshape(batch_size , num_mask_units, *x.shape[2:], x.shape[1])
     return x
 
 
@@ -132,7 +132,7 @@ class MaskedAutoencoderHiera(Hiera):
         self.apply(self._mae_init_weights)
 
         # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
-        w = self.patch_embed.proj.weight.data
+        w = self.patch_embed.projection.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
     def _mae_init_weights(self, m: nn.Module):
@@ -188,7 +188,7 @@ class MaskedAutoencoderHiera(Hiera):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         if mask is None:
-            mask = self.get_random_mask(x, mask_ratio)  # [B, #MUs_all]
+            mask = self.get_random_mask(x, mask_ratio)  # [batch_size , #MUs_all]
 
         # Get multi-scale representations from encoder
         _, intermediates = super().forward(x, mask, return_intermediates=True)
@@ -212,8 +212,8 @@ class MaskedAutoencoderHiera(Hiera):
 
         # Combine visible and mask tokens
 
-        # x: [B, #MUs, *mask_unit_spatial_shape_final, encoder_dim_out]
-        # mask: [B, #MUs_all]
+        # x: [batch_size , #MUs, *mask_unit_spatial_shape_final, encoder_dim_out]
+        # mask: [batch_size , #MUs_all]
         x_dec = torch.zeros(*mask.shape, *x.shape[2:], device=x.device, dtype=x.dtype)
         mask_tokens = self.mask_token.view(
             (1,) * (len(mask.shape) + len(x.shape[2:-1])) + (-1,)
@@ -258,9 +258,9 @@ class MaskedAutoencoderHiera(Hiera):
         """
         Note: in mask, 0 is *visible*, 1 is *masked*
 
-        x: e.g. [B, 3, H, W]
-        pred: [B * num_pred_tokens, num_pixels_in_pred_patch * in_chans]
-        label: [B * num_pred_tokens, num_pixels_in_pred_patch * in_chans]
+        x: e.g. [batch_size , 3, H, W]
+        pred: [batch_size  * num_pred_tokens, num_pixels_in_pred_patch * in_chans]
+        label: [batch_size  * num_pred_tokens, num_pixels_in_pred_patch * in_chans]
         """
         if len(self.q_stride) == 2:
             label = self.get_pixel_label_2d(x, mask)
@@ -299,7 +299,7 @@ class MaskedAutoencoderHiera(Hiera):
 }, default="mae_in1k")
 def mae_hiera_tiny_224(**kwargs):
     return MaskedAutoencoderHiera(
-        embed_dim=96, num_heads=1, stages=(1, 2, 7, 2), q_pool=2, **kwargs,
+        embedding_dimention=96, num_heads=1, stages=(1, 2, 7, 2), q_pool=2, **kwargs,
     )
 
 
@@ -308,7 +308,7 @@ def mae_hiera_tiny_224(**kwargs):
 }, default="mae_in1k")
 def mae_hiera_small_224(**kwargs):
     return MaskedAutoencoderHiera(
-        embed_dim=96, num_heads=1, stages=(1, 2, 11, 2), q_pool=2, **kwargs,
+        embedding_dimention=96, num_heads=1, stages=(1, 2, 11, 2), q_pool=2, **kwargs,
     )
 
 
@@ -317,7 +317,7 @@ def mae_hiera_small_224(**kwargs):
 }, default="mae_in1k")
 def mae_hiera_base_224(**kwargs):
     return MaskedAutoencoderHiera(
-        embed_dim=96, num_heads=1, stages=(2, 3, 16, 3), q_pool=2, **kwargs,
+        embedding_dimention=96, num_heads=1, stages=(2, 3, 16, 3), q_pool=2, **kwargs,
     )
 
 
@@ -326,7 +326,7 @@ def mae_hiera_base_224(**kwargs):
 }, default="mae_in1k")
 def mae_hiera_base_plus_224(**kwargs):
     return MaskedAutoencoderHiera(
-        embed_dim=112, num_heads=2, stages=(2, 3, 16, 3), q_pool=2, **kwargs,
+        embedding_dimention=112, num_heads=2, stages=(2, 3, 16, 3), q_pool=2, **kwargs,
     )
 
 
@@ -335,7 +335,7 @@ def mae_hiera_base_plus_224(**kwargs):
 }, default="mae_in1k")
 def mae_hiera_large_224(**kwargs):
     return MaskedAutoencoderHiera(
-        embed_dim=144, num_heads=2, stages=(2, 6, 36, 4), q_pool=2, **kwargs,
+        embedding_dimention=144, num_heads=2, stages=(2, 6, 36, 4), q_pool=2, **kwargs,
     )
 
 
@@ -344,7 +344,7 @@ def mae_hiera_large_224(**kwargs):
 }, default="mae_in1k")
 def mae_hiera_huge_224(**kwargs):
     return MaskedAutoencoderHiera(
-        embed_dim=256, num_heads=4, stages=(2, 6, 36, 4), q_pool=2, **kwargs,
+        embedding_dimention=256, num_heads=4, stages=(2, 6, 36, 4), q_pool=2, **kwargs,
     )
 
 
@@ -375,7 +375,7 @@ def mae_hiera_base_16x224(num_classes: int = 400, **kwdargs):
 @pretrained_model(None)
 def mae_hiera_base_plus_16x224(**kwdargs):
     return mae_hiera_base_16x224(
-        embed_dim=112, num_heads=2, stages=(2, 3, 16, 3), **kwdargs
+        embedding_dimention=112, num_heads=2, stages=(2, 3, 16, 3), **kwdargs
     )
 
 
@@ -385,7 +385,7 @@ def mae_hiera_base_plus_16x224(**kwdargs):
 @pretrained_model(None)
 def mae_hiera_large_16x224(**kwdargs):
     return mae_hiera_base_16x224(
-        embed_dim=144, num_heads=2, stages=(2, 6, 36, 4), **kwdargs
+        embedding_dimention=144, num_heads=2, stages=(2, 6, 36, 4), **kwdargs
     )
 
 
@@ -394,5 +394,5 @@ def mae_hiera_large_16x224(**kwdargs):
 }, default="mae_k400")
 def mae_hiera_huge_16x224(**kwdargs):
     return mae_hiera_base_16x224(
-        embed_dim=256, num_heads=4, stages=(2, 6, 36, 4), **kwdargs
+        embedding_dimention=256, num_heads=4, stages=(2, 6, 36, 4), **kwdargs
     )
