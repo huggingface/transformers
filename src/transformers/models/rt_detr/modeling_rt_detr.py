@@ -1403,6 +1403,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             if self.class_embed is not None:
                 logits = self.class_embed[idx](hidden_states)
+                print('decoder_logits', logits.shape)
                 intermediate_logits += (logits,)
 
             if output_attentions:
@@ -1889,6 +1890,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        print('outputs', outputs.intermediate_logits.shape)
 
         dn_meta = outputs.dn_meta
 
@@ -1899,8 +1901,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
             dn_out_class, outputs_class = torch.split(outputs_class, dn_meta["dn_num_split"], dim=2)
 
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
+        print(outputs_class.shape)
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
 
         loss, loss_dict = None, None
         if labels is not None:
