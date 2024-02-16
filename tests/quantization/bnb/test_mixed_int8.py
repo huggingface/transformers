@@ -847,6 +847,7 @@ class MixedInt8GPT2Test(MixedInt8Test):
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a big fan of")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I am a member of the")
 
     def test_int8_from_pretrained(self):
         r"""
