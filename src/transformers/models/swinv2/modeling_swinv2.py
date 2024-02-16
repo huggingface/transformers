@@ -446,8 +446,8 @@ class Swinv2SelfAttention(nn.Module):
         )
 
         # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
+        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
+        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
         relative_coords_table = (
             torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)

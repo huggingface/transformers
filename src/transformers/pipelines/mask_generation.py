@@ -8,7 +8,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+from .base import ChunkPipeline, build_pipeline_init_args
 
 
 if is_torch_available():
@@ -19,7 +19,17 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(
+    build_pipeline_init_args(has_image_processor=True),
+    r"""
+        points_per_batch (*optional*, int, default to 64):
+            Sets the number of points run simultaneously by the model. Higher numbers may be faster but use more GPU
+            memory.
+        output_bboxes_mask (`bool`, *optional*, default to `False`):
+            Whether or not to output the bounding box predictions.
+        output_rle_masks (`bool`, *optional*, default to `False`):
+            Whether or not to output the masks in `RLE` format""",
+)
 class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
@@ -47,23 +57,6 @@ class MaskGenerationPipeline(ChunkPipeline):
                   `stability_scores`. Also
                 applies a variety of filters based on non maximum suppression to remove bad masks.
                 - image_processor.postprocess_masks_for_amg applies the NSM on the mask to only keep relevant ones.
-
-    Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`].
-        feature_extractor ([`SequenceFeatureExtractor`]):
-            The feature extractor that will be used by the pipeline to encode the input.
-        points_per_batch (*optional*, int, default to 64):
-            Sets the number of points run simultaneously by the model. Higher numbers may be faster but use more GPU
-            memory.
-        output_bboxes_mask (`bool`, *optional*, default to `False`):
-           Whether or not to output the bounding box predictions.
-        output_rle_masks (`bool`, *optional*, default to `False`):
-            Whether or not to output the masks in `RLE` format
 
     Example:
 

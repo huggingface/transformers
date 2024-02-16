@@ -28,7 +28,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_tvp import TvpConfig
 
 
@@ -148,7 +148,7 @@ class TvpLoss(nn.Module):
 class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.grid_encoder_conv = nn.Conv2d(
             config.backbone_config.hidden_sizes[-1],
             config.hidden_size,

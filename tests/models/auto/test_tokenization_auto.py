@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import shutil
 import sys
@@ -176,12 +177,14 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):
-        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False), BertTokenizer)
-        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased"), BertTokenizerFast)
+        self.assertIsInstance(
+            AutoTokenizer.from_pretrained("google-bert/bert-base-cased", use_fast=False), BertTokenizer
+        )
+        self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
 
     @require_tokenizers
     def test_do_lower_case(self):
-        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", do_lower_case=False)
+        tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased", do_lower_case=False)
         sample = "Hello, world. How are you?"
         tokens = tokenizer.tokenize(sample)
         self.assertEqual("[UNK]", tokens[0])
@@ -211,15 +214,15 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer2.vocab_size, 12)
 
     def test_auto_tokenizer_fast_no_slow(self):
-        tokenizer = AutoTokenizer.from_pretrained("ctrl")
+        tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
         # There is no fast CTRL so this always gives us a slow tokenizer.
         self.assertIsInstance(tokenizer, CTRLTokenizer)
 
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.
-        config = get_tokenizer_config("bert-base-cased")
+        config = get_tokenizer_config("google-bert/bert-base-cased")
         _ = config.pop("_commit_hash", None)
-        # If we ever update bert-base-cased tokenizer config, this dict here will need to be updated.
+        # If we ever update google-bert/bert-base-cased tokenizer config, this dict here will need to be updated.
         self.assertEqual(config, {"do_lower_case": False})
 
         # This model does not have a tokenizer_config so we get back an empty dict.
@@ -427,3 +430,73 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(counter["GET"], 0)
         self.assertEqual(counter["HEAD"], 1)
         self.assertEqual(counter.total_calls, 1)
+
+    def test_init_tokenizer_with_trust(self):
+        nop_tokenizer_code = """
+import transformers
+
+class NopTokenizer(transformers.PreTrainedTokenizer):
+    def get_vocab(self):
+        return {}
+"""
+
+        nop_config_code = """
+from transformers import PretrainedConfig
+
+class NopConfig(PretrainedConfig):
+    model_type = "test_unregistered_dynamic"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+"""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_model_id = "hf-internal-testing/test_unregistered_dynamic"
+            fake_repo = os.path.join(tmp_dir, fake_model_id)
+            os.makedirs(fake_repo)
+
+            tokenizer_src_file = os.path.join(fake_repo, "tokenizer.py")
+            with open(tokenizer_src_file, "w") as wfp:
+                wfp.write(nop_tokenizer_code)
+
+            model_config_src_file = os.path.join(fake_repo, "config.py")
+            with open(model_config_src_file, "w") as wfp:
+                wfp.write(nop_config_code)
+
+            config = {
+                "model_type": "test_unregistered_dynamic",
+                "auto_map": {"AutoConfig": f"{fake_model_id}--config.NopConfig"},
+            }
+
+            config_file = os.path.join(fake_repo, "config.json")
+            with open(config_file, "w") as wfp:
+                json.dump(config, wfp, indent=2)
+
+            tokenizer_config = {
+                "auto_map": {
+                    "AutoTokenizer": [
+                        f"{fake_model_id}--tokenizer.NopTokenizer",
+                        None,
+                    ]
+                }
+            }
+
+            tokenizer_config_file = os.path.join(fake_repo, "tokenizer_config.json")
+            with open(tokenizer_config_file, "w") as wfp:
+                json.dump(tokenizer_config, wfp, indent=2)
+
+            prev_dir = os.getcwd()
+            try:
+                # it looks like subdir= is broken in the from_pretrained also, so this is necessary
+                os.chdir(tmp_dir)
+
+                # this should work because we trust the code
+                _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
+                try:
+                    # this should fail because we don't trust and we're not at a terminal for interactive response
+                    _ = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=False)
+                    self.fail("AutoTokenizer.from_pretrained with trust_remote_code=False should raise ValueException")
+                except ValueError:
+                    pass
+            finally:
+                os.chdir(prev_dir)

@@ -235,14 +235,14 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoXRotaryEmbedding->RotaryEmbedding
 class RotaryEmbedding(nn.Module):
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.__init__
+    # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -252,7 +252,7 @@ class RotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation

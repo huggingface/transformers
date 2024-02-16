@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. 抽象的な要約のために、[BillSum](https://huggingface.co/datasets/billsum) データセットのカリフォルニア州請求書サブセットで [T5](https://huggingface.co/t5-small) を微調整します。
+1. 抽象的な要約のために、[BillSum](https://huggingface.co/datasets/billsum) データセットのカリフォルニア州請求書サブセットで [T5](https://huggingface.co/google-t5/t5-small) を微調整します。
 2. 微調整したモデルを推論に使用します。
 
 <Tip>
@@ -92,7 +92,7 @@ pip install transformers datasets evaluate rouge_score
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 

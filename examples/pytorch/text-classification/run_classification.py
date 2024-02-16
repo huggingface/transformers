@@ -83,7 +83,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The name of the text column in the input dataset or a CSV/JSON file. "
-                'If not specified, will use the "sentence" column for single/multi-label classifcation task.'
+                'If not specified, will use the "sentence" column for single/multi-label classification task.'
             )
         },
     )
@@ -121,7 +121,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The name of the label column in the input dataset or a CSV/JSON file. "
-                'If not specified, will use the "label" column for single/multi-label classifcation task'
+                'If not specified, will use the "label" column for single/multi-label classification task'
             )
         },
     )
@@ -247,7 +247,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -260,7 +260,7 @@ class ModelArguments:
 
 
 def get_label_list(raw_dataset, split="train") -> List[str]:
-    """Get the list of labels from a mutli-label dataset"""
+    """Get the list of labels from a multi-label dataset"""
 
     if isinstance(raw_dataset[split]["label"][0], list):
         label_list = [label for sample in raw_dataset[split]["label"] for label in sample]
@@ -343,7 +343,7 @@ def main():
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files, or specify a dataset name
     # to load from huggingface/datasets. In ether case, you can specify a the key of the column(s) containing the text and
-    # the key of the column containing the label. If multiple columns are specified for the text, they will be joined togather
+    # the key of the column containing the label. If multiple columns are specified for the text, they will be joined together
     # for the actual text value.
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
