@@ -204,7 +204,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         else:
             new_value = param_value.to("cpu")
 
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
             if issubclass(module.source_cls, Conv1D):
                 new_value = new_value.T

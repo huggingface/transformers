@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [ELI5](https:/) の [r/askscience](https://www.reddit.com/r/askscience/) サブセットで [DistilGPT2](https://huggingface.co/distilgpt2) を微調整します。 /huggingface.co/datasets/eli5) データセット。
+1. [ELI5](https:/) の [r/askscience](https://www.reddit.com/r/askscience/) サブセットで [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) を微調整します。 /huggingface.co/datasets/eli5) データセット。
 2. 微調整したモデルを推論に使用します。
 
 <Tip>
@@ -112,7 +112,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 ```
 
 上の例からわかるように、`text`フィールドは実際には`answers`内にネストされています。つまり、次のことが必要になります。
@@ -234,7 +234,7 @@ Apply the `group_texts` function over the entire dataset:
 ```py
 >>> from transformers import AutoModelForCausalLM, TrainingArguments, Trainer
 
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 この時点で残っている手順は次の 3 つだけです。
@@ -298,7 +298,7 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 ```py
 >>> from transformers import TFAutoModelForCausalLM
 
->>> model = TFAutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。

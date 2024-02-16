@@ -138,11 +138,11 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def t5_base_tokenizer(self):
-        return T5Tokenizer.from_pretrained("t5-base")
+        return T5Tokenizer.from_pretrained("google-t5/t5-base")
 
     @cached_property
     def t5_base_tokenizer_fast(self):
-        return T5TokenizerFast.from_pretrained("t5-base")
+        return T5TokenizerFast.from_pretrained("google-t5/t5-base")
 
     def get_tokenizer(self, **kwargs) -> T5Tokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -373,7 +373,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="t5-base",
+            model_name="google-t5/t5-base",
             revision="5a7ff2d8f5117c194c7e32ec1ccbf04642cca99b",
         )
 
@@ -400,7 +400,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
 
     def test_some_edge_cases(self):
-        tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
 
         sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
@@ -426,8 +426,8 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_fast_slow_edge_cases(self):
         # We are testing spaces before and spaces after special tokens + space transformations
-        slow_tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
-        fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
+        slow_tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
+        fast_tokenizer = T5TokenizerFast.from_pretrained("google-t5/t5-base", legacy=False, from_slow=True)
         slow_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
 
@@ -445,7 +445,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with self.subTest(f"fast {edge_case} normalized = False"):
             self.assertEqual(fast_tokenizer.tokenize(hard_case), EXPECTED_SLOW)
 
-        fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
+        fast_tokenizer = T5TokenizerFast.from_pretrained("google-t5/t5-base", legacy=False, from_slow=True)
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
 
         # `normalized=True` is the default normalization scheme when adding a token. Normalize -> don't strip the space.
@@ -604,7 +604,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
                 )
 
         # Test with T5
-        hf_tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        hf_tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         vocab_path = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"
         t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
         for text in input_texts:

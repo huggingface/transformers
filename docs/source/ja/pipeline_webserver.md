@@ -36,7 +36,7 @@ async def homepage(request):
 
 
 async def server_loop(q):
-    pipe = pipeline(model="bert-base-uncased")
+    pipe = pipeline(model="google-bert/bert-base-uncased")
     while True:
         (string, response_q) = await q.get()
         out = pipe(string)

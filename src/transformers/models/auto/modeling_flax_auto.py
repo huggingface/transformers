@@ -308,7 +308,9 @@ class FlaxAutoModelForSeq2SeqLM(_BaseAutoModelClass):
 
 
 FlaxAutoModelForSeq2SeqLM = auto_class_update(
-    FlaxAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+    FlaxAutoModelForSeq2SeqLM,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="google-t5/t5-base",
 )
 
 

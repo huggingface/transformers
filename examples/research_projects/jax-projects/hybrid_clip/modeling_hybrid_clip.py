@@ -314,8 +314,6 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In
@@ -327,8 +325,6 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In
@@ -354,7 +350,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
             >>> from transformers import FlaxHybridCLIP
             >>> # initialize a model from pretrained BERT and CLIP models. Note that the projection layers will be randomly initialized.
             >>> # If using CLIP's vision model the vision projection layer will be initialized using pre-trained weights
-            >>> model = FlaxHybridCLIP.from_text_vision_pretrained('bert-base-uncased', 'openai/clip-vit-base-patch32')
+            >>> model = FlaxHybridCLIP.from_text_vision_pretrained('google-bert/bert-base-uncased', 'openai/clip-vit-base-patch32')
             >>> # saving model after fine-tuning
             >>> model.save_pretrained("./bert-clip")
             >>> # load fine-tuned model

@@ -64,10 +64,10 @@ from transformers import (
 )
 
 model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-    "openai/clip-vit-base-patch32", "roberta-base"
+    "openai/clip-vit-base-patch32", "FacebookAI/roberta-base"
 )
 
-tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
 image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
 processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
 

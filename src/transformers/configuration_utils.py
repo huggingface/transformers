@@ -527,8 +527,7 @@ class PretrainedConfig(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
@@ -581,16 +580,16 @@ class PretrainedConfig(PushToHubMixin):
         # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
         # derived class: BertConfig
         config = BertConfig.from_pretrained(
-            "bert-base-uncased"
+            "google-bert/bert-base-uncased"
         )  # Download configuration from huggingface.co and cache.
         config = BertConfig.from_pretrained(
             "./test/saved_model/"
         )  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
         config = BertConfig.from_pretrained("./test/saved_model/my_configuration.json")
-        config = BertConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        config = BertConfig.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         assert config.output_attentions == True
         config, unused_kwargs = BertConfig.from_pretrained(
-            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+            "google-bert/bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         )
         assert config.output_attentions == True
         assert unused_kwargs == {"foo": False}
