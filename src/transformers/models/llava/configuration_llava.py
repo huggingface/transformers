@@ -54,9 +54,9 @@ class LlavaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`].
-        mm_patch_merge_type (`str`, *optional*):
+        mm_patch_merge_type (`str`, *optional*, defaults to `""`):
             The patch merging type to use. Only used by the newer LLaVa 1.6 variant.
-        image_aspect_ratio (`str`, *optional*):
+        image_aspect_ratio (`str`, *optional*, defaults to `""`):
             The aspect ratio of the image. Only used by the newer LLaVa 1.6 variant.
         image_grid_pinpoints (`str`, *optional*):
             The grid pinpoints of the image. Only used by the newer LLaVa 1.6 variant.
