@@ -138,6 +138,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [FLAN-UL2](model_doc/flan-ul2)                      |       ✅        |         ✅         |      ✅      |
 |                      [FlauBERT](model_doc/flaubert)                      |       ✅        |         ✅         |      ❌      |
 |                         [FLAVA](model_doc/flava)                         |       ✅        |         ❌         |      ❌      |
+|                          [FLMR](model_doc/flmr)                          |       ✅        |         ❌         |      ❌      |
 |                          [FNet](model_doc/fnet)                          |       ✅        |         ❌         |      ❌      |
 |                      [FocalNet](model_doc/focalnet)                      |       ✅        |         ❌         |      ❌      |
 |                  [Funnel Transformer](model_doc/funnel)                  |       ✅        |         ✅         |      ❌      |

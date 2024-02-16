@@ -45,7 +45,7 @@ if is_torch_available():
     )
 
 
-# Copied from tests.models.dpr.modeling_dpr with DPR to FLMR
+# Modified from tests.models.dpr.modeling_dpr with DPR to FLMR
 class FLMRTextModelTester:
     def __init__(
         self,
@@ -285,7 +285,7 @@ class FLMRVisionModelTester:
         return config, inputs_dict
 
 
-# Copied from tests.models.clip.test_modeling_clip with CLIP to FLMR
+# Modified from tests.models.clip.test_modeling_clip with CLIP to FLMR
 @require_torch
 class FLMRVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """

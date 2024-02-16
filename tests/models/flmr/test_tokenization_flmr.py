@@ -183,7 +183,7 @@ class FLMRContextEncoderTokenizationTest:
         self.assertDictEqual(encoded, expected_encoding)
 
 
-# Copied and modified from ..bert.test_tokenization_bert.BertTokenizationTest
+# Modified from ..bert.test_tokenization_bert.BertTokenizationTest
 @require_tokenizers
 class FLMRQueryEncoderTokenizationTest(unittest.TestCase):
     tokenizer_class = FLMRQueryEncoderTokenizer

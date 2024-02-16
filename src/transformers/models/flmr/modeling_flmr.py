@@ -415,7 +415,7 @@ FLMR_MODEL_CONTEXT_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.dpr.modeling_dpr with DPR -> FLMR
+# Modified from transformers.models.dpr.modeling_dpr with DPR -> FLMR
 FLMR_TEXT_ENCODERS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -472,7 +472,7 @@ FLMR_TEXT_ENCODERS_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-# Copied from transformers.models.clip.modeling_clip with CLIP -> FLMR
+# Modified from transformers.models.clip.modeling_clip with CLIP -> FLMR
 FLMR_VISION_ENCODERS_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):

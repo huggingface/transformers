@@ -1197,6 +1197,10 @@ def check_docstrings(overwrite: bool = False):
                 old_doc, new_doc = None, None
         except Exception as e:
             print(e)
+            print(obj)
+            print(name)
+            result = match_docstring_with_signature(obj)
+            input()
             hard_failures.append(name)
             continue
         if old_doc != new_doc:

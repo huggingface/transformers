@@ -81,7 +81,7 @@ QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-# Copied and modified from colbert.modeling.tokenization
+# Modified from colbert.modeling.tokenization
 class FLMRContextEncoderTokenizer(BertTokenizer):
     r"""
     Construct a FLMRContextEncoder tokenizer.
@@ -157,7 +157,7 @@ class FLMRContextEncoderTokenizer(BertTokenizer):
         return encoding
 
 
-# Copied and modified from colbert.modeling.tokenization
+# Modified from colbert.modeling.tokenization
 class FLMRQueryEncoderTokenizer(BertTokenizer):
     r"""
     Constructs a FLMRQueryEncoder tokenizer.
