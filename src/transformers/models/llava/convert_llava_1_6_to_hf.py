@@ -155,7 +155,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # TODO verify input_ids
     image = load_image()
-    text = "hello world"
+    text = "[INST] <image>\nWhat is shown in this image? [/INST]"
     inputs = processor(images=image, text=text, return_tensors="pt")
 
     for k, v in inputs.items():
@@ -166,15 +166,13 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
     original_pixel_values = torch.load(filepath, map_location="cpu")
 
-    assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
-
-    print("Shape of original pixel values:", original_pixel_values.shape)
-    print("Shape of original input_ids:", original_input_ids.shape)
-
-    print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
-
     # replace -200 by 32000 (ask Arthur)
     original_input_ids[original_input_ids == -200] = 32000
+    print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
+
+    # verify inputs
+    assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
+    assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     # verify single forward pass
     # TODO make sure image_sizes is not a list
