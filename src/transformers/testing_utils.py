@@ -966,9 +966,17 @@ def require_aqlm(test_case):
 
 def require_bitsandbytes(test_case):
     """
-    Decorator for bits and bytes (bnb) dependency
+    Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+    if is_bitsandbytes_available() and is_torch_available():
+        try:
+            import pytest
+
+            return pytest.mark.bitsandbytes(test_case)
+        except ImportError:
+            return test_case
+    else:
+        return unittest.skip("test requires bitsandbytes and torch")(test_case)
 
 
 def require_optimum(test_case):
