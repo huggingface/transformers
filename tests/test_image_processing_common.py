@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import json
 import os
 import pathlib
@@ -23,7 +24,6 @@ from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-import inspect
 
 if is_torch_available():
     import numpy as np
@@ -289,16 +289,16 @@ class ImageProcessingTestMixin:
         self.assertEqual(
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
+
     def test_image_processor_preprocess_arguments(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
         if hasattr(image_processor, "_valid_processor_keys") and hasattr(image_processor, "preprocess"):
             preprocess_parameter_names = inspect.getfullargspec(image_processor.preprocess).args
-            preprocess_parameter_names.remove('self')
+            preprocess_parameter_names.remove("self")
             preprocess_parameter_names.sort()
             valid_processor_keys = image_processor._valid_processor_keys
             valid_processor_keys.sort()
             self.assertEqual(preprocess_parameter_names, valid_processor_keys)
-
 
 
 class AnnotationFormatTestMixin:
