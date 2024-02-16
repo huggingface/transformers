@@ -254,21 +254,21 @@ class TextGenerationPipeline(Pipeline):
         if isinstance(prompt_text, Chat):
             inputs = self.tokenizer.apply_chat_template(
                 prompt_text.messages,
-                padding=padding,
-                add_generation_prompt=True,
-                return_tensors=self.framework,
-                max_length=max_length,
                 truncation=truncation,
+                padding=padding,
+                max_length=max_length,
+                add_generation_prompt=True,
                 return_dict=True,
+                return_tensors=self.framework,
             )
         else:
             inputs = self.tokenizer(
                 prefix + prompt_text,
-                return_tensors=self.framework,
                 truncation=truncation,
                 padding=padding,
                 max_length=max_length,
                 add_special_tokens=add_special_tokens,
+                return_tensors=self.framework,
             )
         inputs["prompt_text"] = prompt_text
 
