@@ -289,7 +289,7 @@ class MambaMixer(nn.Module):
         # D "skip" parameter
         self.D = nn.Parameter(torch.ones(self.d_inner))  # Keep in fp32
         self.D._no_weight_decay = True
-        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_conv_bias)
+        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
         """
@@ -374,6 +374,7 @@ class MambaSlowMixer(MambaMixer):
 
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1,2)
+        # self.in_proj(hidden_states.squeeze(0))
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -381,7 +382,10 @@ class MambaSlowMixer(MambaMixer):
             conv_state = inference_params.conv_states[self.layer_idx]
             conv_state.copy_(torch.roll(conv_state, shifts=-1, dims=-1))
             conv_state[:, :, -1].copy_(hidden_states[:,:,0])
-            hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1).unsqueeze(-1)
+
+            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)  + self.conv1d.bias)
+            hidden_states = hidden_states.unsqueeze(-1)
+
         else:
             inference_params.conv_states[self.layer_idx].copy_(nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0)))
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
@@ -448,7 +452,7 @@ class MambaBlock(nn.Module):
         #     residual = residual.to(torch.float32)
 
         hidden_states, conv_states, ssm_state = self.mixer(hidden_states, inference_params=inference_params)
-        hidden_states = residual + hidden_states
+        hidden_states = residual.to(torch.float32) + hidden_states
         return hidden_states, conv_states, ssm_state
 
 
@@ -636,7 +640,7 @@ class MambaModel(MambaPreTrainedModel):
         self.layers = nn.ModuleList([MambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
-
+        self.norm_f = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -704,6 +708,8 @@ class MambaModel(MambaPreTrainedModel):
             if output_attentions:
                 all_last_states = all_last_states + (ssm_state,)
         inference_params.seqlen_offset += inputs_embeds.shape[1]
+
+        hidden_states = self.norm_f(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

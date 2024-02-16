@@ -103,7 +103,7 @@ class MambaConfig(PretrainedConfig):
         dt_rank="auto",
         tie_word_embeddings=True,
         use_bias=False,
-        use_conv_bias=False,
+        use_conv_bias=True,
         hidden_act="silu",
         initializer_range=0.1,
         **kwargs,
