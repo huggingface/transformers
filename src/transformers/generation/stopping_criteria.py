@@ -151,36 +151,31 @@ class StopStringCriteria(StoppingCriteria):
 
         self.vocab = tokenizer.get_vocab()
         self.stop_strings: List[str] = stop_strings
-        self.strings_to_valid_positions, self.strings_to_end_lengths = self.get_matching_positions(
-            self.vocab, stop_strings
-        )
+        self.token_valid_positions, self.token_end_overlaps = self._get_matching_positions()
 
         self.max_valid_positions = {
-            stop_string: max([len(val) for val in self.strings_to_valid_positions[stop_string].values()])
+            stop_string: max([len(val) for val in self.token_valid_positions[stop_string].values()])
             for stop_string in stop_strings
         }
         self.max_valid_end_lens = {
-            stop_string: max([len(val) for val in self.strings_to_end_lengths[stop_string].values()])
+            stop_string: max([len(val) for val in self.token_end_overlaps[stop_string].values()])
             for stop_string in stop_strings
         }
-        self.embedding_vecs = self.create_embedding_vecs()
+        self.embedding_vecs = self._create_embedding_vecs()
 
-    @staticmethod
-    def get_matching_positions(
-        vocab: List[str], stop_strings: List[str]
-    ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
+    def _get_matching_positions(self) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
         valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
         end of the stop string."""
-        tok_list = list(vocab.keys())
+        tok_list = list(self.vocab.keys())
         reversed_filtered_tok_list = [token[::-1].replace("▁", " ").replace("Ġ", " ") for token in tok_list]
-        strings_to_valid_positions = {}
-        strings_to_end_lengths = {}
-        for stop_string in stop_strings:
+        token_valid_positions = {}
+        token_end_overlaps = {}
+        for stop_string in self.stop_strings:
             reversed_stop_string = stop_string[::-1]
-            strings_to_valid_positions[stop_string] = {}
-            strings_to_end_lengths[stop_string] = {}
+            token_valid_positions[stop_string] = {}
+            token_end_overlaps[stop_string] = {}
             for token, reversed_filtered_token in zip(tok_list, reversed_filtered_tok_list):
                 matching_positions = []
                 possible_end_lengths = []
@@ -189,47 +184,38 @@ class StopStringCriteria(StoppingCriteria):
                     stop = reversed_stop_string
                     if i < 0:
                         tok = tok[-i:]
-                        if not tok:
-                            raise ValueError("Tok is null - this is a bug!")
                         i = 0
                     stop = stop[i : i + len(tok)]
-                    if not stop:
-                        raise ValueError("Stop is null - this is a bug!")
                     if len(tok) > len(stop):
                         tok = tok[: len(stop)]
-                        if not tok:
-                            raise ValueError("Tok is null after stop string truncation - this is a bug!")
-                    if len(tok) != len(stop):
-                        raise ValueError("Truncated token and stop string have different lengths - this is a bug!")
                     if tok == stop:
                         if i == 0:
                             possible_end_lengths.append(len(tok))
                         else:
                             matching_positions.append(i)
                 if matching_positions:
-                    strings_to_valid_positions[stop_string][token] = matching_positions
+                    token_valid_positions[stop_string][token] = matching_positions
                 if possible_end_lengths:
-                    strings_to_end_lengths[stop_string][token] = possible_end_lengths
-        return strings_to_valid_positions, strings_to_end_lengths
+                    token_end_overlaps[stop_string][token] = possible_end_lengths
+        return token_valid_positions, token_end_overlaps
 
-    def create_embedding_vecs(self) -> Dict[str, torch.tensor]:
+    def _create_embedding_vecs(self) -> Dict[str, torch.tensor]:
         """
         This function builds an embedding matrix for each stop string, consisting of possible valid positions
         and possible end lengths for each token, and the total length of the token string. When tokens have
         fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
         """
+        # TODO Matt: Merge the embeddings across all stop strings to save space and reduce gather calls?
         vocab = self.vocab
         embedding_vecs = {}
         for stop_string in self.stop_strings:
-            positions = self.strings_to_valid_positions[stop_string]
-            end_lens = self.strings_to_end_lengths[stop_string]
-            # TODO Matt: Merge the embeddings across all stop strings to save space and reduce gather calls?
-
-            # Since this is lots of very small assignments of lists, we build it with numpy rather
-            # than torch for speed + simplicity, then convert to torch at the end
+            positions = self.token_valid_positions[stop_string]
+            end_lens = self.token_end_overlaps[stop_string]
             max_valid_positions = self.max_valid_positions[stop_string]
             max_valid_end_lens = self.max_valid_end_lens[stop_string]
             vec_size = max_valid_positions + max_valid_end_lens + 1
+            # Since this is lots of very small assignments of lists, we build it with numpy rather
+            # than torch for speed + simplicity, then convert to torch at the end
             gather_vec = np.full((len(self.vocab), vec_size), dtype=np.int32, fill_value=-1)
             for token, valid_positions in positions.items():
                 token_idx = vocab[token]
