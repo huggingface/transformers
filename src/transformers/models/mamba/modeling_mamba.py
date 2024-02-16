@@ -36,14 +36,12 @@ from ...utils import (
 from .configuration_mamba import MambaConfig
 
 
-is_causal_conv_1d_available = None
-if is_causal_conv_1d_available():
+if False and is_causal_conv_1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_kernel_compiled = None
-if is_kernel_compiled():
+if False and is_kernel_compiled():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     selective_scan_update, selective_scan_fn = None, None
