@@ -167,10 +167,11 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 
 ## PyTorch scaled dot product attention
 
-PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available.
+PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. You may also set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request for SDPA to be used.
 
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
+* [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
@@ -190,6 +191,13 @@ FlashAttention can only be used for models with the `fp16` or `bf16` torch type,
 
 </Tip>
 
+<Tip>
+
+SDPA does not support certain sets of attention parameters, such as `head_mask` and `output_attentions=True`.
+In that case, you will see a warning message and we will fall back to the (slower) eager implementation.   
+
+</Tip>
+
 By default, SDPA selects the most performant kernel available but you can check whether a backend is available in a given setting (hardware, problem size) with [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
 
 ```diff
@@ -198,8 +206,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
 
 input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")

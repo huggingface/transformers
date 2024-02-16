@@ -66,10 +66,11 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 PyTorch includes a native scaled dot-product attention operator (SDPA) as part of `torch.nn.functional`. This function 
 encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
 [official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
-for more information.
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
 
-To load a model that uses SPDA, pass the argument `attn_implementation="sdpa"` to `.from_pretrained`. For the best 
-speedups, we recommend loading the model in half-precision (e.g. `torch.float16`).
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 ```
 from transformers import BertModel
@@ -77,6 +78,8 @@ from transformers import BertModel
 model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16, attn_implementation="sdpa")
 ...
 ```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16`).
 
 On a local benchmark (A100-80GB, CPUx12, RAM 96.6GB, OS Ubuntu 22.04), we have seen speedups as high as 20%+ for
 training and 15%+ for inference. The improvements are higher for larger batch sizes and longer sequence lengths.
