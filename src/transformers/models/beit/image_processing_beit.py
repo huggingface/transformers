@@ -136,19 +136,17 @@ class BeitImageProcessor(BaseImageProcessor):
             "do_resize",
             "size",
             "resample",
+            "do_center_crop",
+            "crop_size",
             "do_rescale",
             "rescale_factor",
             "do_normalize",
             "image_mean",
             "image_std",
-            "do_pad",
-            "do_center_crop",
-            "crop_size",
+            "do_reduce_labels",
             "return_tensors",
             "data_format",
             "input_data_format",
-            "do_reduce_label",
-            "pad_and_return_pixel_mask",
         ]
 
     @classmethod
