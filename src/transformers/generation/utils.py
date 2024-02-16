@@ -80,6 +80,7 @@ from .stopping_criteria import (
     MaxTimeCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
+    StopStringCriteria,
     validate_stopping_criteria,
 )
 
@@ -881,7 +882,7 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList]
+        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList], **kwargs
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
@@ -894,6 +895,14 @@ class GenerationMixin:
             )
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
+        if generation_config.stop_strings is not None:
+            if "tokenizer" not in kwargs:
+                raise ValueError(
+                    "To generate with stop strings, you need to pass the model's tokenizer to the `generate` method."
+                )
+            criteria.append(
+                StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=kwargs["tokenizer"])
+            )
         if generation_config.eos_token_id is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config.eos_token_id))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
@@ -1527,7 +1536,7 @@ class GenerationMixin:
 
         # 9. prepare stopping criteria
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria
+            generation_config=generation_config, stopping_criteria=stopping_criteria, **kwargs
         )
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
