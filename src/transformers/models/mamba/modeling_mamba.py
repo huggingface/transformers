@@ -24,6 +24,19 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+
+is_causal_conv_1d_available = None
+if is_causal_conv_1d_available():
+    from causal_conv1d import causal_conv1d_update, causal_conv1d_fn
+else :
+    causal_conv1d_update, causal_conv1d_fn =  None, None
+
+is_kernel_compiled = None
+if is_kernel_compiled():
+    from causal_conv1d import causal_conv1d_update, causal_conv1d_fn
+else :
+    selective_scan_update, selective_scan_fn = None, None
+
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -38,18 +51,17 @@ from .configuration_mamba import MambaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "state-spaces/mamba-2.8b"
+_CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
 
 MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "state-spaces/mamba-2.8b",
+    "state-spaces/mamba-130m",
     # See all Mamba models at https://huggingface.co/models?filter=mamba
 ]
 
 
 
 mamba_cuda_kernel = None
-
 
 # Copied from transformers.models.mamba.modeling_mamba.load_mamba_cuda_kernel with mamba->MAMBA,mamba->mamba
 def load_mamba_cuda_kernel(context_length):
@@ -84,167 +96,6 @@ def load_mamba_cuda_kernel(context_length):
     mamba_cuda_kernel.max_seq_length = context_length
 
 
-class MambaMixer(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, time_decay, time_first, key, value, state=None, return_state=False):
-        batch_size, seq_len, hidden_size = key.size()
-        if seq_len > mamba_cuda_kernel.max_seq_length:
-            raise ValueError(
-                f"Cannot process a batch with {seq_len} tokens at the same time, use a maximum of "
-                f"{mamba_cuda_kernel.max_seq_length} with this model."
-            )
-        if batch_size * hidden_size % min(hidden_size, 32) != 0:
-            raise ValueError(
-                f"The product of batch size ({batch_size}) and hidden size ({hidden_size}) needs to be a round "
-                f"multiple of {min(hidden_size, 32)}."
-            )
-
-        ctx.input_dtype = key.dtype
-
-        if (
-            time_decay.device.type != "cuda"
-            or time_first.device.type != "cuda"
-            or key.device.type != "cuda"
-            or value.device.type != "cuda"
-        ):
-            raise ValueError("Calling the CUDA kernel for mamba attention requires all tensors to be on CUDA devices.")
-
-        time_decay = -torch.exp(time_decay.float().contiguous())
-        if key.dtype == torch.float16:
-            time_first = time_first.float()
-            key = key.float()
-            value = value.float()
-        time_first = time_first.contiguous()
-        key = key.contiguous()
-        value = value.contiguous()
-        # The CUDA kernel will fill this tensor.
-        output = torch.empty_like(key, memory_format=torch.contiguous_format)
-        if return_state or state is not None:
-            if state is None:
-                state = torch.zeros(
-                    batch_size,
-                    hidden_size,
-                    3,
-                    dtype=torch.float32,
-                    device=key.device,
-                    memory_format=torch.contiguous_format,
-                )
-                state[:, :, 2] -= 1e38
-            else:
-                state = torch.cat([s.unsqueeze(2) for s in state], dim=2).contiguous()
-            if key.dtype == torch.bfloat16:
-                forward_func = mamba_cuda_kernel.forward_with_state_bf16
-            else:
-                forward_func = mamba_cuda_kernel.forward_with_state
-            forward_func(time_decay, time_first, key, value, output, state)
-        else:
-            forward_func = mamba_cuda_kernel.forward_bf16 if key.dtype == torch.bfloat16 else mamba_cuda_kernel.forward
-            forward_func(time_decay, time_first, key, value, output)
-
-        ctx.save_for_backward(time_decay, time_first, key, value, output)
-
-        if state is not None:
-            state = [s.squeeze(2) for s in torch.chunk(state, 3, dim=2)]
-
-        return output.to(ctx.input_dtype), state
-
-    @staticmethod
-    # g stands for grad
-    def backward(ctx, g_output, g_state=None):
-        input_dtype = ctx.input_dtype
-
-        time_decay, time_first, key, value, output = ctx.saved_tensors
-        # The CUDA kernel will fill those tensors.
-        g_time_decay = torch.empty_like(
-            time_decay,
-            memory_format=torch.contiguous_format,
-            dtype=torch.bfloat16 if input_dtype == torch.bfloat16 else torch.float32,
-        )
-        g_time_first = torch.empty_like(time_first, memory_format=torch.contiguous_format)
-        g_key = torch.empty_like(key, memory_format=torch.contiguous_format)
-        g_value = torch.empty_like(value, memory_format=torch.contiguous_format)
-
-        if input_dtype == torch.float16:
-            g_output = g_output.float()
-        backward_func = mamba_cuda_kernel.backward_bf16 if input_dtype == torch.bfloat16 else mamba_cuda_kernel.backward
-        backward_func(
-            time_decay,
-            time_first,
-            key,
-            value,
-            output,
-            g_output.contiguous(),
-            g_time_decay,
-            g_time_first,
-            g_key,
-            g_value,
-        )
-
-        return (
-            g_time_decay.to(input_dtype),
-            g_time_first.to(input_dtype),
-            g_key.to(input_dtype),
-            g_value.to(input_dtype),
-            None,
-            None,
-        )
-
-
-def mamba_linear_attention_cpu(time_decay, time_first, key, value, state=None, return_state=False):
-    # For CPU fallback. Will be slower and probably take more memory than the custom CUDA kernel if not executed
-    # within a torch.no_grad.
-    _, seq_length, _ = key.size()
-    output = torch.zeros_like(key)
-
-    if state is None:
-        num_state = torch.zeros_like(key[:, 0], dtype=torch.float32)
-        den_state = torch.zeros_like(key[:, 0], dtype=torch.float32)
-        max_state = torch.zeros_like(key[:, 0], dtype=torch.float32) - 1e38
-    else:
-        num_state, den_state, max_state = state
-    # For numerical stability
-    #    real_numerator_state = num_state * torch.exp(max_state)
-    #    real_denominator_state = den_state * torch.exp(max_state)
-
-    time_decay = -torch.exp(time_decay)
-
-    for current_index in range(seq_length):
-        current_key = key[:, current_index].float()
-        current_value = value[:, current_index]
-
-        # mamba computation at time t
-        max_for_output = torch.maximum(max_state, current_key + time_first)
-        e1 = torch.exp(max_state - max_for_output)
-        e2 = torch.exp(current_key + time_first - max_for_output)
-        numerator = e1 * num_state + e2 * current_value
-        denominator = e1 * den_state + e2
-        output[:, current_index] = (numerator / denominator).to(output.dtype)
-
-        # Update state for next iteration
-        max_for_state = torch.maximum(max_state + time_decay, current_key)
-        e1 = torch.exp(max_state + time_decay - max_for_state)
-        e2 = torch.exp(current_key - max_for_state)
-        num_state = e1 * num_state + e2 * current_value
-        den_state = e1 * den_state + e2
-        max_state = max_for_state
-
-    if return_state or state is not None:
-        state = [num_state, den_state, max_state]
-
-    return output, state
-
-
-def mamba_mixer_forward(time_decay, time_first, key, value, state=None, return_state=False):
-    no_cuda = any(t.device.type != "cuda" for t in [time_decay, time_first, key, value])
-    # Launching the CUDA kernel for just one token will actually be slower (there is no for loop in the CPU version
-    # in this case).
-    one_token = key.size(1) == 1
-    if mamba_cuda_kernel is None or no_cuda or one_token:
-        return mamba_linear_attention_cpu(time_decay, time_first, key, value, state=state, return_state=return_state)
-    else:
-        return MambaMixer.apply(time_decay, time_first, key, value, state, return_state)
-
-
 class MambaMixer(nn.Module):
 
     def __init__(self, config, layer_idx):
@@ -255,10 +106,7 @@ class MambaMixer(nn.Module):
         self.expand = config.expand
         self.d_inner = int(self.expand * self.d_model)
         self.time_step_rank = math.ceil(self.d_model / 16) if config.time_step_rank == "auto" else config.time_step_rank
-        # self.use_fast_path = config.use_fast_path
         self.layer_idx = layer_idx
-
-
 
         self.conv1d = nn.Conv1d(
             in_channels=self.d_inner,
@@ -292,17 +140,14 @@ class MambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
-        """
-        hidden_states: (B, L, D)
-        Returns: same shape as hidden_states
-        """
-        _, seqlen, _ = hidden_states.shape
-        # conv_state, ssm_state = inference_params.key_value_memory_dict[self.layer_idx]
-
+        batch_size, seq_len, _ = hidden_states.shape
+        # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1,2)
-        hidden_states, z = projected_states.chunk(2, dim=1)
+        hidden_states, gate = projected_states.chunk(2, dim=1)
 
+        # 2. Convolution sequence transformation
         if inference_params is not None and inference_params.seq_offset > 0:
+            conv_state = inference_params.conv_states[self.layer_idx]
             hidden_states = causal_conv1d_update(
                 hidden_states,
                 conv_state,
@@ -311,7 +156,7 @@ class MambaMixer(nn.Module):
                 self.activation,
             )
         else:
-            conv_state = F.pad(hidden_states, (self.d_conv - seqlen, 0))
+            conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
             hidden_states = causal_conv1d_fn(
                 hidden_states=hidden_states,
                 weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
@@ -319,31 +164,33 @@ class MambaMixer(nn.Module):
                 activation=self.activation,
             )
 
-        # We're careful here about the layout, to avoid extra transposes.
-        # We want dt to have d as the slowest moving dimension
-        # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.
-        x_dbl = self.x_proj(rearrange(hidden_states, "b d l -> (b l) d"))  # (bl d)
-        dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
-        dt = self.dt_proj.weight @ dt.t()
-        dt = rearrange(dt, "d (b l) -> b d l", l=seqlen)
-        B = rearrange(B, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
-        C = rearrange(C, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+        # 3. State Space Model sequence transformation
+        # 3.a. input varying initialization of time_step, B and C
+        x_dbl = self.x_proj(hidden_states.transpose(1,2))
+        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
+        discrete_time_step = self.dt_proj(time_step)
+        # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
+        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1,2)
+
+        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
+        ssm_state = inference_params.ssm_states[self.layer_idx]
         if inference_params is not None and inference_params.seq_offset > 0:
             y, _ = selective_scan_update(
-                ssm_state, hidden_states, dt, self.negA, B, C, self.D, z=z, dt_bias=self.dt_proj.bias, dt_softplus=True
+                ssm_state, hidden_states, discrete_time_step, self.negA, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True
             )
         else:
             y, last_state = selective_scan_fn(
-                hidden_states, dt, self.negA, B, C, self.D.float(),z=z,delta_bias=self.dt_proj.bias.float(),delta_softplus=True,return_last_state=True,
+                hidden_states, discrete_time_step, self.negA, B, C, self.D.float(),z=gate,delta_bias=self.dt_proj.bias.float(),delta_softplus=True,return_last_state=True,
             )
-        y = rearrange(y, "b d l -> b l d")
-        attn_outputs = self.out_proj(y)
-        return attn_outputs, conv_state, last_state
 
+        # 4. Final linear projection
+        attn_outputs = self.out_proj(y.transpose(1,2))
+        return attn_outputs, conv_state, ssm_state
 
 class MambaCache:
     def __init__(self, config,  batch_size, conv_dtype=torch.float32, ssm_dtype=torch.float32, device=None):
         self.seqlen_offset = 0
+
         d_model = config.hidden_size
         d_state = config.state_size
         expand = config.expand
@@ -699,6 +546,7 @@ class MambaModel(MambaPreTrainedModel):
             else:
                 hidden_states, conv_state, ssm_state = layer(hidden_states, inference_params=inference_params)
                 inference_params.ssm_states[idx].copy_(ssm_state)
+                # TODO maybe for torch.compile + graph do things here
                 # inference_params.conv_states[idx].copy_(conv_state)
 
             if output_hidden_states:

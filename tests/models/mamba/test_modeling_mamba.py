@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -421,14 +421,15 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertIsNotNone(model)
 
 
-class MAMBAIntegrationTests(unittest.TestCase):
+class MambaIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.model_id = "state-spaces/mamba-2.8b"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
     def test_simple_generate(self):
-        from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
         import torch
+
+        from transformers import AutoTokenizer, MambaForCausalLM
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
         tokenizer.pad_token = tokenizer.eos_token
