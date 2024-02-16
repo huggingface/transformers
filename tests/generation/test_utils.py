@@ -2840,8 +2840,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
     def test_beam_search_low_memory(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
 
@@ -2857,8 +2857,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # PT-only test: TF doesn't have a BeamSearchScorer
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -2898,8 +2898,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
@@ -2936,8 +2936,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         flexible_phrases = tokenizer(
@@ -2977,8 +2977,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_word = "scared"
         force_flexible = ["scream", "screams", "screaming", "screamed"]
@@ -3014,8 +3014,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @slow
     def test_cfg_mixin(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         input = tokenizer(["The dragon flew over Paris,"], return_tensors="pt", return_attention_mask=True)
         input["input_ids"] = input["input_ids"].to(torch_device)
@@ -3055,8 +3055,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_translation_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         force_words = ["sind"]
@@ -3080,8 +3080,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_integration(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids

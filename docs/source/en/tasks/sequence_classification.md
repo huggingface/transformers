@@ -24,7 +24,7 @@ Text classification is a common NLP task that assigns a label or class to text. 
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [IMDb](https://huggingface.co/datasets/imdb) dataset to determine whether a movie review is positive or negative.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [IMDb](https://huggingface.co/datasets/imdb) dataset to determine whether a movie review is positive or negative.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -87,7 +87,7 @@ The next step is to load a DistilBERT tokenizer to preprocess the `text` field:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Create a preprocessing function to tokenize `text` and truncate sequences to be no longer than DistilBERT's maximum input length:
@@ -169,7 +169,7 @@ You're ready to start training your model now! Load DistilBERT with [`AutoModelF
 >>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForSequenceClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -243,7 +243,7 @@ Then you can load DistilBERT with [`TFAutoModelForSequenceClassification`] along
 >>> from transformers import TFAutoModelForSequenceClassification
 
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
 ... )
 ```
 

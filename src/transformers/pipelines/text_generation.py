@@ -31,7 +31,7 @@ class TextGenerationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> generator = pipeline(model="gpt2")
+    >>> generator = pipeline(model="openai-community/gpt2")
     >>> generator("I can't believe you did such a ", do_sample=False)
     [{'generated_text': "I can't believe you did such a icky thing to me. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I"}]
 
@@ -48,7 +48,7 @@ class TextGenerationPipeline(Pipeline):
     `"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
-    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
+    objective, which includes the uni-directional models in the library (e.g. openai-community/gpt2). See the list of available models
     on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
     """
 
