@@ -1318,6 +1318,8 @@ SLOW_TO_FAST_CONVERTERS = {
     "DPRQuestionEncoderTokenizer": BertConverter,
     "DPRContextEncoderTokenizer": BertConverter,
     "ElectraTokenizer": BertConverter,
+    "FLMRQueryEncoderTokenizer": BertConverter,
+    "FLMRContextEncoderTokenizer": BertConverter,
     "FNetTokenizer": AlbertConverter,
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
