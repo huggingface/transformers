@@ -24,6 +24,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -50,6 +51,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    get_torch_version,
     logging,
     replace_return_docstrings,
 )
@@ -383,6 +385,7 @@ class BertSdpaSelfAttention(BertSelfAttention):
     def __init__(self, config, position_embedding_type=None):
         super().__init__(config, position_embedding_type=position_embedding_type)
         self.dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from BertSelfAttention
     def forward(
@@ -453,12 +456,13 @@ class BertSdpaSelfAttention(BertSelfAttention):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a
-        # custom attn_mask, so we need to call `.contiguous()` here.
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
         # Reference: https://github.com/pytorch/pytorch/issues/112577
-        query_layer = query_layer.contiguous()
-        key_layer = key_layer.contiguous()
-        value_layer = value_layer.contiguous()
+        if self.require_contiguous_qkv:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
 
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal
         # mask in case tgt_len == 1.
