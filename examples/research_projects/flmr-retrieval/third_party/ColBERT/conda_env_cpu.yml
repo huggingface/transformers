@@ -1,0 +1,20 @@
+name: colbert
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - faiss-cpu
+  - pip=21.0
+  - pytorch-cpu
+  - pip:
+    - bitarray
+    - datasets
+    - gitpython
+    - ninja
+    - scipy
+    - spacy
+    - tqdm
+    - transformers
+    - ujson
