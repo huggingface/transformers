@@ -747,7 +747,7 @@ _import_structure = {
         "RoFormerTokenizer",
     ],
     "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
-    "models.rwkv5": ["RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP", "Rwkv5Config", "RWKVWorldTokenizer"],
+    "models.rwkv5": ["RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP", "Rwkv5Config", "Rwkv5Tokenizer"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -3136,7 +3136,7 @@ else:
             "Rwkv5ForCausalLM",
             "Rwkv5Model",
             "Rwkv5PreTrainedModel",
-            "RWKVWorldTokenizer",
+            "Rwkv5Tokenizer",
         ]
     )
     _import_structure["models.sam"].extend(
@@ -5484,7 +5484,7 @@ if TYPE_CHECKING:
         RoFormerTokenizer,
     )
     from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
-    from .models.rwkv5 import RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP, Rwkv5Config, RWKVWorldTokenizer
+    from .models.rwkv5 import RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP, Rwkv5Config, Rwkv5Tokenizer
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
@@ -7555,7 +7555,7 @@ if TYPE_CHECKING:
             Rwkv5ForCausalLM,
             Rwkv5Model,
             Rwkv5PreTrainedModel,
-            RWKVWorldTokenizer,
+            Rwkv5Tokenizer,
         )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,

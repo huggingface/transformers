@@ -23,7 +23,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_rwkv5": ["RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP", "Rwkv5Config"],
-    "tokenization_rwkv5": ["RWKVWorldTokenizer"],
+    "tokenization_rwkv5": ["Rwkv5Tokenizer"],
 }
 
 try:
@@ -42,7 +42,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_rwkv5 import RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP, Rwkv5Config
-    from .tokenization_rwkv5 import RWKVWorldTokenizer
+    from .tokenization_rwkv5 import Rwkv5Tokenizer
 
     try:
         if not is_torch_available():

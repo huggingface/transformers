@@ -7341,7 +7341,7 @@ class Rwkv5PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class RWKVWorldTokenizer(metaclass=DummyObject):
+class Rwkv5Tokenizer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

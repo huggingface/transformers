@@ -55,9 +55,9 @@ output_two = outputs.last_hidden_state
 
 [[autodoc]] Rwkv5Config
 
-## RWKVWorldTokenizer
+## Rwkv5Tokenizer
 
-[[autodoc]] RWKVWorldTokenizer
+[[autodoc]] Rwkv5Tokenizer
 
 ## Rwkv5Model
 

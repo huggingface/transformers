@@ -365,7 +365,7 @@ else:
             ("roc_bert", ("RoCBertTokenizer", None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("rwkv", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
-            ("rwkv5", ("RWKVWorldTokenizer", None)),
+            ("rwkv5", ("Rwkv5Tokenizer", None)),
             (
                 "seamless_m4t",
                 (

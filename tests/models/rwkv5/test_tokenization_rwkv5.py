@@ -13,51 +13,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import os
 import unittest
 
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_tokenizers
 from transformers.utils import is_torch_available
-
+from transformers.models.rwkv5.tokenization_rwkv5 import VOCAB_FILES_NAMES
+from ...test_tokenization_common import TokenizerTesterMixin
 
 if is_torch_available():
-    from transformers import RWKVWorldTokenizer
+    from transformers import Rwkv5Tokenizer
 
 
 @require_torch
-class RWKVWorldTokenizationTest(unittest.TestCase):
-    def test_rwkv_world_tokenizer_encode(self):
-        tokenizer = RWKVWorldTokenizer.from_pretrained("RWKV/rwkv-5-world-1b5")
-        s1 = tokenizer("Hello")["input_ids"]
-        self.assertListEqual(s1, [33155])
-        s2 = tokenizer("S:2")["input_ids"]
-        self.assertListEqual(s2, [84, 59, 51])
-        s3 = tokenizer("Made in China")["input_ids"]
-        self.assertListEqual(s3, [23897, 4596, 36473])
-        s4 = tokenizer("今天天气不错")["input_ids"]
-        self.assertListEqual(s4, [10381, 11639, 11639, 13655, 10260, 17631])
-        s5 = tokenizer("男：听说你们公司要派你去南方工作?")["input_ids"]
-        self.assertListEqual(
-            s5,
-            [
-                14601,
-                19151,
-                11065,
-                16735,
-                10464,
-                10402,
-                10678,
-                11029,
-                16503,
-                13818,
-                10464,
-                10985,
-                10934,
-                13036,
-                12137,
-                10460,
-                64,
-            ],
-        )
-        s6 = tokenizer("Pré")["input_ids"]
-        self.assertListEqual(s6, [1371, 2503])
+@require_tokenizers
+class RWKV5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = Rwkv5Tokenizer
+    rust_tokenizer_class = None
+    test_rust_tokenizer = False
+    from_pretrained_kwargs = {"add_prefix_space": True}
+    test_seq2seq = False
+
+    def setUp(self):
+        super().setUp()
+        vocab_tokens = [b'\x00', b'\x01', b'\x02', b'\x03', b'\x04', b'\x05', b'\x06', b'\x07', b'\x08', b'\t', b'\n', b'\x0b', b'\x0c', b'\r', b'\x0e', b'\x0f', b'\x10', b'\x11', b'\x12', b'\x13', b'\x14', b'\x15', b'\x16', b'\x17', b'\x18', b'\x19', b'\x1a', b'\x1b', b'\x1c', b'\x1d', b'\x1e', b'\x1f', b' ', b'!', b'"', b'#', b'$', b'%', b'&', b"'", b'(', b')', b'*', b'+', b',', b'-', b'.', b'/', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b':', b';', b'<', b'=', b'>', b'?', b'@', b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H', b'I', b'J', b'K', b'L', b'M', b'N', b'O', b'P', b'Q', b'R', b'S', b'T', b'U', b'V', b'W', b'X', b'Y', b'Z', b'[', b'\\', b']', b'^', b'_', b'`', b'a', b'b', b'c']
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(self.vocab_file, "wb") as vocab_writer:
+            vocab_writer.write(b"".join([x + b"\n" for x in vocab_tokens]))
+        self.special_tokens_map = {"unk_token": "<s>"}
+
+    def get_tokenizer(self, **kwargs):
+        kwargs.update(self.special_tokens_map)
+        return Rwkv5Tokenizer.from_pretrained(self.tmpdirname, **kwargs, trust_remote_code=True)
+
