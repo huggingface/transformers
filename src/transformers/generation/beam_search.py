@@ -919,6 +919,97 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         )
 
 
+class CandidateBeamSearchScorer(BeamSearchScorer):
+    r"""
+    [`BeamSearchScorer`] implementing candidate beam search decoding.
+
+    Args:
+        batch_size (`int`):
+            Batch Size of `input_ids` for which standard beam search decoding is run in parallel.
+        num_beams (`int`):
+            Number of beams for beam search.
+        candidate_words_ids (`List[List[int]]`):
+            List of lists containing candidate token ids that are intended to be generated. Each inner list represents a candidate sentence,
+            and each element in the inner list is the encoded ID of a word in the vocabulary.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
+        device (`torch.device`):
+            Defines the device type (*e.g.*, `"cpu"` or `"cuda"`) on which this instance of `BeamSearchScorer` will be
+            allocated.
+        length_penalty (`float`, *optional*, defaults to 1.0):
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
+        do_early_stopping (`bool` or `str`, *optional*, defaults to `False`):
+            Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
+            `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
+            heuristic is applied and the generation stops when is it very unlikely to find better candidates;
+            `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
+            beam search algorithm).
+        num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):
+            The number of beam hypotheses that shall be returned upon calling
+            [`~transformers.BeamSearchScorer.finalize`].
+        num_beam_groups (`int`, *optional*, defaults to 1):
+            Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
+            See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+        max_length (`int`, *optional*):
+            The maximum length of the sequence to be generated.
+    """
+
+    def __init__(
+        self,
+        batch_size: int,
+        num_beams: int,
+        candidate_words_ids: List[List[int]],
+        eos_token_id: int,
+        device: torch.device,
+        length_penalty: Optional[float] = 1.0,
+        do_early_stopping: Optional[Union[bool, str]] = False,
+        num_beam_hyps_to_keep: Optional[int] = 1,
+        num_beam_groups: Optional[int] = 1,
+        max_length: Optional[int] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            batch_size,
+            num_beams,
+            device,
+            length_penalty,
+            do_early_stopping,
+            num_beam_hyps_to_keep,
+            num_beam_groups,
+            max_length,
+            **kwargs,
+        )
+
+        self.eos_token_id = eos_token_id
+        self.nested_candidate_dict = self.make_nested_candidate_dict(candidate_words_ids)
+
+    def make_nested_candidate_dict(self, words_ids_list):
+        def convert_to_dict(nested_list, next_dict):
+            key = nested_list[0]
+            if len(nested_list) == 1:
+                if key not in next_dict:
+                    next_dict[key] = {self.eos_token_id: self.eos_token_id}
+                else:
+                    next_dict[key].update({self.eos_token_id: self.eos_token_id})
+            else:
+                if key not in next_dict:
+                    value = convert_to_dict(nested_list[1:], dict())
+                    next_dict[key] = value
+                else:
+                    value = convert_to_dict(nested_list[1:], next_dict[key])
+                    next_dict[key].update(value)
+
+            return next_dict
+
+        result = dict()
+        for sublist in words_ids_list:
+            convert_to_dict(sublist, result)
+        return result
+
+
 class BeamHypotheses:
     def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool, max_length: Optional[int] = None):
         """

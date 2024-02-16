@@ -39,6 +39,7 @@ else:
         "BeamScorer",
         "BeamSearchScorer",
         "ConstrainedBeamSearchScorer",
+        "CandidateBeamSearchScorer",
     ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
@@ -177,7 +178,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
-        from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .beam_search import (
+            BeamHypotheses,
+            BeamScorer,
+            BeamSearchScorer,
+            CandidateBeamSearchScorer,
+            ConstrainedBeamSearchScorer,
+        )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,

@@ -57,6 +57,8 @@ class GenerationConfig(PushToHubMixin):
             `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
             `constraints!=None` or `force_words_ids!=None`
+        - *candidate beam-search decoding* by calling [`~generation.GenerationMixin.candidate_beam_search`], if
+            `candidate_words_ids!=None`
         - *assisted decoding* by calling [`~generation.GenerationMixin.assisted_decoding`], if
             `assistant_model` is passed to `.generate()`
 
@@ -156,6 +158,14 @@ class GenerationConfig(PushToHubMixin):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
         force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
+            List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
+            words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
+            triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
+            can allow different forms of each word.
+        candidate_words_ids(`List[List[int]]`, *optional*):
+            List of lists containing candidate token ids that are intended to be generated. Each inner list represents a candidate sentence,
+            and each element in the inner list is the encoded ID of a word in the vocabulary.
+            ## 수정필요
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
@@ -296,6 +306,7 @@ class GenerationConfig(PushToHubMixin):
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.force_words_ids = kwargs.pop("force_words_ids", None)
+        self.candidate_words_ids = kwargs.pop("candidate_words_ids", None)
         self.renormalize_logits = kwargs.pop("renormalize_logits", False)
         self.constraints = kwargs.pop("constraints", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
