@@ -30,7 +30,9 @@ pip install -e .
 ```
 Install ColBERT engine
 ```
-cd examples/research_projects/flmr-retrieval/third_party/ColBERT
+cd examples/research_projects/flmr-retrieval/third_party
+git clone https://github.com/LinWeizheDragon/ColBERT.git
+cd ./ColBERT
 pip install -e .
 ```
 
