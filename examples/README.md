@@ -118,8 +118,8 @@ pip install runhouse
 # For an on-demand V100 with whichever cloud provider you have configured:
 python run_on_remote.py \
     --example pytorch/text-generation/run_generation.py \
-    --model_type=gpt2 \
-    --model_name_or_path=gpt2 \
+    --model_type=openai-community/gpt2 \
+    --model_name_or_path=openai-community/gpt2 \
     --prompt "I am a language model and"
 
 # For byo (bring your own) cluster:

@@ -57,10 +57,10 @@ pip install optimum[exporters]
 optimum-cli export onnx --help
 ```
 
-🤗 Hubからモデルのチェックポイントをエクスポートするには、例えば `distilbert-base-uncased-distilled-squad` を使いたい場合、以下のコマンドを実行してください：
+🤗 Hubからモデルのチェックポイントをエクスポートするには、例えば `distilbert/distilbert-base-uncased-distilled-squad` を使いたい場合、以下のコマンドを実行してください：
 
 ```bash
-optimum-cli export onnx --model distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
+optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
 ```
 
 進行状況を示し、結果の `model.onnx` が保存される場所を表示するログは、以下のように表示されるはずです：
@@ -147,7 +147,7 @@ pip install transformers[onnx]
 `transformers.onnx`パッケージをPythonモジュールとして使用して、事前に用意された設定を使用してチェックポイントをエクスポートする方法は以下の通りです：
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased onnx/
+python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 ```
 
 この方法は、`--model`引数で定義されたチェックポイントのONNXグラフをエクスポートします。🤗 Hubのいずれかのチェックポイントまたはローカルに保存されたチェックポイントを渡すことができます。エクスポートされた`model.onnx`ファイルは、ONNX標準をサポートする多くのアクセラレータで実行できます。例えば、ONNX Runtimeを使用してモデルを読み込んで実行する方法は以下の通りです：
@@ -157,7 +157,7 @@ python -m transformers.onnx --model=distilbert-base-uncased onnx/
 >>> from transformers import AutoTokenizer
 >>> from onnxruntime import InferenceSession
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 >>> session = InferenceSession("onnx/model.onnx")
 >>> # ONNX Runtime expects NumPy arrays as input
 >>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")

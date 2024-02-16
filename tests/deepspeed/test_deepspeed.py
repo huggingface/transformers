@@ -70,7 +70,7 @@ set_seed(42)
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
 
-T5_SMALL = "t5-small"
+T5_SMALL = "google-t5/t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
 GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"

@@ -403,8 +403,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 Information necessary to initiate the encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -416,8 +414,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -444,7 +440,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> from transformers import EncoderDecoderModel
 
         >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./bert2bert")
         >>> # load fine-tuned model
@@ -560,9 +556,9 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> from transformers import EncoderDecoderModel, BertTokenizer
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "bert-base-uncased", "bert-base-uncased"
+        ...     "google-bert/bert-base-uncased", "google-bert/bert-base-uncased"
         ... )  # initialize Bert2Bert from pre-trained checkpoints
 
         >>> # training

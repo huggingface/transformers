@@ -29,7 +29,7 @@ the left. This means the model cannot see future tokens. GPT-2 is an example of 
 
 This guide will show you how to:
 
-1. Finetune [DistilGPT2](https://huggingface.co/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
+1. Finetune [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -110,7 +110,7 @@ The next step is to load a DistilGPT2 tokenizer to process the `text` subfield:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 ```
 
 You'll notice from the example above, the `text` field is actually nested inside `answers`. This means you'll need to
@@ -236,7 +236,7 @@ You're ready to start training your model now! Load DistilGPT2 with [`AutoModelF
 ```py
 >>> from transformers import AutoModelForCausalLM, TrainingArguments, Trainer
 
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 At this point, only three steps remain:
@@ -300,7 +300,7 @@ Then you can load DistilGPT2 with [`TFAutoModelForCausalLM`]:
 ```py
 >>> from transformers import TFAutoModelForCausalLM
 
->>> model = TFAutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
