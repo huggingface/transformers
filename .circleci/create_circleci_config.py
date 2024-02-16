@@ -309,7 +309,7 @@ torch_job = CircleCIJob(
     "torch",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
-        "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        "curl -LsSf https://astral.sh/uv/install.sh | sh;source $HOME/.cargo/env",
         "uv venv",
         "uv pip install --upgrade --upgrade-strategy eager pip",
         "uv pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
@@ -467,7 +467,7 @@ exotic_models_job = CircleCIJob(
     "exotic_models",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
-        "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        "curl -LsSf https://astral.sh/uv/install.sh | sh;source $HOME/.cargo/env",
         "uv venv",
         "uv pip install --upgrade --upgrade-strategy eager pip",
         "uv pip install -U --upgrade-strategy eager .[torch,testing,vision]",
