@@ -445,8 +445,8 @@ class MAMBAIntegrationTests(unittest.TestCase):
         torch.testing.assert_allclose(logits, EXPECTED_LOGITS)
 
         out = model.generate(input_ids, max_new_tokens=10)
-        print(tokenizer.batch_decode(out))
-        self.assertEqual(output_sentence, expected_output)
+        output_sentence = tokenizer.decode(out[0,:])
+        self.assertEqual(output_sentence, ["Hey how are you doing?\n\nI'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm"])
 
     def test_simple_generate_bf16(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
