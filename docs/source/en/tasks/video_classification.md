@@ -483,7 +483,7 @@ You can also manually replicate the results of the `pipeline` if you'd like.
 
 Now, pass your input to the model and return the `logits`:
 
-```
+```py
 >>> logits = run_inference(trained_model, sample_test_video["video"])
 ```
 

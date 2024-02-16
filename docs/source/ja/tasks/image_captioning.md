@@ -70,7 +70,7 @@ DatasetDict({
 
 </Tip>
 
-[~datasets.Dataset.train_test_split] メソッドを使用して、データセットのトレイン スプリットをトレイン セットとテスト セットに分割します。
+[`~datasets.Dataset.train_test_split`] メソッドを使用して、データセットのトレイン スプリットをトレイン セットとテスト セットに分割します。
 
 ```python
 ds = ds["train"].train_test_split(test_size=0.1)

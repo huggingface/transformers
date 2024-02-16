@@ -217,7 +217,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
+        {"image-feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
         if is_torch_available()
         else {}
     )

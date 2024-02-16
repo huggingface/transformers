@@ -39,22 +39,22 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
+        "google-t5/t5-small": "https://huggingface.co/google-t5/t5-small/resolve/main/spiece.model",
+        "google-t5/t5-base": "https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model",
+        "google-t5/t5-large": "https://huggingface.co/google-t5/t5-large/resolve/main/spiece.model",
+        "google-t5/t5-3b": "https://huggingface.co/google-t5/t5-3b/resolve/main/spiece.model",
+        "google-t5/t5-11b": "https://huggingface.co/google-t5/t5-11b/resolve/main/spiece.model",
     }
 }
 
 
 # TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
+    "google-t5/t5-small": 512,
+    "google-t5/t5-base": 512,
+    "google-t5/t5-large": 512,
+    "google-t5/t5-3b": 512,
+    "google-t5/t5-11b": 512,
 }
 
 SPIECE_UNDERLINE = "▁"
@@ -117,7 +117,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=True)
             >>> tokenizer.encode("Hello <extra_id_0>.")
             [8774, 32099, 3, 5, 1]
             ```
@@ -125,7 +125,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
