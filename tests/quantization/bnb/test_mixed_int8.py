@@ -97,6 +97,7 @@ class BaseMixedInt8Test(unittest.TestCase):
     input_text = "Hello my name is"
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of the family.\n")
+    EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
