@@ -6951,8 +6951,8 @@ if TYPE_CHECKING:
             HubertPreTrainedModel,
         )
         from .models.hiera import (
+            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
             HieraModel,
-            HieraBlock
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

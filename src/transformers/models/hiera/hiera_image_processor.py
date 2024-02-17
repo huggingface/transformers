@@ -1,5 +1,5 @@
 
-"""Image processor class for Hirea."""
+"""Image processor class for Hiera."""
 
 from typing import Dict, List, Optional, Union
 

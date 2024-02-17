@@ -9,8 +9,8 @@ from ...utils import (
 
 _import_structure = {
     "configuration_hiera": [
-        "HIREA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "HireaConfig",
+        "HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "HieraConfig",
     ],
 }
 
@@ -20,14 +20,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["hirea"] = [
-        "HIREA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Hirea",
+    _import_structure["hiera_model"] = [
+        "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "HieraModel",
         "Head",
         "HieraBlock",
         "MaskUnitAttention"
         ""
     ]
+
 
 if TYPE_CHECKING:
     from .configuration_hiera import (
@@ -42,10 +43,12 @@ if TYPE_CHECKING:
         pass
     else:
         from .hiera_model import (
+            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
             HieraModel,
             Head,
             HieraBlock,
             MaskUnitAttention,
+            
         )
         from .hiera_image_processor import (
             HieraImageProcessor
