@@ -614,9 +614,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         logits = outputs[0]
 
-        print("Shape of logits:", logits.shape)
-        print("First values of logits:", logits[0, :3, :3])
-
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n

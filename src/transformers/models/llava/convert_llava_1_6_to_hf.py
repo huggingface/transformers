@@ -18,7 +18,7 @@ URL: https://github.com/haotian-liu/LLaVA/tree/main.
 
 
 The command used to obtain original logits is the following:
-python llava/eval/run_llava.py --model-path "liuhaotian/llava-v1.6-mistral-7b" --image-file "images/llava_v1_5_radar.jpg" --query "What is shown in this image?"
+python llava/eval/run_llava.py --model-path "liuhaotian/llava-v1.6-mistral-7b" --image-file "images/llava_v1_5_radar.jpg" --query "What is shown in this image?" --max_new_tokens 100 --temperature 0
 """
 
 import argparse
@@ -212,12 +212,22 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     output_ids = model.generate(
         **inputs,
-        max_new_tokens=3,
-        # use_cache=True,
+        max_new_tokens=100,
+        use_cache=True,
     )
 
-    outputs = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-    print(outputs)
+    generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+
+    print(repr(generated_text))
+
+    if model_id == "liuhaotian/llava-v1.6-mistral-7b":
+        expected_text = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular radar chart, there are several axes labeled with different metrics or benchmarks, such as "MMM-Vet," "MMM-Bench," "LLaVA-Bench," "SLED-Bench," "'
+    elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
+        expected_text = """A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER:  \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmarking study comparing the performance of various models or systems. It\'s a scatter plot with a circular layout, where each point represents a different model or system, and the axes represent different metrics or dimensions of comparison.\n\nThe metrics are likely related to machine learning or artificial intelligence performance, as indicated by the terms like "BLIP-2," "Instruct BLIP," "POE," "QWA," "V"""
+    else:
+        raise ValueError(f"Model {model_id} not supported")
+
+    assert generated_text == expected_text
 
     # verify batched generation
     # stack the input_ids and pixel_values
