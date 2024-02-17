@@ -412,7 +412,7 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
             )
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
-        output = tf.linalg.matmul(inputs, self.weight)
+        output = tf.linalg.matmul(a=inputs, b=self.weight, transpose_b=True)
         if self.bias is not None:
             output = tf.nn.bias_add(output, self.bias)
 
@@ -454,7 +454,7 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
             return
         self.built = True
         self.weight = self.add_weight(
-            shape=(self.in_features, self.out_features), trainable=not self.partially_freeze, name="weight"
+            shape=(self.out_features, self.in_features), trainable=not self.partially_freeze, name="weight"
         )
         if self.use_bias:
             self.bias = self.add_weight(shape=(self.out_features,), trainable=not self.partially_freeze, name="bias")
