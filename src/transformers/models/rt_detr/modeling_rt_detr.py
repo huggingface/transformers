@@ -478,7 +478,6 @@ class RTDetrConvEncoder(nn.Module):
             # downsample pixel_mask to match shape of corresponding feature_map
             mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
             out.append((feature_map, mask))
-            print(feature_map[0,0,:2,:2], feature_map.shape)
         return out
 
 
@@ -600,7 +599,6 @@ class RTDetrEncoderLayer(nn.Module):
         residual = hidden_states
         if self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
-        print('self_attn_encoderlayer', hidden_states[0,:4,:4], hidden_states.shape)
 
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -608,7 +606,6 @@ class RTDetrEncoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-        print('self_attn_encoderlayer', hidden_states[0,:4,:4], hidden_states.shape)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -617,21 +614,16 @@ class RTDetrEncoderLayer(nn.Module):
 
         if self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
-        print('self_attn_beforeresidual1', hidden_states[0,:4,:4], hidden_states.shape)
         residual = hidden_states
 
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        print('self_attn_beforeresidual2', hidden_states[0,:4,:4], hidden_states.shape)
 
         hidden_states = self.fc2(hidden_states)
-        print('self_attn_afterfc2', hidden_states[0,:4,:4], hidden_states.shape)
 
-        print('fc1.weight', self.activation_fn, self.fc1.weight[0])
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = residual + hidden_states
-        print('self_attn_afterresidual', hidden_states[0,:4,:4], hidden_states.shape)
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
@@ -1053,17 +1045,12 @@ class RTDetrDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
-        print('decoder self_attn', hidden_states[0, :10, :10], hidden_states.shape)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         second_residual = hidden_states
-        print('decoder second_residual', hidden_states[0, :10, :10], hidden_states.shape)
-        # print('decoder encoder_attention_mask', encoder_attention_mask[0, :10, :10], encoder_attention_mask.shape)
-        print('decoder encoder_hidden_states', encoder_hidden_states[0, :10, :10], encoder_hidden_states.shape)
-        print('decoder position_embeddings', position_embeddings[0, :10, :10], position_embeddings.shape)
 
         # Cross-Attention
         cross_attn_weights = None
@@ -1078,7 +1065,6 @@ class RTDetrDecoderLayer(nn.Module):
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
-        print('decoder cross_attn', hidden_states[0, :10, :10], hidden_states.shape)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = second_residual + hidden_states
@@ -1092,9 +1078,7 @@ class RTDetrDecoderLayer(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        print('decoder after fc2 residual', hidden_states[0, :10, :10], hidden_states.shape)
         hidden_states = self.final_layer_norm(hidden_states)
-        print('decoder hidden_states', hidden_states[0, :10, :10], hidden_states.shape)
 
         outputs = (hidden_states,)
 
@@ -1165,7 +1149,6 @@ class RTDetrEncoder(nn.Module):
         for layer in self.layers:
             layer_outputs = layer(hidden_states, attention_mask=src_mask, position_embeddings=pos_embed)
             hidden_states = layer_outputs[0]
-            print('inside_encoder', hidden_states[0,:3,:3], hidden_states.shape)
 
         return hidden_states
 
@@ -1272,9 +1255,6 @@ class RTDetrHybridEncoder(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        for i in inputs_embeds:
-            print('proj', i[0,0,:5,:5], i.shape)
-
         hidden_states = inputs_embeds
         # encoder
         if self.config.encoder_layers > 0:
@@ -1290,10 +1270,7 @@ class RTDetrHybridEncoder(nn.Module):
                     pos_embed = None
 
                 memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
-                print("memory", memory.shape)
                 hidden_states[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
-        for i in hidden_states:
-            print('encoder', i[0,0,:4,:4], i.shape)
 
         # broadcasting and fusion
         fpn_feature_maps = [hidden_states[-1]]
@@ -1305,8 +1282,6 @@ class RTDetrHybridEncoder(nn.Module):
             upsample_feat = F.interpolate(feat_high, scale_factor=2.0, mode="nearest")
             fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
             fpn_feature_maps.insert(0, fps_map)
-        for i in fpn_feature_maps:
-            print('fpn_feature_maps', i[0,0,:2,:2], i.shape)
 
         outs = [fpn_feature_maps[0]]
         for idx in range(len(self.in_channels) - 1):
@@ -1315,7 +1290,6 @@ class RTDetrHybridEncoder(nn.Module):
             downsample_feat = self.downsample_convs[idx](feat_low)
             out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
             outs.append(out)
-            print('pan_output', out[0,0,:2,:2], out.shape)
 
         return outs
 
@@ -1405,9 +1379,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
             position_embeddings = self.query_pos_head(reference_points)
-            print(idx, 'decoder after query_pos_head', hidden_states[0,:8,:8], hidden_states.shape)
-            print('position_embeddings', position_embeddings.shape, position_embeddings[0,:8,:8])
-            print('reference_points', reference_points[0,:8,:8], reference_points.shape)
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1427,11 +1398,8 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
-                print('hidden_states', hidden_states[0,:8,:8], hidden_states.shape)
                 tmp = self.bbox_embed[idx](hidden_states)
-                print('tmp', tmp[0,:8,:8], tmp.shape)
                 new_reference_points = F.sigmoid(tmp + inverse_sigmoid(reference_points))
-                print('new_reference_points', new_reference_points[0,:8,:8], new_reference_points.shape)
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
@@ -1439,7 +1407,6 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             if self.class_embed is not None:
                 logits = self.class_embed[idx](hidden_states)
-                print('decoder_logits', logits.shape)
                 intermediate_logits += (logits,)
 
             if output_attentions:
@@ -1594,7 +1561,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
-            print("anchors", height, width)
         # define the valid range for anchor coordinates
         eps = 1e-2
         anchors = torch.concat(anchors, 1).to(device)
@@ -1684,7 +1650,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             spatial_shapes.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             source_flatten.append(source)
-            print("source", source.shape)
         source_flatten = torch.cat(source_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
@@ -1714,7 +1679,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
-        print('memory', memory[0,:8,:8], memory.shape)
 
         output_memory = self.enc_output(memory)
 
@@ -1735,9 +1699,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
         )
 
-        print(enc_topk_bboxes[:4,:4], 'enc_topk_bboxes', enc_topk_bboxes.shape)
-        print(enc_topk_logits[:4,:4], 'enc_topk_logits', enc_topk_logits.shape)
-
         # extract region features
         if self.config.learnt_init_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
@@ -1746,8 +1707,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
-
-        print(target[:4,:4], 'target', target.shape)
 
         init_reference_points = reference_points_unact.detach()
 
@@ -1932,7 +1891,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        print('outputs', outputs.intermediate_logits.shape)
 
         dn_meta = outputs.dn_meta
 
@@ -1943,7 +1901,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
             dn_out_class, outputs_class = torch.split(outputs_class, dn_meta["dn_num_split"], dim=2)
 
-        print(outputs_class.shape)
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
 
