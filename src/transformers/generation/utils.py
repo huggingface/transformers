@@ -2332,6 +2332,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+        i = 0
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2353,6 +2354,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            print("Step:", i)
+            print("Shape of logits:", outputs.logits.shape)
+            print("First values of logits:", outputs.logits[0, :3, :3])
+            i += 1
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
