@@ -3,9 +3,9 @@ import argparse
 import requests
 import torch
 from PIL import Image
-# from transformers.models.hiera.configuration_hiera import HieraConfig
-# from transformers.models.hiera.hiera import HieraModel
-# from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
+from transformers import HieraConfig
+from transformers import HieraModel
+from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
 # from transformers import HieraConfig, HieraModel
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
@@ -199,11 +199,13 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
     out = model(inputs[None, ...])
 
     # 207: golden retriever  (imagenet-1k)
-    out.argmax(dim=-1).item()
+    out.last_hidden_state.argmax(dim=-1).item()
 
+    # If you also want intermediate feature maps
+    out = model(inputs[None, ...], return_intermediates=True)
 
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
+    for x in out.intermediates:
+        print(x.shape)    
 
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
