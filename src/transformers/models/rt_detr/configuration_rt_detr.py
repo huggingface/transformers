@@ -44,27 +44,30 @@ class RTDetrConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
+        use_timm_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
+        num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        backbone (`<fill_type>`, *optional*, defaults to `"resnet50d"`): <fill_docstring>
+        use_pretrained_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        dilation (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        d_model (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        encoder_in_channels (`<fill_type>`, *optional*, defaults to `[512, 1024, 2048]`): <fill_docstring>
         feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
-        hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension for hidden states in transformer encoder and decoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the transformer encoder and decoder.
-        dim_feedforward (`int`, *optional*, defaults to 1024):
-            Dimension for feedforward network layer in transformer encoder and decoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
         encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
+        encoder_ffn_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        encoder_attention_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        dropout (`float`, *optional*, defaults to 0.0):
+            The ratio for all dropout layers.
+        activation_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
+            Indexes of the projected layers to be used in the encoder.
         pe_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
-        act_encoder (`str`, *optional*, defaults to `"silu"`):
-            Activation function of the encoder used in the top-down Feature Pyramid Network and the bottom-up Path
-            Aggregation Network.
+        encoder_activation_function (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        activation_function (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
         eval_size (`Tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride.
@@ -73,14 +76,14 @@ class RTDetrConfig(PretrainedConfig):
             feed-forward modules.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
-        feat_channels (`List[int]`, *optional*, defaults to `[256, 256, 256]`):
-            A list of integers representing the number of feature channels at various layers or stages of the network
-        num_levels (`int`, *optional*, defaults to 3):
-            The number of feature levels used by the `RTDetrTransformers`.
-        num_decoder_points (`int`, *optional*, defaults to 4):
-            Number of points used by the `TransformerDecoderLayer`.
-        num_decoder_layers (`int`, *optional*, defaults to 6):
-            Number of layers of the decoder.
+        decoder_in_channels (`<fill_type>`, *optional*, defaults to `[256, 256, 256]`): <fill_docstring>
+        decoder_ffn_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        num_feature_levels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        decoder_n_points (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        decoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
+        decoder_attention_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        decoder_activation_function (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
+        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
         num_denoising (`int`, *optional*, defaults to 100):
             The total number of denoising tasks or queries to be used for contrastive denoising.
         label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -93,6 +96,8 @@ class RTDetrConfig(PretrainedConfig):
             Height and width of the input image used during evaluation to generate the bounding box anchors.
         eval_idx (`int`, *optional*, defaults to -1):
             Id of the decoder layer used to obtain the logits and bounding boxes.
+        disable_custom_kernels (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        with_box_refine (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):

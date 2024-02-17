@@ -7324,6 +7324,13 @@ def load_tf_weights_in_roformer(*args, **kwargs):
 RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class RTDetrForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RTDetrModel(metaclass=DummyObject):
     _backends = ["torch"]
 

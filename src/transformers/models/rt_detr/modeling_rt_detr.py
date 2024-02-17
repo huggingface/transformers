@@ -63,6 +63,7 @@ else:
     MultiScaleDeformableAttention = None
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -273,7 +274,7 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDETR
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDetr
 class RTDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -313,10 +314,10 @@ class RTDetrFrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->DeformableDetr
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->RTDetr
 def replace_batch_norm(model):
     r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `DeformableDetrFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `RTDetrFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):
@@ -507,55 +508,6 @@ def bias_init_with_prob(prior_prob=0.01):
     return bias_init
 
 
-def deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights):
-    """
-    Implements the core functionality of deformable attention mechanism.
-
-    This function applies deformable attention to the provided `value` tensor using the specified `sampling_locations`
-    and `attention_weights`. It handles multiple levels of features, each with a different spatial shape, and combines
-    these features using the deformable attention mechanism.
-
-    Args:
-        value (`torch.FloatTensor`): The value tensor with the features on which attention is to be applied.
-        value_spatial_shapes (`List[Tuple[int, int]]`): A list of tuples where each tuple represents the spatial shape
-                                               (height, width) of the feature map at each level.
-        sampling_locations (`torch.FloatTensor`): The sampling locations for applying attention.
-        attention_weights (`torch.FloatTensor`):
-            The attention weights with shape (batch_size, len_q, num_head, n_levels, n_points).
-
-    Returns:
-        The output tensor after applying deformable attention, with shape (batch_size, len_q, num_head * head_dim).
-    """
-
-    batch_size, _, num_head, head_dim = value.shape
-    _, len_q, _, n_levels, n_points, _ = sampling_locations.shape
-
-    split_shape = [h * w for h, w in value_spatial_shapes]
-    value_list = value.split(split_shape, dim=1)
-    sampling_grids = 2 * sampling_locations - 1
-    sampling_value_list = []
-    for level, (height, width) in enumerate(value_spatial_shapes):
-        new_value_list = (
-            value_list[level].flatten(2).permute(0, 2, 1).reshape(batch_size * num_head, head_dim, height, width)
-        )
-        new_sampling_grid = sampling_grids[:, :, :, level].permute(0, 2, 1, 3, 4).flatten(0, 1)
-        new_sampling_value = F.grid_sample(
-            new_value_list, new_sampling_grid, mode="bilinear", padding_mode="zeros", align_corners=False
-        )
-        sampling_value_list.append(new_sampling_value)
-    # (batch_size, len_q, num_head, n_levels, n_points) -> (batch_size, num_head, len_q, n_levels, n_points)
-    attention_weights = attention_weights.permute(0, 2, 1, 3, 4)
-    # (batch_size, num_head, len_q, n_levels, n_points) -> (batch_size*num_head, 1, len_q, n_levels*n_points)
-    attention_weights = attention_weights.reshape(batch_size * num_head, 1, len_q, n_levels * n_points)
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .reshape(batch_size, num_head * head_dim, len_q)
-    )
-
-    return output.permute(0, 2, 1)
-
-
 class RTDetrEncoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
@@ -687,6 +639,7 @@ class RTDetrCSPRepLayer(nn.Module):
         return self.conv3(x_1 + x_2)
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
 ) -> Tensor:
@@ -726,9 +679,10 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
 class RTDetrMultiscaleDeformableAttention(nn.Module):
     """
-    Multi-Scale Deformable Attention Module
+    Multiscale deformable attention as proposed in Deformable DETR.
     """
 
     def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
@@ -737,15 +691,15 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
             raise ValueError(
                 f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
             )
-
         dim_per_head = config.d_model // num_heads
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
-                "You'd better set embed_dim (d_model) in DeformableDetrMultiscaleDeformableAttention to make the"
+                "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
                 " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
                 " implementation."
             )
+
         self.im2col_step = 64
 
         self.d_model = config.d_model
@@ -764,7 +718,8 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / self.n_heads)
+        default_dtype = torch.get_default_dtype()
+        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -859,7 +814,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrAttention with Detr->RTDetr
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiheadAttention with DeformableDetr->RTDetr
 class RTDetrMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
