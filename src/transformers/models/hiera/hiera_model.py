@@ -271,10 +271,6 @@ class HieraModelOutput(ModelOutput):
     Args:
         last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)): 
             Last layer hidden-states.
-        attentions (Tuple[torch.FloatTensor], optional, returned when output_attentions=True): 
-            Attentions weights from the model, one for each layer.
-        hidden_states (Tuple[torch.FloatTensor], optional, returned when output_hidden_states=True): 
-            Hidden states of the model at the output of each layer.
         intermediates (List[torch.Tensor], optional): 
             Intermediate representations or features from the model, if applicable.
     """
@@ -422,10 +418,10 @@ class Head(nn.Module):
             x = self.act_func(x)
         return x
 
-
+@add_start_docstrings("""
+Patch embedding that supports any number of spatial dimensions (1d, 2d, 3d).
+""")
 class PatchEmbedding(nn.Module):
-    """Patch embedding that supports any number of spatial dimensions (1d, 2d, 3d)."""
-
     def __init__(
         self,
         dim_in: int,
@@ -453,27 +449,49 @@ class PatchEmbedding(nn.Module):
         embeddings = embeddings.reshape(embeddings.shape[0], embeddings.shape[1], -1).transpose(2, 1)
         return embeddings
 
-
-class HieraModel(PreTrainedModel):
+class HieraPreTrainedModel(PreTrainedModel):
     """
-    Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
-
-    This model is a PyTorch implementation of the Hiera architecture for image classification.
-
-    The model can be used as follows:
-
-    Args:
-        config (HieraConfig): Configuration class instance for `Hiera`.
-
-    Example usage:
-        >>> from your_model_file import Hiera, HieraConfig
-        >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
-
-        >>> model = Hiera(config)
-        >>> inputs = torch.rand((1, 3, 224, 224))
-        >>> outputs = model(inputs)
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
+    config_class = HieraConfig
+    base_model_prefix = "hiera"
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
 
+    def _init_weights(self, module, init_bias=0.02):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
+            nn.init.trunc_normal_(module.weight, std=0.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.constant_(module.bias, init_bias)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.bias, init_bias)
+            nn.init.constant_(module.weight, 1.0)
+
+
+
+
+@add_start_docstrings("""
+Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
+
+This model is a PyTorch implementation of the Hiera architecture for image classification. It introduces a hierarchical design that processes images in a coarse-to-fine manner, efficiently handling various scales and complexities within the images.
+
+The model is built on the principles of Vision Transformers but introduces mask units to focus on specific regions of interest, significantly reducing computational requirements while maintaining competitive performance.
+
+Parameters:
+    config ([`HieraConfig`]): Model configuration class with all the parameters of the model.
+        Initializing with a config file does not load the weights associated with the model, only the
+        configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    
+Example usage:
+    >>> from your_model_file import Hiera, HieraConfig
+    >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
+
+    >>> model = Hiera(config)
+    >>> inputs = torch.rand((1, 3, 224, 224))
+    >>> outputs = model(inputs)
+                      """)
+class HieraModel(HieraPreTrainedModel):
     config_class = HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
@@ -601,14 +619,6 @@ class HieraModel(PreTrainedModel):
         self.head.projection.bias.data.mul_(self.head_init_scale)
         self.post_init()
 
-    def _init_weights(self, m, init_bias=0.02):
-        if isinstance(m, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
-            nn.init.trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, init_bias)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, init_bias)
-            nn.init.constant_(m.weight, 1.0)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -655,6 +665,25 @@ class HieraModel(PreTrainedModel):
         else:
             return self.position_embeddings
 
+    @add_start_docstrings_to_model_forward("""
+    The forward pass for the Hiera model.
+
+    Args:
+        pixel_values (`torch.Tensor`): Input tensor of shape `(batch_size, channels, height, width)`.
+        
+        mask (`torch.Tensor`, optional): A boolean tensor of shape `(batch_size, num_mask_units)` indicating which mask units to keep (True) or remove (False).
+        mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
+        Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
+
+        
+        return_dict (`bool`, optional): Whether to return a dictionary of outputs or a plain tuple.
+
+        return_intermediates (`bool`, optional): Whether to return intermediate features from each stage of the model.
+    
+    
+        
+    """)
+    @replace_return_docstrings(output_type=HieraModelOutput,config_class="HieraConfig")
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -663,8 +692,6 @@ class HieraModel(PreTrainedModel):
         return_intermediates: bool = False,
     ) -> Union[Tuple[torch.Tensor], HieraModelOutput]:
         """
-        mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
-        Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
         """
         # Slowfast training passes in a list
         if isinstance(pixel_values, list):
