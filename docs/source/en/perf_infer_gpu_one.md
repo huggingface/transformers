@@ -167,7 +167,7 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 
 ## PyTorch scaled dot product attention
 
-PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. You may also set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request for SDPA to be used.
+PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. You may also set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
@@ -194,7 +194,7 @@ FlashAttention can only be used for models with the `fp16` or `bf16` torch type,
 <Tip>
 
 SDPA does not support certain sets of attention parameters, such as `head_mask` and `output_attentions=True`.
-In that case, you will see a warning message and we will fall back to the (slower) eager implementation.   
+In that case, you should see a warning message and we will fall back to the (slower) eager implementation.
 
 </Tip>
 

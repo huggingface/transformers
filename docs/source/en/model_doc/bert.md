@@ -81,8 +81,8 @@ model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16`).
 
-On a local benchmark (A100-80GB, CPUx12, RAM 96.6GB, OS Ubuntu 22.04), we have seen speedups as high as 20%+ for
-training and 15%+ for inference. The improvements are higher for larger batch sizes and longer sequence lengths.
+On a local benchmark (A100-80GB, CPUx12, RAM 96.6GB, OS Ubuntu 22.04), we have seen speedups as high as 40%+ for
+training and 20%+ for inference. The improvements are higher for larger batch sizes and longer sequence lengths.
 
 
 ## Resources
