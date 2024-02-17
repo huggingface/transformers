@@ -57,8 +57,8 @@ KEYS_TO_MODIFY_MAPPING = {
 }
 
 
-def load_original_state_dict():
-    directory_path = snapshot_download(repo_id="liuhaotian/llava-v1.6-mistral-7b", allow_patterns=["*.safetensors"])
+def load_original_state_dict(model_id):
+    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -97,7 +97,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         data = json.load(f)
         print(data)
 
-    text_model_id = data["_name_or_path"]
+    if model_id == "liuhaotian/llava-v1.6-mistral-7b":
+        text_model_id = data["_name_or_path"]
+    elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
+        text_model_id = "lmsys/vicuna-7b-v1.5"
     vision_model_id = data["mm_vision_tower"]
 
     torch.set_default_dtype(torch.float16)
@@ -111,7 +114,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     config = LlavaConfig(
-        text_config=text_config,
+        text_config=text_config.to_dict(),
         mm_patch_merge_type="spatial_unpad",
         image_aspect_ratio="anyres",
         image_grid_pinpoints=image_processor.image_grid_pinpoints,
@@ -122,7 +125,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         model = LlavaForConditionalGeneration(config)
 
     # load original state dict
-    state_dict = load_original_state_dict()
+    state_dict = load_original_state_dict(model_id)
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, assign=True)
     model.eval()
@@ -149,25 +152,27 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     device = "cuda:3"
     model.to(device)
 
+    # prepare inputs
     image = load_image()
-    text = "[INST] <image>\nWhat is shown in this image? [/INST]"
-    inputs = processor(images=image, text=text, return_tensors="pt")
-
-    for k, v in inputs.items():
-        print(k, v.shape)
+    if model_id == "liuhaotian/llava-v1.6-mistral-7b":
+        prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+    elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
+        prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT:"
+    inputs = processor(images=image, text=prompt, return_tensors="pt")
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
     original_input_ids = torch.load(filepath, map_location="cpu")
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
     original_pixel_values = torch.load(filepath, map_location="cpu")
 
-    # replace -200 by 32000 (ask Arthur)
-    original_input_ids[original_input_ids == -200] = 32000
-    print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
-
     # verify inputs
-    assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
-    assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
+    if model_id == "liuhaotian/llava-v1.6-mistral-7b":
+        # replace -200 by 32000 (ask Arthur)
+        original_input_ids[original_input_ids == -200] = 32000
+        print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
+
+        assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
+        assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     # verify single forward pass
     image_sizes = torch.tensor([[1024, 899]])
@@ -175,30 +180,38 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     print("Single forward pass")
     with torch.inference_mode():
-        # TODO use processor instead
-        outputs = model(
-            input_ids=original_input_ids.to(device),
-            attention_mask=torch.ones_like(original_input_ids),
-            pixel_values=original_pixel_values.to(device),
-            image_sizes=image_sizes,
-        )
+        inputs = inputs.to(device)
+        outputs = model(**inputs)
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
 
-        expected_slice = torch.tensor(
-            [[-4.8555, -4.6992, -0.1996], [-10.5703, -10.7344, -2.7246], [-7.0391, -7.3672, -0.2634]],
-            dtype=torch.float32,
-            device=device,
-        )
+        if model_id == "liuhaotian/llava-v1.6-mistral-7b":
+            expected_slice = torch.tensor(
+                [[-4.8555, -4.6992, -0.1996], [-10.5703, -10.7344, -2.7246], [-7.0391, -7.3672, -0.2634]],
+                dtype=torch.float32,
+                device=device,
+            )
+        elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
+            expected_slice = torch.tensor(
+                [[ 1.4883,  0.9976, -0.6992],
+                [-9.7031, -5.7031, -1.5557],
+                [-5.1328, -5.5586,  8.8281]],
+                dtype=torch.float32,
+                device=device,
+            )
+        else:
+            raise ValueError(f"Model {model_id} not supported")
+        
         assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
         print("Logits are ok!")
 
     # verify generation
+        
+    for k,v in inputs.items():
+        print(k,v.shape)
+        
     output_ids = model.generate(
-        input_ids=original_input_ids.to(device),
-        attention_mask=torch.ones_like(original_input_ids),
-        pixel_values=original_pixel_values.to(device),
-        image_sizes=image_sizes,
+        **inputs,
         do_sample=False,
         temperature=0,
         top_p=None,
@@ -207,21 +220,19 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         use_cache=True,
     )
 
-    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+    outputs = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
     print(outputs)
 
+    # verify batched generation
     # stack the input_ids and pixel_values
-    original_input_ids = original_input_ids.repeat(4, 1)
-    original_pixel_values = original_pixel_values.repeat(4, 1, 1, 1, 1)
-    image_sizes = image_sizes.repeat(4, 1)
+    # original_input_ids = original_input_ids.repeat(4, 1)
+    # original_pixel_values = original_pixel_values.repeat(4, 1, 1, 1, 1)
+    # image_sizes = image_sizes.repeat(4, 1)
+    inputs = processor(images=[image, image], text=[prompt, prompt], return_tensors="pt").to(device)
 
-    # TODO verify batched generation
     print("Batched generation...")
     output_ids = model.generate(
-        input_ids=original_input_ids.to(device),
-        attention_mask=torch.ones_like(original_input_ids),
-        pixel_values=original_pixel_values.to(device),
-        image_sizes=image_sizes,
+        **inputs,
         do_sample=False,
         temperature=0,
         top_p=None,
@@ -251,6 +262,7 @@ if __name__ == "__main__":
         "--model_id",
         help="Hub location of the model to convert",
         default="liuhaotian/llava-v1.6-mistral-7b",
+        choices=["liuhaotian/llava-v1.6-mistral-7b", "liuhaotian/llava-v1.6-vicuna-7b"],
         required=False,
     )
     parser.add_argument(
