@@ -17,7 +17,7 @@ import math
 import torch
 import torch.nn as nn
 
-from .hiera import HieraModel, HieraBlock
+from .hiera_model import HieraModel, HieraBlock
 from .hiera_utils import pretrained_model, undo_windowing, conv_nd
 
 
