@@ -4152,6 +4152,7 @@ else:
         [
             "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "HieraModel",
+            "HieraPreTrainedModel"
             
         ]
     )
@@ -6995,6 +6996,7 @@ if TYPE_CHECKING:
         from .models.hiera import (
             HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
             HieraModel,
+            HieraPreTrainedModel
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
