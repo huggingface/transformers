@@ -130,7 +130,7 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
         self.encoder = vocab
         self.decoder = {v:k for k,v in vocab.items()}
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=str(unk_token))
-        self._added_tokens_decoder = {0:AddedToken(bos_token)}
+        self._added_tokens_decoder = {0:AddedToken(str(bos_token))}
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
