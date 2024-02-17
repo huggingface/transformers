@@ -155,6 +155,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                    [Graphormer](model_doc/graphormer)                    |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
+|                        [Hiera](model_doc/hiera)                          |       ✅        |         ❌         |      ❌      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |
 |                        [I-BERT](model_doc/ibert)                         |       ✅        |         ❌         |      ❌      |
 |                       [IDEFICS](model_doc/idefics)                       |       ✅        |         ❌         |      ❌      |
