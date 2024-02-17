@@ -88,7 +88,7 @@ Trainer에서 ccl 백엔드를 사용하여 멀티 CPU 분산 훈련을 활성�
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -117,7 +117,7 @@ Trainer에서 ccl 백엔드를 사용하여 멀티 CPU 분산 훈련을 활성�
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \

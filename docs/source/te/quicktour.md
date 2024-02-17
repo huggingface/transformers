@@ -81,7 +81,7 @@ Here is the translation in Telugu:
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-సెంటిమెంట్ విశ్లేషణ కోసం [`pipeline`] డిఫాల్ట్ [ప్రీట్రైన్డ్ మోడల్](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) మరియు టోకెనైజర్‌ని డౌన్‌లోడ్ చేస్తుంది మరియు కాష్ చేస్తుంది. ఇప్పుడు మీరు మీ లక్ష్య వచనంలో `classifier`ని ఉపయోగించవచ్చు:
+సెంటిమెంట్ విశ్లేషణ కోసం [`pipeline`] డిఫాల్ట్ [ప్రీట్రైన్డ్ మోడల్](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) మరియు టోకెనైజర్‌ని డౌన్‌లోడ్ చేస్తుంది మరియు కాష్ చేస్తుంది. ఇప్పుడు మీరు మీ లక్ష్య వచనంలో `classifier`ని ఉపయోగించవచ్చు:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -389,7 +389,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
@@ -425,7 +425,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoModelForSequenceClassification
 
-   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. [`TrainingArguments`] మీరు నేర్చుకునే రేటు, బ్యాచ్ పరిమాణం మరియు శిక్షణ పొందవలసిన యుగాల సంఖ్య వంటి మార్చగల మోడల్ హైపర్‌పారామీటర్‌లను కలిగి ఉంది. మీరు ఎలాంటి శిక్షణా వాదనలను పేర్కొనకుంటే డిఫాల్ట్ విలువలు ఉపయోగించబడతాయి:
@@ -446,7 +446,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 4. డేటాసెట్‌ను లోడ్ చేయండి:
@@ -517,7 +517,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import TFAutoModelForSequenceClassification
 
-   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. టోకెనైజర్, ఇమేజ్ ప్రాసెసర్, ఫీచర్ ఎక్స్‌ట్రాక్టర్ లేదా ప్రాసెసర్ వంటి ప్రీప్రాసెసింగ్ క్లాస్‌ని లోడ్ చేయండి:
@@ -525,7 +525,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 3. డేటాసెట్‌ను టోకనైజ్ చేయడానికి ఒక ఫంక్షన్‌ను సృష్టించండి:

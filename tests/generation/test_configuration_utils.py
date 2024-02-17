@@ -52,7 +52,7 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(loaded_config.max_time, None)
 
     def test_from_model_config(self):
-        model_config = AutoConfig.from_pretrained("gpt2")
+        model_config = AutoConfig.from_pretrained("openai-community/gpt2")
         generation_config_from_model = GenerationConfig.from_model_config(model_config)
         default_generation_config = GenerationConfig()
 

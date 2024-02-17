@@ -1963,7 +1963,7 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(
                 outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids[:, 1:].tolist(),
+                outputs_from_embeds_wo_ids.tolist(),
             )
 
     def test_generate_continue_from_past_key_values(self):
@@ -2730,6 +2730,20 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 **model_kwargs,
             )
 
+    def test_max_length_if_input_embeds(self):
+        # PT-only test: TF doesn't have StoppingCriteria
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        max_length = 20
+        input_len = input_ids.shape[-1]
+        out_gen = model.generate(input_ids=input_ids, max_length=max_length)
+        out_gen_embeds = model.generate(inputs_embeds=inputs_embeds, max_length=max_length)
+        self.assertEqual(out_gen.shape[-1], input_len + out_gen_embeds.shape[-1])
+
     def test_custom_stopping_criteria_overload_error(self):
         # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2840,8 +2854,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
     def test_beam_search_low_memory(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
 
@@ -2857,8 +2871,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # PT-only test: TF doesn't have a BeamSearchScorer
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -2898,8 +2912,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
@@ -2936,8 +2950,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         flexible_phrases = tokenizer(
@@ -2977,8 +2991,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_word = "scared"
         force_flexible = ["scream", "screams", "screaming", "screamed"]
@@ -3014,8 +3028,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @slow
     def test_cfg_mixin(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         input = tokenizer(["The dragon flew over Paris,"], return_tensors="pt", return_attention_mask=True)
         input["input_ids"] = input["input_ids"].to(torch_device)
@@ -3055,8 +3069,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_translation_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         force_words = ["sind"]
@@ -3080,8 +3094,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_integration(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -3476,3 +3490,49 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             encoder_outputs=encoder_outputs,
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+    def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
+        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 5
+        assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic"
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "assistant_model": assistant_model,
+        }
+        model.generate(**inputs, **generation_kwargs)
+        # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
+        self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
+
+    def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
+        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 5
+        assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic_transient"
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "assistant_model": assistant_model,
+        }
+        model.generate(**inputs, **generation_kwargs)
+        # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
+        self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)

@@ -1537,7 +1537,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""
                 run_glue.py
-                --model_name_or_path distilbert-base-uncased
+                --model_name_or_path distilbert/distilbert-base-uncased
                 --task_name mrpc
                 --do_train
                 --do_eval
@@ -1588,18 +1588,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 8
-        self.assertEqual(trainer._train_batch_size, 8)
-
-        # We can then make a new Trainer
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        # Check we are at 16 to start
-        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
-        trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 8)
+        # Note: This can have issues, for now we don't support this functionality
+        # ref: https://github.com/huggingface/transformers/pull/29057
+        with self.assertRaises(NotImplementedError):
+            _ = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
@@ -1886,7 +1878,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_mrpc(self):
-        MODEL_ID = "bert-base-cased-finetuned-mrpc"
+        MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
@@ -1901,7 +1893,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_multiple(self):
-        MODEL_ID = "gpt2"
+        MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
@@ -1930,7 +1922,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_lm(self):
-        MODEL_ID = "distilroberta-base"
+        MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
@@ -2384,7 +2376,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "launch",
                 script_path,
                 "--model_name_or_path",
-                "t5-small",
+                "google-t5/t5-small",
                 "--per_device_train_batch_size",
                 "1",
                 "--output_dir",

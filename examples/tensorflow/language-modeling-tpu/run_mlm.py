@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument(
         "--pretrained_model_config",
         type=str,
-        default="roberta-base",
+        default="FacebookAI/roberta-base",
         help="The model config to use. Note that we don't copy the model's weights, only the config!",
     )
     parser.add_argument(

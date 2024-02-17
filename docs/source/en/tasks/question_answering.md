@@ -27,7 +27,7 @@ Question answering tasks return an answer given a question. If you've ever asked
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -100,7 +100,7 @@ The next step is to load a DistilBERT tokenizer to process the `question` and `c
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 There are a few preprocessing steps particular to question answering tasks you should be aware of:
@@ -206,7 +206,7 @@ You're ready to start training your model now! Load DistilBERT with [`AutoModelF
 ```py
 >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 
->>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 At this point, only three steps remain:
@@ -271,7 +271,7 @@ Then you can load DistilBERT with [`TFAutoModelForQuestionAnswering`]:
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:

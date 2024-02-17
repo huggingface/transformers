@@ -348,7 +348,7 @@ ORT is supported by 🤗 Optimum which can be used in 🤗 Transformers. You'll 
 from optimum.onnxruntime import ORTModelForSequenceClassification
 
 ort_model = ORTModelForSequenceClassification.from_pretrained(
-  "distilbert-base-uncased-finetuned-sst-2-english",
+  "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
   export=True,
   provider="CUDAExecutionProvider",
 )
@@ -360,7 +360,7 @@ Now you're free to use the model for inference:
 from optimum.pipelines import pipeline
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased-finetuned-sst-2-english")
 
 pipeline = pipeline(task="text-classification", model=ort_model, tokenizer=tokenizer, device="cuda:0")
 result = pipeline("Both the music and visual were astounding, not to mention the actors performance.")
