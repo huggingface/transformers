@@ -92,6 +92,9 @@ class LlavaImageProcessor(BaseImageProcessor):
     for processing high resolution images as explained in the [LLaVa paper](https://arxiv.org/abs/2310.03744).
 
     Args:
+        image_aspect_ratio (`str`, *optional*, defaults to `"anyres"`):
+            The aspect ratio setting to use. Can be "" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
+            an be overridden by `image_aspect_ratio` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
@@ -134,6 +137,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
+        image_aspect_ratio: str = "anyres",
         do_resize: bool = True,
         size: Dict[str, int] = None,
         image_grid_pinpoints: List = None,
@@ -159,6 +163,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
+        self.image_aspect_ratio = image_aspect_ratio
         self.do_resize = do_resize
         self.size = size
         self.image_grid_pinpoints = image_grid_pinpoints
@@ -171,6 +176,19 @@ class LlavaImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
+
+    def expand_to_square(self, image: Image.Image, background_color) -> Image.Image:
+        width, height = image.size
+        if width == height:
+            return image
+        elif width > height:
+            result = Image.new(image.mode, (width, width), background_color)
+            result.paste(image, (0, (width - height) // 2))
+            return result
+        else:
+            result = Image.new(image.mode, (height, height), background_color)
+            result.paste(image, ((height - width) // 2, 0))
+            return result
 
     def resize_and_pad_image(self, image: Image.Image, target_resolution: tuple) -> Image.Image:
         """
@@ -281,7 +299,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def preprocess_image_patches(
+    def _preprocess(
         self,
         images: ImageInput,
         do_resize: bool = None,
@@ -301,7 +319,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> Image.Image:
         """
-        Preprocess an image or batch of images.
+        Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
 
         Args:
             images (`ImageInput`):
@@ -449,6 +467,7 @@ class LlavaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        image_aspect_ratio=None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         image_grid_pinpoints: List = None,
@@ -470,6 +489,8 @@ class LlavaImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            image_aspect_ratio (`str`, *optional*, defaults to `"anyres"`):
+                The aspect ratio setting to use. Can be "" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -517,6 +538,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        image_aspect_ratio = image_aspect_ratio if image_aspect_ratio is not None else self.image_aspect_ratio
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, param_name="size", default_to_square=False)
@@ -538,31 +560,57 @@ class LlavaImageProcessor(BaseImageProcessor):
         new_images = []
         image_sizes = [image.size for image in images]
         for image in images:
-            # convert image into a list of patches
-            image_patches = self.get_image_patches(image, image_grid_pinpoints)
+            if image_aspect_ratio == "anyres":
+                # convert image into a list of patches
+                image_patches = self.get_image_patches(image, image_grid_pinpoints)
 
-            # preprocess patches
-            pixel_values = self.preprocess_image_patches(
-                image_patches,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_convert_rgb=do_convert_rgb,
-                return_tensors=return_tensors,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            ).pixel_values
+                # preprocess patches
+                pixel_values = self._preprocess(
+                    image_patches,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_center_crop=do_center_crop,
+                    crop_size=crop_size,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    do_convert_rgb=do_convert_rgb,
+                    return_tensors=return_tensors,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                ).pixel_values
 
-            new_images.append(pixel_values)
+                new_images.append(pixel_values)
 
-        new_images = torch.stack(new_images, dim=0) if return_tensors == "pt" else np.stack(new_images, axis=0)
+            elif image_aspect_ratio == "pad":
+                image = self.expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
+                pixel_values = self._preprocess(
+                    image,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_center_crop=do_center_crop,
+                    crop_size=crop_size,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    do_convert_rgb=do_convert_rgb,
+                    return_tensors=return_tensors,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                ).pixel_values
+            else:
+                raise ValueError(f"Invalid image aspect ratio: {image_aspect_ratio}")
 
-        data = {"pixel_values": new_images, "image_sizes": image_sizes}
+        if image_aspect_ratio == "anyres":
+            new_images = torch.stack(new_images, dim=0) if return_tensors == "pt" else np.stack(new_images, axis=0)
+            data = {"pixel_values": new_images, "image_sizes": image_sizes}
+        elif image_aspect_ratio == "pad":
+            data = {"pixel_values": pixel_values}
+
         return BatchFeature(data=data, tensor_type=return_tensors)

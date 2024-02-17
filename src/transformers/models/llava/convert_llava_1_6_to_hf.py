@@ -204,12 +204,6 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         print("Logits are ok!")
 
     # verify generation
-
-    for k, v in inputs.items():
-        print(k, v.shape)
-
-    print("Input_ids:", inputs.input_ids)
-
     output_ids = model.generate(
         **inputs,
         max_new_tokens=100,
@@ -217,8 +211,6 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     )
 
     generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-
-    print(repr(generated_text))
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         expected_text = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular radar chart, there are several axes labeled with different metrics or benchmarks, such as "MMM-Vet," "MMM-Bench," "LLaVA-Bench," "SLED-Bench," "'
@@ -228,23 +220,20 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         raise ValueError(f"Model {model_id} not supported")
 
     assert generated_text == expected_text
+    print("Generated text is ok!")
 
     # verify batched generation
-    # stack the input_ids and pixel_values
-    # original_input_ids = original_input_ids.repeat(4, 1)
-    # original_pixel_values = original_pixel_values.repeat(4, 1, 1, 1, 1)
-    # image_sizes = image_sizes.repeat(4, 1)
     inputs = processor(images=[image, image], text=[prompt, prompt], return_tensors="pt").to(device)
 
-    # print("Batched generation...")
-    # output_ids = model.generate(
-    #     **inputs,
-    #     max_new_tokens=3,
-    #     # use_cache=True,
-    # )
+    print("Batched generation...")
+    output_ids = model.generate(
+        **inputs,
+        max_new_tokens=3,
+        use_cache=True,
+    )
 
-    # outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    # print(outputs)
+    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    print(outputs)
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_id} to {pytorch_dump_folder_path}")

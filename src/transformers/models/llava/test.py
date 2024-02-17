@@ -12,9 +12,9 @@ image = Image.open(
 
 print(image.size)
 
-processor = LlavaImageProcessor.from_pretrained("openai/clip-vit-large-patch14-336")
+processor = LlavaImageProcessor.from_pretrained("openai/clip-vit-large-patch14-336", image_aspect_ratio="pad")
 
-pixel_values = processor(image, return_tensors="pt")["pixel_values"]
+pixel_values = processor(image, return_tensors="pt")["pixel_values"].half()
 
 print(pixel_values.shape)
 print(pixel_values.mean())
