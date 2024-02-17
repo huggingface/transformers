@@ -647,9 +647,10 @@ class PagedAttentionCache(Cache):
             key_states, value_states, layer_idx
         )
 
-        # update the context length for each sequence in the batch
+        # update the context length for each sequence in the batch 
         for batch_idx in range(batch_size):
             seq_ids = self.batch2seq[batch_idx]
+            
             # fork the blocks allocated for the first sequence to other sequences in the batch
             for seq_id in seq_ids:
                 key_len = original_key_states[batch_idx].shape[-2]
