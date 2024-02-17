@@ -45,7 +45,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import is_ninja_available, logging, is_accelerate_available
+from ...utils import is_accelerate_available, is_ninja_available, logging
 from ..auto import AutoBackbone
 from .configuration_grounding_dino import GroundingDinoConfig, GroundingDinoTextConfig
 
