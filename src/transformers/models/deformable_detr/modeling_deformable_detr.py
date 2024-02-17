@@ -46,7 +46,6 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-
 from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
