@@ -15,16 +15,21 @@
 """Convert LLaVa 1.6 checkpoints from the original repository.
 
 URL: https://github.com/haotian-liu/LLaVA/tree/main.
+
+
+The command used to obtain original logits is the following:
+python llava/eval/run_llava.py --model-path "liuhaotian/llava-v1.6-mistral-7b" --image-file "images/llava_v1_5_radar.jpg" --query "What is shown in this image?"
 """
 
 import argparse
+import glob
 import json
 from pathlib import Path
 
 import requests
 import torch
 from accelerate import init_empty_weights
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
 
@@ -53,23 +58,14 @@ KEYS_TO_MODIFY_MAPPING = {
 
 
 def load_original_state_dict():
-    # note: this is currently defined for liuhaotian/llava-v1.6-mistral-7b
-    filenames = [
-        "model-00001-of-00004.safetensors",
-        "model-00002-of-00004.safetensors",
-        "model-00003-of-00004.safetensors",
-        "model-00004-of-00004.safetensors",
-    ]
-    filepaths = [
-        hf_hub_download(repo_id="liuhaotian/llava-v1.6-mistral-7b", filename=file, repo_type="model")
-        for file in filenames
-    ]
+    directory_path = snapshot_download(repo_id="liuhaotian/llava-v1.6-mistral-7b", allow_patterns=["*.safetensors"])
 
     original_state_dict = {}
-    for path in filepaths:
-        with safe_open(path, framework="pt", device="cpu") as f:
-            for key in f.keys():
-                original_state_dict[key] = f.get_tensor(key)
+    for path in glob.glob(f"{directory_path}/*"):
+        if path.endswith(".safetensors"):
+            with safe_open(path, framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    original_state_dict[key] = f.get_tensor(key)
 
     return original_state_dict
 
