@@ -997,7 +997,7 @@ class RTDetrDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1053,12 +1053,17 @@ class RTDetrDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
+        print('decoder self_attn', hidden_states[0, :10, :10], hidden_states.shape)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         second_residual = hidden_states
+        print('decoder second_residual', hidden_states[0, :10, :10], hidden_states.shape)
+        # print('decoder encoder_attention_mask', encoder_attention_mask[0, :10, :10], encoder_attention_mask.shape)
+        print('decoder encoder_hidden_states', encoder_hidden_states[0, :10, :10], encoder_hidden_states.shape)
+        print('decoder position_embeddings', position_embeddings[0, :10, :10], position_embeddings.shape)
 
         # Cross-Attention
         cross_attn_weights = None
@@ -1073,6 +1078,7 @@ class RTDetrDecoderLayer(nn.Module):
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
+        print('decoder cross_attn', hidden_states[0, :10, :10], hidden_states.shape)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = second_residual + hidden_states
@@ -1086,7 +1092,9 @@ class RTDetrDecoderLayer(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        print('decoder after fc2 residual', hidden_states[0, :10, :10], hidden_states.shape)
         hidden_states = self.final_layer_norm(hidden_states)
+        print('decoder hidden_states', hidden_states[0, :10, :10], hidden_states.shape)
 
         outputs = (hidden_states,)
 
@@ -1397,9 +1405,9 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
             position_embeddings = self.query_pos_head(reference_points)
-            print(idx, 'decoder after query_pos_head', hidden_states[0,:3,:3], hidden_states.shape)
-            print('position_embeddings', position_embeddings.shape, position_embeddings[0,:4,:4])
-            print('reference_points', reference_points[:3,:3], reference_points.shape)
+            print(idx, 'decoder after query_pos_head', hidden_states[0,:8,:8], hidden_states.shape)
+            print('position_embeddings', position_embeddings.shape, position_embeddings[0,:8,:8])
+            print('reference_points', reference_points[0,:8,:8], reference_points.shape)
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1419,8 +1427,11 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
+                print('hidden_states', hidden_states[0,:8,:8], hidden_states.shape)
                 tmp = self.bbox_embed[idx](hidden_states)
-                new_reference_points = tmp.sigmoid() + inverse_sigmoid(reference_points)
+                print('tmp', tmp[0,:8,:8], tmp.shape)
+                new_reference_points = F.sigmoid(tmp + inverse_sigmoid(reference_points))
+                print('new_reference_points', new_reference_points[0,:8,:8], new_reference_points.shape)
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
@@ -1703,6 +1714,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
+        print('memory', memory[0,:8,:8], memory.shape)
 
         output_memory = self.enc_output(memory)
 
@@ -1742,7 +1754,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # decoder
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            encoder_hidden_states=memory,
+            encoder_hidden_states=source_flatten,
             encoder_attention_mask=mask_flatten,
             reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,

@@ -177,6 +177,7 @@ class RTDetrConfig(PretrainedConfig):
         decoder_n_points=4,
         decoder_layers=6,
         decoder_attention_heads=8,
+        decoder_activation_function="relu",
         attention_dropout=0.0,
         num_denoising=100,
         label_noise_ratio=0.5,
@@ -184,7 +185,7 @@ class RTDetrConfig(PretrainedConfig):
         learnt_init_query=False,
         image_size=[640, 640],
         eval_idx=-1,
-        disable_custom_kernels=False,
+        disable_custom_kernels=True,
         with_box_refine=True,
         # Loss
         matcher_alpha=0.25,
@@ -249,6 +250,7 @@ class RTDetrConfig(PretrainedConfig):
         self.decoder_n_points = decoder_n_points
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_activation_function = decoder_activation_function
         self.attention_dropout = attention_dropout
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
