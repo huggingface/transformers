@@ -38,6 +38,9 @@ from ...utils import (
     replace_return_docstrings,
 )
 
+HIERA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "",
+]
 
 def conv_nd(n: int) -> Type[nn.Module]:
     """
