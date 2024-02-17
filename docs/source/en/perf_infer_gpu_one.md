@@ -52,6 +52,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
+* [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 
@@ -347,7 +348,7 @@ ORT is supported by 🤗 Optimum which can be used in 🤗 Transformers. You'll 
 from optimum.onnxruntime import ORTModelForSequenceClassification
 
 ort_model = ORTModelForSequenceClassification.from_pretrained(
-  "distilbert-base-uncased-finetuned-sst-2-english",
+  "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
   export=True,
   provider="CUDAExecutionProvider",
 )
@@ -359,7 +360,7 @@ Now you're free to use the model for inference:
 from optimum.pipelines import pipeline
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased-finetuned-sst-2-english")
 
 pipeline = pipeline(task="text-classification", model=ort_model, tokenizer=tokenizer, device="cuda:0")
 result = pipeline("Both the music and visual were astounding, not to mention the actors performance.")

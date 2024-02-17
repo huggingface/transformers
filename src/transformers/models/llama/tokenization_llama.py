@@ -117,7 +117,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=True)
             >>> tokenizer.encode("Hello <extra_id_0>.")
             [8774, 32099, 3, 5, 1]
             ```
@@ -125,7 +125,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ```python
             >>> from transformers import T5Tokenizer
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```

@@ -344,17 +344,17 @@ class StaticCache(Cache):
             The default `dtype` to use when initializing the layer.
     """
 
-    def __init__(
-        self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=torch.float32
-    ) -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_heads = config.num_attention_heads
-        self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
+        self.dtype = dtype if dtype is not None else torch.float32
+        self.num_key_value_heads = (
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        )
 
-        cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
+        cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.seen_tokens = 0
@@ -384,18 +384,21 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        new_cache_positions = cache_kwargs.get("position_ids")
+        new_cache_positions = cache_kwargs.get("cache_position")
         k_out = self.key_cache
         v_out = self.value_cache
 
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
 
-        self.seen_tokens += key_states.shape[-2]
+        self.seen_tokens += key_states.shape[2]
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
+        return self.seen_tokens
+
+    def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
         return self.seen_tokens
 
     def get_max_length(self) -> Optional[int]:

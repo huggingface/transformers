@@ -176,7 +176,6 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_after_weight_loading`.
         """
-        model._is_quantized_training_enabled = self.is_trainable
         return self._process_model_after_weight_loading(model, **kwargs)
 
     @abstractmethod
