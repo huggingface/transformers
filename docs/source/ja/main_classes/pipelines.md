@@ -44,7 +44,7 @@ Recognition、Masked Language Modeling、Sentiment Analysis、Feature Extraction
 ハブはすでにそれを定義しています。
 
 ```python
->>> pipe = pipeline(model="roberta-large-mnli")
+>>> pipe = pipeline(model="FacebookAI/roberta-large-mnli")
 >>> pipe("This restaurant is awesome")
 [{'label': 'NEUTRAL', 'score': 0.7313136458396912}]
 ```

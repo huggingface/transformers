@@ -485,7 +485,7 @@ def compute_metrics(eval_pred):
 
 모델에 입력값을 넣고 `logits`을 반환받으세요:
 
-```
+```py
 >>> logits = run_inference(trained_model, sample_test_video["video"])
 ```
 

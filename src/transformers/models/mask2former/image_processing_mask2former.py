@@ -771,7 +771,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         )
         return encoded_inputs
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -799,7 +799,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],

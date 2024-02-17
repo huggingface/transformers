@@ -1901,6 +1901,13 @@ class ClapTextModelWithProjection(metaclass=DummyObject):
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class CLIPForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CLIPModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7600,6 +7607,13 @@ class SEWDPreTrainedModel(metaclass=DummyObject):
 SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SiglipForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SiglipModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7809,6 +7823,34 @@ class SqueezeBertModule(metaclass=DummyObject):
 
 
 class SqueezeBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

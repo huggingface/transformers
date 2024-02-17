@@ -53,6 +53,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
+    is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
@@ -95,6 +96,7 @@ from .utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_sudachi_available,
+    is_sudachi_projection_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -955,11 +957,26 @@ def require_apex(test_case):
     return unittest.skipUnless(is_apex_available(), "test requires apex")(test_case)
 
 
+def require_aqlm(test_case):
+    """
+    Decorator marking a test that requires aqlm
+    """
+    return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
 def require_bitsandbytes(test_case):
     """
-    Decorator for bits and bytes (bnb) dependency
+    Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+    if is_bitsandbytes_available() and is_torch_available():
+        try:
+            import pytest
+
+            return pytest.mark.bitsandbytes(test_case)
+        except ImportError:
+            return test_case
+    else:
+        return unittest.skip("test requires bitsandbytes and torch")(test_case)
 
 
 def require_optimum(test_case):
@@ -1041,6 +1058,15 @@ def require_sudachi(test_case):
     Decorator marking a test that requires sudachi
     """
     return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_sudachi_projection(test_case):
+    """
+    Decorator marking a test that requires sudachi_projection
+    """
+    return unittest.skipUnless(is_sudachi_projection_available(), "test requires sudachi which supports projection")(
+        test_case
+    )
 
 
 def require_jumanpp(test_case):
@@ -1299,7 +1325,7 @@ def LoggingLevel(level):
 
     ```python
     with LoggingLevel(logging.INFO):
-        AutoModel.from_pretrained("gpt2")  # calls logger.info() several times
+        AutoModel.from_pretrained("openai-community/gpt2")  # calls logger.info() several times
     ```
     """
     orig_level = transformers_logging.get_verbosity()
@@ -1585,7 +1611,7 @@ class TestCasePlus(unittest.TestCase):
         Example:
 
         ```
-        one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("t5-large")'
+        one_liner_str = 'from transformers import AutoModel; AutoModel.from_pretrained("google-t5/t5-large")'
         max_rss = self.python_one_liner_max_rss(one_liner_str)
         ```
         """

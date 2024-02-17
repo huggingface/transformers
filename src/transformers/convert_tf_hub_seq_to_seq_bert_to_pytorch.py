@@ -33,7 +33,7 @@ logging.set_verbosity_info()
 def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path, is_encoder_named_decoder, vocab_size, is_encoder):
     # Initialise PyTorch model
     bert_config = BertConfig.from_pretrained(
-        "bert-large-cased",
+        "google-bert/bert-large-cased",
         vocab_size=vocab_size,
         max_position_embeddings=512,
         is_decoder=True,

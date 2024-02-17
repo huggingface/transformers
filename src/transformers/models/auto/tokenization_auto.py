@@ -295,7 +295,10 @@ else:
                 ),
             ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
-            ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "openai-gpt",
+                ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None),
+            ),
             ("opt", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
@@ -388,6 +391,7 @@ else:
                 "squeezebert",
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
+            ("stablelm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "switch_transformers",
                 (
@@ -523,8 +527,7 @@ def get_tokenizer_config(
             This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
-              under a user or organization name, like `dbmdz/bert-base-german-cased`.
+              huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
               [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
 
@@ -565,14 +568,14 @@ def get_tokenizer_config(
 
     ```python
     # Download configuration from huggingface.co and cache.
-    tokenizer_config = get_tokenizer_config("bert-base-uncased")
+    tokenizer_config = get_tokenizer_config("google-bert/bert-base-uncased")
     # This model does not have a tokenizer config so the result will be an empty dict.
-    tokenizer_config = get_tokenizer_config("xlm-roberta-base")
+    tokenizer_config = get_tokenizer_config("FacebookAI/xlm-roberta-base")
 
     # Save a pretrained tokenizer locally and you can reload its config
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
@@ -645,8 +648,6 @@ class AutoTokenizer:
                 Can be either:
 
                     - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                       using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
                     - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
@@ -696,7 +697,7 @@ class AutoTokenizer:
         >>> from transformers import AutoTokenizer
 
         >>> # Download vocabulary from huggingface.co and cache.
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
         >>> tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
@@ -705,7 +706,7 @@ class AutoTokenizer:
         >>> # tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base", add_prefix_space=True)
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
         ```"""
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
@@ -799,7 +800,9 @@ class AutoTokenizer:
             _ = kwargs.pop("code_revision", None)
             if os.path.isdir(pretrained_model_name_or_path):
                 tokenizer_class.register_for_auto_class()
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return tokenizer_class.from_pretrained(
+                pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
+            )
         elif config_tokenizer_class is not None:
             tokenizer_class = None
             if use_fast and not config_tokenizer_class.endswith("Fast"):

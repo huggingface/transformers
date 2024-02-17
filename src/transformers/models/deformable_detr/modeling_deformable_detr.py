@@ -36,6 +36,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_ninja_available,
     is_scipy_available,
     is_timm_available,
@@ -45,6 +46,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+
 from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
@@ -65,6 +67,10 @@ else:
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -618,7 +624,8 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / self.n_heads)
+        default_dtype = torch.get_default_dtype()
+        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -1172,8 +1179,8 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1541,15 +1548,15 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
         valid_height = torch.sum(mask[:, :, 0], 1)
         valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio_height = valid_height.to(dtype) / height
+        valid_ratio_width = valid_width.to(dtype) / width
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     def get_proposal_pos_embed(self, proposals):
@@ -1722,7 +1729,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
         valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
@@ -2246,11 +2253,11 @@ class DeformableDetrLoss(nn.Module):
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+        world_size = 1
+        if PartialState._shared_state != {}:
+            num_boxes = reduce(num_boxes)
+            world_size = PartialState().num_processes
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
         losses = {}

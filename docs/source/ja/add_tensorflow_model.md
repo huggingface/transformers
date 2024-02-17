@@ -41,7 +41,7 @@ PyTorchをTensorFlowモデルの重みに変換する手順、およびMLフレ�
 &nbsp;
 
 選択したモデルの`config.json`の`model_type`フィールドをチェックしてみてください
-（[例](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)）。
+（[例](https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json#L14)）。
 🤗 Transformersの該当するモデルフォルダに、名前が"modeling_tf"で始まるファイルがある場合、それは対応するTensorFlow
 アーキテクチャを持っていることを意味します（[例](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)）。
 

@@ -1143,8 +1143,8 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
-        >>> model = XLMForQuestionAnswering.from_pretrained("xlm-mlm-en-2048")
+        >>> tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-mlm-en-2048")
+        >>> model = XLMForQuestionAnswering.from_pretrained("FacebookAI/xlm-mlm-en-2048")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0

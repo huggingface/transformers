@@ -1251,7 +1251,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ```python
         from transformers import AutoModel
 
-        model = AutoModel.from_pretrained("bert-base-cased")
+        model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 
         model.add_model_tags(["custom", "custom-bert"])
 
@@ -2608,8 +2608,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -2788,17 +2786,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> from transformers import BertConfig, BertModel
 
         >>> # Download model and configuration from huggingface.co and cache.
-        >>> model = BertModel.from_pretrained("bert-base-uncased")
+        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
         >>> model = BertModel.from_pretrained("./test/saved_model/")
         >>> # Update configuration during loading.
-        >>> model = BertModel.from_pretrained("bert-base-uncased", output_attentions=True)
+        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", output_attentions=True)
         >>> assert model.config.output_attentions == True
         >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
         >>> config = BertConfig.from_json_file("./tf_model/my_tf_model_config.json")
         >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
-        >>> model = BertModel.from_pretrained("bert-base-uncased", from_flax=True)
+        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", from_flax=True)
         ```
 
         * `low_cpu_mem_usage` algorithm:
@@ -3748,11 +3746,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     _loaded_keys = loaded_keys
                 not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
-                # if we're about to tie the output embeds to the input embeds we don't need to init them
+                # If we're about to tie the output embeds to the input embeds we don't need to init them
                 if hasattr(model.config, "tie_word_embeddings") and model.config.tie_word_embeddings:
                     output_embeddings = model.get_output_embeddings()
                     if output_embeddings is not None:
-                        output_embeddings._is_hf_initialized = True
+                        # Still need to initialize if there is a bias term since biases are not tied.
+                        if not hasattr(output_embeddings, "bias") or output_embeddings.bias is None:
+                            output_embeddings._is_hf_initialized = True
             else:
                 not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
@@ -4187,6 +4187,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             logger.warning_once(warn_string)
+
+    @property
+    def _is_quantized_training_enabled(self):
+        warnings.warn(
+            "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
+            FutureWarning,
+        )
+
+        if not hasattr(self, "hf_quantizer"):
+            return False
+
+        return self.hf_quantizer.is_trainable
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

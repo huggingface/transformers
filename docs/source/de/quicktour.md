@@ -89,7 +89,7 @@ Importieren sie die [`pipeline`] und spezifizieren sie die Aufgabe, welche sie l
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-Die Pipeline lädt ein standardmäßiges [vortrainiertes Modell](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) und einen Tokenizer für die Stimmungs-Analyse herunter und speichert sie. Jetzt können Sie den "Klassifikator" auf Ihren Zieltext anwenden:
+Die Pipeline lädt ein standardmäßiges [vortrainiertes Modell](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) und einen Tokenizer für die Stimmungs-Analyse herunter und speichert sie. Jetzt können Sie den "Klassifikator" auf Ihren Zieltext anwenden:
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -407,7 +407,7 @@ Beginnen Sie mit dem Import von [`AutoConfig`] und laden Sie dann das trainierte
 ```py
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
