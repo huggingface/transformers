@@ -796,7 +796,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
+            weights = layer.input_layernorm.weight
             layer.self_attn.past_key_value = cache_cls(
                 self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
             )
