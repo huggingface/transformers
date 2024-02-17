@@ -193,31 +193,25 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
             )
         elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
             expected_slice = torch.tensor(
-                [[ 1.4883,  0.9976, -0.6992],
-                [-9.7031, -5.7031, -1.5557],
-                [-5.1328, -5.5586,  8.8281]],
+                [[1.4883, 0.9976, -0.6992], [-9.7031, -5.7031, -1.5557], [-5.1328, -5.5586, 8.8281]],
                 dtype=torch.float32,
                 device=device,
             )
         else:
             raise ValueError(f"Model {model_id} not supported")
-        
+
         assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
         print("Logits are ok!")
 
     # verify generation
-        
-    for k,v in inputs.items():
-        print(k,v.shape)
-        
+
+    for k, v in inputs.items():
+        print(k, v.shape)
+
     output_ids = model.generate(
         **inputs,
-        do_sample=False,
-        temperature=0,
-        top_p=None,
-        num_beams=1,
         max_new_tokens=512,
-        use_cache=True,
+        # use_cache=True,
     )
 
     outputs = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
@@ -233,12 +227,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     print("Batched generation...")
     output_ids = model.generate(
         **inputs,
-        do_sample=False,
-        temperature=0,
-        top_p=None,
-        num_beams=1,
         max_new_tokens=512,
-        use_cache=True,
+        # use_cache=True,
     )
 
     outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
