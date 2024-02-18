@@ -90,5 +90,17 @@ The original code can be found [here](https://github.com/LinWeizheDragon/Retriev
 [[autodoc]] FLMRVisionModel
     - forward
 
+## FLMRPretrainedModelForRetrieval
+
+[[autodoc]] FLMRPretrainedModelForRetrieval
+
+## FLMRTextConfig
+
+[[autodoc]] FLMRTextConfig
+
+## FLMRVisionConfig
+
+[[autodoc]] FLMRVisionConfig
+
 </pt>
 <tf>
