@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, require_vision, torch_devi
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -38,11 +38,6 @@ if is_vision_available():
 
 
 CHECKPOINT = "sbchoi/rtdetr_r50vd"  # TODO: replace
-
-
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
 
 
 class RTDetrModelTester:
@@ -238,7 +233,11 @@ class RTDetrModelTester:
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
-    pipeline_model_mapping = ({"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection} if is_torch_available() else {})
+    pipeline_model_mapping = (
+        {"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = False

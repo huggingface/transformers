@@ -576,11 +576,50 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     outputs = model(pixel_values)
 
     if model_name == "rtdetr_r18vd":
-        pass
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.3364253, -6.465683, -3.6130402],
+                [-4.083815, -6.4039373, -6.97881],
+                [-4.192215, -7.3410473, -6.9027247],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.16868353, 0.19833282, 0.21182671],
+                [0.25559652, 0.55121744, 0.47988364],
+                [0.7698693, 0.4124569, 0.46036878],
+            ]
+        )
     elif model_name == "rtdetr_r34vd":
-        pass
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.3727384, -4.7921476, -5.7299604],
+                [-4.840536, -8.455345, -4.1745796],
+                [-4.1277084, -5.2154565, -5.7852697],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.258278, 0.5497808, 0.4732004],
+                [0.16889669, 0.19890057, 0.21138911],
+                [0.76632994, 0.4147879, 0.46851268],
+            ]
+        )
     elif model_name == "rtdetr_r50vd_m":
-        pass
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.319764, -6.1349025, -6.094794],
+                [-5.1056995, -7.744766, -4.803956],
+                [-4.7685347, -7.9278393, -4.5751696],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.2582739, 0.55071366, 0.47660282],
+                [0.16811174, 0.19954777, 0.21292639],
+                [0.54986024, 0.2752091, 0.0561416],
+            ]
+        )
     elif model_name == "rtdetr_r50vd":
         expected_slice_logits = torch.tensor(
             [
