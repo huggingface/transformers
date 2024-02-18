@@ -459,7 +459,7 @@ class BertSdpaSelfAttention(BertSelfAttention):
         # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
         # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
         # Reference: https://github.com/pytorch/pytorch/issues/112577
-        if self.require_contiguous_qkv:
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
             query_layer = query_layer.contiguous()
             key_layer = key_layer.contiguous()
             value_layer = value_layer.contiguous()
