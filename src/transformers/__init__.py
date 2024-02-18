@@ -496,7 +496,7 @@ _import_structure = {
         "GroupViTVisionConfig",
     ],
     "models.herbert": ["HerbertTokenizer"],
-    "models.hiera":["HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP","HieraConfig"],
+    "models.hiera": ["HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP", "HieraConfig"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.idefics": [
@@ -4118,12 +4118,7 @@ else:
         ]
     )
     _import_structure["models.hiera"].extend(
-        [
-            "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "HieraModel",
-            "HieraPreTrainedModel"
-            
-        ]
+        ["HIERA_PRETRAINED_MODEL_ARCHIVE_LIST", "HieraModel", "HieraPreTrainedModel"]
     )
     _import_structure["models.hubert"].extend(
         [
@@ -6944,17 +6939,13 @@ if TYPE_CHECKING:
             GroupViTTextModel,
             GroupViTVisionModel,
         )
+        from .models.hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraModel, HieraPreTrainedModel
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
             HubertForSequenceClassification,
             HubertModel,
             HubertPreTrainedModel,
-        )
-        from .models.hiera import (
-            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            HieraModel,
-            HieraPreTrainedModel
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
