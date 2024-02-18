@@ -82,7 +82,7 @@ The instruction tuned model can be used as follows:
 
 >>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
+>>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
@@ -165,7 +165,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 
 >>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
+>>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```
