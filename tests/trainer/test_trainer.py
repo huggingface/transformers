@@ -60,6 +60,7 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_intel_extension_for_pytorch,
     require_optuna,
+    require_peft,
     require_ray,
     require_safetensors,
     require_sentencepiece,
@@ -498,6 +499,11 @@ class TrainerIntegrationCommon:
 
         for param_name, shard_file in zip(keys, shard_files):
             saver({param_name: state_dict[param_name]}, os.path.join(folder, shard_file))
+
+    def check_state_dict_are_the_same(self, state_dict_1, state_dict_2):
+        self.assertEquals(state_dict_1.keys(), state_dict_2.keys())
+        for key in state_dict_1.keys():
+            self.assertTrue(torch.equal(state_dict_1[key], state_dict_2[key]))
 
 
 @require_torch
@@ -3196,3 +3202,103 @@ class HyperParameterSearchBackendsTest(unittest.TestCase):
             list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
             list(HPSearchBackend),
         )
+
+
+@require_peft
+@require_torch
+class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
+    def get_regression_adapter_trainer(
+        self,
+        keep_report_to=False,
+        adapter_name="default",
+        adapter_args=None,
+        **kwargs,
+    ):
+        # from transformers import OPTForCausalLM
+        base_model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        pretrained_base_model = AutoModelForCausalLM.from_pretrained(base_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(base_model_id)
+
+        def m(sample):
+            return tokenizer(
+                sample["quote"],
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+                max_length=tokenizer.model_max_length,
+            )
+
+        from datasets import load_dataset
+
+        data = load_dataset("Abirate/english_quotes")
+        data = data["train"].filter(lambda example, indice: indice < 9, with_indices=True).map(m, batched=True)
+
+        # generate peft
+        from peft import LoraConfig, get_peft_model
+
+        adapter_args = adapter_args or {
+            "r": 8,
+            "lora_alpha": 16,
+            "lora_dropout": 0.05,
+            "bias": "none",
+            "target_modules": ["q_proj"],
+            "task_type": "CAUSAL_LM",
+        }
+
+        lora_config = LoraConfig(**adapter_args)
+
+        peft_model = get_peft_model(
+            model=pretrained_base_model,
+            peft_config=lora_config,
+            adapter_name=adapter_name,
+        )
+
+        compute_metrics = kwargs.pop("compute_metrics", None)
+        optimizers = kwargs.pop("optimizers", (None, None))
+        output_dir = kwargs.pop("output_dir", "./regression")
+        preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
+
+        args = RegressionTrainingArguments(output_dir, keep_report_to=keep_report_to, **kwargs)
+        return Trainer(
+            peft_model,
+            args,
+            data_collator=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
+            train_dataset=data,
+            compute_metrics=compute_metrics,
+            optimizers=optimizers,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        )
+
+    def test_can_resume_named_adapter_training(self):
+        """
+        test a named adapter can be resumed correctly
+        """
+        from peft import get_peft_model_state_dict
+
+        adapter_name = "test_adapter"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs = {
+                "output_dir": tmpdir,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 5,
+                "adapter_name": adapter_name,
+            }
+            trainer = self.get_regression_adapter_trainer(**kwargs)
+            trainer.train()
+
+            adapter_state_dict = get_peft_model_state_dict(model=trainer.model, adapter_name=adapter_name)
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Reinitialize trainer
+            trainer = self.get_regression_adapter_trainer(**kwargs)
+            # resume training from last checkpoint
+            trainer.train(resume_from_checkpoint=checkpoint)
+
+            adapter_state_dict1 = get_peft_model_state_dict(model=trainer.model, adapter_name=adapter_name)
+            state1 = dataclasses.asdict(trainer.state)
+            self.check_state_dict_are_the_same(adapter_state_dict, adapter_state_dict1)
+            self.check_trainer_state_are_the_same(state, state1)
