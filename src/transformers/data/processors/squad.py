@@ -102,8 +102,12 @@ def _is_whitespace(c):
 
 
 def squad_convert_example_to_features(
-    example, max_seq_length, doc_stride, max_query_length, padding_strategy, is_training
+    example, max_seq_length, doc_stride, max_query_length, padding_strategy, is_training, tokenizer=None
 ):
+    # Use the shared tokenizer from the thread context if one is not already provided.
+    if tokenizer is None:
+        tokenizer = tokenizer_global
+
     features = []
     if is_training and not example.is_impossible:
         # Get start and end position
@@ -308,9 +312,9 @@ def squad_convert_example_to_features(
     return features
 
 
-def squad_convert_example_to_features_init(tokenizer_for_convert: PreTrainedTokenizerBase):
-    global tokenizer
-    tokenizer = tokenizer_for_convert
+def squad_convert_example_to_features_init(tokenizer: PreTrainedTokenizerBase):
+    global tokenizer_global
+    tokenizer_global = tokenizer
 
 
 def squad_convert_examples_to_features(
@@ -364,7 +368,26 @@ def squad_convert_examples_to_features(
     features = []
 
     threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+    if threads > 1:
+        with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+            annotate_ = partial(
+                squad_convert_example_to_features,
+                max_seq_length=max_seq_length,
+                doc_stride=doc_stride,
+                max_query_length=max_query_length,
+                padding_strategy=padding_strategy,
+                is_training=is_training,
+            )
+            features = list(
+                tqdm(
+                    p.imap(annotate_, examples, chunksize=32),
+                    total=len(examples),
+                    desc="convert squad examples to features",
+                    disable=not tqdm_enabled,
+                )
+            )
+    else:
+        # Do not use the process pool to avoid unnecessary overhead.
         annotate_ = partial(
             squad_convert_example_to_features,
             max_seq_length=max_seq_length,
@@ -372,10 +395,11 @@ def squad_convert_examples_to_features(
             max_query_length=max_query_length,
             padding_strategy=padding_strategy,
             is_training=is_training,
+            tokenizer=tokenizer,
         )
         features = list(
             tqdm(
-                p.imap(annotate_, examples, chunksize=32),
+                map(annotate_, examples),
                 total=len(examples),
                 desc="convert squad examples to features",
                 disable=not tqdm_enabled,
