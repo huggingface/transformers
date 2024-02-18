@@ -368,7 +368,7 @@ def squad_convert_examples_to_features(
     features = []
 
     threads = min(threads, cpu_count())
-    if threads > 1:
+    if True: # threads > 1:
         with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
             annotate_ = partial(
                 squad_convert_example_to_features,
