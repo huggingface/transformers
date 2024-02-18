@@ -19,28 +19,28 @@
 # --------------------------------------------------------
 
 import math
+from dataclasses import dataclass
 from functools import partial
-from typing import List, Tuple, Callable, Optional, Union, Type
-from .configuration_hiera import HieraConfig
+from typing import Callable, List, Optional, Tuple, Type, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass
-
 from timm.models.layers import DropPath, Mlp
+
 from ...modeling_utils import PreTrainedModel
-from ...modeling_outputs import BaseModelOutput
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
 )
+from .configuration_hiera import HieraConfig
+
 
 HIERA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",
+    "https://dl.fbaipublicfiles.com/hiera/hiera_base_224.pth",
 ]
+
 
 def conv_nd(n: int) -> Type[nn.Module]:
     """
@@ -67,9 +67,7 @@ def get_resized_mask(target_size: torch.Size, mask: torch.Tensor) -> torch.Tenso
     return mask
 
 
-def do_masked_conv(
-    x: torch.Tensor, conv: nn.Module, mask: Optional[torch.Tensor] = None
-) -> torch.Tensor:
+def do_masked_conv(x: torch.Tensor, conv: nn.Module, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
     """Zero-out the masked regions of the input before conv.
     Prevents leakage of masked regions when using overlapping kernels.
     """
@@ -82,9 +80,7 @@ def do_masked_conv(
     return conv(x * mask.bool())
 
 
-def undo_windowing(
-    x: torch.Tensor, shape: List[int], mu_shape: List[int]
-) -> torch.Tensor:
+def undo_windowing(x: torch.Tensor, shape: List[int], mu_shape: List[int]) -> torch.Tensor:
     """
     Restore spatial organization by undoing windowed organization of mask units.
 
@@ -114,7 +110,6 @@ def undo_windowing(
     x = x.permute(permute).reshape(B, *shape, C)
 
     return x
-
 
 
 class Unroll(nn.Module):
@@ -169,9 +164,7 @@ class Unroll(nn.Module):
             # Move the patch stride into the batch dimension
             # For example in 2d: [B, Sy, Sx, H // Sy, W // Sx, C]
             L = len(new_shape)
-            permute = (
-                [0] + list(range(2, L - 1, 2)) + list(range(1, L - 1, 2)) + [L - 1]
-            )
+            permute = [0] + list(range(2, L - 1, 2)) + list(range(1, L - 1, 2)) + [L - 1]
             x = x.permute(permute)
 
             # Now finally flatten the relevant dims into the batch dimension
@@ -210,9 +203,7 @@ class Reroll(nn.Module):
                     size = [n // s for n, s in zip(size, unroll_schedule[0])]
                 unroll_schedule = unroll_schedule[1:]
 
-    def forward(
-        self, x: torch.Tensor, block_idx: int, mask: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, block_idx: int, mask: torch.Tensor = None) -> torch.Tensor:
         """
         Roll the given tensor back up to spatial order assuming it's from the given block.
 
@@ -269,11 +260,12 @@ class HieraModelOutput(ModelOutput):
     Base class for HieraModel model's outputs, conforming to Hugging Face's ModelOutput.
 
     Args:
-        last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)): 
+        last_hidden_state (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size)):
             Last layer hidden-states.
-        intermediates (List[torch.Tensor], optional): 
+        intermediates (List[torch.Tensor], optional):
             Intermediate representations or features from the model, if applicable.
     """
+
     last_hidden_state: torch.FloatTensor
     intermediates: Optional[List[torch.Tensor]] = None
 
@@ -320,15 +312,13 @@ class MaskUnitAttention(nn.Module):
         self.use_mask_unit_attention = use_mask_unit_attention
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
-        """ Input should be of shape [batch, tokens, channels]. """
-        batch_size , num_channels , _ = embeddings.shape
-        num_windows = (
-            (num_channels  // (self.q_stride * self.window_size)) if self.use_mask_unit_attention else 1
-        )
+        """Input should be of shape [batch, tokens, channels]."""
+        batch_size, num_channels, _ = embeddings.shape
+        num_windows = (num_channels // (self.q_stride * self.window_size)) if self.use_mask_unit_attention else 1
 
         qkv = (
             self.qkv(embeddings)
-            .reshape(batch_size , -1, num_windows, 3, self.number_of_heads, self.head_dim)
+            .reshape(batch_size, -1, num_windows, 3, self.number_of_heads, self.head_dim)
             .permute(3, 0, 4, 2, 1, 5)
         )
         q, k, v = qkv[0], qkv[1], qkv[2]
@@ -336,7 +326,7 @@ class MaskUnitAttention(nn.Module):
         if self.q_stride > 1:
             # Refer to Unroll to see how this performs a maxpool-Nd
             q = (
-                q.view(batch_size , self.number_of_heads, num_windows, self.q_stride, -1, self.head_dim)
+                q.view(batch_size, self.number_of_heads, num_windows, self.q_stride, -1, self.head_dim)
                 .max(dim=3)
                 .values
             )
@@ -347,9 +337,9 @@ class MaskUnitAttention(nn.Module):
         else:
             attention = (q * self.scale) @ k.transpose(-1, -2)
             attention = attention.softmax(dim=-1)
-            embeddings = (attention @ v)
+            embeddings = attention @ v
 
-        embeddings = embeddings.transpose(1, 3).reshape(batch_size , -1, self.output_dim)
+        embeddings = embeddings.transpose(1, 3).reshape(batch_size, -1, self.output_dim)
         embeddings = self.projection(embeddings)
         return embeddings
 
@@ -418,9 +408,12 @@ class Head(nn.Module):
             x = self.act_func(x)
         return x
 
-@add_start_docstrings("""
+
+@add_start_docstrings(
+    """
 Patch embedding that supports any number of spatial dimensions (1d, 2d, 3d).
-""")
+"""
+)
 class PatchEmbedding(nn.Module):
     def __init__(
         self,
@@ -442,18 +435,18 @@ class PatchEmbedding(nn.Module):
             padding=padding,
         )
 
-    def forward(
-        self, pixel_values: torch.Tensor, mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         embeddings = do_masked_conv(pixel_values, self.projection, mask)
         embeddings = embeddings.reshape(embeddings.shape[0], embeddings.shape[1], -1).transpose(2, 1)
         return embeddings
+
 
 class HieraPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
@@ -469,9 +462,8 @@ class HieraPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.weight, 1.0)
 
 
-
-
-@add_start_docstrings("""
+@add_start_docstrings(
+    """
 Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
 
 This model is a PyTorch implementation of the Hiera architecture for image classification. It introduces a hierarchical design that processes images in a coarse-to-fine manner, efficiently handling various scales and complexities within the images.
@@ -482,7 +474,7 @@ Parameters:
     config ([`HieraConfig`]): Model configuration class with all the parameters of the model.
         Initializing with a config file does not load the weights associated with the model, only the
         configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-    
+
 Example usage:
     >>> from your_model_file import Hiera, HieraConfig
     >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
@@ -490,7 +482,8 @@ Example usage:
     >>> model = Hiera(config)
     >>> inputs = torch.rand((1, 3, 224, 224))
     >>> outputs = model(inputs)
-                      """)
+                      """
+)
 class HieraModel(HieraPreTrainedModel):
     config_class = HieraConfig
     base_model_prefix = "hiera"
@@ -531,9 +524,7 @@ class HieraModel(HieraPreTrainedModel):
         assert self.q_pool < len(self.stages)
         self.q_pool, self.q_stride = self.q_pool, self.q_stride
         self.mu_size, self.mask_unit_size = flat_mu_size, self.mask_unit_size
-        self.mask_spatial_shape = [
-            i // s for i, s in zip(self.tokens_spatial_shape, self.mask_unit_size)
-        ]
+        self.mask_spatial_shape = [i // s for i, s in zip(self.tokens_spatial_shape, self.mask_unit_size)]
         self.stage_ends = [sum(self.stages[:i]) - 1 for i in range(1, len(self.stages) + 1)]
 
         self.patch_embedding = PatchEmbedding(
@@ -555,9 +546,7 @@ class HieraModel(HieraPreTrainedModel):
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_tokens, self.embedding_dimension))
 
         # Setup roll and reroll modules
-        self.unroll = Unroll(
-            self.input_size, self.patch_stride, [self.q_stride] * len(self.stage_ends[:-1])
-        )
+        self.unroll = Unroll(self.input_size, self.patch_stride, [self.q_stride] * len(self.stage_ends[:-1]))
         self.reroll = Reroll(
             self.input_size,
             self.patch_stride,
@@ -566,7 +555,7 @@ class HieraModel(HieraPreTrainedModel):
             self.q_pool,
         )
         # q_pool locations
-        q_pool_blocks = [x + 1 for x in self.stage_ends[:self.q_pool]]
+        q_pool_blocks = [x + 1 for x in self.stage_ends[: self.q_pool]]
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, depth)]
 
@@ -619,7 +608,6 @@ class HieraModel(HieraPreTrainedModel):
         self.head.projection.bias.data.mul_(self.head_init_scale)
         self.post_init()
 
-
     @torch.jit.ignore
     def no_weight_decay(self):
         if self.sep_position_embeddings:
@@ -632,21 +620,19 @@ class HieraModel(HieraPreTrainedModel):
         Generates a random mask, mask_ratio fraction are dropped.
         1 is *keep*, 0 is *remove*. Useful for MAE, FLIP, etc.
         """
-        batch_size  = x.shape[0]
+        batch_size = x.shape[0]
         # Tokens selected for masking at mask unit level
         num_windows = math.prod(self.mask_spatial_shape)  # num_mask_units
         len_keep = int(num_windows * (1 - mask_ratio))
-        noise = torch.rand(batch_size , num_windows, device=x.device)
+        noise = torch.rand(batch_size, num_windows, device=x.device)
 
         # Sort noise for each sample
-        ids_shuffle = torch.argsort(
-            noise, dim=1
-        )  # ascend: small is keep, large is remove
+        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
         ids_restore = torch.argsort(ids_shuffle, dim=1)
 
         # Generate the binary mask: 1 is *keep*, 0 is *remove*
         # Note this is opposite to original MAE
-        mask = torch.zeros([batch_size , num_windows], device=x.device)
+        mask = torch.zeros([batch_size, num_windows], device=x.device)
         mask[:, :len_keep] = 1
         # Unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
@@ -665,34 +651,34 @@ class HieraModel(HieraPreTrainedModel):
         else:
             return self.position_embeddings
 
-    @add_start_docstrings_to_model_forward("""
+    @add_start_docstrings_to_model_forward(
+        """
     The forward pass for the Hiera model.
 
     Args:
         pixel_values (`torch.Tensor`): Input tensor of shape `(batch_size, channels, height, width)`.
-        
+
         mask (`torch.Tensor`, optional): A boolean tensor of shape `(batch_size, num_mask_units)` indicating which mask units to keep (True) or remove (False).
         mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
         Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
 
-        
+
         return_dict (`bool`, optional): Whether to return a dictionary of outputs or a plain tuple.
 
         return_intermediates (`bool`, optional): Whether to return intermediate features from each stage of the model.
-    
-    
-        
-    """)
-    @replace_return_docstrings(output_type=HieraModelOutput,config_class="HieraConfig")
+
+
+
+    """
+    )
     def forward(
         self,
         pixel_values: torch.Tensor,
         mask: torch.Tensor = None,
         return_dict: Optional[bool] = True,
-        return_intermediates: bool = False,
+        return_intermediates: bool = True,
     ) -> Union[Tuple[torch.Tensor], HieraModelOutput]:
-        """
-        """
+        """ """
         # Slowfast training passes in a list
         if isinstance(pixel_values, list):
             pixel_values = pixel_values[0]
@@ -700,9 +686,7 @@ class HieraModel(HieraPreTrainedModel):
 
         pached_embeddings = self.patch_embedding(
             pixel_values,
-            mask=mask.view(
-                pixel_values.shape[0], 1, *self.mask_spatial_shape
-            )  # batch_size , C, *mask_spatial_shape
+            mask=mask.view(pixel_values.shape[0], 1, *self.mask_spatial_shape)  # batch_size , C, *mask_spatial_shape
             if mask is not None
             else None,
         )
@@ -732,7 +716,7 @@ class HieraModel(HieraPreTrainedModel):
         # intermediates[-1] is embeddings in spatial order
         if not return_dict:
             return tuple(v for v in [embeddings, intermediates] if v is not None)
-        
+
         return HieraModelOutput(
             last_hidden_state=embeddings,
             intermediates=intermediates if return_intermediates else None,
