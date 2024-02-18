@@ -1083,9 +1083,12 @@ class Trainer:
             OptimizerNames.LION_8BIT,
             OptimizerNames.PAGED_LION,
             OptimizerNames.PAGED_LION_8BIT,
+            OptimizerNames.RMSPROP_BNB,
+            OptimizerNames.RMSPROP_8BIT,
+            OptimizerNames.RMSPROP_32BIT,
         ]:
             try:
-                from bitsandbytes.optim import AdamW, Lion
+                from bitsandbytes.optim import AdamW, Lion, RMSprop
 
                 is_paged = False
                 optim_bits = 32
@@ -1100,8 +1103,16 @@ class Trainer:
                 elif "lion" in args.optim:
                     optimizer_cls = Lion
                     additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
+                elif "rmsprop" in args.optim:
+                    optimizer_cls = RMSprop
+                    # Above we pass all `adam_kwargs` to the optimizer, here
+                    # we only pass `optim_args` which can be passed to the user.
+                    additional_optim_kwargs = optim_args
 
-                bnb_kwargs = {"is_paged": is_paged, "optim_bits": optim_bits}
+                bnb_kwargs = {"optim_bits": optim_bits}
+                if "rmsprop" not in args.optim:
+                    bnb_kwargs["is_paged"] = is_paged
+
                 optimizer_kwargs.update(additional_optim_kwargs)
                 optimizer_kwargs.update(bnb_kwargs)
             except ImportError:
@@ -4135,11 +4146,6 @@ class Trainer:
         ):
             wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
             raise ValueError(f"{wrapper} can't be used with `save_only_model` along with `load_best_model_at_end`.")
-
-        # `auto_find_batch_size` isn't yet supported with DeepSpeed/FSDP
-        if (self.is_deepspeed_enabled or self.is_fsdp_enabled) and self.args.auto_find_batch_size:
-            wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
-            raise NotImplementedError(f"`{wrapper}` doesn't support `auto_find_batch_size`.")
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
