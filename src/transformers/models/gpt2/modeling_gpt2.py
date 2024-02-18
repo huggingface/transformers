@@ -1636,7 +1636,6 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
