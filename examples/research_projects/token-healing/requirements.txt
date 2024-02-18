@@ -1,0 +1,2 @@
+pygtrie >= 2.5.0
+transformers >= 4.36.2
