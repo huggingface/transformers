@@ -5224,6 +5224,8 @@ if TYPE_CHECKING:
         FLMRConfig,
         FLMRContextEncoderTokenizer,
         FLMRQueryEncoderTokenizer,
+        FLMRTextConfig,
+        FLMRVisionConfig,
     )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
