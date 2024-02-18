@@ -641,7 +641,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if tokens is None:
             return None
 
-        if isinstance(tokens, str):
+        if isinstance(tokens, (str, bytes)):
             return self._convert_token_to_id_with_added_voc(tokens)
 
         ids = []

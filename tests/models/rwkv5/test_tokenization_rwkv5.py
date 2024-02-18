@@ -46,3 +46,10 @@ class RWKV5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         return Rwkv5Tokenizer.from_pretrained(self.tmpdirname, **kwargs, trust_remote_code=True)
 
+    def test_pretokenized_inputs(self):
+        pass
+
+    def get_input_output_texts(self, tokenizer):
+        input_text = b"ABC"
+        output_text = b"DEF"
+        return input_text, output_text
