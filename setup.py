@@ -144,8 +144,9 @@ _deps = [
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pydantic<2",
+    "pygtrie>=2.5.0",
+    "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.8.0",
@@ -269,6 +270,7 @@ else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
+extras["generate"] = deps_list("pygtrie")
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
@@ -344,6 +346,7 @@ extras["all"] = (
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
+    + extras["generate"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
@@ -369,6 +372,7 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["generate"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
@@ -382,6 +386,7 @@ extras["dev-tensorflow"] = (
     + extras["modelcreation"]
     + extras["onnx"]
     + extras["tf-speech"]
+    + extras["generate"]
 )
 extras["dev"] = (
     extras["all"]
