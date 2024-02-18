@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MgpstrForSceneTextRecognition
+    from transformers import MgpstrForSceneTextRecognition, MgpstrModel
 
 
 if is_vision_available():
@@ -118,7 +118,11 @@ class MgpstrModelTester:
 @require_torch
 class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": MgpstrForSceneTextRecognition} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": MgpstrForSceneTextRecognition, "image-feature-extraction": MgpstrModel}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
 
     test_pruning = False

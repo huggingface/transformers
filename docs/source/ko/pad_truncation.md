@@ -51,7 +51,7 @@ rendered properly in your Markdown viewer.
 |                                      |                                   | `tokenizer(batch_sentences, padding='longest')`                                          |
 |                                      | 모델의 최대 입력 길이로 패딩      | `tokenizer(batch_sentences, padding='max_length')`                                        |
 |                                      | 특정 길이로 패딩                  | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                         |
-|                                      | 다양한 길이로 패딩                | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)                           |
+|                                      | 다양한 길이로 패딩                | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)`                          |
 | 모델의 최대 입력 길이로 잘라내기      | 패딩 없음                         | `tokenizer(batch_sentences, truncation=True)` 또는                                        |
 |                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY)`                                         |
 |                                      | 배치 내 최대 길이로 패딩          | `tokenizer(batch_sentences, padding=True, truncation=True)` 또는                          |
