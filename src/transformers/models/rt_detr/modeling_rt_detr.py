@@ -122,11 +122,11 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
 # TODO: Replace all occurrences of the checkpoint with the final one
-_CHECKPOINT_FOR_DOC = "rafaelpadilla/porting_rt_detr"
+_CHECKPOINT_FOR_DOC = "sbchoi/rtdetr_r50vd"
 
 RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "rafaelpadilla/porting_rt_detr",
-    # See all RTDETR models at https://huggingface.co/models?filter=rt_detr
+    "sbchoi/rtdetr_r50vd",
+    # See all RTDETR models at https://huggingface.co/models?filter=rtdetr
 ]
 
 

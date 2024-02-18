@@ -30,62 +30,19 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RTDetrModel
+    from transformers import RTDetrForObjectDetection, RTDetrModel
     from transformers.models.rt_detr.modeling_rt_detr import RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
 
-CHECKPOINT = "rafaelpadilla/porting_rt_detr"  # TODO: replace
+CHECKPOINT = "sbchoi/rtdetr_r50vd"  # TODO: replace
 
 
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
-
-
-class RTDetrConfigTester(ConfigTester):
-    def create_and_test_config_common_properties(self):
-        config = self.config_class(**self.inputs_dict)
-        self.parent.assertTrue(hasattr(config, "initializer_range"))
-        self.parent.assertTrue(hasattr(config, "layer_norm_eps"))
-        self.parent.assertTrue(hasattr(config, "backbone_config"))
-        self.parent.assertTrue(hasattr(config, "feat_strides"))
-        self.parent.assertTrue(hasattr(config, "hidden_dim"))
-        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
-        self.parent.assertTrue(hasattr(config, "dim_feedforward"))
-        self.parent.assertTrue(hasattr(config, "dropout"))
-        self.parent.assertTrue(hasattr(config, "encode_proj_layers"))
-        self.parent.assertTrue(hasattr(config, "num_encoder_layers"))
-        self.parent.assertTrue(hasattr(config, "pe_temperature"))
-        self.parent.assertTrue(hasattr(config, "act_encoder"))
-        self.parent.assertTrue(hasattr(config, "eval_size"))
-        self.parent.assertTrue(hasattr(config, "normalize_before"))
-        self.parent.assertTrue(hasattr(config, "num_queries"))
-        self.parent.assertTrue(hasattr(config, "feat_channels"))
-        self.parent.assertTrue(hasattr(config, "num_levels"))
-        self.parent.assertTrue(hasattr(config, "num_decoder_points"))
-        self.parent.assertTrue(hasattr(config, "num_decoder_layers"))
-        self.parent.assertTrue(hasattr(config, "num_denoising"))
-        self.parent.assertTrue(hasattr(config, "label_noise_ratio"))
-        self.parent.assertTrue(hasattr(config, "box_noise_scale"))
-        self.parent.assertTrue(hasattr(config, "learnt_init_query"))
-        self.parent.assertTrue(hasattr(config, "image_size"))
-        self.parent.assertTrue(hasattr(config, "eval_idx"))
-        self.parent.assertTrue(hasattr(config, "matcher_alpha"))
-        self.parent.assertTrue(hasattr(config, "matcher_gamma"))
-        self.parent.assertTrue(hasattr(config, "matcher_class_cost"))
-        self.parent.assertTrue(hasattr(config, "matcher_bbox_cost"))
-        self.parent.assertTrue(hasattr(config, "matcher_giou_cost"))
-        self.parent.assertTrue(hasattr(config, "use_focal_loss"))
-        self.parent.assertTrue(hasattr(config, "use_aux_loss"))
-        self.parent.assertTrue(hasattr(config, "focal_loss_alpha"))
-        self.parent.assertTrue(hasattr(config, "focal_loss_gamma"))
-        self.parent.assertTrue(hasattr(config, "weight_loss_vfl"))
-        self.parent.assertTrue(hasattr(config, "weight_loss_bbox"))
-        self.parent.assertTrue(hasattr(config, "weight_loss_giou"))
-        self.parent.assertTrue(hasattr(config, "eos_coefficient"))
 
 
 class RTDetrModelTester:
@@ -182,25 +139,25 @@ class RTDetrModelTester:
         self.eos_coefficient = eos_coefficient
         self.image_size = None  # As this is test runs in inference, let the model get from the input
 
-    def prepare_random_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.input_image_size, self.input_image_size]
-        )
-        # labels is a list of Dict (each Dict being the labels for a given example in the batch)
-        labels = []
-        # simulates number of samples per image
-        samples_labels = 3
-        for _ in range(self.batch_size):
-            target = {}
-            target["class_labels"] = ids_tensor([samples_labels], self.num_classes)
-            target["boxes"] = torch.rand(samples_labels, 4, device=torch_device)
-            labels.append(target)
-        return pixel_values, labels
-
     def prepare_config_and_inputs(self):
-        pixel_values, labels = self.prepare_random_inputs()
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+
+        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
+
+        labels = None
+        if self.use_labels:
+            # labels is a list of Dict (each Dict being the labels for a given example in the batch)
+            labels = []
+            for i in range(self.batch_size):
+                target = {}
+                target["class_labels"] = torch.randint(
+                    high=self.num_labels, size=(self.n_targets,), device=torch_device
+                )
+                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                labels.append(target)
+
         config = self.get_config()
-        return config, pixel_values, labels
+        return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
         return RTDetrConfig(
@@ -245,48 +202,88 @@ class RTDetrModelTester:
             eos_coefficient=self.eos_coefficient,
         )
 
-    def create_and_check_model(self, model_class, config, pixel_values, labels):
-        """Create and check the shape of the logits and boxes predicted by the model, and their types."""
-        model = model_class(config)
-        model.to(torch_device)
-        model.eval()
-
-        signature = inspect.signature(model_class.forward)
-        arg_names = [*signature.parameters.keys()]
-        if "labels" in arg_names:
-            result = model(pixel_values, labels=labels)
-            self.parent.assertIsInstance(result.loss, torch.Tensor)
-            self.parent.assertIsInstance(result.loss_dict, dict)
-        else:
-            result = model(pixel_values)
-        # Check model's outputs
-        self.parent.assertEqual(result["logits"].shape, (self.batch_size, self.num_queries, config.num_labels))
-        self.parent.assertEqual(result["pred_boxes"].shape, (self.batch_size, self.num_queries, 4))
-
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, _ = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def create_and_check_rt_detr_model(self, config, pixel_values, pixel_mask, labels):
+        model = RTDetrModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
+
+    def create_and_check_rt_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+        model = RTDetrForObjectDetection(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RTDetrModel,) if is_torch_available() else ()
-
-    pipeline_model_mapping = {"object-detection": RTDetrModel} if is_torch_available() else ()
-
+    all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
+    pipeline_model_mapping = ({"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection} if is_torch_available() else {})
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = False
     has_attentions = False
     test_head_masking = False
 
+    # special case for head models
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "RTDetrForObjectDetection":
+                labels = []
+                for i in range(self.model_tester.batch_size):
+                    target = {}
+                    target["class_labels"] = torch.ones(
+                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
+                    )
+                    target["boxes"] = torch.ones(
+                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                    )
+                    labels.append(target)
+                inputs_dict["labels"] = labels
+
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = RTDetrModelTester(self)
-        self.config_tester = RTDetrConfigTester(self, config_class=RTDetrConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(self, config_class=RTDetrConfig, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # we don't test common_properties and arguments_init as these don't apply for Deformable DETR
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+
+    def test_rt_detr_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_rt_detr_model(*config_and_inputs)
+
+    def test_rt_detr_object_detection_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_rt_detr_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="RTDetr does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -331,15 +328,19 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
-        pixel_values, labels = self.model_tester.prepare_random_inputs()
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model(RTDetrModel, config, pixel_values, labels)
-
     def test_model_from_pretrained(self):
         for model_name in RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = RTDetrModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+TOLERANCE = 1e-4
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
 
 
 @require_torch
@@ -349,8 +350,8 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
-    def test_inference(self):
-        model = RTDetrModel.from_pretrained(CHECKPOINT).to(torch_device)
+    def test_inference_object_detection_head(self):
+        model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
