@@ -500,10 +500,18 @@ def get_class_from_dynamic_module(
 
     if code_revision is None and pretrained_model_name_or_path == repo_id:
         code_revision = revision
+    # if we are loading from a path but we're using a class reference with a repo_id--module.classname format
+    # use the path instead of the repo_id because likely module.classname is a peer of the config.json
+    module_path_or_repo_id = repo_id
+    module_filename = module_file + ".py"
+    module_file_path = os.path.join(pretrained_model_name_or_path, module_filename)
+    if os.path.isfile(module_file_path):
+        module_path_or_repo_id = pretrained_model_name_or_path
+
     # And lastly we get the class inside our newly created module
     final_module = get_cached_module_file(
-        repo_id,
-        module_file + ".py",
+        pretrained_model_name_or_path,
+        module_filename,
         cache_dir=cache_dir,
         force_download=force_download,
         resume_download=resume_download,
