@@ -28,7 +28,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import create_repo, HfApi
+from huggingface_hub import HfApi, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -609,7 +609,7 @@ def main():
                     repo_id=repo_id,
                     repo_type="model",
                     ignore_patterns=["step_*", "epoch_*"],
-                    token=args.hub_token
+                    token=args.hub_token,
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -636,7 +636,7 @@ def main():
                     repo_id=repo_id,
                     repo_type="model",
                     ignore_patterns=["step_*", "epoch_*"],
-                    token=args.hub_token
+                    token=args.hub_token,
                 )
 
     if args.task_name == "mnli":
