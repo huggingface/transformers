@@ -15,17 +15,11 @@
 
 import argparse
 
-import requests
 import torch
-from PIL import Image
-from transformers import HieraConfig
-from transformers import HieraModel
-from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
-# from transformers import HieraConfig, HieraModel
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
-from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
+# from transformers import HieraConfig, HieraModel
+from transformers import HieraConfig, HieraModel
+from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
 
 
 def rename_key(name):
@@ -51,7 +45,7 @@ def convert_state_dict(orig_state_dict, config):
     return updated_model_state
 
 
-def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
+def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path, **kwargs):
     strict = True
     pretrained_models_links = {
         "hiera_tiny_224": {
@@ -93,21 +87,24 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
         "hiera_huge_16x224": {
             "mae_k400_ft_k400": "https://dl.fbaipublicfiles.com/hiera/hiera_huge_16x224.pth",
             "mae_k400": "https://dl.fbaipublicfiles.com/hiera/mae_hiera_huge_16x224.pth",
-        }
+        },
     }
 
-
     if "hiera_tiny_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=96, 
-                            number_of_heads=1, 
-                            stages=(1, 2, 7, 2),)
+        config = HieraConfig(
+            embedding_dimension=96,
+            number_of_heads=1,
+            stages=(1, 2, 7, 2),
+        )
         checkpoints = pretrained_models_links["hiera_tiny_224"]
         checkpoint = pretrained_models_links["hiera_tiny_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_small_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=96, 
-                            number_of_heads=1, 
-                            stages=(1, 2, 11, 2),)
+        config = HieraConfig(
+            embedding_dimension=96,
+            number_of_heads=1,
+            stages=(1, 2, 11, 2),
+        )
         checkpoints = pretrained_models_links["hiera_small_224"]
         checkpoint = pretrained_models_links["hiera_small_224"]["mae_in1k_ft_in1k"]
 
@@ -118,56 +115,57 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
         checkpoint = pretrained_models_links["hiera_base_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_base_plus_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=112, 
-                            number_of_heads=2, 
-                            stages=(2, 3, 16, 3),)
+        config = HieraConfig(
+            embedding_dimension=112,
+            number_of_heads=2,
+            stages=(2, 3, 16, 3),
+        )
         checkpoints = pretrained_models_links["hiera_base_plus_224"]
         checkpoint = pretrained_models_links["hiera_base_plus_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_large_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=144, 
-                            number_of_heads=2, 
-                            stages=(2, 6, 36, 4),)
+        config = HieraConfig(
+            embedding_dimension=144,
+            number_of_heads=2,
+            stages=(2, 6, 36, 4),
+        )
         checkpoints = pretrained_models_links["hiera_large_224"]
         checkpoint = pretrained_models_links["hiera_large_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_huge_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=256, 
-                            number_of_heads=4, 
-                            stages=(2, 6, 36, 4))
+        config = HieraConfig(embedding_dimension=256, number_of_heads=4, stages=(2, 6, 36, 4))
         checkpoints = pretrained_models_links["hiera_huge_224"]
         checkpoint = pretrained_models_links["hiera_huge_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_base_16x224" in checkpoint_url:
-        config = HieraConfig(num_classes=num_classes,  # Assuming num_classes is defined elsewhere
-                            input_size=(16, 224, 224),
-                            q_stride=(1, 2, 2),
-                            mask_unit_size=(1, 8, 8),
-                            patch_kernel=(3, 7, 7),
-                            patch_stride=(2, 4, 4),
-                            patch_padding=(1, 3, 3),
-                            sep_position_embeddings=True,)
+        config = HieraConfig(
+            input_size=(16, 224, 224),
+            q_stride=(1, 2, 2),
+            mask_unit_size=(1, 8, 8),
+            patch_kernel=(3, 7, 7),
+            patch_stride=(2, 4, 4),
+            patch_padding=(1, 3, 3),
+            sep_position_embeddings=True,
+        )
         checkpoints = pretrained_models_links["hiera_base_16x224"]
         checkpoint = pretrained_models_links["hiera_base_16x224"]["mae_k400_ft_k400"]
 
     elif "hiera_base_plus_16x224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=112, 
-                            number_of_heads=2, 
-                            stages=(2, 3, 16, 3))
+        config = HieraConfig(embedding_dimension=112, number_of_heads=2, stages=(2, 3, 16, 3))
         checkpoints = pretrained_models_links["hiera_base_plus_16x224"]
         checkpoint = pretrained_models_links["hiera_base_plus_16x224"]["mae_k400_ft_k400"]
 
     elif "hiera_large_16x224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=144, 
-                            number_of_heads=2, 
-                            stages=(2, 6, 36, 4), )
+        config = HieraConfig(
+            embedding_dimension=144,
+            number_of_heads=2,
+            stages=(2, 6, 36, 4),
+        )
         checkpoints = pretrained_models_links["hiera_large_16x224"]
         checkpoint = pretrained_models_links["hiera_large_16x224"]["mae_k400_ft_k400"]
 
     elif "hiera_huge_16x224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=256, 
-                            number_of_heads=4, 
-                            stages=(2, 6, 36, 4) )
+        config = HieraConfig(embedding_dimension=256, number_of_heads=4, stages=(2, 6, 36, 4))
         checkpoints = pretrained_models_links["hiera_huge_16x224"]
         checkpoint = pretrained_models_links["hiera_huge_16x224"]["mae_k400_ft_k400"]
     elif checkpoint not in checkpoints:
@@ -181,7 +179,7 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
             raise RuntimeError("No checkpoint specified.")
 
         state_dict = torch.hub.load_state_dict_from_url(checkpoint, map_location="cpu")
-        state_dict["model_state"] = convert_state_dict(state_dict["model_state"],{})
+        state_dict["model_state"] = convert_state_dict(state_dict["model_state"], {})
         if "head.projection.weight" in state_dict["model_state"]:
             # Set the number of classes equal to the state_dict only if the user doesn't want to overwrite it
             if config.num_classes is None:
@@ -194,19 +192,16 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
     model = HieraModel(config=config)
     if pretrained:
         # Disable being strict when trying to load a encoder-decoder model into an encoder-only model
-        if "decoder_position_embeddings" in state_dict["model_state"] and not hasattr(model, "decoder_position_embeddings"):
+        if "decoder_position_embeddings" in state_dict["model_state"] and not hasattr(
+            model, "decoder_position_embeddings"
+        ):
             strict = False
 
-        model.load_state_dict(state_dict["model_state"])
+        model.load_state_dict(state_dict["model_state"], strict)
         # model.load_state_dict(state_dict["model_state"], strict=strict)
-    
-
-
 
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
-
-    
     image_processor = HieraImageProcessor(size=224)
     inputs = image_processor.process_image(image_url=url)
 
@@ -220,7 +215,7 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path,**kwargs):
     out = model(inputs[None, ...], return_intermediates=True)
 
     for x in out.intermediates:
-        print(x.shape)    
+        print(x.shape)
 
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
@@ -231,4 +226,3 @@ if __name__ == "__main__":
 
     checkpoint_url = "https://dl.fbaipublicfiles.com/hiera/hiera_base_224.pth"
     convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path="~/")
-

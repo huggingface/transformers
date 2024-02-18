@@ -15,15 +15,15 @@
 """ hiera  model configuration"""
 
 
+from typing import Tuple
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from typing import  Tuple
+
 
 logger = logging.get_logger(__name__)
 
-HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-
-}
+HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class HieraConfig(PretrainedConfig):
@@ -42,7 +42,7 @@ class HieraConfig(PretrainedConfig):
         embedding_dimension (int, optional): Dimension of the initial embedding. Defaults to 96.
         number_of_heads (int, optional): Initial number of attention heads. Defaults to 1.
         num_classes (int, optional): Number of output classes. Defaults to 1000.
-        stages (Tuple[int, ...], optional): Defines the number of blocks at each stage of the model. 
+        stages (Tuple[int, ...], optional): Defines the number of blocks at each stage of the model.
         q_pool (int, optional): Number of pooling stages for queries. Defaults to 3.
         q_stride (Tuple[int, ...], optional): Stride size for pooling. Defaults to (2, 2).
         mask_unit_size (Tuple[int, ...], optional): Dimensions for the mask unit. Must be compatible with q_stride.
@@ -58,7 +58,7 @@ class HieraConfig(PretrainedConfig):
         head_init_scale (float, optional): Initial scaling factor for attention head weights. Defaults to 0.001.
         sep_position_embeddings (bool, optional): Whether to use separate position embeddings. Defaults to False.
 
-    
+
         Example:
         ```python
         >>> from transformers import HieraConfig, HieraModel
@@ -72,9 +72,10 @@ class HieraConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
         ```
-        """
+    """
 
     model_type = "hiera"
+
     def __init__(
         self,
         input_size: Tuple[int, ...] = (224, 224),
@@ -99,7 +100,6 @@ class HieraConfig(PretrainedConfig):
         head_init_scale: float = 0.001,
         sep_position_embeddings: bool = False,
         **kwargs,
-
     ):
         super().__init__(**kwargs)
         self.input_size = input_size

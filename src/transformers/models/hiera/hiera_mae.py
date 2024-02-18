@@ -10,28 +10,28 @@
 # --------------------------------------------------------
 
 
-from functools import partial
-from typing import Tuple, Optional
-
 import math
+from functools import partial
+from typing import Optional, Tuple
+
 import torch
 import torch.nn as nn
 
-from .hiera_model import HieraModel, HieraBlock, undo_windowing, conv_nd
+from .hiera_model import HieraBlock, HieraModel, conv_nd, undo_windowing
 
 
 def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     if isinstance(head, nn.Identity):
         return x
 
-    batch_size , num_mask_units = x.shape[0:2]
+    batch_size, num_mask_units = x.shape[0:2]
     # Apply head, e.g [batch_size , #MUs, My, Mx, C] -> head([batch_size  * #MUs, C, My, Mx])
     permute = [0] + [len(x.shape) - 2] + list(range(1, len(x.shape) - 2))
-    x = head(x.reshape(batch_size  * num_mask_units, *x.shape[2:]).permute(permute))
+    x = head(x.reshape(batch_size * num_mask_units, *x.shape[2:]).permute(permute))
 
     # Restore original layout, e.g. [batch_size  * #MUs, C', My', Mx'] -> [batch_size , #MUs, My', Mx', C']
     permute = [0] + list(range(2, len(x.shape))) + [1]
-    x = x.permute(permute).reshape(batch_size , num_mask_units, *x.shape[2:], x.shape[1])
+    x = x.permute(permute).reshape(batch_size, num_mask_units, *x.shape[2:], x.shape[1])
     return x
 
 
@@ -64,8 +64,7 @@ class MaskedAutoencoderHiera(HieraModel):
             i // s ** (self.q_pool) for i, s in zip(self.mask_unit_size, self.q_stride)
         ]
         self.tokens_spatial_shape_final = [
-            i // s ** (self.q_pool)
-            for i, s in zip(self.tokens_spatial_shape, self.q_stride)
+            i // s ** (self.q_pool) for i, s in zip(self.tokens_spatial_shape, self.q_stride)
         ]
         # --------------------------------------------------------------------------
         # Multi-scale fusion heads
@@ -73,9 +72,7 @@ class MaskedAutoencoderHiera(HieraModel):
         self.multi_scale_fusion_heads = nn.ModuleList()
 
         for i in self.stage_ends[: self.q_pool]:  # resolution constant after q_pool
-            kernel = [
-                i // s for i, s in zip(curr_mu_size, self.mask_unit_spatial_shape_final)
-            ]
+            kernel = [i // s for i, s in zip(curr_mu_size, self.mask_unit_spatial_shape_final)]
             curr_mu_size = [i // s for i, s in zip(curr_mu_size, self.q_stride)]
             self.multi_scale_fusion_heads.append(
                 conv_nd(len(self.q_stride))(
@@ -94,9 +91,7 @@ class MaskedAutoencoderHiera(HieraModel):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
 
         self.decoder_pos_embed = nn.Parameter(
-            torch.zeros(
-                1, math.prod(self.tokens_spatial_shape_final), decoder_embed_dim
-            )
+            torch.zeros(1, math.prod(self.tokens_spatial_shape_final), decoder_embed_dim)
         )
 
         self.decoder_blocks = nn.ModuleList(
@@ -113,9 +108,7 @@ class MaskedAutoencoderHiera(HieraModel):
         )
         self.decoder_norm = norm_layer(decoder_embed_dim)
 
-        self.pred_stride = patch_stride[-1] * (
-            self.q_stride[-1] ** self.q_pool
-        )  # patch stride of prediction
+        self.pred_stride = patch_stride[-1] * (self.q_stride[-1] ** self.q_pool)  # patch stride of prediction
 
         self.decoder_pred = nn.Linear(
             decoder_embed_dim,
@@ -143,9 +136,7 @@ class MaskedAutoencoderHiera(HieraModel):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def get_pixel_label_2d(
-        self, input_img: torch.Tensor, mask: torch.Tensor, norm: bool = True
-    ) -> torch.Tensor:
+    def get_pixel_label_2d(self, input_img: torch.Tensor, mask: torch.Tensor, norm: bool = True) -> torch.Tensor:
         # mask (boolean tensor): True must correspond to *masked*
         input_img = input_img.permute(0, 2, 3, 1)
 
@@ -160,13 +151,11 @@ class MaskedAutoencoderHiera(HieraModel):
 
         return label
 
-    def get_pixel_label_3d(
-        self, input_vid: torch.Tensor, mask: torch.Tensor, norm: bool = True
-    ) -> torch.Tensor:
+    def get_pixel_label_3d(self, input_vid: torch.Tensor, mask: torch.Tensor, norm: bool = True) -> torch.Tensor:
         # mask (boolean tensor): True must correspond to *masked*
 
         # We use time strided loss, only take the first frame from each token
-        input_vid = input_vid[:, :, ::self.patch_stride[0], :, :]
+        input_vid = input_vid[:, :, :: self.patch_stride[0], :, :]
 
         size = self.pred_stride
         label = input_vid.unfold(3, size, size).unfold(4, size, size)
@@ -181,11 +170,9 @@ class MaskedAutoencoderHiera(HieraModel):
 
         return label
 
-
     def forward_encoder(
         self, x: torch.Tensor, mask_ratio: float, mask: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-
         if mask is None:
             mask = self.get_random_mask(x, mask_ratio)  # [batch_size , #MUs_all]
 
@@ -203,9 +190,7 @@ class MaskedAutoencoderHiera(HieraModel):
 
         return x, mask
 
-    def forward_decoder(
-        self, x: torch.Tensor, mask: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward_decoder(self, x: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Embed tokens
         x = self.decoder_embed(x)
 
@@ -214,9 +199,7 @@ class MaskedAutoencoderHiera(HieraModel):
         # x: [batch_size , #MUs, *mask_unit_spatial_shape_final, encoder_dim_out]
         # mask: [batch_size , #MUs_all]
         x_dec = torch.zeros(*mask.shape, *x.shape[2:], device=x.device, dtype=x.dtype)
-        mask_tokens = self.mask_token.view(
-            (1,) * (len(mask.shape) + len(x.shape[2:-1])) + (-1,)
-        )
+        mask_tokens = self.mask_token.view((1,) * (len(mask.shape) + len(x.shape[2:-1])) + (-1,))
         mask = mask.reshape(mask.shape + (1,) * len(x.shape[2:]))
         mask = mask.expand((-1,) * 2 + x.shape[2:]).bool()
         x_dec[mask] = x.flatten()
@@ -279,11 +262,8 @@ class MaskedAutoencoderHiera(HieraModel):
         mask_ratio: float = 0.6,
         mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         latent, mask = self.forward_encoder(x, mask_ratio, mask=mask)
-        pred, pred_mask = self.forward_decoder(
-            latent, mask
-        )  # pred_mask is mask at resolution of *prediction*
+        pred, pred_mask = self.forward_decoder(latent, mask)  # pred_mask is mask at resolution of *prediction*
 
         # Toggle mask, to generate labels for *masked* tokens
         return *self.forward_loss(x, pred, ~pred_mask), mask
