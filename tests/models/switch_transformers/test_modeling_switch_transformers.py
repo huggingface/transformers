@@ -677,12 +677,15 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             decoder_attention_mask,
             lm_labels,
         )
-        
+
     # SwitchTransformersForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (SwitchTransformersModel, SwitchTransformersForConditionalGeneration,):
+        for model_class in (
+            SwitchTransformersModel,
+            SwitchTransformersForConditionalGeneration,
+        ):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -707,7 +710,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
             with torch.no_grad():
                 model(**inputs)[0]
-
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
