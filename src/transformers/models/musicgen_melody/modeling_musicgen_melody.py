@@ -41,7 +41,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto.configuration_auto import AutoConfig
-from ..auto.modeling_auto import AutoModel
+from ..auto.modeling_auto import AutoModel, AutoModelForTextEncoding
 from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyDecoderConfig
 
 
@@ -1381,7 +1381,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         audio_encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
     ):
-        if config is None and (text_encoder is None or audio_encoder is None or decoder is None):
+        if config is None and None in (text_encoder, audio_encoder, decoder):
             raise ValueError(
                 "Either a configuration has to be provided, or all three of text encoder, audio encoder and Musicgen Melody decoder."
             )
@@ -1397,13 +1397,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         super().__init__(config)
 
         if text_encoder is None:
-            from ..auto.modeling_auto import AutoModelForTextEncoding
-
             text_encoder = AutoModelForTextEncoding.from_config(config.text_encoder)
 
         if audio_encoder is None:
-            from ..auto.modeling_auto import AutoModel
-
             audio_encoder = AutoModel.from_config(config.audio_encoder)
 
         if decoder is None:
