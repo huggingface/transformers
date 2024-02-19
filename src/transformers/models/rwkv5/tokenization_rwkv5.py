@@ -16,8 +16,9 @@
 
 import os
 from typing import TYPE_CHECKING, List, Optional, Tuple
+import re
 
-from transformers.tokenization_utils import PreTrainedTokenizer, AddedToken
+from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
 from transformers.utils import logging
 
 
@@ -35,7 +36,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
-import re
+
+
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text.
     The separators are kept
@@ -43,7 +45,7 @@ def whitespace_tokenize(text):
     text = text.strip()
     if not text:
         return []
-    tokens = re.split(b'(?= )', text)
+    tokens = re.split(b"(?= )", text)
     return tokens
 
 
@@ -54,7 +56,6 @@ class WordpieceTokenizer(object):
         self.vocab = vocab
         self.unk_token = unk_token
         self.max_input_chars_per_word = max_input_chars_per_word
-
 
     def tokenize(self, text):
         """
@@ -102,20 +103,21 @@ class WordpieceTokenizer(object):
                 output_tokens.extend(sub_tokens)
         return output_tokens
 
+
 class Rwkv5Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {"ArthurZ/rwkv-5-utf": 2048}
 
     model_input_names = ["input_ids", "attention_mask"]
-    
-    def __init__(self, vocab_file,bos_token="<s>", eos_token="<s>",unk_token="<s>",**kwargs):
+
+    def __init__(self, vocab_file, bos_token="<s>", eos_token="<s>", unk_token="<s>", **kwargs):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
                 " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-            
+
         with open(vocab_file, "r") as reader:
             tokens = reader.readlines()
         vocab = {}
@@ -125,15 +127,10 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
 
         self.add_bos_token = True
         self.encoder = vocab
-        self.decoder = {v:k for k,v in vocab.items()}
+        self.decoder = {v: k for k, v in vocab.items()}
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=str(unk_token))
-        self._added_tokens_decoder = {0:AddedToken(str(bos_token))}
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            **kwargs
-        )
+        self._added_tokens_decoder = {0: AddedToken(str(bos_token))}
+        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
     @property
     def vocab_size(self):
@@ -143,26 +140,28 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
         vocab = {str(self.convert_ids_to_tokens(i)): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-    
+
     def _tokenize(self, text, split_special_tokens=False):
         return self.wordpiece_tokenizer.tokenize(text.encode("utf-8"))
-    
+
     def _convert_token_to_id(self, token):
         """Converts a token (byte) to an id using the vocab."""
         if not isinstance(token, bytes):
-            token = token.encode('utf-8', errors="replace")
+            token = token.encode("utf-8", errors="replace")
         return self.encoder.get(token, self.unk_token_id)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (byte) using the vocab."""
         token = self.decoder.get(index, self.unk_token)
         if isinstance(token, (bytes)):
-            token = token.decode('utf-8', errors="replace")
+            token = token.decode("utf-8", errors="replace")
         return token
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (bytes) in a single string. Additional tokens are encoded to bytes"""
-        out_string = b"".join([k.encode(errors="replace") if isinstance(k,str) else k for k in tokens ]).decode("utf-8")
+        out_string = b"".join([k.encode(errors="replace") if isinstance(k, str) else k for k in tokens]).decode(
+            "utf-8"
+        )
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -184,7 +183,7 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
                 writer.write(str(token) + "\n")
                 index += 1
         return (vocab_file,)
-    
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         if self.add_bos_token:
             bos_token_ids = [self.bos_token_id]
