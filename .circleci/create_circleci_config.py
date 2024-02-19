@@ -283,6 +283,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install pytest==8.0.0",
+        "pip install -U accelerate"
         # TODO: remove this one after fixing the dependency issue(s) above
         "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
     ],
@@ -299,6 +300,7 @@ torch_and_flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install pytest==8.0.0",
+        "pip install -U accelerate"
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -312,6 +314,7 @@ torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install pytest==8.0.0",
+        "pip install -U accelerate"
     ],
     parallelism=1,
     pytest_num_workers=6,
@@ -324,6 +327,7 @@ tf_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install pytest==8.0.0",
+        "pip install -U accelerate",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
@@ -337,6 +341,7 @@ flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install pytest==8.0.0",
+        "pip install -U accelerate",
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
     parallelism=1,
@@ -349,6 +354,7 @@ pipelines_torch_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
@@ -365,6 +371,7 @@ pipelines_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
     ],
     marker="is_pipeline_test",
@@ -389,6 +396,7 @@ custom_tokenizers_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
         "python -m unidic download",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
     ],
     parallelism=None,
@@ -410,6 +418,7 @@ examples_torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
     ],
     pytest_num_workers=1,
@@ -424,6 +433,7 @@ examples_tensorflow_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -U --upgrade-strategy eager -r examples/tensorflow/_tests_requirements.txt",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
     ],
 )
@@ -436,6 +446,7 @@ examples_flax_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
         "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
     ],
 )
@@ -450,6 +461,7 @@ hub_job = CircleCIJob(
         'git config --global user.name "ci"',
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
     ],
     marker="is_staging_test",
@@ -527,6 +539,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
         "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager g2p-en",
+        "pip install -U accelerate",
         "pip install pytest==8.0.0",
         # TODO: remove this one after fixing the dependency issue(s) above
         "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
