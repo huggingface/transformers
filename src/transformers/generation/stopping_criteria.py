@@ -236,8 +236,10 @@ class StopStringCriteria(StoppingCriteria):
         # *shorter* than the global max, and the code below should be ready for that
         maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         input_ids = input_ids[:, -maximum_token_len:]
+
         # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
+
         string_matches = []
         for stop_string in self.stop_strings:
             # We need the length of the stop string to know how many characters our token sequence should have
@@ -258,11 +260,11 @@ class StopStringCriteria(StoppingCriteria):
             end_lengths = embedded[:, :1, max_valid_positions : max_valid_positions + max_valid_end_lens]
 
             # Lengths is the total length of each token. Unlike end_lengths, it always has a single value
-            lengths = embedded[:, 1:, -1:]  # B x (maximum_token_len - 1) x 1
+            lengths = embedded[:, 1:, -1:]
 
             # Concatenate lengths onto each possible end_lengths value
             lengths = lengths.expand((-1, -1, end_lengths.shape[-1]))
-            lengths_with_ends = torch.cat([end_lengths, lengths], dim=1)  # B x maximum_token_len x max_valid_end_lens
+            lengths_with_ends = torch.cat([end_lengths, lengths], dim=1)
 
             # cumsum() to get the number of matched characters in the stop string after each token
             cumsum = lengths_with_ends.cumsum(dim=1)  # B x maximum_token_len x max_valid_end_lens
@@ -271,10 +273,10 @@ class StopStringCriteria(StoppingCriteria):
             # First we get the vector of positions tokens can validly appear in
             valid_positions = embedded[:, 1:, :max_valid_positions]
 
-            # Tokens can match the start of the string if they have any valid value in the end_lengths vector
+            # Tokens match the start of the string if they have a positive value in the end_lengths vector
             initial_match = end_lengths > 0
 
-            # Tokens can continue the string if the cumsum() so far is one of the valid positions for that token
+            # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
             # Note that we're actually tracking one cumsum() for for each possible end_length
             later_match = torch.any(cumsum[:, :-1, None] == valid_positions[:, :, :, None], axis=2)
 
