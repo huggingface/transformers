@@ -168,6 +168,55 @@ class CacheTest(unittest.TestCase):
 @require_torch_gpu
 @slow
 class CacheIntegrationTest(unittest.TestCase):
+    def _check_static_cache_correct(self, model):
+        for m in model.modules():
+            if hasattr(m, "past_key_value") and isinstance(m.past_key_value, StaticCache):
+                return True
+        return False
+
+    def test_set_cache_api_errors(self):
+        model_id = "HuggingFaceM4/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+
+        with self.assertRaises(ValueError):
+            # Sink cache requires some specific args
+            model.set_cache_implementation("sink")
+
+        with self.assertRaises(ValueError):
+            # Dummy name
+            model.set_cache_implementation("dummy-name")
+
+    def test_set_cache_api(self):
+        model_id = "HuggingFaceM4/tiny-random-LlamaForCausalLM"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+
+        # First, set it to static.
+        model.set_cache_implementation("static")
+
+        inputs = tokenizer(["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt").to(model.device)
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
+
+        # At this point the static cache should be correctly set
+        self.assertTrue(self._check_static_cache_correct(model))
+
+        _ = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+
+        model.set_cache_implementation("dynamic")
+        # This should return false as the cache should have been reset at this point.
+        self.assertFalse(self._check_static_cache_correct(model))
+
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        _ = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+
+        model.set_cache_implementation("sink", window_length=128, num_sink_tokens=4)
+        # This should return false as the cache should have been reset at this point.
+        self.assertFalse(self._check_static_cache_correct(model))
+
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        _ = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained(

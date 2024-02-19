@@ -393,6 +393,7 @@ class GenerationMixin:
             self.generation_config.sink_window_length = kwargs.get("window_length")
             self.generation_config.num_sink_tokens = kwargs.get("num_sink_tokens")
 
+        self._reset_cache()
         self.generation_config.cache_implementation = cache_implementation.lower()
 
     def _prepare_model_inputs(
