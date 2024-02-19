@@ -66,6 +66,8 @@ class MambaConfig(PretrainedConfig):
         initializer_range (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether or not residuals should be in `float32`.
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether or not the cache should be used.
 
 
     Example:
@@ -104,6 +106,7 @@ class MambaConfig(PretrainedConfig):
         hidden_act="silu",
         initializer_range=0.1,
         residual_in_fp32=False,
+        use_cache=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -113,7 +116,6 @@ class MambaConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.d_inner = hidden_size * 2
         self.conv_kernel = 4
-        self.state_size = state_size
         self.expand = expand
         self.time_step_rank = math.ceil(self.hidden_size / 16) if dt_rank == "auto" else dt_rank
         self.bos_token_id = bos_token_id
@@ -126,5 +128,6 @@ class MambaConfig(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.tie_word_embeddings = tie_word_embeddings
         self.dt_rank = dt_rank
+        self.use_cache=use_cache
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

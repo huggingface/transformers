@@ -423,7 +423,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 class MambaIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.model_id = "state-spaces/mamba-2.8b"
+        self.model_id = "ArthurZ/mamba-2.8b"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
     def test_simple_generate(self):
@@ -435,7 +435,7 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
 
         model = MambaForCausalLM.from_pretrained(
-            "state-spaces/mamba-130m", vocab_size=50280, num_hidden_layers=24, torch_dtype=torch.float16
+            "ArthurZ/mamba-130m", vocab_size=50277, num_hidden_layers=64, torch_dtype=torch.float16, hidden_size=2560
         )
         model.to(torch_device)
         model.config.use_cache = True
@@ -460,7 +460,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())

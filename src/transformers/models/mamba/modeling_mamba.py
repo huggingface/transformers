@@ -126,6 +126,7 @@ class MambaMixer(nn.Module):
             ).unsqueeze(-1)
         else:
             conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
+            inference_params.conv_states[self.layer_idx].copy_(conv_state)
             hidden_states = causal_conv1d_fn(
                 x=hidden_states,
                 weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
@@ -169,7 +170,7 @@ class MambaMixer(nn.Module):
 
 
 class MambaCache:
-    def __init__(self, config, batch_size, conv_dtype=torch.float16, ssm_dtype=torch.float16, device=None):
+    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.seqlen_offset = 0
 
         d_model = config.hidden_size
@@ -178,11 +179,11 @@ class MambaCache:
         d_conv = config.conv_kernel
 
         self.conv_states = {
-            i: torch.zeros(batch_size, d_model * expand, d_conv, device=device, dtype=conv_dtype)
+            i: torch.zeros(batch_size, d_model * expand, d_conv, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, d_model * expand, d_state, device=device, dtype=ssm_dtype)
+            i: torch.zeros(batch_size, d_model * expand, d_state, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
 
@@ -525,7 +526,7 @@ class MambaModel(MambaPreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
 
         if use_cache and inference_params is None:
-            inference_params = MambaCache(self.config, inputs_embeds.size(0), device=inputs_embeds.device)
+            inference_params = MambaCache(self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
