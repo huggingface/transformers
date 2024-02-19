@@ -186,6 +186,7 @@ class FLMRContextEncoderTokenizationTest:
 
 # Modified from ..bert.test_tokenization_bert.BertTokenizationTest
 @require_tokenizers
+@require_torch
 class FLMRQueryEncoderTokenizationTest(unittest.TestCase):
     tokenizer_class = FLMRQueryEncoderTokenizer
     rust_tokenizer_class = FLMRQueryEncoderTokenizerFast
