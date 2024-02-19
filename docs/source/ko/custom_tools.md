@@ -373,7 +373,7 @@ Assistant:
 따라서 사용자 정의 `chat` 프롬프트 템플릿의 예제에서도 이 형식을 사용하는 것이 중요합니다. 
 다음과 같이 인스턴스화 할 때 `chat` 템플릿을 덮어쓸 수 있습니다.
 
-```
+```python
 template = """ [...] """
 
 agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)
@@ -548,7 +548,7 @@ task = "text-classification"
 model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
-`text-classification`(텍스트 분류) 작업의 경우 `'facebook/bart-large-mnli'`를 반환하고, `translation`(번역) 작업의 경우 `'t5-base'`를 반환합니다.
+`text-classification`(텍스트 분류) 작업의 경우 `'facebook/bart-large-mnli'`를 반환하고, `translation`(번역) 작업의 경우 `'google-t5/t5-base'`를 반환합니다.
 
 이를 에이전트가 활용할 수 있는 도구로 변환하려면 어떻게 해야 할까요? 
 모든 도구는 필요한 주요 속성을 보유하는 슈퍼클래스 `Tool`에 의존합니다. 이를 상속하는 클래스를 만들어 보겠습니다:

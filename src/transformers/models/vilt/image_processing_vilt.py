@@ -252,7 +252,6 @@ class ViltImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -280,7 +279,6 @@ class ViltImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],

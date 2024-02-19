@@ -35,14 +35,16 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         DynamicCache,
+        LlamaConfig,
         LlamaForCausalLM,
         SinkCache,
+        StaticCache,
     )
 
 
 @require_torch
 class CacheTest(unittest.TestCase):
-    def test_cache_equivalence(self):
+    def test_dynamic_cache_retrocompatibility(self):
         """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
         legacy_cache = ()
         new_cache = DynamicCache()
@@ -119,6 +121,48 @@ class CacheTest(unittest.TestCase):
                         new_cache[layer_idx][key_value_idx], legacy_cache_reordered[layer_idx][key_value_idx]
                     )
                 )
+
+    def test_static_cache_mha_mqa_gqa(self):
+        """
+        Tests that static cache works with multi-head attention (MHA), grouped query attention (GQA), and multi-query
+        attention (MQA)
+        """
+
+        def _random_kvs(config):
+            # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
+            random_keys = torch.rand(
+                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                device=torch_device,
+            )
+            random_values = torch.rand(
+                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                device=torch_device,
+            )
+            return random_keys, random_values
+
+        mha_config = LlamaConfig(num_attention_heads=32)
+        mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        cached_keys, cached_values = mha_static_cache.update(
+            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+        )
+        self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
+        self.assertTrue(cached_values.shape == (1, 32, 10, 128))
+
+        gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
+        gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        cached_keys, cached_values = gqa_static_cache.update(
+            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+        )
+        self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
+        self.assertTrue(cached_values.shape == (1, 4, 10, 128))
+
+        mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
+        mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        cached_keys, cached_values = mqa_static_cache.update(
+            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+        )
+        self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
+        self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
 
 @require_torch_gpu
