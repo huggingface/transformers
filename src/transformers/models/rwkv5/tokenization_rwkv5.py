@@ -15,16 +15,10 @@
 """Tokenization classes for RWKV5."""
 
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from transformers.tokenization_utils import PreTrainedTokenizer, AddedToken
-from transformers.tokenization_utils_base import (
-    BatchEncoding,
-    EncodedInput,
-    TextInput,
-    TruncationStrategy,
-)
-from transformers.utils import PaddingStrategy, TensorType, logging, to_py_obj
+from transformers.utils import logging
 
 
 if TYPE_CHECKING:

@@ -99,8 +99,10 @@ def convert_rwkv_checkpoint_to_hf_format(
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     else:
         if is_world_tokenizer:
+            # TODO @Arthur the tokenizer file needs additional cleaning to be passed to the AutoTokenizer.
             tokenizer = AutoTokenizer.from_pretrained(tokenizer_file, trust_remote_code=True)
-            vocab_size = 65536
+            vocab_size = 65536 # TODO that should correspond to the length of the tokenizer
+            
         else:
             tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_file)
             vocab_size = len(tokenizer)
