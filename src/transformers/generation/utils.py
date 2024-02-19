@@ -367,7 +367,7 @@ class GenerationMixin:
 
         Args:
             cache_implementation (`Union[CacheImplementation, str]`):
-                The target cache implementation
+                The target cache implementation, currently supported cache implementations are `["sink", "static", "dynamic"]`.
             kwargs (`dict`, *optional*):
                 Optional key word arguments to be passed. E.g. for "sink", it is required to
                 pass `window_length` and `num_sink_tokens`.
