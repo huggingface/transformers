@@ -130,8 +130,10 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenMelodyDecoderConf
 
 
 @torch.no_grad()
-def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu"):
-    fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
+def convert_musicgen_melody_checkpoint(
+    checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu", test_same_output=False
+):
+    fairseq_model = MusicGen.get_pretrained(checkpoint, device=args.device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
     decoder_state_dict = fairseq_model.lm.state_dict()
@@ -163,7 +165,7 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
     # init the composite model
     model = MusicgenMelodyForConditionalGeneration(
         text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder
-    )
+    ).to(args.device)
 
     # load the pre-trained enc-dec projection (from the decoder state dict)
     model.enc_to_dec_proj.load_state_dict(enc_dec_proj_state_dict)
@@ -172,8 +174,8 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
     model.audio_enc_to_dec_proj.load_state_dict(audio_enc_to_dec_proj_state_dict)
 
     # check we can do a forward pass
-    input_ids = torch.arange(0, 2 * decoder_config.num_codebooks, dtype=torch.long).reshape(2, -1)
-    decoder_input_ids = input_ids.reshape(2 * decoder_config.num_codebooks, -1)
+    input_ids = torch.arange(0, 2 * decoder_config.num_codebooks, dtype=torch.long).reshape(2, -1).to(device)
+    decoder_input_ids = input_ids.reshape(2 * decoder_config.num_codebooks, -1).to(device)
 
     with torch.no_grad():
         logits = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
@@ -197,6 +199,26 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
     model.generation_config.do_sample = True
     model.generation_config.guidance_scale = 3.0
 
+    if test_same_output:
+        # check same output than original model
+        decoder_input_ids = torch.ones_like(decoder_input_ids).to(device) * model.generation_config.pad_token_id
+        with torch.no_grad():
+            decoder_input_ids = decoder_input_ids[: decoder_config.num_codebooks]
+            inputs = processor(text=["gen"], return_tensors="pt", padding=True).to(device)
+            logits = model(**inputs, decoder_input_ids=decoder_input_ids).logits
+
+            attributes, prompt_tokens = fairseq_model._prepare_tokens_and_attributes(["gen"], None)
+            original_logits = fairseq_model.lm.forward(
+                decoder_input_ids.reshape(1, decoder_config.num_codebooks, -1), attributes
+            )
+
+            torch.testing.assert_close(
+                original_logits.squeeze(2).reshape(decoder_config.num_codebooks, -1),
+                logits[:, -1],
+                rtol=1e-5,
+                atol=5e-5,
+            )
+
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
         logger.info(f"Saving model {checkpoint} to {pytorch_dump_folder}")
@@ -205,8 +227,8 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
 
     if repo_id:
         logger.info(f"Pushing model {checkpoint} to {repo_id}")
-        model.push_to_hub(repo_id)
-        processor.push_to_hub(repo_id)
+        model.push_to_hub(repo_id, create_pr=True)
+        processor.push_to_hub(repo_id, create_pr=True)
 
 
 if __name__ == "__main__":
@@ -223,20 +245,22 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder",
-        required=True,
         default=None,
         type=str,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--push_to_hub",
-        default="musicgen-stereo-melody-large",
+        default="musicgen-melody",
         type=str,
         help="Where to upload the converted model on the 🤗 hub.",
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
     )
+    parser.add_argument("--test_same_output", default=False, type=bool, help="If `True`, test if same output logits.")
 
     args = parser.parse_args()
-    convert_musicgen_melody_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub, args.device)
+    convert_musicgen_melody_checkpoint(
+        args.checkpoint, args.pytorch_dump_folder, args.push_to_hub, args.device, args.test_same_output
+    )
