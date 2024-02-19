@@ -35,18 +35,21 @@ from ...utils import (
 )
 from .configuration_mamba import MambaConfig
 
+logger = logging.get_logger(__name__)
 
-if False and is_causal_conv_1d_available():
+if is_mamba_ssm_available():
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+else:
+    logger.warning_once(" `mamba_ssm` is not installed in your environnement. Make sure to install it following `src/transformers/kernels/mamba/Makefile`")
+    selective_state_update, selective_scan_fn = None, None
+
+if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
+    logger.warning_once(" `causal_conv1d` is not installed in your environnement. Make sure to install it: `src/transformers/kernels/mamba/Makefile`")
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-if False and is_kernel_compiled():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    selective_scan_update, selective_scan_fn = None, None
-
-logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
@@ -55,43 +58,6 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "state-spaces/mamba-130m",
     # See all Mamba models at https://huggingface.co/models?filter=mamba
 ]
-
-
-mamba_cuda_kernel = None
-
-
-# Copied from transformers.models.mamba.modeling_mamba.load_mamba_cuda_kernel with mamba->MAMBA,mamba->mamba
-def load_mamba_cuda_kernel(context_length):
-    from torch.utils.cpp_extension import load as load_kernel
-
-    global mamba_cuda_kernel
-
-    kernel_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "mamba"
-    cuda_kernel_files = [kernel_folder / f for f in ["mamba_op.cpp", "mamba_cuda.cu", "mamba_cuda_bf16.cu"]]
-
-    # Only load the kernel if it's not been loaded yet or if we changed the context length
-    if mamba_cuda_kernel is not None and mamba_cuda_kernel.max_seq_length == context_length:
-        return
-
-    logger.info(f"Loading CUDA kernel for MAMBA at context length of {context_length}.")
-
-    flags = [
-        "-res-usage",
-        "--maxrregcount 60",
-        "--use_fast_math",
-        "-O3",
-        "-Xptxas -O3",
-        "--extra-device-vectorization",
-        f"-DTmax={context_length}",
-    ]
-    mamba_cuda_kernel = load_kernel(
-        name=f"mamba_{context_length}",
-        sources=cuda_kernel_files,
-        verbose=(logging.get_verbosity() == logging.DEBUG),
-        extra_cuda_cflags=flags,
-    )
-    mamba_cuda_kernel.max_seq_length = context_length
-
 
 class MambaMixer(nn.Module):
     def __init__(self, config, layer_idx):
@@ -173,31 +139,13 @@ class MambaMixer(nn.Module):
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
         if inference_params is not None and inference_params.seq_offset > 0:
-            y, _ = selective_scan_update(
-                ssm_state,
-                hidden_states,
-                discrete_time_step,
-                self.negA,
-                B,
-                C,
-                self.D,
-                z=gate,
-                dt_bias=self.dt_proj.bias,
-                dt_softplus=True,
-            )
+            y = selective_state_update(
+                ssm_state, hidden_states, discrete_time_step, self.negA, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True 
+            ) #fmt: skip
         else:
-            y, last_state = selective_scan_fn(
-                hidden_states,
-                discrete_time_step,
-                self.negA,
-                B,
-                C,
-                self.D.float(),
-                z=gate,
-                delta_bias=self.dt_proj.bias.float(),
-                delta_softplus=True,
-                return_last_state=True,
-            )
+            y, last_state = selective_scan_fn( hidden_states, discrete_time_step, self.negA, B, C, self.D.float(), z=gate, delta_bias=self.dt_proj.bias.float(), delta_softplus=True, return_last_state=True,)
+            if last_state is not None:
+                ssm_state = last_state
 
         # 4. Final linear projection
         attn_outputs = self.out_proj(y.transpose(1, 2))
@@ -312,15 +260,21 @@ class MambaBlock(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        # self.residual_in_fp32 = config.residual_in_fp32
+        self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = MambaMixerSlow(config, layer_idx=layer_idx)
+
+        if any(selective_scan_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update) is None:
+            MIXER_CLS = MambaMixerSlow
+        else: # CUDA is available and the kernels are also available
+            MIXER_CLS = MambaMixer
+        
+        self.mixer = MIXER_CLS(config, layer_idx=layer_idx)
 
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        # if self.residual_in_fp32:
-        #     residual = residual.to(torch.float32)
+        if self.residual_in_fp32:
+            residual = residual.to(torch.float32)
 
         hidden_states, conv_states, ssm_state = self.mixer(hidden_states, inference_params=inference_params)
         hidden_states = residual.to(torch.float32) + hidden_states

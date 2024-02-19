@@ -66,6 +66,8 @@ class MambaConfig(PretrainedConfig):
             `rescale_every` layer. If set to 0 or a negative number, no rescale is done.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether or not to tie the word embeddings with the input token embeddings.
+        residual_in_fp32 (`bool`, *optional*, defaults to `False`):
+            Whether or not residuals should be in `float32`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last state.
 
@@ -105,6 +107,7 @@ class MambaConfig(PretrainedConfig):
         use_conv_bias=True,
         hidden_act="silu",
         initializer_range=0.1,
+        residual_in_fp32=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -124,6 +127,7 @@ class MambaConfig(PretrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.residual_in_fp32 = residual_in_fp32
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
