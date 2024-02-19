@@ -175,7 +175,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     all_model_classes = (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
     greedy_sample_model_classes = (
         (MusicgenMelodyForCausalLM,) if is_torch_available() else ()
-    )  # the model uses a custom generation method so we only run a specific subset of the generation tests 
+    )  # the model uses a custom generation method so we only run a specific subset of the generation tests
     test_pruning = False
     test_resize_embeddings = False
 
