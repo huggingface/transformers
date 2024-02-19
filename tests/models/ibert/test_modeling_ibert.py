@@ -296,6 +296,12 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = IBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(
+        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761

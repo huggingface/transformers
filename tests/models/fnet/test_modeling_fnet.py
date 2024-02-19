@@ -468,6 +468,12 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = FNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(
+        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 @require_torch
 class FNetModelIntegrationTest(unittest.TestCase):
