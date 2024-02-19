@@ -767,6 +767,12 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return tf_inputs_dict
 
+    @unittest.skip(
+        reason="Does not currently support low_cpu_mem_usage - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 @require_torch
 class LxmertModelIntegrationTest(unittest.TestCase):

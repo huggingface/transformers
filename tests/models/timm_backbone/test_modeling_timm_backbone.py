@@ -273,3 +273,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
             model.to(torch_device)
             model.eval()
             result = model(**inputs_dict)
+
+    @unittest.skip(
+        reason="Does not support low_cpu_mem_usage - weights are loaded from timm and not from transformers checkpoint."
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass

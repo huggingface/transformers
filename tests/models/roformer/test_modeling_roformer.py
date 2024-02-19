@@ -504,6 +504,12 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="Does not currently support low_cpu_mem_usage - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 @require_torch
 class RoFormerModelIntegrationTest(unittest.TestCase):

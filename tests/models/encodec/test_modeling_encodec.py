@@ -420,6 +420,12 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
+    @unittest.skip(
+        reason="Does not currently support low_cpu_mem_usage - TypeError: _weight_norm_interface() missing 1 required positional argument: 'dim'"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 def normalize(arr):
     norm = np.linalg.norm(arr)

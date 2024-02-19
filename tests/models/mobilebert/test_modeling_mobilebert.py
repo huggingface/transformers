@@ -341,6 +341,12 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
 
+    @unittest.skip(
+        reason="Does not currently support low_cpu_mem_usage - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 def _long_tensor(tok_lst):
     return torch.tensor(

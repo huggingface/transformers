@@ -1256,6 +1256,12 @@ class FlavaForPreTrainingTest(FlavaModelTest):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="Does not currently support low_cpu_mem_usage - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

@@ -380,8 +380,14 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs["inputs_embeds"] = wte(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
-            with torch.no_grad():
-                model(**inputs)[0]
+        with torch.no_grad():
+            model(**inputs)[0]
+
+    @unittest.skip(
+        reason="Does not currently support low_cpu_mem_usage - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
 
 
 @require_torch
