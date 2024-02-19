@@ -209,7 +209,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
     @property
-    # Copied from transformers.models.llama.tokenization_llama.GemmaTokenizer.default_chat_template
     def default_chat_template(self):
         raise NotImplementedError
 
