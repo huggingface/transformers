@@ -18,34 +18,18 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MusicGen Melody model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284)
-by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
+The MusicGen Melody model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
 
-MusicGen Melody is a single stage auto-regressive Transformer model capable of generating high-quality music samples conditioned
-on text descriptions or audio prompts. The text descriptions are passed through a frozen text encoder model to obtain a
-sequence of hidden-state representations. MusicGen is then trained to predict discrete audio tokens, or *audio codes*,
-conditioned on these hidden-states. These audio tokens are then decoded using an audio compression model, such as EnCodec,
-to recover the audio waveform.
+MusicGen Melody is a single stage auto-regressive Transformer model capable of generating high-quality music samples conditioned on text descriptions or audio prompts. The text descriptions are passed through a frozen text encoder model to obtain a sequence of hidden-state representations. MusicGen is then trained to predict discrete audio tokens, or *audio codes*, conditioned on these hidden-states. These audio tokens are then decoded using an audio compression model, such as EnCodec, to recover the audio waveform.
 
-Through an efficient token interleaving pattern, MusicGen does not require a self-supervised semantic representation of
-the text/audio prompts, thus eliminating the need to cascade multiple models to predict a set of codebooks (e.g.
-hierarchically or upsampling). Instead, it is able to generate all the codebooks in a single forward pass.
+Through an efficient token interleaving pattern, MusicGen does not require a self-supervised semantic representation of the text/audio prompts, thus eliminating the need to cascade multiple models to predict a set of codebooks (e.g. hierarchically or upsampling). Instead, it is able to generate all the codebooks in a single forward pass.
 
 The abstract from the paper is the following:
 
-*We tackle the task of conditional music generation. We introduce MusicGen, a single Language Model (LM) that operates
-over several streams of compressed discrete music representation, i.e., tokens. Unlike prior work, MusicGen is comprised
-of a single-stage transformer LM together with efficient token interleaving patterns, which eliminates the need for
-cascading several models, e.g., hierarchically or upsampling. Following this approach, we demonstrate how MusicGen
-can generate high-quality samples, while being conditioned on textual description or melodic features, allowing better
-controls over the generated output. We conduct extensive empirical evaluation, considering both automatic and human
-studies, showing the proposed approach is superior to the evaluated baselines on a standard text-to-music benchmark.
-Through ablation studies, we shed light over the importance of each of the components comprising MusicGen.*
+*We tackle the task of conditional music generation. We introduce MusicGen, a single Language Model (LM) that operates over several streams of compressed discrete music representation, i.e., tokens. Unlike prior work, MusicGen is comprised of a single-stage transformer LM together with efficient token interleaving patterns, which eliminates the need for cascading several models, e.g., hierarchically or upsampling. Following this approach, we demonstrate how MusicGen can generate high-quality samples, while being conditioned on textual description or melodic features, allowing better controls over the generated output. We conduct extensive empirical evaluation, considering both automatic and human studies, showing the proposed approach is superior to the evaluated baselines on a standard text-to-music benchmark. Through ablation studies, we shed light over the importance of each of the components comprising MusicGen.*
 
 
-This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found
-[here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the
-[Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen).
+This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen).
 
 
 ## Difference with [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
@@ -56,15 +40,9 @@ There are two key differences with MusicGen:
 
 ## Generation
 
-MusicGen Melody is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
-better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by default,
-and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenMelodyForConditionalGeneration.generate`],
-or by overriding the model's generation config (see below).
+MusicGen Melody is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by default, and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenMelodyForConditionalGeneration.generate`], or by overriding the model's generation config (see below).
 
-Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen Melody. The mono channel versions 
-generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), 
-and each set of codebooks is decoded independently through the audio compression model. The audio streams for each 
-channel are combined to give the final stereo output.
+Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen Melody. The mono channel versions generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), and each set of codebooks is decoded independently through the audio compression model. The audio streams for each channel are combined to give the final stereo output.
 
 
 #### Audio Conditional Generation
@@ -141,8 +119,7 @@ You can also pass the audio signal directly without using Demucs, although the q
 >>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
 ```
 
-The audio outputs are a three-dimensional Torch tensor of shape `(batch_size, num_channels, sequence_length)`. To listen
-to the generated audio samples, you can either play them in an ipynb notebook:
+The audio outputs are a three-dimensional Torch tensor of shape `(batch_size, num_channels, sequence_length)`. To listen to the generated audio samples, you can either play them in an ipynb notebook:
 
 ```python
 from IPython.display import Audio
@@ -179,11 +156,7 @@ The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prom
 >>> audio_values = model.generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=256)
 ```
 
-The `guidance_scale` is used in classifier free guidance (CFG), setting the weighting between the conditional logits
-(which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or
-'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input
-prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results,
-use `guidance_scale=3` (default).
+The `guidance_scale` is used in classifier free guidance (CFG), setting the weighting between the conditional logits (which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or 'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results, use `guidance_scale=3` (default).
 
 
 You can also generate in batch:
@@ -213,8 +186,7 @@ You can also generate in batch:
 
 ### Unconditional Generation
 
-The inputs for unconditional (or 'null') generation can be obtained through the method
-[`MusicgenMelodyProcessor.get_unconditional_inputs`]:
+The inputs for unconditional (or 'null') generation can be obtained through the method [`MusicgenMelodyProcessor.get_unconditional_inputs`]:
 
 ```python
 >>> from transformers import MusicgenMelodyForConditionalGeneration, MusicgenMelodyProcessor
@@ -227,8 +199,7 @@ The inputs for unconditional (or 'null') generation can be obtained through the 
 
 ### Generation Configuration
 
-The default parameters that control the generation process, such as sampling, guidance scale and number of generated 
-tokens, can be found in the model's generation config, and updated as desired:
+The default parameters that control the generation process, such as sampling, guidance scale and number of generated tokens, can be found in the model's generation config, and updated as desired:
 
 ```python
 >>> from transformers import MusicgenMelodyForConditionalGeneration
@@ -245,21 +216,16 @@ tokens, can be found in the model's generation config, and updated as desired:
 >>> model.generation_config.max_length = 256
 ```
 
-Note that any arguments passed to the generate method will **supersede** those in the generation config, so setting 
-`do_sample=False` in the call to generate will supersede the setting of `model.generation_config.do_sample` in the 
-generation config.
+Note that any arguments passed to the generate method will **supersede** those in the generation config, so setting `do_sample=False` in the call to generate will supersede the setting of `model.generation_config.do_sample` in the generation config.
 
 ## Model Structure
 
 The MusicGen model can be de-composed into three distinct stages:
-1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5
+1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5.
 2. MusicGen Melody decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
-3. Audio decoder: used to recover the audio waveform from the audio tokens predicted by the decoder
+3. Audio decoder: used to recover the audio waveform from the audio tokens predicted by the decoder.
 
-Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenMelodyForCausalLM`],
-or as a composite model that includes the text encoder and audio encoder, corresponding to the class
-[`MusicgenMelodyForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first 
-specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
+Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenMelodyForCausalLM`], or as a composite model that includes the text encoder and audio encoder, corresponding to the class [`MusicgenMelodyForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
 
 ```python
 >>> from transformers import AutoConfig, MusicgenMelodyForCausalLM, MusicgenMelodyForConditionalGeneration
@@ -272,15 +238,11 @@ specifying the correct config, or be accessed through the `.decoder` attribute o
 >>> decoder = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").decoder
 ```
 
-Since the text encoder and audio encoder models are frozen during training, the MusicGen decoder [`MusicgenMelodyForCausalLM`]
-can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can
-be combined with the frozen text encoder and audio encoder to recover the composite [`MusicgenMelodyForConditionalGeneration`]
-model.
+Since the text encoder and audio encoder models are frozen during training, the MusicGen decoder [`MusicgenMelodyForCausalLM`] can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can be combined with the frozen text encoder and audio encoder to recover the composite [`MusicgenMelodyForConditionalGeneration`] model.
 
 ## Checkpoint Conversion
 
-- After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models) , you can convert them using the **conversion script** available at
-`src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py` with the following command:
+- After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models), you can convert them using the **conversion script** available at `src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py` with the following command:
 
 ```bash
 python src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py \
