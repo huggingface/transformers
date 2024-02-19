@@ -357,7 +357,9 @@ class StaticCache(Cache):
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-        self.seen_tokens = 0
+
+        # NOTE: self.seen_tokens being in an int results in bugs with torch.compile, where it is somehow not updated.
+        self.seen_tokens = torch.tensor(0, dtype=torch.int64, device=device)
 
     def update(
         self,
@@ -390,8 +392,9 @@ class StaticCache(Cache):
 
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
-
-        self.seen_tokens += key_states.shape[2]
+        
+        # # This NEEDS to be in-place as in the modeling we are not calling directly `self.past_key_value.update()`, but are rather using getattr.
+        self.seen_tokens.add_(key_states.shape[2])
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:

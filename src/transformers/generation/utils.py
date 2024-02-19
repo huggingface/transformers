@@ -2343,6 +2343,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+        count = 0
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2354,9 +2355,13 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
+            print("------------ call forward", count)
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            print("model_inputs intut_ids shape", model_inputs["input_ids"].shape)
+            print("model_inputs intut_ids stride", model_inputs["input_ids"].stride())
+            count += 1 
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -2393,6 +2398,8 @@ class GenerationMixin:
 
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
+
+            print("next_tokens", next_tokens.shape)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:

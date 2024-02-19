@@ -623,6 +623,7 @@ class LlamaSdpaAttention(LlamaAttention):
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
+        # In case static cache is used, it is an instance attribute.
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
@@ -961,6 +962,10 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        # print("attention_mask", attention_mask.shape)
+        # print("attention_mask", attention_mask.stride())
+        # print("inputs_embeds", inputs_embeds.shape)
+        # print("inputs_embeds", inputs_embeds.stride())
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
         # embed positions
@@ -1224,7 +1229,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 and cache_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
-
+        
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1238,6 +1243,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             past_length = past_key_value.get_seq_length()
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
+        
+        print("input_ids after update", input_ids.shape)
 
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
@@ -1251,7 +1258,12 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The `contiguous()` here is necessary to have a static stride during (non-speculative) decoding. torchdynamo otherwise
+            # recompiles graphs as the stride of the inputs is a guard.
+            # TODO: We don't really need to handle the input_ids here, and this contiguous() call could be removed if we were
+            # simply using GenerationMixin.greedy_search `next_tokens` variable directly (which is already contiguous), instead of
+            # doing a torch.cat + then slice.
+            model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs.update(
             {
