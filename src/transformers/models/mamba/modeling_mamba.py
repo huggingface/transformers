@@ -115,7 +115,7 @@ class MambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
-        if inference_params is not None and inference_params.seq_offset > 0:
+        if inference_params is not None and inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
             hidden_states = causal_conv1d_update(
                 hidden_states,
@@ -127,7 +127,7 @@ class MambaMixer(nn.Module):
         else:
             conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
             hidden_states = causal_conv1d_fn(
-                hidden_states=hidden_states,
+                x=hidden_states,
                 weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
                 bias=self.conv1d.bias,
                 activation=self.activation,
@@ -141,17 +141,18 @@ class MambaMixer(nn.Module):
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
 
+        A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
-        if inference_params is not None and inference_params.seq_offset > 0:
+        if inference_params is not None and inference_params.seqlen_offset > 0:
             y = selective_state_update(
-                ssm_state, hidden_states, discrete_time_step, self.negA, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True
+                ssm_state, hidden_states, discrete_time_step, A, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True
             )  # fmt: skip
         else:
             y, last_state = selective_scan_fn(
                 hidden_states,
                 discrete_time_step,
-                self.negA,
+                A,
                 B,
                 C,
                 self.D.float(),
@@ -279,7 +280,7 @@ class MambaBlock(nn.Module):
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        if any(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update) is None:
+        if any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is None:
             MIXER_CLS = MambaMixerSlow
         else:  # CUDA is available and the kernels are also available
             MIXER_CLS = MambaMixer
