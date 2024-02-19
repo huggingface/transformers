@@ -313,7 +313,7 @@ def is_mamba_ssm_available():
         if not torch.cuda.is_available():
             return False
         else:
-            return _is_package_available("mamba-ssm")
+            return _is_package_available("mamba_ssm")
     return False
 
 
