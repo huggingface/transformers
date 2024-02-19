@@ -1754,13 +1754,13 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> image = example["image"]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
-        >>> question = "Question answering. In which year is the report made?"
+        >>> question = "Question answering. What is the date on the form?"
         >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
         >>> print(processor.batch_decode(predicted_ids, skip_special_tokens=True)[0])
-        2013
+        9/30/92
         ```"""
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
