@@ -260,10 +260,9 @@ SUPPORTED_TASKS = {
     },
     "fill-in-middle": {
         "impl": FimPipeline,
-        "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": ("codellama/CodeLlama-7b-hf", "ec58a5b"), "tf": ("codellama/CodeLlama-7b-hf", "ec58a5b")}
+            "model": {"pt": ("codellama/CodeLlama-7b-hf", "ec58a5b")}
         },
         "type": "text",
     },
