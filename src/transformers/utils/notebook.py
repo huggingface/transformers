@@ -298,6 +298,7 @@ class NotebookProgressCallback(TrainerCallback):
         column_names = [self.first_column] + ["Training Loss"]
         if args.evaluation_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
+        column_names.append("Learning Rate")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
     def on_step_end(self, args, state, control, **kwargs):
@@ -332,14 +333,19 @@ class NotebookProgressCallback(TrainerCallback):
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step
+            values["Learning Rate"] = f"{logs['learning_rate']:0.2e}"
             self.training_tracker.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
-            values = {"Training Loss": "No log", "Validation Loss": "No log"}
+            values = {"Training Loss": "No log", "Validation Loss": "No log", "Learning Rate": "No log"}
             for log in reversed(state.log_history):
                 if "loss" in log:
                     values["Training Loss"] = log["loss"]
+                    break
+            for log in reversed(state.log_history):
+                if "learning_rate" in log:
+                    values["Learning Rate"] = f"{log['learning_rate']:0.2e}"
                     break
 
             if self.first_column == "Epoch":
