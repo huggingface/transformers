@@ -254,12 +254,12 @@ class StopStringCriteria(StoppingCriteria):
             # The embedding vec contains the valid positions, end_lengths and total lengths for each token
             embedding_vec = self.embedding_vecs[stop_string].to(flipped_ids.device)
             embedded = F.embedding(flipped_ids, embedding_vec)
-
+            # Now we split the embedding vector. valid_positions is the positions in the stop string the token can fit
+            valid_positions = embedded[:, 1:, :max_valid_positions]
             # end_lengths is the number of characters from the string, counting from the end, that the token
             # contains. It can have multiple values if the same token can overlap different end lengths
             end_lengths = embedded[:, :1, max_valid_positions : max_valid_positions + max_valid_end_lens]
-
-            # Lengths is the total length of each token. Unlike end_lengths, it always has a single value
+            # Lengths is the total length of each token. Unlike the others, it always has a single value
             lengths = embedded[:, 1:, -1:]
 
             # Concatenate lengths onto each possible end_lengths value
@@ -269,11 +269,8 @@ class StopStringCriteria(StoppingCriteria):
             # cumsum() to get the number of matched characters in the stop string after each token
             cumsum = lengths_with_ends.cumsum(dim=1)  # B x maximum_token_len x max_valid_end_lens
 
-            # The code above assumes that all tokens are in valid positions. This code masks the ones that are not.
-            # First we get the vector of positions tokens can validly appear in
-            valid_positions = embedded[:, 1:, :max_valid_positions]
-
-            # Tokens match the start of the string if they have a positive value in the end_lengths vector
+            # The calculation above assumes that all tokens are in valid positions. Now we mask the ones that are not.
+            # First, tokens match the start of the string if they have a positive value in the end_lengths vector
             initial_match = end_lengths > 0
 
             # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
