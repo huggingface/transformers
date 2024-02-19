@@ -124,7 +124,7 @@ class MambaConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.residual_in_fp32 = residual_in_fp32
+        self.tie_word_embeddings = tie_word_embeddings
+        self.dt_rank = dt_rank
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
-        )
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
