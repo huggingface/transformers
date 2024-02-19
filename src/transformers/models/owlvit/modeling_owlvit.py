@@ -458,12 +458,12 @@ class OwlViTSdpaAttention(OwlViTAttention):
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # get query proj
+        # get query projection
         query_states = self.q_proj(hidden_states) * self.scale
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        proj_shape = (bsz, self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
@@ -523,11 +523,10 @@ class OwlViTMLP(nn.Module):
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
-    # Ignore Copy
     def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = OWLVIT_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = OwlViTAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = OwlViTMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
