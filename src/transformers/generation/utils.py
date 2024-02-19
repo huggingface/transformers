@@ -836,6 +836,11 @@ class GenerationMixin:
                 EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
             )
         if generation_config.bad_words_ids is not None:
+            if generation_config.bias is not None:
+                logger.warning(
+                    "If using `torch.compile`,'NoBadWordsLogitsProcessor' cannot be used together with `SequenceBiasLogitsProcessor` "
+                    "To compile generation, add only one to generation config: `bias` or 'bad_words_ids'"
+                )
             processors.append(
                 NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
             )

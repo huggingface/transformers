@@ -34,6 +34,9 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
+        cur_len: (`int`): The current sequence length of generated text. For compatibility with `torch.compile`, `input_ids`
+            sequence length is the maxiumum length that can be generated, and `cur_len` indicates the length that was actually
+            generated.
 
     Return:
         `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
@@ -78,6 +81,9 @@ class LogitsProcessorList(list):
             scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
+            cur_len: (`int`): The current sequence length of generated text. For compatibility with `torch.compile`, `input_ids`
+                sequence length is the maxiumum length that can be generated, and `cur_len` indicates the length that was actually
+                generated.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional kwargs that are specific to a logits processor.
 
@@ -146,6 +152,10 @@ class MinLengthLogitsProcessor(LogitsProcessor):
             eos_token_id = [eos_token_id]
         if not all(isinstance(i, int) for i in eos_token_id) or any(i < 0 for i in eos_token_id):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+        logger.warning(
+            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+            "do not add `min_length` in generation config for efficient compilation"
+        )
 
         self.min_length = min_length
         self.eos_token_id = eos_token_id
@@ -207,6 +217,10 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             eos_token_id = [eos_token_id]
         if not all(isinstance(i, int) for i in eos_token_id) or any(i < 0 for i in eos_token_id):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+        logger.warning(
+            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+            "do not add `min_new_tokens` in generation config for efficient compilation"
+        )
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens
@@ -863,6 +877,10 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     def __init__(self, ngram_size: int):
         if not isinstance(ngram_size, int) or ngram_size <= 0:
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
+        logger.warning(
+            f"{self.__class__.__name__} will cannot be used with `torch.compile`"
+            "To compile generation, do not add `no_repeat_ngram_size`to generation config"
+        )
         self.ngram_size = ngram_size
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -919,6 +937,10 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
             raise ValueError(
                 f"`encoder_ngram_size` has to be a strictly positive integer, but is {encoder_ngram_size}"
             )
+        logger.warning(
+            f"{self.__class__.__name__} will cannot be used with `torch.compile`"
+            "To compile generation, do not add `encoder_no_repeat_ngram_size`to generation config"
+        )
         self.ngram_size = encoder_ngram_size
         if len(encoder_input_ids.shape) == 1:
             encoder_input_ids = encoder_input_ids.unsqueeze(0)
@@ -1227,6 +1249,10 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
+        logger.warning(
+            f"{self.__class__.__name__} cannot be used with `torch.compile`"
+            "To compile generation, do not add `prefix_allowed_tokens_fn`to generation config"
+        )
         self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
         self._num_beams = num_beams
 
@@ -1414,6 +1440,10 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, bos_token_id: int):
+        logger.warning(
+            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+            "do not add `forced_bos_token_id` in generation config for efficient compilation"
+        )
         self.bos_token_id = bos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -1421,7 +1451,7 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
         if cur_len == 1:
             mask = torch.full_like(scores, -math.inf)
             mask[:, self.bos_token_id] = 0
-            scores = scores + mask
+            scores = mask
         return scores
 
 
@@ -1459,6 +1489,10 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
+        logger.warning(
+            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+            "do not add `forced_eos_token_id` in generation config for efficient compilation"
+        )
         self.max_length = max_length
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -1469,7 +1503,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         if cur_len == self.max_length - 1:
             mask = torch.full_like(scores, -math.inf)
             mask[:, self.eos_token_id] = 0
-            scores = scores + mask
+            scores = mask
         return scores
 
 
@@ -1485,15 +1519,11 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
         # set all nan values to 0.0
-        zeros = torch.zeros_like(scores)
-        scores = scores.masked_scatter(scores != scores, zeros)
-
-        maxs = torch.ones_like(scores) * torch.finfo(scores.dtype).max
-        mins = torch.ones_like(scores) * torch.finfo(scores.dtype).min
+        scores = torch.where(scores != scores, 0.0, scores)
 
         # set all +/-inf values to max/min possible value
-        scores = scores.masked_scatter(scores == float("inf"), maxs)
-        scores = scores.masked_scatter(scores == -float("inf"), mins)
+        scores = torch.where(scores == float("inf"), torch.finfo(scores.dtype).max, scores)
+        scores = torch.where(scores == -float("inf"), torch.finfo(scores.dtype).min, scores)
 
         return scores
 
@@ -1572,6 +1602,10 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         eos_token_id: Union[int, List[int]],
         input_ids_seq_length: int,
     ):
+        logger.warning(
+            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+            "do not add `exponential_decay_length_penalty` in generation config for efficient compilation"
+        )
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
         if isinstance(eos_token_id, int):
@@ -1663,6 +1697,10 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, begin_suppress_tokens, begin_index):
+        logger.warning(
+            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+            "do not add `begin_suppress_tokens` in generation config for efficient compilation"
+        )
         self.begin_suppress_tokens = list(begin_suppress_tokens)
         self.begin_index = begin_index
 
@@ -1768,7 +1806,7 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
         if current_token is not None:
             mask = torch.full_like(scores, -float("inf"))
             mask[:, current_token] = 0
-            scores = scores + mask
+            scores = mask
         return scores
 
 
@@ -2133,6 +2171,10 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             "past_key_values": None,
             "first_pass": True,
         }
+        logger.warning(
+            f"{self.__class__.__name__} cannot be used with `torch.compile`"
+            "To compile generation, do not add `guidance_scale`to generation config"
+        )
 
     def get_unconditional_logits(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
         if self.unconditional_context["first_pass"]:
