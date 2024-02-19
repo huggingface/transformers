@@ -737,6 +737,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Adapted from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

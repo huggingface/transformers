@@ -793,6 +793,7 @@ class XmodModel(XmodPreTrainedModel):
 
     """
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaModel.__init__ with Roberta->Xmod
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -823,6 +824,7 @@ class XmodModel(XmodPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(XMOD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # Adapted from transformers.models.roberta.modeling_roberta.RobertaModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

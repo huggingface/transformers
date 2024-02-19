@@ -704,6 +704,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     """
 
+    # Adapted from transformers.models.bert.modeling_bert.BertModel.__init__
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -736,6 +737,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Adapted from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
