@@ -997,6 +997,9 @@ class GenerationConfig(PushToHubMixin):
                 setattr(self, key, value)
                 to_remove.append(key)
 
-        # remove all the attributes that were updated, without modifying the input dict
+        # Confirm that the updated instance is still valid
+        self.validate()
+
+        # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs

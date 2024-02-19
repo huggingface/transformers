@@ -135,15 +135,33 @@ class GenerationConfigTest(unittest.TestCase):
             GenerationConfig(temperature=0.5)
         self.assertEqual(len(captured_warnings), 1)
 
-        # Case 3: Impossible sets of contraints/parameters will raise an exception
+        # Case 3: Expanding on the case above, we can update a bad configuration to get rid of the warning. Ideally,
+        # that is done by unsetting the parameter (i.e. setting it to None)
+        generation_config_bad_temperature = GenerationConfig(temperature=0.5)
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            # BAD - 0.9 means it is still set, we should warn
+            generation_config_bad_temperature.update(temperature=0.9)
+        self.assertEqual(len(captured_warnings), 1)
+        generation_config_bad_temperature = GenerationConfig(temperature=0.5)
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            # CORNER CASE - 1.0 is the default, we can't detect whether it is set by the user or not, we shouldn't warn
+            generation_config_bad_temperature.update(temperature=1.0)
+        self.assertEqual(len(captured_warnings), 0)
+        generation_config_bad_temperature = GenerationConfig(temperature=0.5)
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            # OK - None means it is unset, nothing to warn about
+            generation_config_bad_temperature.update(temperature=None)
+        self.assertEqual(len(captured_warnings), 0)
+
+        # Case 4: Impossible sets of contraints/parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(num_return_sequences=2)
 
-        # Case 4: Passing `generate()`-only flags to `validate` will raise an exception
+        # Case 5: Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(logits_processor="foo")
 
-        # Case 5: Model-specific parameters will NOT raise an exception or a warning
+        # Case 6: Model-specific parameters will NOT raise an exception or a warning
         with warnings.catch_warnings(record=True) as captured_warnings:
             GenerationConfig(foo="bar")
         self.assertEqual(len(captured_warnings), 0)
