@@ -456,6 +456,9 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -483,7 +486,6 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         )
 
         # let's set num_channels to 1
-        config.num_channels = 1
         config.backbone_config.num_channels = 1
 
         for model_class in self.all_model_classes:

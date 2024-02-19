@@ -474,7 +474,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         )
 
         # let's set num_channels to 1
-        config.num_channels = 1
         config.backbone_config.num_channels = 1
 
         for model_class in self.all_model_classes:
