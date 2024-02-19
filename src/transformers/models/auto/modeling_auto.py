@@ -80,6 +80,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosModel"),
     ]
 )
+
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
