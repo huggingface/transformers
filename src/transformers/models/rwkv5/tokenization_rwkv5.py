@@ -110,6 +110,9 @@ class WordpieceTokenizer(object):
 
 class Rwkv5Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = {"ArthurZ/rwkv-5-utf": 2048}
+
     model_input_names = ["input_ids", "attention_mask"]
     
     def __init__(self, vocab_file,bos_token="<s>", eos_token="<s>",unk_token="<s>",**kwargs):
