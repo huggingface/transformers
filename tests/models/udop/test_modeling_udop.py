@@ -343,7 +343,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 "head_mask",
                 "input_ids",
                 "inputs_embeds",
-                "kwargs",
             ]
             if model_class in self.all_generative_model_classes:
                 expected_arg_names.append(

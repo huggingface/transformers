@@ -1560,7 +1560,6 @@ class UdopModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Tuple[Tensor, ...]:
         r"""
         Returns:
@@ -1731,7 +1730,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Tuple[Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
