@@ -58,9 +58,11 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_staging_test,
     require_accelerate,
+    require_bitsandbytes,
     require_deepspeed,
     require_intel_extension_for_pytorch,
     require_optuna,
+    require_peft,
     require_ray,
     require_safetensors,
     require_sentencepiece,
@@ -871,6 +873,44 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
+
+    @require_bitsandbytes
+    @require_peft
+    def test_bnb_compile(self):
+        from peft import LoraConfig, get_peft_model
+
+        # Simply tests if initializing a Trainer with a PEFT + compiled model works out of the box
+        # QLoRA + torch compile is not really supported yet, but we should at least support the model
+        # loading and let torch throw the
+        tiny_model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", load_in_4bit=True
+        )
+
+        peft_config = LoraConfig(
+            r=8,
+            lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        tiny_model = get_peft_model(tiny_model, peft_config)
+
+        tiny_model = torch.compile(tiny_model)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                learning_rate=1e-9,
+                logging_steps=5,
+            )
+            trainer = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+
+            # TODO: In the future (once we have bnb + compile support), uncomment this
+            # trainer.train()
 
     def test_neftune(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
