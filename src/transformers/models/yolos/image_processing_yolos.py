@@ -1297,7 +1297,7 @@ class YolosImageProcessor(BaseImageProcessor):
             encoded_inputs = self.pad(
                 images,
                 annotations=annotations,
-                return_pixel_mask=True,
+                return_pixel_mask=False,
                 data_format=data_format,
                 input_data_format=input_data_format,
                 update_bboxes=do_convert_annotations,

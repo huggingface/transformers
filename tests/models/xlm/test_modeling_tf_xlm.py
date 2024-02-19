@@ -369,7 +369,7 @@ class TFXLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TFXLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
-        model = TFXLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        model = TFXLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-mlm-en-2048")
         input_ids = tf.convert_to_tensor([[14, 447]], dtype=tf.int32)  # the president
         expected_output_ids = [
             14,

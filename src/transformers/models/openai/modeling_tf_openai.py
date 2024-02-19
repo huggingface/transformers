@@ -52,12 +52,12 @@ from .configuration_openai import OpenAIGPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openai-gpt"
+_CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
 TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-gpt",
-    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
+    "openai-community/openai-gpt",
+    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-community/openai-gpt
 ]
 
 
@@ -731,8 +731,8 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFOpenAIGPTDoubleHeadsModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-gpt")
-        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/openai-gpt")
+        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained("openai-community/openai-gpt")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> tokenizer.add_special_tokens({"cls_token": "[CLS]"})
