@@ -1568,20 +1568,19 @@ class UdopModel(UdopPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, UdopModel
+        >>> from transformers import AutoProcessor, AutoModel
         >>> from huggingface_hub import hf_hub_download
-        >>> from datasets import load_dataset
+        >>> from PIL import Image
         >>> import torch
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large", apply_ocr=False)
-        >>> model = UdopModel.from_pretrained("nielsr/udop-large")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test")
+        >>> model = AutoModel.from_pretrained("nielsr/udop-test")
 
-        >>> # load image, along with its words and boxes
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
-        >>> example = dataset[0]
-        >>> image = example["image"]
-        >>> words = example["tokens"]
-        >>> boxes = example["bboxes"]
+        >>> # load image
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        ... )
+        >>> image = Image.open(filepath).convert("RGB")
 
         >>> # prepare for the model
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1750,22 +1749,21 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, UdopForConditionalGeneration
         >>> from huggingface_hub import hf_hub_download
-        >>> from datasets import load_dataset
+        >>> from PIL import Image
 
         >>> # load model and processor
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large", apply_ocr=False)
-        >>> model = UdopForConditionalGeneration.from_pretrained("nielsr/udop-large")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test")
+        >>> model = UdopForConditionalGeneration.from_pretrained("nielsr/udop-test")
 
-        >>> # load image, along with its words and boxes
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
-        >>> example = dataset[0]
-        >>> image = example["image"]
-        >>> words = example["tokens"]
-        >>> boxes = example["bboxes"]
-
-        >>> # inference
+        >>> # load image and text prompt
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        ... )
+        >>> image = Image.open(filepath).convert("RGB")
         >>> prompt = "Question answering. In which year is the report made?"
         >>> encoding = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
         >>> print(processor.batch_decode(predicted_ids, skip_special_tokens=True)[0])
         2013
@@ -1970,14 +1968,22 @@ class UdopEncoderModel(UdopPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, UdopEncoderModel
+        >>> from transformers import AutoProcessor, UdopEncoderModel
+        >>> from huggingface_hub import hf_hub_download
+        >>> from PIL import Image
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/udop-large")
-        >>> model = UdopEncoderModel.from_pretrained("nielsr/udop-large")
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids)
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test")
+        >>> model = UdopEncoderModel.from_pretrained("nielsr/udop-test")
+
+        >>> # load image and text prompt
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
+        ... )
+        >>> image = Image.open(filepath).convert("RGB")
+        >>> prompt = "Question answering. In which year is the report made?"
+        >>> encoding = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
