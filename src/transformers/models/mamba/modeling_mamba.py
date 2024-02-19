@@ -579,7 +579,6 @@ class MambaModel(MambaPreTrainedModel):
     """,
     MAMBA_START_DOCSTRING,
 )
-# Copied from transformers.models.mamba.modeling_mamba.mambaForCausalLM with mamba->MAMBA,mamba->Mamba,mamba->mamba
 class MambaForCausalLM(MambaPreTrainedModel):
     _tied_weights_keys = ["head.weight"]
 
