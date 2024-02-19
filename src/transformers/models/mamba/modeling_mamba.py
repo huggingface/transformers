@@ -137,9 +137,8 @@ class MambaMixer(nn.Module):
         # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
-        discrete_time_step = self.dt_proj(time_step)
+        discrete_time_step = self.dt_proj.weight @ time_step.transpose(1,2)
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
 
         A = -torch.exp(self.A_log.float())
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
@@ -162,7 +161,7 @@ class MambaMixer(nn.Module):
                 return_last_state=True,
             )
             if last_state is not None:
-                ssm_state = last_state
+                inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
         attn_outputs = self.out_proj(y.transpose(1, 2))
