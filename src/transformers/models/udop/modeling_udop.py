@@ -1569,21 +1569,18 @@ class UdopModel(UdopPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, AutoModel
-        >>> from huggingface_hub import hf_hub_download
-        >>> from PIL import Image
+        >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
         >>> model = AutoModel.from_pretrained("nielsr/udop-test")
 
-        >>> # load image
-        >>> filepath = hf_hub_download(
-        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        ... )
-        >>> image = Image.open(filepath).convert("RGB")
-
-        >>> # prepare for the model
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+        >>> inputs = processor(image, words, boxes=boxes, return_tensors="pt")
 
         >>> decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]])
 
@@ -1748,20 +1745,18 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, UdopForConditionalGeneration
-        >>> from huggingface_hub import hf_hub_download
-        >>> from PIL import Image
+        >>> from datasets import load_dataset
 
         >>> # load model and processor
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
         >>> model = UdopForConditionalGeneration.from_pretrained("nielsr/udop-test")
 
-        >>> # load image and text prompt
-        >>> filepath = hf_hub_download(
-        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        ... )
-        >>> image = Image.open(filepath).convert("RGB")
-        >>> prompt = "Question answering. In which year is the report made?"
-        >>> encoding = processor(images=image, text=prompt, return_tensors="pt")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
@@ -1970,18 +1965,17 @@ class UdopEncoderModel(UdopPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, UdopEncoderModel
         >>> from huggingface_hub import hf_hub_download
-        >>> from PIL import Image
+        >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
         >>> model = UdopEncoderModel.from_pretrained("nielsr/udop-test")
 
-        >>> # load image and text prompt
-        >>> filepath = hf_hub_download(
-        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        ... )
-        >>> image = Image.open(filepath).convert("RGB")
-        >>> prompt = "Question answering. In which year is the report made?"
-        >>> encoding = processor(images=image, text=prompt, return_tensors="pt")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
 
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
