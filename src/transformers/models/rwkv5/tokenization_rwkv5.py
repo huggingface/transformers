@@ -33,11 +33,11 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
-    "vocab_file": "rwkv_vocab_v20230424.txt",
+    "vocab_file": "vocab.txt",
 }
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "RWKV/rwkv-5-world-1b5": "https://huggingface.co/RWKV/rwkv-5-world-1b5/blob/main/rwkv_vocab_v20230424.txt",
+        "ArthurZ/rwkv-5-utf": "https://huggingface.co/ArthurZ/rwkv-5-utf/blob/main/vocab.txt",
     },
 }
 
@@ -49,7 +49,7 @@ def whitespace_tokenize(text):
     text = text.strip()
     if not text:
         return []
-    tokens = re.split(r'(?=\W)', text)
+    tokens = re.split(b'(?= )', text)
     return tokens
 
 
@@ -91,15 +91,15 @@ class WordpieceTokenizer(object):
                 end = len(chars)
                 cur_substr = None
                 while start < end:
-                    substr = "".join(chars[start:end])
-                    if substr.encode('utf-8') in self.vocab:
+                    substr = bytes(chars[start:end])
+                    if substr in self.vocab:
                         cur_substr = substr
                         break
                     end -= 1
                 if cur_substr is None:
                     is_bad = True
                     break
-                sub_tokens.append(cur_substr)
+                sub_tokens.append(cur_substr.decode())
                 start = end
 
             if is_bad:
@@ -119,11 +119,11 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
                 " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
             
-        with open(vocab_file, "rb") as reader:
+        with open(vocab_file, "r") as reader:
             tokens = reader.readlines()
         vocab = {}
         for index, token in enumerate(tokens):
-            token = token.rstrip(b"\n")
+            token = eval(token.rstrip("\n"))
             vocab[token] = index
 
         self.add_bos_token = True
@@ -143,27 +143,29 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = {str(self.convert_ids_to_tokens(i)): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
     
     def _tokenize(self, text, split_special_tokens=False):
-        return self.wordpiece_tokenizer.tokenize(text)
+        return self.wordpiece_tokenizer.tokenize(text.encode("utf-8"))
     
     def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        if not isinstance(token, (str, int)):
-            token = token.decode('utf-8')
+        """Converts a token (byte) to an id using the vocab."""
+        if not isinstance(token, bytes):
+            token = token.encode('utf-8', errors="replace")
         return self.encoder.get(token, self.unk_token_id)
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
+        """Converts an index (integer) in a token (byte) using the vocab."""
         token = self.decoder.get(index, self.unk_token)
-        if not isinstance(token, (str, int)):
-            token = token.decode('utf-8')
+        if isinstance(token, (bytes)):
+            token = token.decode('utf-8', errors="replace")
         return token
 
     def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        out_string = "".join(tokens)
+        """Converts a sequence of tokens (bytes) in a single string. Additional tokens are encoded to bytes"""
+        out_string = b"".join([k.encode(errors="replace") if isinstance(k,str) else k for k in tokens ]).decode("utf-8")
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -174,7 +176,7 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
             )
         else:
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
-        with open(vocab_file, "wb") as writer:
+        with open(vocab_file, "w") as writer:
             for token, token_index in sorted(self.encoder.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
@@ -182,7 +184,7 @@ class Rwkv5Tokenizer(PreTrainedTokenizer):
                         " Please check that the vocabulary is not corrupted!"
                     )
                     index = token_index
-                writer.write(token + b"\n")
+                writer.write(str(token) + "\n")
                 index += 1
         return (vocab_file,)
     
