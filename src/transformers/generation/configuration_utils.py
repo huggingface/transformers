@@ -200,7 +200,8 @@ class GenerationConfig(PushToHubMixin):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
         low_memory (`bool`, *optional*):
-            Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
+            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
+            Used with beam search and contrastive search.
 
 
         > Parameters that define the output variables of `generate`
@@ -215,6 +216,9 @@ class GenerationConfig(PushToHubMixin):
             more details.
         output_scores (`bool`, *optional*, defaults to `False`):
             Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+        output_logits (`bool`, *optional*):
+            Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
+            more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
@@ -232,8 +236,11 @@ class GenerationConfig(PushToHubMixin):
         encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+        decoder_start_token_id (`Union[int, List[int]]`, *optional*):
+            If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token or a list of length
+            `batch_size`. Indicating a list enables different start ids for each element in the batch
+            (e.g. multilingual models with different target languages in one batch)
+
 
         > Generation parameters exclusive to [assistant generation](https://arxiv.org/abs/2211.17192)
 
@@ -245,9 +252,15 @@ class GenerationConfig(PushToHubMixin):
 
         num_assistant_tokens_schedule (`str`, *optional*, defaults to `"heuristic"`):
             Defines the schedule at which max assistant tokens shall be changed during inference.
-            - `"_heuristic_`: When all _speculative_ tokens are correct, increase `num_assistant_tokens` by 2 else
-              reduce by 1
+            - `"heuristic"`: When all speculative tokens are correct, increase `num_assistant_tokens` by 2 else
+              reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
+            - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
+
+        > Parameters specific to the caching mechanism:
+
+        cache_implementation (`str`, *optional*, default to `None`):
+            Cache class that should be used when generating.
 
         > Wild card
 
@@ -305,6 +318,7 @@ class GenerationConfig(PushToHubMixin):
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_scores = kwargs.pop("output_scores", False)
+        self.output_logits = kwargs.pop("output_logits", None)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
 
         # Special tokens that can be used at generation time
@@ -319,6 +333,12 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
+
+        # Cache implementation
+        self.cache_implementation = kwargs.pop("cache_implementation", None)
+
+        # Prompt lookup decoding
+        self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -369,6 +389,8 @@ class GenerationConfig(PushToHubMixin):
         # Validation of individual attributes
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
+        if self.max_new_tokens is not None and self.max_new_tokens <= 0:
+            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
 
         # Validation of attribute relations:
         fix_location = ""
@@ -551,16 +573,13 @@ class GenerationConfig(PushToHubMixin):
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 self.validate()
-            for w in caught_warnings:
-                raise ValueError(w.message)
+            if len(caught_warnings) > 0:
+                raise ValueError(str([w.message for w in caught_warnings]))
         except ValueError as exc:
-            warnings.warn(
+            raise ValueError(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
-                "\n\nThrown during validation:\n" + str(exc),
-                UserWarning,
+                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc)
             )
-            return
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 
@@ -622,8 +641,7 @@ class GenerationConfig(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
             config_file_name (`str` or `os.PathLike`, *optional*, defaults to `"generation_config.json"`):
@@ -677,7 +695,7 @@ class GenerationConfig(PushToHubMixin):
         >>> from transformers import GenerationConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
+        >>> generation_config = GenerationConfig.from_pretrained("openai-community/gpt2")
 
         >>> # E.g. config was saved using *save_pretrained('./test/saved_model/')*
         >>> generation_config.save_pretrained("./test/saved_model/")
@@ -690,7 +708,7 @@ class GenerationConfig(PushToHubMixin):
         >>> # If you'd like to try a minor variation to an existing configuration, you can also pass generation
         >>> # arguments to `.from_pretrained()`. Be mindful that typos and unused arguments will be ignored
         >>> generation_config, unused_kwargs = GenerationConfig.from_pretrained(
-        ...     "gpt2", top_k=1, foo=False, do_sample=True, return_unused_kwargs=True
+        ...     "openai-community/gpt2", top_k=1, foo=False, do_sample=True, return_unused_kwargs=True
         ... )
         >>> generation_config.top_k
         1
@@ -907,6 +925,16 @@ class GenerationConfig(PushToHubMixin):
         if ignore_metadata:
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
+
+        def convert_keys_to_string(obj):
+            if isinstance(obj, dict):
+                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys_to_string(item) for item in obj]
+            else:
+                return obj
+
+        config_dict = convert_keys_to_string(config_dict)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 

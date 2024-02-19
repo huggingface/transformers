@@ -47,6 +47,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("longt5", "FlaxLongT5Model"),
         ("marian", "FlaxMarianModel"),
         ("mbart", "FlaxMBartModel"),
+        ("mistral", "FlaxMistralModel"),
         ("mt5", "FlaxMT5Model"),
         ("opt", "FlaxOPTModel"),
         ("pegasus", "FlaxPegasusModel"),
@@ -148,6 +149,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
         ("gptj", "FlaxGPTJForCausalLM"),
         ("llama", "FlaxLlamaForCausalLM"),
+        ("mistral", "FlaxMistralForCausalLM"),
         ("opt", "FlaxOPTForCausalLM"),
         ("roberta", "FlaxRobertaForCausalLM"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForCausalLM"),
@@ -306,7 +308,9 @@ class FlaxAutoModelForSeq2SeqLM(_BaseAutoModelClass):
 
 
 FlaxAutoModelForSeq2SeqLM = auto_class_update(
-    FlaxAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+    FlaxAutoModelForSeq2SeqLM,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="google-t5/t5-base",
 )
 
 

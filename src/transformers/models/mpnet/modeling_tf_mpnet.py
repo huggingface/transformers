@@ -44,6 +44,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -77,7 +78,7 @@ class TFMPNetPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "mpnet"
 
 
-class TFMPNetEmbeddings(tf.keras.layers.Layer):
+class TFMPNetEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -88,8 +89,8 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -160,11 +161,11 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->MPNet
-class TFMPNetPooler(tf.keras.layers.Layer):
+class TFMPNetPooler(keras.layers.Layer):
     def __init__(self, config: MPNetConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -189,7 +190,7 @@ class TFMPNetPooler(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFMPNetSelfAttention(tf.keras.layers.Layer):
+class TFMPNetSelfAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -204,19 +205,19 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.q = tf.keras.layers.Dense(
+        self.q = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="q"
         )
-        self.k = tf.keras.layers.Dense(
+        self.k = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="k"
         )
-        self.v = tf.keras.layers.Dense(
+        self.v = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="v"
         )
-        self.o = tf.keras.layers.Dense(
+        self.o = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="o"
         )
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.config = config
 
     def transpose_for_scores(self, x, batch_size):
@@ -280,13 +281,13 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
                 self.o.build([None, None, self.config.hidden_size])
 
 
-class TFMPNetAttention(tf.keras.layers.Layer):
+class TFMPNetAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.attn = TFMPNetSelfAttention(config, name="attn")
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def prune_heads(self, heads):
@@ -313,11 +314,11 @@ class TFMPNetAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->MPNet
-class TFMPNetIntermediate(tf.keras.layers.Layer):
+class TFMPNetIntermediate(keras.layers.Layer):
     def __init__(self, config: MPNetConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -343,15 +344,15 @@ class TFMPNetIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->MPNet
-class TFMPNetOutput(tf.keras.layers.Layer):
+class TFMPNetOutput(keras.layers.Layer):
     def __init__(self, config: MPNetConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -373,7 +374,7 @@ class TFMPNetOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFMPNetLayer(tf.keras.layers.Layer):
+class TFMPNetLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -409,7 +410,7 @@ class TFMPNetLayer(tf.keras.layers.Layer):
                 self.out.build(None)
 
 
-class TFMPNetEncoder(tf.keras.layers.Layer):
+class TFMPNetEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -526,7 +527,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFMPNetMainLayer(tf.keras.layers.Layer):
+class TFMPNetMainLayer(keras.layers.Layer):
     config_class = MPNetConfig
 
     def __init__(self, config, **kwargs):
@@ -544,7 +545,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFMPNetEmbeddings(config, name="embeddings")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
@@ -666,7 +667,7 @@ MPNET_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -800,7 +801,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
                 self.mpnet.build(None)
 
 
-class TFMPNetLMHead(tf.keras.layers.Layer):
+class TFMPNetLMHead(keras.layers.Layer):
     """MPNet head for masked and permuted language modeling"""
 
     def __init__(self, config, input_embeddings, **kwargs):
@@ -808,10 +809,10 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
 
         self.config = config
         self.hidden_size = config.hidden_size
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
@@ -942,19 +943,19 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
                 self.lm_head.build(None)
 
 
-class TFMPNetClassificationHead(tf.keras.layers.Layer):
+class TFMPNetClassificationHead(keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.out_proj = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
         self.config = config
@@ -1074,8 +1075,8 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         super().__init__(config, *inputs, **kwargs)
 
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1175,8 +1176,8 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
 
         self.num_labels = config.num_labels
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1261,7 +1262,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         self.num_labels = config.num_labels
 
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

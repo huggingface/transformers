@@ -25,8 +25,9 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
+from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -90,6 +91,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vipllava", "LlavaProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
+        ("wav2vec2-bert", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
         ("wavlm", "Wav2Vec2Processor"),
         ("whisper", "WhisperProcessor"),
@@ -154,8 +156,7 @@ class AutoProcessor:
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a processor files saved using the `save_pretrained()` method,
                   e.g., `./my_model_directory/`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -227,27 +228,41 @@ class AutoProcessor:
         processor_class = None
         processor_auto_map = None
 
-        # First, let's see if we have a preprocessor config.
+        # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `get_file_from_repo`.
         get_file_from_repo_kwargs = {
             key: kwargs[key] for key in inspect.signature(get_file_from_repo).parameters.keys() if key in kwargs
         }
-        # Let's start by checking whether the processor class is saved in an image processor
-        preprocessor_config_file = get_file_from_repo(
-            pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
+
+        # Let's start by checking whether the processor class is saved in a processor config
+        processor_config_file = get_file_from_repo(
+            pretrained_model_name_or_path, PROCESSOR_NAME, **get_file_from_repo_kwargs
         )
-        if preprocessor_config_file is not None:
-            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        if processor_config_file is not None:
+            config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
             processor_class = config_dict.get("processor_class", None)
             if "AutoProcessor" in config_dict.get("auto_map", {}):
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
-        # If not found, let's check whether the processor class is saved in a feature extractor config
-        if preprocessor_config_file is not None and processor_class is None:
-            config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
-            processor_class = config_dict.get("processor_class", None)
-            if "AutoProcessor" in config_dict.get("auto_map", {}):
-                processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+        if processor_class is None:
+            # If not found, let's check whether the processor class is saved in an image processor config
+            preprocessor_config_file = get_file_from_repo(
+                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
+            )
+            if preprocessor_config_file is not None:
+                config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+                processor_class = config_dict.get("processor_class", None)
+                if "AutoProcessor" in config_dict.get("auto_map", {}):
+                    processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+
+            # If not found, let's check whether the processor class is saved in a feature extractor config
+            if preprocessor_config_file is not None and processor_class is None:
+                config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                    pretrained_model_name_or_path, **kwargs
+                )
+                processor_class = config_dict.get("processor_class", None)
+                if "AutoProcessor" in config_dict.get("auto_map", {}):
+                    processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer

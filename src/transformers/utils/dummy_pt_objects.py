@@ -37,6 +37,13 @@ class SinkCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class StaticCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GlueDataset(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1894,6 +1901,13 @@ class ClapTextModelWithProjection(metaclass=DummyObject):
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class CLIPForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CLIPModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2770,6 +2784,23 @@ class VanModel(metaclass=DummyObject):
 
 
 class VanPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DepthAnythingForDepthEstimation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DepthAnythingPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4672,6 +4703,13 @@ class LlamaForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LlamaForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LlamaForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5707,6 +5745,13 @@ class MT5ForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MT5ForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MT5Model(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6715,6 +6760,34 @@ def load_tf_weights_in_qdqbert(*args, **kwargs):
     requires_backends(load_tf_weights_in_qdqbert, ["torch"])
 
 
+class Qwen2ForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Qwen2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RagModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7517,6 +7590,13 @@ class SEWDPreTrainedModel(metaclass=DummyObject):
 SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SiglipForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SiglipModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7732,6 +7812,34 @@ class SqueezeBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class StableLmForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StableLmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7926,6 +8034,13 @@ class T5ForQuestionAnswering(metaclass=DummyObject):
 
 
 class T5ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class T5ForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -8165,6 +8280,13 @@ class UMT5ForQuestionAnswering(metaclass=DummyObject):
 
 
 class UMT5ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UMT5ForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -8724,6 +8846,51 @@ class Wav2Vec2Model(metaclass=DummyObject):
 
 
 class Wav2Vec2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Wav2Vec2BertForAudioFrameClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2BertForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2BertForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2BertForXVector(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2BertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Wav2Vec2BertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

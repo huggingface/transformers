@@ -51,15 +51,15 @@ from .configuration_gpt2 import GPT2Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "gpt2"
+_CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gpt2",
-    "gpt2-medium",
-    "gpt2-large",
-    "gpt2-xl",
-    "distilgpt2",
+    "openai-community/gpt2",
+    "openai-community/gpt2-medium",
+    "openai-community/gpt2-large",
+    "openai-community/gpt2-xl",
+    "distilbert/distilgpt2",
     # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
 ]
 
@@ -619,16 +619,16 @@ PARALLELIZE_DOCSTRING = r"""
             have fewer attention modules mapped to it than other devices. For reference, the gpt2 models have the
             following number of attention modules:
 
-                - gpt2: 12
-                - gpt2-medium: 24
-                - gpt2-large: 36
-                - gpt2-xl: 48
+                - openai-community/gpt2: 12
+                - openai-community/gpt2-medium: 24
+                - openai-community/gpt2-large: 36
+                - openai-community/gpt2-xl: 48
 
     Example:
 
     ```python
     # Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
-    model = GPT2LMHeadModel.from_pretrained("gpt2-xl")
+    model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-xl")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
         1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
@@ -644,8 +644,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Example:
 
     ```python
-    # On a 4 GPU machine with gpt2-large:
-    model = GPT2LMHeadModel.from_pretrained("gpt2-large")
+    # On a 4 GPU machine with openai-community/gpt2-large:
+    model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7],
         1: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -1277,8 +1277,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         >>> import torch
         >>> from transformers import AutoTokenizer, GPT2DoubleHeadsModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = GPT2DoubleHeadsModel.from_pretrained("openai-community/gpt2")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})

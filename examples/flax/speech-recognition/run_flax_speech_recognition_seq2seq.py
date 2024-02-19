@@ -60,9 +60,9 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.37.0.dev0")
+check_min_version("4.38.0.dev0")
 
-require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
+require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -577,7 +577,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = evaluate.load("wer")
+    metric = evaluate.load("wer", cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, labels):
         # replace padded labels by the padding token
