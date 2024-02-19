@@ -65,7 +65,7 @@ class UdopProcessorTest(unittest.TestCase):
 
         # TODO update organization
         # TODO update tesseract tests below
-        self.tokenizer_pretrained_name = "ArthurZ/udop"
+        self.tokenizer_pretrained_name = "nielsr/udop-test"
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
@@ -168,7 +168,7 @@ class UdopProcessorTest(unittest.TestCase):
         # set up
         datasets = load_dataset("nielsr/funsd")
         # TODO update organization
-        processor = UdopProcessor.from_pretrained("ArthurZ/udop", apply_ocr=False)
+        processor = UdopProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
 
         def preprocess_data(examples):
             images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
@@ -215,8 +215,8 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
     @cached_property
     def get_tokenizers(self):
         # TODO update organization
-        slow_tokenizer = UdopTokenizer.from_pretrained("ArthurZ/udop")
-        fast_tokenizer = UdopTokenizerFast.from_pretrained("ArthurZ/udop")
+        slow_tokenizer = UdopTokenizer.from_pretrained("nielsr/udop-test")
+        fast_tokenizer = UdopTokenizerFast.from_pretrained("nielsr/udop-test")
         return [slow_tokenizer, fast_tokenizer]
 
     @slow
