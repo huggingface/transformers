@@ -118,12 +118,12 @@ class MambaMixer(nn.Module):
         if inference_params is not None and inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
             hidden_states = causal_conv1d_update(
-                hidden_states,
+                hidden_states.squeeze(-1),
                 conv_state,
                 self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
                 self.conv1d.bias,
                 self.activation,
-            )
+            ).unsqueeze(-1)
         else:
             conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
             hidden_states = causal_conv1d_fn(
@@ -146,15 +146,15 @@ class MambaMixer(nn.Module):
         ssm_state = inference_params.ssm_states[self.layer_idx]
         if inference_params is not None and inference_params.seqlen_offset > 0:
             y = selective_state_update(
-                ssm_state, hidden_states, discrete_time_step, A, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True
-            )  # fmt: skip
+                ssm_state, hidden_states.squeeze(-1), discrete_time_step.squeeze(-1), A, B.squeeze(1), C.squeeze(1), self.D, z=gate.squeeze(-1), dt_bias=self.dt_proj.bias, dt_softplus=True
+            ).unsqueeze(-1)  # fmt: skip
         else:
             y, last_state = selective_scan_fn(
                 hidden_states,
                 discrete_time_step,
                 A,
-                B,
-                C,
+                B.transpose(1,2),
+                C.transpose(1,2),
                 self.D.float(),
                 z=gate,
                 delta_bias=self.dt_proj.bias.float(),
@@ -170,7 +170,7 @@ class MambaMixer(nn.Module):
 
 
 class MambaCache:
-    def __init__(self, config, batch_size, conv_dtype=torch.float32, ssm_dtype=torch.float32, device=None):
+    def __init__(self, config, batch_size, conv_dtype=torch.float16, ssm_dtype=torch.float16, device=None):
         self.seqlen_offset = 0
 
         d_model = config.hidden_size
@@ -252,6 +252,9 @@ class MambaMixerSlow(MambaMixer):
         y = y * self.act(gate)  # (B D)
         # 4. Final linear projection
         attn_outputs = self.out_proj(y.transpose(1, 2))
+
+        inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
+
         return attn_outputs, None, ssm_state
 
 
@@ -384,7 +387,7 @@ class MambaOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     inference_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -542,7 +545,7 @@ class MambaModel(MambaPreTrainedModel):
                 )
             else:
                 hidden_states, conv_state, ssm_state = layer(hidden_states, inference_params=inference_params)
-                inference_params.ssm_states[idx].copy_(ssm_state)
+                # inference_params.ssm_states[idx].copy_(ssm_state)
                 # TODO maybe for torch.compile + graph do things here
                 # inference_params.conv_states[idx].copy_(conv_state)
 
@@ -569,7 +572,7 @@ class MambaModel(MambaPreTrainedModel):
             last_hidden_state=hidden_states,
             inference_params=inference_params,
             hidden_states=all_hidden_states,
-            attentions=all_last_states,
+            states=all_last_states,
         )
 
 
@@ -662,7 +665,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         )
         hidden_states = mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype))
 
         loss = None
         if labels is not None:
@@ -684,5 +687,5 @@ class MambaForCausalLM(MambaPreTrainedModel):
             logits=logits,
             inference_params=mamba_outputs.inference_params,
             hidden_states=mamba_outputs.hidden_states,
-            attentions=mamba_outputs.attentions,
+            states=mamba_outputs.states,
         )
