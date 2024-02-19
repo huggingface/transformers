@@ -59,7 +59,7 @@ class SwitchTransformersModelTester:
         vocab_size=99,
         batch_size=13,
         encoder_seq_length=7,
-        decoder_seq_length=9,
+        decoder_seq_length=7,
         # For common tests
         is_training=True,
         use_attention_mask=True,
@@ -113,7 +113,9 @@ class SwitchTransformersModelTester:
         return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
+        input_ids[:, -1] = self.eos_token_id  # Eos Token
+
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
         attention_mask = None
