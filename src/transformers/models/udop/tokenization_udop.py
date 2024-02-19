@@ -25,6 +25,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import (
+    AddedToken,
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
@@ -273,6 +274,11 @@ class UdopTokenizer(PreTrainedTokenizer):
         legacy=True,
         **kwargs,
     ) -> None:
+        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
+        sep_token = AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token
+        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
+
         self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

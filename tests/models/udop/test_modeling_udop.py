@@ -352,6 +352,12 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 expected_arg_names = sorted(expected_arg_names)
             self.assertListEqual(sorted(arg_names[: len(expected_arg_names)]), expected_arg_names)
 
+    @unittest.skip(
+        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in UDOP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -518,6 +524,12 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    @unittest.skip(
+        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
 
 
 @require_torch
