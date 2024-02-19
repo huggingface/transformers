@@ -29,7 +29,7 @@ import tensorflow as tf
 
 from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
-from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, keras, shape_list, unpack_inputs
 from ...tf_utils import flatten, functional_layernorm
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
@@ -114,7 +114,7 @@ class TFSamImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
-class TFSamPatchEmbeddings(tf.keras.layers.Layer):
+class TFSamPatchEmbeddings(keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -133,7 +133,7 @@ class TFSamPatchEmbeddings(tf.keras.layers.Layer):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = tf.keras.layers.Conv2D(
+        self.projection = keras.layers.Conv2D(
             hidden_size, kernel_size=patch_size, strides=patch_size, name="projection"
         )
 
@@ -159,11 +159,11 @@ class TFSamPatchEmbeddings(tf.keras.layers.Layer):
                 self.projection.build([None, None, None, self.num_channels])
 
 
-class TFSamMLPBlock(tf.keras.layers.Layer):
+class TFSamMLPBlock(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.lin1 = tf.keras.layers.Dense(config.mlp_dim, name="lin1")
-        self.lin2 = tf.keras.layers.Dense(config.hidden_size, name="lin2")
+        self.lin1 = keras.layers.Dense(config.mlp_dim, name="lin1")
+        self.lin2 = keras.layers.Dense(config.hidden_size, name="lin2")
         self.act = ACT2FN[config.hidden_act]
         self.config = config
 
@@ -185,7 +185,7 @@ class TFSamMLPBlock(tf.keras.layers.Layer):
                 self.lin2.build([None, None, self.config.mlp_dim])
 
 
-class TFSamLayerNorm(tf.keras.layers.Layer):
+class TFSamLayerNorm(keras.layers.Layer):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -212,7 +212,7 @@ class TFSamLayerNorm(tf.keras.layers.Layer):
         return x
 
 
-class TFSamAttention(tf.keras.layers.Layer):
+class TFSamAttention(keras.layers.Layer):
     """
     SAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
     values.
@@ -229,10 +229,10 @@ class TFSamAttention(tf.keras.layers.Layer):
         if self.internal_dim % config.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
 
-        self.q_proj = tf.keras.layers.Dense(self.internal_dim, name="q_proj")
-        self.k_proj = tf.keras.layers.Dense(self.internal_dim, name="k_proj")
-        self.v_proj = tf.keras.layers.Dense(self.internal_dim, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(self.hidden_size, name="out_proj")
+        self.q_proj = keras.layers.Dense(self.internal_dim, name="q_proj")
+        self.k_proj = keras.layers.Dense(self.internal_dim, name="k_proj")
+        self.v_proj = keras.layers.Dense(self.internal_dim, name="v_proj")
+        self.out_proj = keras.layers.Dense(self.hidden_size, name="out_proj")
 
     def _separate_heads(self, hidden_states: tf.Tensor, num_attention_heads: int) -> tf.Tensor:
         batch, point_batch_size, n_tokens, channel = shape_list(hidden_states)
@@ -295,7 +295,7 @@ class TFSamAttention(tf.keras.layers.Layer):
                 self.out_proj.build([None, None, self.internal_dim])
 
 
-class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
+class TFSamTwoWayAttentionBlock(keras.layers.Layer):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False, **kwargs):
         """
         A transformer block with four layers:
@@ -316,17 +316,17 @@ class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
         self.layer_norm_eps = config.layer_norm_eps
 
         self.self_attn = TFSamAttention(config, downsample_rate=1, name="self_attn")
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm1")
 
         self.cross_attn_token_to_image = TFSamAttention(
             config, downsample_rate=attention_downsample_rate, name="cross_attn_token_to_image"
         )
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm2")
 
         self.mlp = TFSamMLPBlock(config, name="mlp")
-        self.layer_norm3 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm3")
+        self.layer_norm3 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm3")
 
-        self.layer_norm4 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm4")
+        self.layer_norm4 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm4")
         self.cross_attn_image_to_token = TFSamAttention(
             config, downsample_rate=attention_downsample_rate, name="cross_attn_image_to_token"
         )
@@ -412,7 +412,7 @@ class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
                 self.cross_attn_image_to_token.build(None)
 
 
-class TFSamTwoWayTransformer(tf.keras.layers.Layer):
+class TFSamTwoWayTransformer(keras.layers.Layer):
     def __init__(self, config: SamMaskDecoderConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -424,7 +424,7 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
             self.layers.append(TFSamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0), name=f"layers_._{i}"))
 
         self.final_attn_token_to_image = TFSamAttention(config, name="final_attn_token_to_image")
-        self.layer_norm_final_attn = tf.keras.layers.LayerNormalization(
+        self.layer_norm_final_attn = keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="layer_norm_final_attn"
         )
 
@@ -493,17 +493,17 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
                 layer.build(None)
 
 
-class TFSamFeedForward(tf.keras.layers.Layer):
+class TFSamFeedForward(keras.layers.Layer):
     def __init__(
         self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, sigmoid_output: bool = False, **kwargs
     ):
         super().__init__(**kwargs)
         self.num_layers = num_layers
-        self.activation = tf.keras.layers.ReLU()
-        self.proj_in = tf.keras.layers.Dense(hidden_dim, input_shape=(input_dim,), name="proj_in")
-        self.proj_out = tf.keras.layers.Dense(output_dim, input_shape=(hidden_dim,), name="proj_out")
+        self.activation = keras.layers.ReLU()
+        self.proj_in = keras.layers.Dense(hidden_dim, input_shape=(input_dim,), name="proj_in")
+        self.proj_out = keras.layers.Dense(output_dim, input_shape=(hidden_dim,), name="proj_out")
         self.layers = [
-            tf.keras.layers.Dense(hidden_dim, input_shape=(hidden_dim,), name=f"layers_._{i}")
+            keras.layers.Dense(hidden_dim, input_shape=(hidden_dim,), name=f"layers_._{i}")
             for i in range(num_layers - 2)
         ]
         self.sigmoid_output = sigmoid_output
@@ -537,7 +537,7 @@ class TFSamFeedForward(tf.keras.layers.Layer):
                     layer.build([None, None, self.hidden_dim])
 
 
-class TFSamMaskDecoder(tf.keras.layers.Layer):
+class TFSamMaskDecoder(keras.layers.Layer):
     def __init__(self, config: SamMaskDecoderConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -548,10 +548,10 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
 
         self.transformer = TFSamTwoWayTransformer(config, name="transformer")
 
-        self.upscale_conv1 = tf.keras.layers.Conv2DTranspose(
+        self.upscale_conv1 = keras.layers.Conv2DTranspose(
             self.hidden_size // 4, kernel_size=2, strides=2, name="upscale_conv1", data_format="channels_first"
         )
-        self.upscale_conv2 = tf.keras.layers.Conv2DTranspose(
+        self.upscale_conv2 = keras.layers.Conv2DTranspose(
             self.hidden_size // 8, kernel_size=2, strides=2, name="upscale_conv2", data_format="channels_first"
         )
         self.upscale_layer_norm = TFSamLayerNorm(
@@ -685,7 +685,7 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         return outputs
 
 
-class TFSamPositionalEmbedding(tf.keras.layers.Layer):
+class TFSamPositionalEmbedding(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.scale = config.hidden_size // 2
@@ -696,7 +696,7 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
         self.positional_embedding = self.add_weight(
             name="positional_embedding",
             shape=(2, self.config.num_pos_feats),
-            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
+            initializer=keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
             trainable=False,
         )
         super().build(input_shape)
@@ -723,14 +723,14 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
         return tf.concat([tf.sin(coordinates), tf.cos(coordinates)], axis=-1)
 
 
-class TFSamMaskEmbedding(tf.keras.layers.Layer):
+class TFSamMaskEmbedding(keras.layers.Layer):
     def __init__(self, config: SamPromptEncoderConfig, **kwargs):
         super().__init__(**kwargs)
         self.mask_input_channels = config.mask_input_channels // 4
         self.activation = ACT2FN[config.hidden_act]
-        self.conv1 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
-        self.conv2 = tf.keras.layers.Conv2D(config.mask_input_channels, kernel_size=2, strides=2, name="conv2")
-        self.conv3 = tf.keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
+        self.conv1 = keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
+        self.conv2 = keras.layers.Conv2D(config.mask_input_channels, kernel_size=2, strides=2, name="conv2")
+        self.conv3 = keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
         self.layer_norm1 = TFSamLayerNorm(self.mask_input_channels, config.layer_norm_eps, name="layer_norm1")
         self.layer_norm2 = TFSamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps, name="layer_norm2")
         self.config = config
@@ -765,7 +765,7 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
             self.layer_norm2.build([None, None, None, self.mask_input_channels * 4])
 
 
-class TFSamPromptEncoder(tf.keras.layers.Layer):
+class TFSamPromptEncoder(keras.layers.Layer):
     def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding, **kwargs):
         super().__init__(**kwargs)
         self.shared_embedding = shared_patch_embedding
@@ -784,14 +784,14 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         self.no_mask_embed = self.add_weight(
             name="no_mask_embed.weight",
             shape=(1, self.hidden_size),
-            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            initializer=keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
             trainable=True,
         )
         self.point_embed = [
             self.add_weight(
                 name=f"point_embed_._{i}.weight",
                 shape=(1, self.hidden_size),
-                initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+                initializer=keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
                 trainable=True,
             )
             for i in range(self.config.num_point_embeddings)
@@ -799,7 +799,7 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         self.not_a_point_embed = self.add_weight(
             name="not_a_point_embed.weight",
             shape=(1, self.hidden_size),
-            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            initializer=keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
             trainable=True,
         )
         with tf.name_scope("mask_embed"):
@@ -907,7 +907,7 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         return sparse_embeddings, dense_embeddings
 
 
-class TFSamVisionAttention(tf.keras.layers.Layer):
+class TFSamVisionAttention(keras.layers.Layer):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(self, config, window_size, **kwargs):
@@ -925,8 +925,8 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         self.scale = head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.qkv = tf.keras.layers.Dense(config.hidden_size * 3, use_bias=config.qkv_bias, name="qkv")
-        self.proj = tf.keras.layers.Dense(config.hidden_size, name="proj")
+        self.qkv = keras.layers.Dense(config.hidden_size * 3, use_bias=config.qkv_bias, name="qkv")
+        self.proj = keras.layers.Dense(config.hidden_size, name="proj")
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
@@ -1072,12 +1072,12 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFSamVisionLayer(tf.keras.layers.Layer):
+class TFSamVisionLayer(keras.layers.Layer):
     def __init__(self, config, window_size, **kwargs):
         super().__init__(**kwargs)
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.attn = TFSamVisionAttention(config, window_size, name="attn")
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
         self.mlp = TFSamMLPBlock(config, name="mlp")
         self.window_size = window_size
         self.config = config
@@ -1166,19 +1166,19 @@ class TFSamVisionLayer(tf.keras.layers.Layer):
                 self.mlp.build(None)
 
 
-class TFSamVisionNeck(tf.keras.layers.Layer):
+class TFSamVisionNeck(keras.layers.Layer):
     def __init__(self, config: SamVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
-        self.conv1 = tf.keras.layers.Conv2D(
+        self.conv1 = keras.layers.Conv2D(
             config.output_channels,
             kernel_size=1,
             use_bias=False,
             name="conv1",
         )
         self.layer_norm1 = TFSamLayerNorm(config.output_channels, name="layer_norm1")
-        self.conv2 = tf.keras.layers.Conv2D(
+        self.conv2 = keras.layers.Conv2D(
             config.output_channels,
             kernel_size=3,
             padding="same",
@@ -1214,7 +1214,7 @@ class TFSamVisionNeck(tf.keras.layers.Layer):
                 self.layer_norm2.build(None)
 
 
-class TFSamVisionEncoder(tf.keras.layers.Layer):
+class TFSamVisionEncoder(keras.layers.Layer):
     def __init__(self, config: SamVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -1332,7 +1332,7 @@ SAM_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a TensorFlow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a TensorFlow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TensorFlow Model and refer to the TensorFlow documentation for all matter related to
     general usage and behavior.
 

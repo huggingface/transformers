@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서는 다음 작업을 수행하는 방법을 안내합니다:
 
-1. [DistilGPT2](https://huggingface.co/distilgpt2) 모델을 [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트의 [r/askscience](https://www.reddit.com/r/askscience/) 하위 집합으로 미세 조정
+1. [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) 모델을 [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트의 [r/askscience](https://www.reddit.com/r/askscience/) 하위 집합으로 미세 조정
 2. 미세 조정된 모델을 추론에 사용
 
 <Tip>
@@ -104,7 +104,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 ```
 
 위의 예제에서 알 수 있듯이, `text` 필드는 `answers` 아래에 중첩되어 있습니다. 따라서 [`flatten`](https://huggingface.co/docs/datasets/process#flatten) 메소드를 사용하여 중첩 구조에서 `text` 하위 필드를 추출해야 합니다.
@@ -221,7 +221,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoModelForCausalLM, TrainingArguments, Trainer
 
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 여기까지 진행하면 세 단계만 남았습니다:
@@ -285,7 +285,7 @@ TensorFlow에서 모델을 미세 조정하려면, 먼저 옵티마이저 함수
 ```py
 >>> from transformers import TFAutoModelForCausalLM
 
->>> model = TFAutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환하세요:

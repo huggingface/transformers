@@ -32,7 +32,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile"}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "v": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
@@ -52,7 +52,7 @@ class CircleCIJob:
     name: str
     additional_env: Dict[str, Any] = None
     cache_name: str = None
-    cache_version: str = "0.7"
+    cache_version: str = "0.8"
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
@@ -227,7 +227,7 @@ class CircleCIJob:
             # failure.
             test_command = f"({test_command}) || true"
         else:
-            test_command += " || true"
+            test_command = f"({test_command} | tee tests_output.txt) || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
         # Deal with errors
@@ -283,6 +283,8 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        # TODO: remove this one after fixing the dependency issue(s) above
+        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -470,10 +472,11 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
-        "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
+        "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0' 'torchvision<0.17' 'torchaudio<2.2.0'"
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
@@ -513,9 +516,11 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager -e .[dev]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-        "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
-        "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
+        "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
+        "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager g2p-en",
+        # TODO: remove this one after fixing the dependency issue(s) above
+        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
