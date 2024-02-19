@@ -86,6 +86,7 @@ from .stopping_criteria import (
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
@@ -925,7 +926,7 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList], **kwargs
+        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList], tokenizer: Optional["PreTrainedTokenizerBase"], **kwargs
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
@@ -939,14 +940,14 @@ class GenerationMixin:
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
         if generation_config.stop_strings is not None:
-            if "tokenizer" not in kwargs:
+            if tokenizer is None:
                 raise ValueError(
                     "There are one or more stop strings, either in the arguments to `generate` or in the "
                     "model's generation config, but we could not locate a tokenizer. When generating with "
                     "stop strings, you must pass the model's tokenizer to the `tokenizer` argument of `generate`."
                 )
             criteria.append(
-                StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=kwargs["tokenizer"])
+                StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer)
             )
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
@@ -1329,6 +1330,7 @@ class GenerationMixin:
                 synced_gpus = True
             else:
                 synced_gpus = False
+        tokenizer = kwargs.pop("tokenizer", None)
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
@@ -1509,7 +1511,7 @@ class GenerationMixin:
 
         # 9. prepare stopping criteria
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria, **kwargs
+            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
         )
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
