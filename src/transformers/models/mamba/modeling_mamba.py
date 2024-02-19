@@ -16,7 +16,6 @@
 
 import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -33,22 +32,27 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
-from ...utils.import_utils import is_mamba_ssm_available, is_causal_conv1d_available
+
 
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
     from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
-    logger.warning_once(" `mamba_ssm` is not installed in your environnement. Make sure to install it following `src/transformers/kernels/mamba/Makefile`")
+    logger.warning_once(
+        " `mamba_ssm` is not installed in your environnement. Make sure to install it following `src/transformers/kernels/mamba/Makefile`"
+    )
     selective_state_update, selective_scan_fn = None, None
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
-    logger.warning_once(" `causal_conv1d` is not installed in your environnement. Make sure to install it: `src/transformers/kernels/mamba/Makefile`")
+    logger.warning_once(
+        " `causal_conv1d` is not installed in your environnement. Make sure to install it: `src/transformers/kernels/mamba/Makefile`"
+    )
     causal_conv1d_update, causal_conv1d_fn = None, None
 
 
@@ -59,6 +63,7 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "state-spaces/mamba-130m",
     # See all Mamba models at https://huggingface.co/models?filter=mamba
 ]
+
 
 class MambaMixer(nn.Module):
     def __init__(self, config, layer_idx):
@@ -105,7 +110,6 @@ class MambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
-        batch_size, seq_len, _ = hidden_states.shape
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
@@ -141,10 +145,21 @@ class MambaMixer(nn.Module):
         ssm_state = inference_params.ssm_states[self.layer_idx]
         if inference_params is not None and inference_params.seq_offset > 0:
             y = selective_state_update(
-                ssm_state, hidden_states, discrete_time_step, self.negA, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True 
-            ) #fmt: skip
+                ssm_state, hidden_states, discrete_time_step, self.negA, B, C, self.D, z=gate, dt_bias=self.dt_proj.bias, dt_softplus=True
+            )  # fmt: skip
         else:
-            y, last_state = selective_scan_fn( hidden_states, discrete_time_step, self.negA, B, C, self.D.float(), z=gate, delta_bias=self.dt_proj.bias.float(), delta_softplus=True, return_last_state=True,)
+            y, last_state = selective_scan_fn(
+                hidden_states,
+                discrete_time_step,
+                self.negA,
+                B,
+                C,
+                self.D.float(),
+                z=gate,
+                delta_bias=self.dt_proj.bias.float(),
+                delta_softplus=True,
+                return_last_state=True,
+            )
             if last_state is not None:
                 ssm_state = last_state
 
@@ -264,11 +279,11 @@ class MambaBlock(nn.Module):
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        if any(selective_scan_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update) is None:
+        if any(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update) is None:
             MIXER_CLS = MambaMixerSlow
-        else: # CUDA is available and the kernels are also available
+        else:  # CUDA is available and the kernels are also available
             MIXER_CLS = MambaMixer
-        
+
         self.mixer = MIXER_CLS(config, layer_idx=layer_idx)
 
     def forward(self, hidden_states, inference_params=None):
