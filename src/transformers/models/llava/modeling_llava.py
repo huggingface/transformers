@@ -295,7 +295,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
 
-        if "unpad" in getattr(config, "mm_patch_merge_type", ""):
+        if "unpad" in getattr(config, "multimodal_patch_merge_type", ""):
             self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
 
         self.vocab_size = config.vocab_size
@@ -496,11 +496,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
 
-                    mm_patch_merge_type = getattr(self.config, "mm_patch_merge_type", "flat")
-                    image_aspect_ratio = getattr(self.config, "image_aspect_ratio", "square")
-                    if mm_patch_merge_type == "flat":
+                    multimodal_patch_merge_type = self.config.multimodal_patch_merge_type
+
+                    if multimodal_patch_merge_type == "flat":
                         image_features = [x.flatten(0, 1) for x in image_features]
-                    elif mm_patch_merge_type.startswith("spatial"):
+                    elif multimodal_patch_merge_type.startswith("spatial"):
                         new_image_features = []
                         for image_idx, image_feature in enumerate(image_features):
                             if image_feature.shape[0] > 1:
@@ -508,44 +508,34 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                 image_feature = image_feature[1:]
                                 height = width = self.num_patches_per_side()
                                 assert height * width == base_image_feature.shape[0]
-                                if image_aspect_ratio == "anyres":
-                                    num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                                num_patch_width, num_patch_height = get_anyres_image_grid_shape(
                                         image_sizes[image_idx],
                                         self.config.image_grid_pinpoints,
                                         self.config.vision_config.image_size,
-                                    )
-                                    image_feature = image_feature.view(
-                                        num_patch_height, num_patch_width, height, width, -1
-                                    )
-                                else:
-                                    raise NotImplementedError
-                                if "unpad" in mm_patch_merge_type:
-                                    image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                                    image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                                    image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                                    image_feature = torch.cat(
-                                        (
-                                            image_feature,
-                                            self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
-                                        ),
-                                        dim=-1,
-                                    )
-                                    image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                                else:
-                                    image_feature = image_feature.permute(0, 2, 1, 3, 4).contiguous()
-                                    image_feature = image_feature.flatten(0, 3)
+                                )
+                                image_feature = image_feature.view(
+                                    num_patch_height, num_patch_width, height, width, -1
+                                )
+                                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                                image_feature = unpad_image(image_feature, image_sizes[image_idx])
+                                image_feature = torch.cat(
+                                    (
+                                        image_feature,
+                                        self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+                                    ),
+                                    dim=-1,
+                                )
+                                image_feature = image_feature.flatten(1, 2).transpose(0, 1)
                                 image_feature = torch.cat((base_image_feature, image_feature), dim=0)
                             else:
                                 image_feature = image_feature[0]
-                                if "unpad" in mm_patch_merge_type:
-                                    image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
+                                image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
                             new_image_features.append(image_feature)
                         image_features = new_image_features
-                        print("Length of image_features", len(image_features))
-                        print("Shape of image_features[0]", image_features[0].shape)
                         image_features = torch.stack(image_features, dim=0)
                     else:
-                        raise ValueError(f"Unexpected mm_patch_merge_type: {self.config.mm_patch_merge_type}")
+                        raise ValueError(f"Unexpected multimodal_patch_merge_type: {self.config.multimodal_patch_merge_type}")
 
                 else:
                     # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.

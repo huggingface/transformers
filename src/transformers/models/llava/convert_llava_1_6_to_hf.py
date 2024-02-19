@@ -115,8 +115,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     config = LlavaConfig(
         text_config=text_config.to_dict(),
-        mm_patch_merge_type="spatial_unpad",
-        image_aspect_ratio="anyres",
+        multimodal_patch_merge_type="spatial_unpad",
         image_grid_pinpoints=image_processor.image_grid_pinpoints,
     )
     config.pad_token_id = 32001
