@@ -484,7 +484,7 @@ class OwlViTSdpaAttention(OwlViTAttention):
             is_causal=self.is_causal and causal_attention_mask is None,
         )
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+        if attn_output.size() != (bsz  ,  self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
