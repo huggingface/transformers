@@ -137,7 +137,7 @@ class MambaMixer(nn.Module):
         # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
-        discrete_time_step = self.dt_proj.weight @ time_step.transpose(1,2)
+        discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
 
         A = -torch.exp(self.A_log.float())
@@ -152,8 +152,8 @@ class MambaMixer(nn.Module):
                 hidden_states,
                 discrete_time_step,
                 A,
-                B.transpose(1,2),
-                C.transpose(1,2),
+                B.transpose(1, 2),
+                C.transpose(1, 2),
                 self.D.float(),
                 z=gate,
                 delta_bias=self.dt_proj.bias.float(),
