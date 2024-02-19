@@ -125,6 +125,8 @@ class Starcoder2Config(PretrainedConfig):
         rope_theta=10000.0,
         sliding_window=None,
         attention_dropout=0.0,
+        residual_dropout=0.0,
+        embedding_dropout=0.0,
         # TODO: Implement
         use_bias: bool = True,
         # TODO: Other dropouts?
@@ -153,6 +155,8 @@ class Starcoder2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
+        self.residual_dropout = residual_dropout
+        self.embedding_dropout = embedding_dropout
 
         super().__init__(
             bos_token_id=bos_token_id,

@@ -169,11 +169,13 @@ class Starcoder2MLP(nn.Module):
         self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
         self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
         self.act = ACT2FN[config.hidden_act]
+        self.residual_dropout = config.residual_dropout
 
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
         return hidden_states
 
 
@@ -188,9 +190,12 @@ class Starcoder2GatedMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.act_fn = ACT2FN[config.hidden_act]
+        self.residual_dropout = config.residual_dropout
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        hidden_states = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
+        return hidden_states
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -233,6 +238,7 @@ class Starcoder2Attention(nn.Module):
         self.use_bias = config.use_bias
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
+        self.residual_dropout = config.residual_dropout
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -329,6 +335,7 @@ class Starcoder2Attention(nn.Module):
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
+        attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
 
         if not output_attentions:
             attn_weights = None
@@ -481,6 +488,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
+        attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
 
         if not output_attentions:
             attn_weights = None
@@ -714,6 +722,7 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
+        attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
 
         return attn_output, None, past_key_value
 
@@ -946,6 +955,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embedding_dropout = config.embedding_dropout
         self.layers = nn.ModuleList(
             [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -1052,6 +1062,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
             )
 
         hidden_states = inputs_embeds
+        hidden_states = nn.functional.dropout(hidden_states, p=self.embedding_dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
