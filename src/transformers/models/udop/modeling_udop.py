@@ -1811,6 +1811,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         lm_logits = self.lm_head(sequence_output)
 
+        print("Shape of logits:", lm_logits.shape)
+        print("First values of logits:", lm_logits[0, :3, :3])
+
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)

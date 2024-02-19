@@ -145,6 +145,20 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
+    # autoregressive decoding with original input data
+    print("Testing generation with original inputs...")
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
+    input_ids = torch.load(filepath)
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
+    bbox = torch.load(filepath)
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="pixel_values_udop_224.pt", repo_type="dataset")
+    pixel_values = torch.load(filepath)
+
+    model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
+    outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
+
+    print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
         tokenizer.save_pretrained(pytorch_dump_folder_path)
