@@ -1754,7 +1754,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> image = example["image"]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
-        >>> question = "Question answering. What is the title of the presentation?"
+        >>> question = "Question answering. In which year is the report made?"
         >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
