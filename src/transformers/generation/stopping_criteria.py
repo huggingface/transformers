@@ -163,13 +163,19 @@ class StopStringCriteria(StoppingCriteria):
         }
         self.embedding_vecs = self._create_embedding_vecs()
 
+    @staticmethod
+    def _cleanup_token(token: str) -> str:
+        if token[0] in ["▁", "Ġ"]:
+            token = " " + token[1:]
+        return token
+
     def _get_matching_positions(self) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
         valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
         end of the stop string."""
         tok_list = list(self.vocab.keys())
-        reversed_filtered_tok_list = [token[::-1].replace("▁", " ").replace("Ġ", " ") for token in tok_list]
+        reversed_filtered_tok_list = [self._cleanup_token(token[::-1]) for token in tok_list]
         token_valid_positions = {}
         token_end_overlaps = {}
         for stop_string in self.stop_strings:
