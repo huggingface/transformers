@@ -385,7 +385,7 @@ class GenerationMixin:
             )
 
         if cache_implementation == CacheImplementation.SINK:
-            if "window_length" not in kwargs and "num_sink_tokens" not in kwargs:
+            if "window_length" not in kwargs or "num_sink_tokens" not in kwargs:
                 raise ValueError(
                     "You requested to use the Sink cache implementation, but you did not pass `window_length` and `num_sink_tokens` to "
                     "`set_cache_implementation`. Try again with passing these arguments to the method. (e.g. `model.set_cache_implementation('sink', window_length=window_length=508, num_sink_tokens=4)`"
