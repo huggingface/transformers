@@ -42,7 +42,7 @@ from transformers.testing_utils import (
 
 
 def get_some_linear_layer(model):
-    if model.config.model_type == "openai-community/gpt2":
+    if model.config.model_type == "gpt2":
         return model.transformer.h[0].mlp.c_fc
     return model.transformer.h[0].mlp.dense_4h_to_h
 
