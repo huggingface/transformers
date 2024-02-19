@@ -586,7 +586,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
         super().__init__(config)
         self.backbone = MambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
         # Initialize weights and apply final processing
         self.post_init()
 
