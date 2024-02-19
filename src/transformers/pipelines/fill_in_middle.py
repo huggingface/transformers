@@ -44,7 +44,7 @@ class FimPipeline(Pipeline):
             <FILL_ME>
             return fib(x-1) + fib(x-2)
     '''
-    >>> generator = pipeline(model="codellama/CodeLlama-7b-hf")
+    >>> generator = pipeline(model="codellama/CodeLlama-7b-hf", max_new_tokens=128)
     >>> print(generator(PROMPT, do_sample=False))
     [{'generated_text': "\ndef fib(x: int) -> int:\n\tif x == 0:\n\t\treturn 0\n\tif x == 1:\n\t\treturn 1\n\telse:\n\t\treturn fib(x-1) + fib(x-2)\n"}]
     ```
@@ -64,9 +64,9 @@ class FimPipeline(Pipeline):
     # CodeLlama's HF implementation has a third mode called 'suffix-first' which is added here for total compatibility with CodeLlama family
     # The placement of prefix and suffix along with their respective sentinel tokens depends on the mode
     # More information on this: https://arxiv.org/abs/2207.14255
-    DEFAULT_INFILL_MODE = "psm"
+    DEFAULT_INFILL_MODE = "prefix-suffix-middle"
     DEFAULT_INFILL_TOKEN = "<FILL_ME>"
-    ALL_INFILL_MODES = ["psm", "spm", "suffix-first"]
+    ALL_INFILL_MODES = ["prefix-suffix-middle", "suffix-prefix-middle", "suffix-first"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -193,15 +193,14 @@ class FimPipeline(Pipeline):
         # Ensure the prompt_text contains the infill token
         self.ensure_infill_token(old_prompt_text, infill_token)
 
-        # Assemble the inputs in the PSM (Prefix-Suffix-Middle) format based on the model architecture
         # Extract prefix and suffix
         input_prefix, input_suffix = self.extract_prefix_suffix(old_prompt_text, infill_token)
 
         # If the mode is Prefix-Suffix-Middle, arrange the components accordingly
-        if mode == "psm":
+        if mode == "prefix-suffix-middle":
             prompt_text = self.PREFIX_TOKEN + input_prefix + self.SUFFIX_TOKEN + input_suffix + self.MIDDLE_TOKEN
         # Change if the mode is Suffix-Prefix-Middle
-        elif mode == "spm":
+        elif mode == "suffix-prefix-middle":
             prompt_text = self.SUFFIX_TOKEN + input_suffix + self.PREFIX_TOKEN + input_prefix + self.MIDDLE_TOKEN
         # CodeLlama's Implementation has a Suffix-First mode which is different than SPM
         elif mode == "suffix-first":
