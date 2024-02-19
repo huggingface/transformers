@@ -179,7 +179,7 @@ else:
                 "flmr",
                 (
                     "FLMRQueryEncoderTokenizer",
-                    "FLMRTokenizerFast" if is_tokenizers_available() else None,
+                    "FLMRQueryEncoderTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),

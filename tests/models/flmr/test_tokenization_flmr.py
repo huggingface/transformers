@@ -24,7 +24,7 @@ from transformers import (
     FLMRQueryEncoderTokenizerFast,
     is_torch_available,
 )
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_tokenizers, require_torch
 
 
 if is_torch_available():
@@ -34,6 +34,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer_con
 
 
 @require_tokenizers
+@require_torch
 class FLMRContextEncoderTokenizationTest:
     tokenizer_class = FLMRContextEncoderTokenizer
     rust_tokenizer_class = FLMRContextEncoderTokenizerFast

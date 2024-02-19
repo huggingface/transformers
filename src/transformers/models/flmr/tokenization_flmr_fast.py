@@ -101,7 +101,7 @@ class FLMRQueryEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "fast" FLMRQueryEncoderTokenizer tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`FLMRTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`FLMRQueryEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
     Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.

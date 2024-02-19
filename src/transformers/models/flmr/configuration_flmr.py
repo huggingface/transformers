@@ -75,10 +75,10 @@ class FLMRVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import FLMRVisionConfig, FLMRVisionModel
 
-    >>> # Initializing a FLMRVisionConfig with openai/flmr-vit-base-patch32 style configuration
+    >>> # Initializing a FLMRVisionConfig with LinWeizheDragon/FLMR style configuration
     >>> configuration = FLMRVisionConfig()
 
-    >>> # Initializing a FLMRVisionModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a FLMRVisionModel (with random weights) from the LinWeizheDragon/FLMR style configuration
     >>> model = FLMRVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -195,12 +195,12 @@ class FLMRTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FLMRConfig, FLMRTextModel
+    >>> from transformers import FLMRTextConfig, FLMRTextModel
 
-    >>> # Initializing a FLMR facebook/dpr-ctx_encoder-single-nq-base style configuration
-    >>> configuration = FLMRConfig()
+    >>> # Initializing a FLMR LinWeizheDragon/FLMR style configuration
+    >>> configuration = FLMRTextConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/dpr-ctx_encoder-single-nq-base style configuration
+    >>> # Initializing a model (with random weights) from the LinWeizheDragon/FLMR style configuration
     >>> model = FLMRTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -303,7 +303,7 @@ class FLMRConfig(PretrainedConfig):
     ```python
     >>> from transformers import FLMRConfig, FLMRModelForRetrieval
 
-    >>> # Initializing a FLMR weizhelin/flmr style configuration
+    >>> # Initializing a FLMR LinWeizheDragon/FLMR style configuration
     >>> configuration = FLMRConfig()
 
     >>> # Initializing a model (with random weights) from the FLMR style configuration

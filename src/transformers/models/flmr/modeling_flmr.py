@@ -757,7 +757,7 @@ class FLMRModelForRetrieval(FLMRPretrainedModelForRetrieval):
           >>> model = FLMRModelForRetrieval.from_pretrained(checkpoint_path,
                                                           query_tokenizer=query_tokenizer,
                                                           context_tokenizer=context_tokenizer,
-                                                          ).to("cuda")
+                                                          )
           >>> image_processor = AutoImageProcessor.from_pretrained(image_processor_name)
 
           >>> Q_encoding = query_tokenizer(["Using the provided image, obtain documents that address the subsequent question: What is the capital of France?", "Extract documents linked to the question provided in conjunction with the image: What is the capital of China?"])
