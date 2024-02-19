@@ -526,7 +526,9 @@ class MambaModel(MambaPreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
 
         if use_cache and inference_params is None:
-            inference_params = MambaCache(self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            inference_params = MambaCache(
+                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -546,7 +548,6 @@ class MambaModel(MambaPreTrainedModel):
             else:
                 hidden_states, conv_state, ssm_state = layer(hidden_states, inference_params=inference_params)
                 # inference_params.ssm_states[idx].copy_(ssm_state)
-                # TODO maybe for torch.compile + graph do things here
                 # inference_params.conv_states[idx].copy_(conv_state)
 
             if output_hidden_states:
