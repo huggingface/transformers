@@ -94,7 +94,8 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        pad_token (`<fill_type>`, *optional*, defaults to `"<pad>"`): <fill_docstring>
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The padding token
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):

@@ -37,6 +37,15 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GemmaConfig
 
+## GemmaTokenizer
+
+[[autodoc]] GemmaTokenizer
+
+
+## GemmaTokenizerFast
+
+[[autodoc]] GemmaTokenizerFast
+
 ## GemmaModel
 
 [[autodoc]] GemmaModel

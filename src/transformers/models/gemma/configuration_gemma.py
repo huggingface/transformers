@@ -25,9 +25,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/gemma-2b": "https://huggingface.co/google/gemma-2b/resolve/main/config.json",
-}
+GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class GemmaConfig(PretrainedConfig):
@@ -35,6 +33,8 @@ class GemmaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma-7B.
+
+    e.g. [google/gemma-7b](https://huggingface.co/google/gemma-7b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -60,7 +60,8 @@ class GemmaConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        head_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        head_dim (`int`, *optional*, defaults to 256):
+            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
