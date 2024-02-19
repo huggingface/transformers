@@ -90,10 +90,11 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
+        pad_token (`<fill_type>`, *optional*, defaults to `"<pad>"`): <fill_docstring>
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
@@ -213,7 +214,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         raise NotImplementedError
 
     # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
-    # Copied from transformers.models.llama.tokenization_llama.GemmaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []

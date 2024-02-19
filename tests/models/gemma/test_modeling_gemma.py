@@ -43,7 +43,6 @@ if is_torch_available():
 
 
 class GemmaModelTester:
-    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
     def __init__(
         self,
         parent,
@@ -282,11 +281,8 @@ class GemmaModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Gemma
 class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
-    )
+    all_model_classes = (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

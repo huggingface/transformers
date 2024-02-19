@@ -73,11 +73,11 @@ class GemmaTokenizer(PreTrainedTokenizer):
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*):
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
             attention mechanisms or loss computation.
         sp_model_kwargs (`Dict[str, Any]`, `Optional`, *optional*):

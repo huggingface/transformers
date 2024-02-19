@@ -686,6 +686,7 @@ class FlaxGemmaForCausalLMModule(nn.Module):
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
 
+    # Ignore copy
     def __call__(
         self,
         input_ids,
@@ -709,7 +710,6 @@ class FlaxGemmaForCausalLMModule(nn.Module):
         )
 
         hidden_states = outputs[0]
-
         if self.config.tie_word_embeddings:
             shared_kernel = self.model.variables["params"]["embed_tokens"]["embedding"].T
             lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)

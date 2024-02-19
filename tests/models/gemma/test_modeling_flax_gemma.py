@@ -18,7 +18,7 @@ import unittest
 import jax
 import numpy as np
 
-from transformers import GemmaConfig, is_flax_available, is_tokenizers_available, AutoTokenizer
+from transformers import AutoTokenizer, GemmaConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -241,7 +241,7 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype = jnp.float16)
+        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)

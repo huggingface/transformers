@@ -122,7 +122,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -180,7 +180,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class GemmaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Ignore Copy
+    # Ignore copy
     def __init__(self, config: GemmaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -279,7 +279,7 @@ class GemmaAttention(nn.Module):
 
         attn_output = attn_output.transpose(1, 2).contiguous()
 
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -304,6 +304,7 @@ class GemmaFlashAttention2(GemmaAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -315,15 +316,6 @@ class GemmaFlashAttention2(GemmaAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # GemmaFlashAttention2 attention does not support output_attentions
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
-
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -501,7 +493,7 @@ class GemmaSdpaAttention(GemmaAttention):
     SDPA API.
     """
 
-    # Adapted from GemmaAttention.forward
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -540,10 +532,8 @@ class GemmaSdpaAttention(GemmaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
-        value_states = value_states.to(hidden_states.dtype)
-        key_states = key_states.to(hidden_states.dtype)
+        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
@@ -553,13 +543,13 @@ class GemmaSdpaAttention(GemmaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        causal_mask = None
-        if attention_mask is not None:
-            causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+        causal_mask = attention_mask
+        if attention_mask is not None and cache_position is not None:
+            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
+        if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
@@ -573,7 +563,7 @@ class GemmaSdpaAttention(GemmaAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
 
@@ -684,7 +674,6 @@ GEMMA_START_DOCSTRING = r"""
     "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Gemma
 class GemmaPreTrainedModel(PreTrainedModel):
     config_class = GemmaConfig
     base_model_prefix = "model"
@@ -713,7 +702,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-        
+
         if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
             causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
@@ -821,17 +810,13 @@ class GemmaModel(GemmaPreTrainedModel):
         self.layers = nn.ModuleList(
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._use_sdpa = config._attn_implementation == "sdpa"
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
         self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
         causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -840,8 +825,8 @@ class GemmaModel(GemmaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Ignore Copy
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -894,6 +879,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+
         # normalized
         hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
@@ -915,7 +901,7 @@ class GemmaModel(GemmaPreTrainedModel):
                     past_key_values,
                     output_attentions,
                     use_cache,
-                    cache_position
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -994,6 +980,7 @@ class GemmaModel(GemmaPreTrainedModel):
                 causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
                     dtype
                 )
+
         return causal_mask
 
 
@@ -1028,7 +1015,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    # Ignore Copy
+    # Ignore copy
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

@@ -44,15 +44,15 @@ class GemmaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GemmaModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 3072):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 24576):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 28):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 16):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -60,9 +60,10 @@ class GemmaConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        head_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with. Gemma 1 supports up to 2048 tokens,
             Gemma 2 up to 4096, CodeGemma up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -74,16 +75,11 @@ class GemmaConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 1):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        bos_token_id (`int`, *optional*, defaults to 2):
+            Beginning of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
