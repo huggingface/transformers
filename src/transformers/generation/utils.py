@@ -898,7 +898,9 @@ class GenerationMixin:
         if generation_config.stop_strings is not None:
             if "tokenizer" not in kwargs:
                 raise ValueError(
-                    "To generate with stop strings, you need to pass the model's tokenizer to the `generate` method."
+                    "There are one or more stop strings, either in the arguments to `generate` or in the "
+                    "model's generation config, but we could not locate a tokenizer. When generating with "
+                    "stop strings, you must pass the model's tokenizer to the `tokenizer` argument of `generate`."
                 )
             criteria.append(
                 StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=kwargs["tokenizer"])
