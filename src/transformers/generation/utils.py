@@ -1245,6 +1245,12 @@ class GenerationMixin:
                     window_length=generation_config.sink_window_length,
                     num_sink_tokens=generation_config.num_sink_tokens,
                 )
+            else:
+                warnings.warn(
+                    "You have already called `model.set_cache_implementation('sink')` and you are passing a `SinkCache()`"
+                    " to `generate`. We assume you know what you are doing and we'll silently ignore the `SinkCache` arguments you"
+                    " passed into `set_cache_implementation`."
+                )
         return kwargs
 
     @torch.no_grad()
