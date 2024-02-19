@@ -277,7 +277,7 @@ def combine_image_text_embeddings(
     )
     ocr_points = ocr_points_x + ocr_points_y
     # make sure bounding boxes are of type float to calculate means
-    bbox = bbox.float()
+    bbox = bbox.to(torch.float64)
     target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
         image_embeddings, 1, ocr_points.unsqueeze(-1).repeat(1, 1, image_embeddings.size(-1))
@@ -1810,9 +1810,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             sequence_output = sequence_output * (self.config.d_model**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
-
-        print("Shape of logits:", lm_logits.shape)
-        print("First values of logits:", lm_logits[0, :3, :3])
 
         loss = None
         if labels is not None:
