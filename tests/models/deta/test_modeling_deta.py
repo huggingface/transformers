@@ -157,6 +157,7 @@ class DetaModelTester:
             assign_first_stage=assign_first_stage,
             assign_second_stage=assign_second_stage,
             backbone_config=resnet_config,
+            backbone=None,
         )
 
     def prepare_config_and_inputs_for_common(self, model_class_name="DetaModel"):
@@ -216,7 +217,7 @@ class DetaModelTester:
 class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torchvision_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
+        {"image-feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
         if is_torchvision_available()
         else {}
     )
@@ -449,6 +450,22 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.auxiliary_loss = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -502,6 +519,10 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @unittest.skip("Cannot be initialized on meta device as some weights are modified during the initialization")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
 
 
 TOLERANCE = 1e-4

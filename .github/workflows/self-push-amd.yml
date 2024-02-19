@@ -15,6 +15,7 @@ env:
   PYTEST_TIMEOUT: 60
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 jobs:
   check_runner_status:
@@ -236,7 +237,7 @@ jobs:
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:

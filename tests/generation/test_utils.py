@@ -65,6 +65,10 @@ if is_torch_available():
         DisjunctiveConstraint,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
+        GenerateBeamDecoderOnlyOutput,
+        GenerateBeamEncoderDecoderOutput,
+        GenerateDecoderOnlyOutput,
+        GenerateEncoderDecoderOutput,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
         HammingDiversityLogitsProcessor,
@@ -84,6 +88,7 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
+    from transformers.generation.utils import _speculative_sampling
 
 
 class GenerationTesterMixin:
@@ -730,9 +735,15 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_greedy, GenerateEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_greedy, GreedySearchEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
             else:
+                self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
                 self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
@@ -848,9 +859,15 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_sample, GenerateEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_sample, SampleEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
             else:
+                self.assertIsInstance(output_sample, GenerateDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_sample, SampleDecoderOnlyOutput)
                 self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
@@ -952,9 +969,15 @@ class GenerationTesterMixin:
                 return_dict_in_generate=True,
             )
             if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_search, GenerateBeamEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_beam_search, BeamSearchEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
+                self.assertIsInstance(output_beam_search, GenerateBeamDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_beam_search, BeamSearchDecoderOnlyOutput)
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
@@ -1109,9 +1132,15 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_sample, GenerateBeamEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_beam_sample, BeamSampleEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
             else:
+                self.assertIsInstance(output_beam_sample, GenerateBeamDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_beam_sample, BeamSampleDecoderOnlyOutput)
                 self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
@@ -1238,9 +1267,15 @@ class GenerationTesterMixin:
                 return_dict_in_generate=True,
             )
             if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_group_beam_search, GenerateBeamEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_group_beam_search, BeamSearchEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
+                self.assertIsInstance(output_group_beam_search, GenerateBeamDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_group_beam_search, BeamSearchDecoderOnlyOutput)
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
@@ -1258,6 +1293,8 @@ class GenerationTesterMixin:
                     output, input_ids, model.config, num_return_sequences=num_return_sequences * beam_scorer.num_beams
                 )
 
+    # TODO: @gante
+    @is_flaky()
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -1390,9 +1427,15 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_search, GenerateBeamEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_beam_search, BeamSearchEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
+                self.assertIsInstance(output_beam_search, GenerateBeamDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
                 self.assertIsInstance(output_beam_search, BeamSearchDecoderOnlyOutput)
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
@@ -1499,6 +1542,39 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
+    def test_beam_search_low_memory(self):
+        # Check that choosing 'low_memory' does not change the model output
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest("Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bloom",
+                    "ctrl",
+                    "gptbigcode",
+                    "transo_xl",
+                    "xlnet",
+                    "cpm",
+                ]
+            ):
+                self.skipTest("May fix in the future: need model-specific fixes")
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=2)
+            # batch_size=1 is ok, but batch_size>1 will cause non-identical output
+
+            config.use_cache = True
+            config.is_decoder = True
+
+            # test output equality of low versus high memory
+            model = model_class(config).to(torch_device).eval()
+
+            low_output = model.generate(input_ids, max_new_tokens=8, num_beams=5, early_stopping=True, low_memory=True)
+
+            high_output = model.generate(
+                input_ids, max_new_tokens=8, num_beams=5, early_stopping=True, low_memory=False
+            )
+            self.assertListEqual(low_output.tolist(), high_output.tolist())
+
     @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
     def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
@@ -1567,6 +1643,66 @@ class GenerationTesterMixin:
             # The two outputs must match and their shape must be as expected
             self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
             for output in (output_greedy, output_assisted):
+                self._check_outputs(output, input_ids, model.config, use_cache=True)
+
+    @is_flaky()
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        # This test ensures that the prompt lookup generation does not introduce output changes over greedy search.
+        # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
+
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest("Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bigbirdpegasus",
+                    "led",
+                    "mega",
+                    "speech2text",
+                    "git",
+                    "prophetnet",
+                    "seamlessm4t",
+                    "clvp",
+                ]
+            ):
+                self.skipTest("May fix in the future: need model-specific fixes")
+
+            # enable cache
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
+
+            # NOTE: assisted generation only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                self.skipTest("This model doesn't support caching")
+
+            config.use_cache = True
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            # Sets assisted generation arguments such that:
+            # a) no EOS is generated, to ensure generation doesn't break early
+            # b) the prompt lookup tries to give the model 2 tokens, to ensure the input preparation of
+            #    prompt lookup is correct
+            # c) there are at least two forward passes in the main model, to ensure the input preparation of
+            #    the main model is correct
+            generation_kwargs = {
+                "eos_token_id": -1,  # see a)
+                "max_new_tokens": 4,  # see c)
+                "num_beams": 1,
+                "do_sample": False,
+                "output_scores": True,
+                "output_hidden_states": True,
+                "output_attentions": True,
+                "return_dict_in_generate": True,
+            }
+
+            output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+            generation_kwargs.update({"prompt_lookup_num_tokens": 2})  # see b)
+            output_prompt_lookup = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+            # The two outputs must match and their shape must be as expected
+            self.assertListEqual(output_greedy.sequences.tolist(), output_prompt_lookup.sequences.tolist())
+            for output in (output_greedy, output_prompt_lookup):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_assisted_decoding_sample(self):
@@ -1827,7 +1963,7 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(
                 outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids[:, 1:].tolist(),
+                outputs_from_embeds_wo_ids.tolist(),
             )
 
     def test_generate_continue_from_past_key_values(self):
@@ -2291,6 +2427,43 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(expected_output, output, atol=1e-12))
 
+    def test_speculative_sampling(self):
+        # assume vocab size 10, input length 5 + 3 generated candidates
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
+                ]
+            ]
+        )
+        last_assistant_token_is_eos = False
+        max_matches = 5
+        validated_tokens, n_matches = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            last_assistant_token_is_eos,
+            max_matches,
+        )
+        self.assertTrue(n_matches.item() == 2)
+        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
+
 
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
@@ -2557,6 +2730,20 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 **model_kwargs,
             )
 
+    def test_max_length_if_input_embeds(self):
+        # PT-only test: TF doesn't have StoppingCriteria
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        max_length = 20
+        input_len = input_ids.shape[-1]
+        out_gen = model.generate(input_ids=input_ids, max_length=max_length)
+        out_gen_embeds = model.generate(inputs_embeds=inputs_embeds, max_length=max_length)
+        self.assertEqual(out_gen.shape[-1], input_len + out_gen_embeds.shape[-1])
+
     def test_custom_stopping_criteria_overload_error(self):
         # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2666,13 +2853,26 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
+    def test_beam_search_low_memory(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
+
+        low_output = model.generate(model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=True)
+
+        high_output = model.generate(
+            model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
+        )
+        self.assertListEqual(low_output.tolist(), high_output.tolist())
+
     @slow
     def test_beam_search_example_integration(self):
         # PT-only test: TF doesn't have a BeamSearchScorer
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -2712,8 +2912,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
@@ -2750,8 +2950,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         flexible_phrases = tokenizer(
@@ -2791,8 +2991,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_word = "scared"
         force_flexible = ["scream", "screams", "screaming", "screamed"]
@@ -2828,8 +3028,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @slow
     def test_cfg_mixin(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         input = tokenizer(["The dragon flew over Paris,"], return_tensors="pt", return_attention_mask=True)
         input["input_ids"] = input["input_ids"].to(torch_device)
@@ -2869,8 +3069,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_translation_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         force_words = ["sind"]
@@ -2894,8 +3094,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_integration(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -2976,6 +3176,26 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         with self.assertRaises(ValueError):
             model.generate(input_ids, force_words_ids=[[[-1]]])
+
+    def test_batched_decoder_start_id(self):
+        # PT-only test: TF doesn't support batched_decoder_start_id
+        articles = [
+            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
+            "Michael Phelps is arguably the most decorated Olympian of all time.",
+        ]
+        bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        input_ids = bart_tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        decoder_start_token_id = bart_model.generation_config.decoder_start_token_id
+        decoder_start_token_id_batch = [decoder_start_token_id] * input_ids.shape[0]
+
+        outputs = bart_model.generate(input_ids, decoder_start_token_id=decoder_start_token_id)
+
+        outputs_batched_ids = bart_model.generate(input_ids, decoder_start_token_id=decoder_start_token_id_batch)
+
+        self.assertListEqual(outputs.tolist(), outputs_batched_ids.tolist())
 
     def test_contrastive_search_batched(self):
         # PT-only test: TF doesn't have constrained beam search
@@ -3270,3 +3490,49 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             encoder_outputs=encoder_outputs,
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+    def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
+        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 5
+        assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic"
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "assistant_model": assistant_model,
+        }
+        model.generate(**inputs, **generation_kwargs)
+        # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
+        self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
+
+    def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
+        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 5
+        assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic_transient"
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "assistant_model": assistant_model,
+        }
+        model.generate(**inputs, **generation_kwargs)
+        # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
+        self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)
