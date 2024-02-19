@@ -1803,11 +1803,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 else:
                     encoder_hidden_states = audio_hidden_states
 
-                if attention_mask is not None:
-                    attention_mask = torch.cat(
-                        [torch.ones(audio_hidden_states.shape[:2], device=self.device), attention_mask], dim=1
-                    )
-
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
@@ -1818,7 +1813,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
