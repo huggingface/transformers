@@ -808,7 +808,7 @@ class WandbCallback(TrainerCallback):
                     if f.is_file():
                         with model_artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
-                self._wandb.run.log_artifact(model_artifact, aliases=["initial-model"])
+                self._wandb.run.log_artifact(model_artifact, aliases=["base-model"])
 
                 badge_markdown = (
                     f'[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge'
@@ -912,9 +912,9 @@ class WandbCallback(TrainerCallback):
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
             logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. ...")
             checkpoint_name = (
-                f"checkpoint-{self._wandb.run.id}"
+                f"model-{self._wandb.run.id}"
                 if (args.run_name is None or args.run_name == args.output_dir)
-                else f"checkpoint-{self._wandb.run.name}"
+                else f"model-{self._wandb.run.name}"
             )
             artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
             artifact.add_dir(artifact_path)
