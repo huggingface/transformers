@@ -50,7 +50,3 @@ class RWKV5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pretokenized_inputs(self):
         pass
 
-    def get_input_output_texts(self, tokenizer):
-        input_text = "ABC"
-        output_text = "DEF"
-        return input_text, output_text
