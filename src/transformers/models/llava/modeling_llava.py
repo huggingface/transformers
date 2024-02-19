@@ -515,9 +515,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                                 self.config.image_grid_pinpoints,
                                 self.config.vision_config.image_size,
                             )
-                            image_feature = image_feature.view(
-                                num_patch_height, num_patch_width, height, width, -1
-                            )
+                            image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
                             image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                             image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                             image_feature = unpad_image(image_feature, image_sizes[image_idx])
@@ -534,8 +532,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                             image_feature = image_feature[0]
                             image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
                         new_image_features.append(image_feature)
-                    image_features = new_image_features
-                    image_features = torch.stack(image_features, dim=0)
+                    image_features = torch.stack(new_image_features, dim=0)
 
                 else:
                     # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
