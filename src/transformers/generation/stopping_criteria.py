@@ -175,7 +175,7 @@ class StopStringCriteria(StoppingCriteria):
         valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
         end of the stop string."""
         tok_list = list(self.vocab.keys())
-        reversed_filtered_tok_list = [self._cleanup_token(token[::-1]) for token in tok_list]
+        reversed_filtered_tok_list = [self._cleanup_token(token)[::-1] for token in tok_list]
         token_valid_positions = {}
         token_end_overlaps = {}
         for stop_string in self.stop_strings:
