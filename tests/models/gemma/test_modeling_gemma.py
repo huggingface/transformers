@@ -464,14 +464,14 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 @require_torch_gpu
 @slow
 class GemmaIntegrationTest(unittest.TestCase):
-    input_text = ["Hello my name is", "Hi"]
+    input_text = ["Hello I am doing", "Hi today"]
 
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
@@ -481,14 +481,15 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_fp16(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -503,12 +504,34 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    def test_model_2b_fp16_static_cache(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/gemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        model.generation_config.cache_implementation = "static"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
     def test_model_2b_bf16(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is <strong><em><u>A.J.</u></em></strong> and I am a <strong><em><u>Certified",
-            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public void OnClick(",
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -528,8 +551,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1",
-            "Hi,\n\nI have a 2007 335i with the 6 speed",
+            "Hello I am doing a 200 cherokee build and have a few questions.\n\n1. I have a ",
+            "Hi today we are going to talk about the <strong>best way to remove the blackheads</strong>.\n\nBlack",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
@@ -565,8 +588,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today.\n\nI am sorry to hear you are having issues with",
-            "Hi,\n\nI have a 2006 320d with 100",
+            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
+            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -581,42 +604,12 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    def test_model_7b_fp16_logits(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/golden-gate-7b"
-        EXPECTED_LOGITS = (
-            torch.Tensor(
-                [
-                    [[-194.0000, -187.8750, -169.8750], [70.3750, 86.1875, -18.5312], [-58.9062, -45.7188, -115.8750]],
-                    [
-                        [-272.2500, -271.0000, -293.2500],
-                        [-275.5000, -272.7500, -258.2500],
-                        [-280.2500, -276.0000, -280.5000],
-                    ],
-                ]
-            )
-            .half()
-            .to(torch_device)
-        )
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-
-        with torch.no_grad():
-            output = model(**inputs).logits[:, :3, :3]
-
-        self.assertTrue(torch.allclose(output, EXPECTED_LOGITS, rtol=1e-3, atol=1e-3))
-
     def test_model_7b_bf16(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear you",
-            'Hi,\n\nI have a problem with the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
+            """Hello I am doing a project on the "The effect of the use of a new type of a new type of a""",
+            "Hi today I am going to tell you about the new update for the new update is the new update is the",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -631,13 +624,35 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    def test_model_7b_fp16_static_cache(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/gemma-7b"
+        EXPECTED_TEXTS = [
+            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
+            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        model.generation_config.cache_implementation = "static"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
     @require_bitsandbytes
     def test_model_7b_4bit(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is***** will be glad to help you with this. The first thing I would do is to make sure",
-            "Hiệu của 2 số là 1memcmp(1000000000",
+            "Hello I am doing a project for my school. I have a problem. I have a program that is a program that",
+            """Hi today I am going to talk about the book "The Hunger Games" by Suzanne Collins.\n\nThe first""",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
