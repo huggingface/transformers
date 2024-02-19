@@ -253,11 +253,10 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
                 "Link to the docstrings: https://huggingface.co/docs/transformers/main/en/model_doc/musicgen_melody"
             )
             audio = self._extract_stem_indices(audio, sampling_rate=sampling_rate)
-        else:
-            if sampling_rate is not None and sampling_rate != self.sampling_rate:
-                audio = torchaudio.functional.resample(
-                    audio, sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
-                )
+        elif sampling_rate is not None and sampling_rate != self.sampling_rate:
+            audio = torchaudio.functional.resample(
+                audio, sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
+            )
 
         is_batched = isinstance(audio, (np.ndarray, torch.Tensor)) and len(audio.shape) > 1
         is_batched = is_batched or (
@@ -289,8 +288,6 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             audio = [stereo.mean(dim=0) for stereo in audio]
 
         batched_speech = BatchFeature({"input_features": audio})
-
-        # convert into correct format for padding
 
         padded_inputs = self.pad(
             batched_speech,

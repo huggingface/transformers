@@ -41,7 +41,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto.configuration_auto import AutoConfig
-from ..auto.modeling_auto import AutoModel
+from ..auto.modeling_auto import AutoModel, AutoModelForTextEncoding
 from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyDecoderConfig
 
 
@@ -1397,7 +1397,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         audio_encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
     ):
-        if config is None and (text_encoder is None or audio_encoder is None or decoder is None):
+        if config is None and None in (text_encoder, audio_encoder, decoder):
             raise ValueError(
                 "Either a configuration has to be provided, or all three of text encoder, audio encoder and Musicgen Melody decoder."
             )
@@ -1413,13 +1413,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         super().__init__(config)
 
         if text_encoder is None:
-            from ..auto.modeling_auto import AutoModelForTextEncoding
-
             text_encoder = AutoModelForTextEncoding.from_config(config.text_encoder)
 
         if audio_encoder is None:
-            from ..auto.modeling_auto import AutoModel
-
             audio_encoder = AutoModel.from_config(config.audio_encoder)
 
         if decoder is None:
@@ -1503,27 +1499,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import MusicgenMelodyForConditionalGeneration
-
-        >>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-        ```"""
-
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for MusicgenMelodyForConditionalGeneration. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
     # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration.from_sub_models_pretrained with Musicgen->MusicgenMelody, musicgen-small->musicgen-melody
@@ -1844,11 +1819,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 else:
                     encoder_hidden_states = audio_hidden_states
 
-                if attention_mask is not None:
-                    attention_mask = torch.cat(
-                        [torch.ones(audio_hidden_states.shape[:2], device=self.device), attention_mask], dim=1
-                    )
-
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
@@ -1859,7 +1829,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

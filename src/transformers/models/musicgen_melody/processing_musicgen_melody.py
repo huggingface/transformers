@@ -163,7 +163,9 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         >>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
         >>> # get the unconditional (or 'null') inputs for the model
-        >>> unconditional_inputs = MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody").get_unconditional_inputs(num_samples=1)
+        >>> processor = MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody")
+        >>> unconditional_inputs = processor.get_unconditional_inputs(num_samples=1)
+
         >>> audio_samples = model.generate(**unconditional_inputs, max_new_tokens=256)
         ```"""
         inputs = self.tokenizer([""] * num_samples, return_tensors=return_tensors, return_attention_mask=True)

@@ -72,10 +72,9 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(hidden_size).
         num_codebooks (`int`, *optional*, defaults to 4):
             The number of parallel codebooks forwarded to the model.
-            Whether input and output word embeddings should be tied.
-            Number of channels in the audio data. Either 1 for mono or 2 for stereo. Stereo models generate a separate
+        audio_channels (`int`, *optional*, defaults to 1):
+            Number of audio channels used by the model (either mono or stereo). Stereo models generate a separate
             audio stream for the left/right output channels. Mono models generate a single audio stream output.
-        audio_channels (`int`, *optional*, defaults to 1): Number of audio channels used by the model (either mono or stereo).
         pad_token_id (`int`, *optional*, defaults to 2048): The id of the *padding* token.
         bos_token_id (`int`, *optional*, defaults to 2048): The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*): The id of the *end-of-sequence* token.
