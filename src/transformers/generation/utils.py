@@ -361,7 +361,7 @@ class GenerationMixin:
 
     def set_cache_implementation(self, cache_implementation: Union[CacheImplementation, str], **kwargs):
         """
-        Simple API to switch cache implementation in a model. Users could also do
+        Simple API to set cache implementation in a model. Users could also do
         `model.config.generation_config.cache_implementation = xxx` but they will most likely unexpected
         behaviour
 
@@ -369,7 +369,7 @@ class GenerationMixin:
             cache_implementation (`Union[CacheImplementation, str]`):
                 The target cache implementation
             kwargs (`dict`, *optional*):
-                Optional key word arguments to be passed. E.g. for SinkCache, it is required to
+                Optional key word arguments to be passed. E.g. for "sink", it is required to
                 pass `window_length` and `num_sink_tokens`.
         """
         if cache_implementation.upper() not in CacheImplementation.__members__:
@@ -380,19 +380,18 @@ class GenerationMixin:
 
         if not self._supports_cache_class:
             raise ValueError(
-                "This model do not currently support switching between cache implementations. Please raise a feature request on GitHub for adding"
-                " the request to support this model: https://github.com/huggingface/transformers"
+                "You cannot currently update the cache implementation for this model. Please raise a feature request on GitHub for adding"
+                " improved cache support this model: https://github.com/huggingface/transformers"
             )
 
         if cache_implementation == CacheImplementation.SINK:
             if "window_length" not in kwargs and "num_sink_tokens" not in kwargs:
                 raise ValueError(
-                    "You asked to switch to the Sink cache implementation, but you did not pass `window_length` and `num_sink_tokens` to "
+                    "You requested to use the Sink cache implementation, but you did not pass `window_length` and `num_sink_tokens` to "
                     "`set_cache_implementation`. Try again with passing these arguments to the method. (e.g. `model.set_cache_implementation('sink', window_length=window_length=508, num_sink_tokens=4)`"
                 )
-            else:
-                self.generation_config.sink_window_length = kwargs.get("window_length")
-                self.generation_config.num_sink_tokens = kwargs.get("num_sink_tokens")
+            self.generation_config.sink_window_length = kwargs.get("window_length")
+            self.generation_config.num_sink_tokens = kwargs.get("num_sink_tokens")
 
         self.generation_config.cache_implementation = cache_implementation.lower()
 
