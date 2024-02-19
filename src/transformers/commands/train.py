@@ -82,7 +82,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--task", type=str, default="text_classification", help="Task to train the model on."
         )
         train_parser.add_argument(
-            "--model", type=str, default="bert-base-uncased", help="Model's name or path to stored model."
+            "--model", type=str, default="google-bert/bert-base-uncased", help="Model's name or path to stored model."
         )
         train_parser.add_argument("--train_batch_size", type=int, default=32, help="Batch size for training.")
         train_parser.add_argument("--valid_batch_size", type=int, default=64, help="Batch size for validation.")

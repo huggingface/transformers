@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 진행하는 방법은 아래와 같습니다:
 
-1. [SWAG](https://huggingface.co/datasets/swag) 데이터 세트의 'regular' 구성으로 [BERT](https://huggingface.co/bert-base-uncased)를 미세 조정하여 여러 옵션과 일부 컨텍스트가 주어졌을 때 가장 적합한 답을 선택합니다.
+1. [SWAG](https://huggingface.co/datasets/swag) 데이터 세트의 'regular' 구성으로 [BERT](https://huggingface.co/google-bert/bert-base-uncased)를 미세 조정하여 여러 옵션과 일부 컨텍스트가 주어졌을 때 가장 적합한 답을 선택합니다.
 2. 추론에 미세 조정된 모델을 사용합니다.
 
 <Tip>
@@ -90,7 +90,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 생성하려는 전처리 함수는 다음과 같아야 합니다:
@@ -253,7 +253,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> from transformers import AutoModelForMultipleChoice, TrainingArguments, Trainer
 
->>> model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 이제 세 단계만 남았습니다:
@@ -317,7 +317,7 @@ TensorFlow에서 모델을 미세 조정하려면 최적화 함수, 학습률 �
 ```py
 >>> from transformers import TFAutoModelForMultipleChoice
 
->>> model = TFAutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터 세트를 `tf.data.Dataset` 형식으로 변환합니다:

@@ -376,7 +376,7 @@ For example, to run the [run_glue.py](https://github.com/huggingface/transformer
 ```bash
 accelerate launch \
     ./examples/pytorch/text-classification/run_glue.py \
-    --model_name_or_path bert-base-cased \
+    --model_name_or_path google-bert/bert-base-cased \
     --task_name $TASK_NAME \
     --do_train \
     --do_eval \
@@ -399,7 +399,7 @@ accelerate launch --num_processes=2 \
     --fsdp_sharding_strategy=1 \
     --fsdp_state_dict_type=FULL_STATE_DICT \
     ./examples/pytorch/text-classification/run_glue.py
-    --model_name_or_path bert-base-cased \
+    --model_name_or_path google-bert/bert-base-cased \
     --task_name $TASK_NAME \
     --do_train \
     --do_eval \

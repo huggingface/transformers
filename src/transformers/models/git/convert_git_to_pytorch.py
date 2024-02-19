@@ -311,7 +311,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
             size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
         )
     )
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", model_input_names=["input_ids", "attention_mask"])
+    tokenizer = AutoTokenizer.from_pretrained(
+        "google-bert/bert-base-uncased", model_input_names=["input_ids", "attention_mask"]
+    )
     processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     if is_video:
