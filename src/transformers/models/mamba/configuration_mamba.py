@@ -39,37 +39,33 @@ class MambaConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50277):
+        vocab_size (`int`, *optional*, defaults to 50280):
             Vocabulary size of the MAMBA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MambaModel`].
-        context_length (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model can be be used with in a single forward (using it in RNN mode
-            lets use any sequence length).
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
+        state_size (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the model.
-        attention_hidden_size (`int`, *optional*):
-            Dimensionality of the attention hidden states. Will default to `hidden_size` if unset.
-        intermediate_size (`int`, *optional*):
-            Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
-        bos_token_id (`int`, *optional*, defaults to 0):
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        bos_token_id (`int`, *optional*, defaults to 1):
             The id of the beginning of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer
             as GPTNeoX.
-        eos_token_id (`int`, *optional*, defaults to 0):
+        eos_token_id (`int`, *optional*, defaults to 2):
             The id of the end of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer as
             GPTNeoX.
-        rescale_every (`int`, *optional*, defaults to 6):
-            At inference, the hidden states (and weights of the correponding output layers) are divided by 2 every
-            `rescale_every` layer. If set to 0 or a negative number, no rescale is done.
+        expand (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        dt_rank (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether or not to tie the word embeddings with the input token embeddings.
+        use_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        use_conv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        hidden_act (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
+        initializer_range (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether or not residuals should be in `float32`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last state.
 
 
     Example:
