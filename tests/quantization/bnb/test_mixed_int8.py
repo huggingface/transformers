@@ -42,7 +42,7 @@ from transformers.testing_utils import (
 
 
 def get_some_linear_layer(model):
-    if model.config.model_type == "gpt2":
+    if model.config.model_type == "openai-community/gpt2":
         return model.transformer.h[0].mlp.c_fc
     return model.transformer.h[0].mlp.dense_4h_to_h
 
@@ -174,7 +174,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             model = OPTForCausalLM(config)
         self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "model.decoder.embed_tokens"].sort())
 
-        model_id = "roberta-large"
+        model_id = "FacebookAI/roberta-large"
         config = AutoConfig.from_pretrained(model_id, revision="716877d372b884cad6d419d828bac6c85b3b18d9")
         with init_empty_weights():
             model = AutoModelForMaskedLM.from_config(config)
@@ -240,7 +240,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         quantization_config = BitsAndBytesConfig(load_in_8bit=True, llm_int8_skip_modules=["classifier"])
         seq_classification_model = AutoModelForSequenceClassification.from_pretrained(
-            "roberta-large-mnli", quantization_config=quantization_config
+            "FacebookAI/roberta-large-mnli", quantization_config=quantization_config
         )
         self.assertTrue(seq_classification_model.roberta.encoder.layer[0].output.dense.weight.dtype == torch.int8)
         self.assertTrue(
@@ -340,7 +340,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small", load_in_8bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
     def test_int8_serialization(self):
@@ -447,7 +447,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 class MixedInt8T5Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.model_name = "t5-small"
+        cls.model_name = "google-t5/t5-small"
         cls.dense_act_model_name = "google/flan-t5-small"  # flan-t5 uses dense-act instead of dense-relu-dense
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.input_text = "Translate in German: Hello, my dog is cute"
@@ -463,7 +463,7 @@ class MixedInt8T5Test(unittest.TestCase):
     def test_inference_without_keep_in_fp32(self):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
-        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
         from transformers import T5ForConditionalGeneration
@@ -471,7 +471,7 @@ class MixedInt8T5Test(unittest.TestCase):
         modules = T5ForConditionalGeneration._keep_in_fp32_modules
         T5ForConditionalGeneration._keep_in_fp32_modules = None
 
-        # test with `t5-small`
+        # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
         _ = model.generate(**encoded_input)
@@ -487,14 +487,14 @@ class MixedInt8T5Test(unittest.TestCase):
     def test_inference_with_keep_in_fp32(self):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
-        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
         import bitsandbytes as bnb
 
         from transformers import T5ForConditionalGeneration
 
-        # test with `t5-small`
+        # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
         # there was a bug with decoders - this test checks that it is fixed
@@ -514,14 +514,14 @@ class MixedInt8T5Test(unittest.TestCase):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly on
         a serialized model.
-        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
         import bitsandbytes as bnb
 
         from transformers import T5ForConditionalGeneration
 
-        # test with `t5-small`
+        # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -548,7 +548,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         super().setUp()
         # model_name
         self.model_name = "bigscience/bloom-560m"
-        self.seq_to_seq_name = "t5-small"
+        self.seq_to_seq_name = "google-t5/t5-small"
 
         # Different types of model
 
@@ -842,7 +842,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
 
 class MixedInt8GPT2Test(MixedInt8Test):
-    model_name = "gpt2-xl"
+    model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a big fan of")

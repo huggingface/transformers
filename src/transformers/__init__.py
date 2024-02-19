@@ -806,6 +806,7 @@ _import_structure = {
         "SqueezeBertConfig",
         "SqueezeBertTokenizer",
     ],
+    "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -1091,7 +1092,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["AwqConfig", "BitsAndBytesConfig", "GPTQConfig"],
+    "utils.quantization_config": ["AqlmConfig", "AwqConfig", "BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -1425,6 +1426,7 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.align"].extend(
         [
             "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1768,6 +1770,7 @@ else:
     _import_structure["models.clip"].extend(
         [
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLIPForImageClassification",
             "CLIPModel",
             "CLIPPreTrainedModel",
             "CLIPTextModel",
@@ -3206,6 +3209,7 @@ else:
     _import_structure["models.siglip"].extend(
         [
             "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipForImageClassification",
             "SiglipModel",
             "SiglipPreTrainedModel",
             "SiglipTextModel",
@@ -3254,6 +3258,14 @@ else:
             "SqueezeBertModel",
             "SqueezeBertModule",
             "SqueezeBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.stablelm"].extend(
+        [
+            "StableLmForCausalLM",
+            "StableLmForSequenceClassification",
+            "StableLmModel",
+            "StableLmPreTrainedModel",
         ]
     )
     _import_structure["models.swiftformer"].extend(
@@ -5566,6 +5578,7 @@ if TYPE_CHECKING:
         SqueezeBertConfig,
         SqueezeBertTokenizer,
     )
+    from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -5850,7 +5863,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig
+    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -6457,6 +6470,7 @@ if TYPE_CHECKING:
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLIPForImageClassification,
             CLIPModel,
             CLIPPreTrainedModel,
             CLIPTextModel,
@@ -7635,6 +7649,7 @@ if TYPE_CHECKING:
         )
         from .models.siglip import (
             SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipForImageClassification,
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,
@@ -7678,6 +7693,12 @@ if TYPE_CHECKING:
             SqueezeBertModel,
             SqueezeBertModule,
             SqueezeBertPreTrainedModel,
+        )
+        from .models.stablelm import (
+            StableLmForCausalLM,
+            StableLmForSequenceClassification,
+            StableLmModel,
+            StableLmPreTrainedModel,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

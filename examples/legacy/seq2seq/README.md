@@ -170,7 +170,7 @@ If 'translation' is in your task name, the computed metric will be BLEU. Otherwi
 For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
 export DATA_DIR=wmt_en_ro
-./run_eval.py t5-base \
+./run_eval.py google-t5/t5-base \
     $DATA_DIR/val.source t5_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \
@@ -228,7 +228,7 @@ Contributions that implement this command for other distributed hardware setups 
 When using `run_eval.py`, the following features can be useful:
 
 * if you running the script multiple times and want to make it easier to track what arguments produced that output, use `--dump-args`. Along with the results it will also dump any custom params that were passed to the script. For example if you used: `--num_beams 8 --early_stopping true`, the output will be:
-   ```
+   ```json
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True}
    ```
 
@@ -236,13 +236,13 @@ When using `run_eval.py`, the following features can be useful:
 
    If using `--dump-args --info`, the output will be:
 
-   ```
+   ```json
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': '2020-09-13 18:44:43'}
    ```
 
    If using `--dump-args --info "pair:en-ru chkpt=best`, the output will be:
 
-   ```
+   ```json
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': 'pair=en-ru chkpt=best'}
    ```
 

@@ -445,7 +445,7 @@ class EncoderDecoderMixin:
 class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-base-960h", "bert-base-cased"
+            "facebook/wav2vec2-base-960h", "google-bert/bert-base-cased"
         )
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], scale=1.0)
@@ -509,7 +509,7 @@ class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
 class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/s2t-small-librispeech-asr", "bert-base-cased"
+            "facebook/s2t-small-librispeech-asr", "google-bert/bert-base-cased"
         )
         batch_size = 13
         input_features = floats_tensor([batch_size, 7, 80], scale=1.0)

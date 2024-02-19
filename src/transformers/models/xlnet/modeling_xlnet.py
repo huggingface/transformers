@@ -40,12 +40,12 @@ from .configuration_xlnet import XLNetConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlnet-base-cased"
+_CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
 
 XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlnet-base-cased",
-    "xlnet-large-cased",
+    "xlnet/xlnet-base-cased",
+    "xlnet/xlnet-large-cased",
     # See all XLNet models at https://huggingface.co/models?filter=xlnet
 ]
 
@@ -1393,8 +1393,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         >>> from transformers import AutoTokenizer, XLNetLMHeadModel
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-large-cased")
-        >>> model = XLNetLMHeadModel.from_pretrained("xlnet-large-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet/xlnet-large-cased")
+        >>> model = XLNetLMHeadModel.from_pretrained("xlnet/xlnet-large-cased")
 
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
         >>> input_ids = torch.tensor(
@@ -1970,8 +1970,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         >>> from transformers import AutoTokenizer, XLNetForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
-        >>> model = XLNetForQuestionAnswering.from_pretrained("xlnet-base-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet/xlnet-base-cased")
+        >>> model = XLNetForQuestionAnswering.from_pretrained("xlnet/xlnet-base-cased")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
         ...     0

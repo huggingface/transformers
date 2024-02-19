@@ -80,6 +80,8 @@
     title: Filosofía
   - local: glossary
     title: Glosario
+  - local: task_summary
+    title: Lo que 🤗 Transformers puede hacer
   - local: pad_truncation
     title: Relleno y truncamiento
   - local: bertology

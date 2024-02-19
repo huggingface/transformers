@@ -3990,7 +3990,7 @@ class TokenizerTesterMixin:
 
     # TODO This is ran for all models but only tests bert...
     def test_clean_up_tokenization_spaces(self):
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
         assert tokenizer.clean_up_tokenization_spaces is True
 
         tokens = tokenizer.encode("This shouldn't be! He'll go.")

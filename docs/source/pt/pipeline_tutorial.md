@@ -85,8 +85,8 @@ para uma tarefa de modelagem de linguagem causal:
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 Crie uma [`pipeline`] para a sua tarefa e especifíque o modelo e o tokenizador que foram carregados:

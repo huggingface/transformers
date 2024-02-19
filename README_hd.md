@@ -99,13 +99,13 @@ checkpoint: जाँच बिंदु
 आप सबसे सीधे मॉडल पृष्ठ पर परीक्षण कर सकते हैं [model hub](https://huggingface.co/models) मॉडल पर। हम [निजी मॉडल होस्टिंग, मॉडल संस्करण, और अनुमान एपीआई](https://huggingface.co/pricing) भी प्रदान करते हैं।。
 
 यहाँ कुछ उदाहरण हैं：
-- [शब्द को भरने के लिए मास्क के रूप में BERT का प्रयोग करें](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
+- [शब्द को भरने के लिए मास्क के रूप में BERT का प्रयोग करें](https://huggingface.co/google-bert/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [इलेक्ट्रा के साथ नामित इकाई पहचान](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
-- [जीपीटी-2 के साथ टेक्स्ट जनरेशन](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
-- [रॉबर्टा के साथ प्राकृतिक भाषा निष्कर्ष](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
+- [जीपीटी-2 के साथ टेक्स्ट जनरेशन](https://huggingface.co/openai-community/gpt2?text=A+long+time+ago%2C+)
+- [रॉबर्टा के साथ प्राकृतिक भाषा निष्कर्ष](https://huggingface.co/FacebookAI/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
 - [बार्ट के साथ पाठ सारांश](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
-- [डिस्टिलबर्ट के साथ प्रश्नोत्तर](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
-- [अनुवाद के लिए T5 का प्रयोग करें](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
+- [डिस्टिलबर्ट के साथ प्रश्नोत्तर](https://huggingface.co/distilbert/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
+- [अनुवाद के लिए T5 का प्रयोग करें](https://huggingface.co/google-t5/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
 **[Write With Transformer](https://transformer.huggingface.co)**，हगिंग फेस टीम द्वारा बनाया गया, यह एक आधिकारिक पाठ पीढ़ी है demo。
 
@@ -151,8 +151,8 @@ checkpoint: जाँच बिंदु
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
->>> model = AutoModel.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+>>> model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
 
 >>> inputs = tokenizer("Hello world!", return_tensors="pt")
 >>> outputs = model(**inputs)
@@ -161,8 +161,8 @@ checkpoint: जाँच बिंदु
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
->>> model = TFAutoModel.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+>>> model = TFAutoModel.from_pretrained("google-bert/bert-base-uncased")
 
 >>> inputs = tokenizer("Hello world!", return_tensors="tf")
 >>> outputs = model(**inputs)
@@ -436,6 +436,7 @@ conda install conda-forge::transformers
 1. **[SpeechToTextTransformer2](https://huggingface.co/docs/transformers/model_doc/speech_to_text_2)** (फेसबुक से) साथ में पेपर [लार्ज-स्केल सेल्फ- एंड सेमी-सुपरवाइज्ड लर्निंग फॉर स्पीच ट्रांसलेशन](https://arxiv.org/abs/2104.06678) चांगहान वांग, ऐनी वू, जुआन पिनो, एलेक्सी बेवस्की, माइकल औली, एलेक्सिस द्वारा Conneau द्वारा पोस्ट किया गया।
 1. **[Splinter](https://huggingface.co/docs/transformers/model_doc/splinter)** (तेल अवीव यूनिवर्सिटी से) साथ में पेपर [स्पैन सिलेक्शन को प्री-ट्रेनिंग करके कुछ-शॉट क्वेश्चन आंसरिंग](https://arxiv.org/abs/2101.00438) ओरि राम, युवल कर्स्टन, जोनाथन बेरेंट, अमीर ग्लोबर्सन, ओमर लेवी द्वारा।
 1. **[SqueezeBERT](https://huggingface.co/docs/transformers/model_doc/squeezebert)** (बर्कले से) कागज के साथ [SqueezeBERT: कुशल तंत्रिका नेटवर्क के बारे में NLP को कंप्यूटर विज़न क्या सिखा सकता है?](https://arxiv.org/abs/2006.11316) फॉरेस्ट एन. इनडोला, अल्बर्ट ई. शॉ, रवि कृष्णा, और कर्ट डब्ल्यू. केटज़र द्वारा।
+1. **[StableLm](https://huggingface.co/docs/transformers/main/model_doc/stablelm)** (from Stability AI) released with the paper [StableLM 3B 4E1T (Technical Report)](https://stability.wandb.io/stability-llm/stable-lm/reports/StableLM-3B-4E1T--VmlldzoyMjU4?accessToken=u3zujipenkx5g7rtcj9qojjgxpconyjktjkli2po09nffrffdhhchq045vp0wyfo) by  Jonathan Tow, Marco Bellagente, Dakota Mahan, Carlos Riquelme Ruiz, Duy Phung, Maksym Zhuravinskyi, Nathan Cooper, Nikhil Pinnaparaju, Reshinth Adithyan, and James Baicoianu. 
 1. **[SwiftFormer](https://huggingface.co/docs/transformers/model_doc/swiftformer)** (MBZUAI से) Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, Fahad Shahbaz Khan. द्वाराअनुसंधान पत्र [SwiftFormer: Efficient Additive Attention for Transformer-based Real-time Mobile Vision Applications](https://arxiv.org/abs/2303.15446) के साथ जारी किया गया
 1. **[Swin Transformer](https://huggingface.co/docs/transformers/model_doc/swin)** (माइक्रोसॉफ्ट से) साथ में कागज [स्वाइन ट्रांसफॉर्मर: शिफ्टेड विंडोज का उपयोग कर पदानुक्रमित विजन ट्रांसफॉर्मर](https://arxiv.org/abs/2103.14030) ज़ी लियू, युटोंग लिन, यू काओ, हान हू, यिक्सुआन वेई, झेंग झांग, स्टीफन लिन, बैनिंग गुओ द्वारा।
 1. **[Swin Transformer V2](https://huggingface.co/docs/transformers/model_doc/swinv2)** (Microsoft से) साथ वाला पेपर [Swin Transformer V2: स्केलिंग अप कैपेसिटी एंड रेजोल्यूशन](https://arxiv.org/abs/2111.09883) ज़ी लियू, हान हू, युटोंग लिन, ज़ुलिआंग याओ, ज़ेंडा ज़ी, यिक्सुआन वेई, जिया निंग, यू काओ, झेंग झांग, ली डोंग, फुरु वेई, बैनिंग गुओ द्वारा।

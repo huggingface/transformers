@@ -339,11 +339,11 @@ def main():
 
     accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
     if args.source_prefix is None and args.model_name_or_path in [
-        "t5-small",
-        "t5-base",
-        "t5-large",
-        "t5-3b",
-        "t5-11b",
+        "google-t5/t5-small",
+        "google-t5/t5-base",
+        "google-t5/t5-large",
+        "google-t5/t5-3b",
+        "google-t5/t5-11b",
     ]:
         logger.warning(
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
