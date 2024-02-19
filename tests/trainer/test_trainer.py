@@ -1588,18 +1588,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 8
-        self.assertEqual(trainer._train_batch_size, 8)
-
-        # We can then make a new Trainer
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        # Check we are at 16 to start
-        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
-        trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 8)
+        # Note: This can have issues, for now we don't support this functionality
+        # ref: https://github.com/huggingface/transformers/pull/29057
+        with self.assertRaises(NotImplementedError):
+            _ = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)

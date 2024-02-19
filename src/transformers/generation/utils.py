@@ -441,6 +441,9 @@ class GenerationMixin:
             if isinstance(value, torch.Tensor):
                 batch_size = value.shape[0]
                 break
+
+        if "inputs_embeds" in model_kwargs:
+            return torch.ones((batch_size, 0), dtype=torch.long, device=self.device)
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
@@ -1420,6 +1423,14 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+
+        # otherwise the total length [inputs-embeds-len + new-tokens-len] will go beyond indicated `max_length``
+        elif (
+            model_input_name == "inputs_embeds"
+            and inputs_tensor.shape[:-1] != input_ids.shape
+            and not self.config.is_encoder_decoder
+        ):
+            generation_config.max_length -= inputs_tensor.shape[1]
 
         # if we don't pass `past_key_values` and a cache_implementation is specified
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
@@ -4550,6 +4561,13 @@ class GenerationMixin:
         if streamer is not None:
             streamer.end()
 
+        if (
+            hasattr(candidate_generator, "assistant_model")
+            and candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic"
+        ):
+            candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
+                candidate_generator.num_assistant_tokens
+            )
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
