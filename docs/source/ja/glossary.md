@@ -33,7 +33,7 @@ rendered properly in your Markdown viewer.
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence_a = "This is a short sequence."
 >>> sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
@@ -147,7 +147,7 @@ The encoded versions have different lengths:
 ### feed forward chunking
 
 トランスフォーマー内の各残差注意ブロックでは、通常、自己注意層の後に2つのフィードフォワード層が続きます。
-フィードフォワード層の中間埋め込みサイズは、モデルの隠れたサイズよりも大きいことがよくあります（たとえば、`bert-base-uncased`の場合）。
+フィードフォワード層の中間埋め込みサイズは、モデルの隠れたサイズよりも大きいことがよくあります（たとえば、`google-bert/bert-base-uncased`の場合）。
 
 入力サイズが `[batch_size、sequence_length]` の場合、中間フィードフォワード埋め込み `[batch_size、sequence_length、config.intermediate_size]` を保存するために必要なメモリは、メモリの大部分を占めることがあります。[Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451)の著者は、計算が `sequence_length` 次元に依存しないため、両方のフィードフォワード層の出力埋め込み `[batch_size、config.hidden_size]_0、...、[batch_size、config.hidden_size]_n` を個別に計算し、後で `[batch_size、sequence_length、config.hidden_size]` に連結することは数学的に等価であると気付きました。これにより、増加した計算時間とメモリ使用量のトレードオフが生じますが、数学的に等価な結果が得られます。
 
@@ -191,7 +191,7 @@ The encoded versions have different lengths:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
@@ -400,7 +400,7 @@ The encoded versions have different lengths:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
 

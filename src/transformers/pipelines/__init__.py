@@ -528,7 +528,7 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"translation"`
             - `"translation_xx_to_yy"`
             - `"video-classification"`
-            - `"visual-question-answering"`
+            - `"visual-question-answering"` (alias `"vqa"` available)
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
             - `"zero-shot-object-detection"`
@@ -713,12 +713,12 @@ def pipeline(
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
     >>> oracle = pipeline(
-    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="google-bert/bert-base-cased"
     ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
     >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
     if model_kwargs is None:
@@ -892,6 +892,8 @@ def pipeline(
                 'You cannot use both `pipeline(... torch_dtype=..., model_kwargs={"torch_dtype":...})` as those'
                 " arguments might conflict, use only one.)"
             )
+        if isinstance(torch_dtype, str) and hasattr(torch, torch_dtype):
+            torch_dtype = getattr(torch, torch_dtype)
         model_kwargs["torch_dtype"] = torch_dtype
 
     model_name = model if isinstance(model, str) else None

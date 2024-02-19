@@ -51,6 +51,9 @@ class ViTHybridConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -104,6 +107,7 @@ class ViTHybridConfig(PretrainedConfig):
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
+        backbone_kwargs=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -137,6 +141,9 @@ class ViTHybridConfig(PretrainedConfig):
                 "embedding_dynamic_padding": True,
             }
 
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
         if isinstance(backbone_config, dict):
             if "model_type" in backbone_config:
                 backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
@@ -152,6 +159,7 @@ class ViTHybridConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

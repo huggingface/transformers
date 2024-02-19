@@ -515,6 +515,12 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
+    @unittest.skip(
+        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
+    )
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
 
 @require_torch
 class XLMRobertaModelXLIntegrationTest(unittest.TestCase):

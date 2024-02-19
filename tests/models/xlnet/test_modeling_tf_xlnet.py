@@ -491,7 +491,7 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 class TFXLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
-        model = TFXLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model = TFXLNetLMHeadModel.from_pretrained("xlnet/xlnet-base-cased")
         # fmt: off
         input_ids = tf.convert_to_tensor(
             [
