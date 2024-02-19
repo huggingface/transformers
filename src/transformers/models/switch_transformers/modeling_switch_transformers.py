@@ -22,7 +22,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -125,6 +125,24 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+
+
+class ClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config: SwitchTransformersConfig, model_dim: int):
+        super().__init__()
+        self.dense = nn.Linear(model_dim, model_dim, bias=False)
+        self.dropout = nn.Dropout(p=0.1)
+        self.out_proj = nn.Linear(model_dim, config.num_labels, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
 
 
 class SwitchTransformersTop1Router(nn.Module):
@@ -822,6 +840,13 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, ClassificationHead):
+            module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.dense, "bias") and module.dense.bias is not None:
+                module.dense.bias.data.zero_()
+            module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
+                module.out_proj.bias.data.zero_()
         elif isinstance(module, SwitchTransformersDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -1866,3 +1891,249 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         )
 
         return encoder_outputs
+
+
+@add_start_docstrings(
+    """
+    SwitchTransformers model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """,
+    SWITCH_TRANSFORMERS_START_DOCSTRING,
+)
+class SwitchTransformersForSequenceClassification(SwitchTransformersPreTrainedModel):
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
+    def __init__(self, config: SwitchTransformersConfig):
+        super().__init__(config)
+        self.model_dim = config.d_model
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
+        encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
+        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+
+        decoder_config = copy.deepcopy(config)
+        decoder_config.is_decoder = True
+        decoder_config.is_encoder_decoder = False
+        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        # Classifier head
+        self.classification_head = ClassificationHead(config, self.model_dim)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+        # Model parallel
+        self.device_map = None
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+        self.decoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
+    @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqMoEOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        decoder_inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, Seq2SeqMoEOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Returns:
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if labels is not None:
+            use_cache = False
+
+        if input_ids is None and inputs_embeds is not None:
+            raise NotImplementedError(
+                f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
+            )
+
+        if (
+            output_router_logits
+            and self.config.num_sparse_encoder_layers == 0
+            and self.config.num_sparse_encoder_layers == 0
+        ):
+            raise ValueError(
+                "You asked to return `output_router_logits` but the transformer in dense, and does                    "
+                "           not contain any sparse MLP Layers. Set `output_router_logits = False` and restart"
+            )
+
+        # Copied from models.bart.modeling_bart.BartModel.forward different to other models, T5 automatically creates
+        # decoder_input_ids from input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            if input_ids is None:
+                raise ValueError(
+                    "If no `decoder_input_ids` or `decoder_inputs_embeds` are "
+                    "passed, `input_ids` cannot be `None`. Please pass either "
+                    "`input_ids` or `decoder_input_ids` or `decoder_inputs_embeds`."
+                )
+            decoder_input_ids = self._shift_right(input_ids)
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                output_router_logits=output_router_logits,
+                return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, MoEModelOutput):
+            encoder_outputs = MoEModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                router_probs=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
+            )
+
+        hidden_states = encoder_outputs[0]
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            past_key_values=past_key_values,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
+            return_dict=return_dict,
+        )
+        sequence_output = decoder_outputs[0]
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(sequence_output.device)
+
+        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
+            raise ValueError(
+                "All examples must have the same number of <eos> tokens. Your batch has {} <eos> tokens.".format(
+                    torch.unique_consecutive(eos_mask.sum(1)).tolist()
+                )
+            )
+        batch_size, _, hidden_size = sequence_output.shape
+        sentence_representation = sequence_output[eos_mask, :].view(batch_size, -1, hidden_size)[:, -1, :]
+        logits = self.classification_head(sentence_representation)
+
+        loss = None
+        encoder_z_loss = None
+        encoder_aux_loss = None
+        decoder_z_loss = None
+        decoder_aux_loss = None
+        if output_router_logits:
+            # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
+            if self.encoder.config.encoder_sparse_step > 1:
+                encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_outputs[-1])
+                encoder_z_loss = router_z_loss_func(encoder_router_logits)
+                encoder_router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
+                encoder_aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
+            else:
+                encoder_z_loss = 0
+                encoder_aux_loss = 0
+
+            if self.decoder.config.decoder_sparse_step > 1:
+                decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(decoder_outputs[-1])
+                decoder_z_loss = router_z_loss_func(decoder_router_logits)
+                decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
+                decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
+            else:
+                decoder_z_loss = 0
+                decoder_aux_loss = 0
+        if labels is not None:
+            labels = labels.to(logits.device)
+            if self.config.problem_type is None:
+                if self.config.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.config.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+            if output_router_logits:
+                z_loss = self.router_z_loss_coef * (encoder_z_loss + decoder_z_loss)
+                aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
+                loss = loss + z_loss + aux_loss
+
+        if not return_dict:
+            output = (logits,)
+            if output_router_logits:
+                output += (encoder_z_loss, encoder_aux_loss, decoder_z_loss, decoder_aux_loss)
+            output += (*decoder_outputs[1:], *encoder_outputs)
+
+            return ((loss,) + output) if loss is not None else output
+
+        return Seq2SeqMoEOutput(
+            loss=loss,
+            logits=logits,
+            encoder_z_loss=encoder_z_loss,
+            encoder_aux_loss=encoder_aux_loss,
+            decoder_z_loss=decoder_z_loss,
+            decoder_aux_loss=decoder_aux_loss,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            decoder_router_logits=decoder_outputs.router_probs,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            encoder_router_logits=encoder_outputs.router_probs,
+        )

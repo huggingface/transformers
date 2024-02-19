@@ -41,6 +41,7 @@ if is_torch_available():
         AutoTokenizer,
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
+        SwitchTransformersForSequenceClassification,
         SwitchTransformersModel,
         SwitchTransformersTop1Router,
     )
@@ -305,6 +306,26 @@ class SwitchTransformersModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_with_sequence_classification_head(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
+        model = SwitchTransformersForSequenceClassification(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            decoder_input_ids=input_ids,
+            labels=labels,
+        )
+        # self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, config.num_labels))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
     def create_and_check_decoder_model_attention_mask_past(
         self,
         config,
@@ -555,7 +576,13 @@ class SwitchTransformersModelTester:
 @require_torch
 class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
+        (
+            SwitchTransformersModel,
+            SwitchTransformersForConditionalGeneration,
+            SwitchTransformersForSequenceClassification,
+        )
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -565,6 +592,8 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             "summarization": SwitchTransformersForConditionalGeneration,
             "text2text-generation": SwitchTransformersForConditionalGeneration,
             "translation": SwitchTransformersForConditionalGeneration,
+            "zero-shot-classification": SwitchTransformersForSequenceClassification,
+            "text-classification": SwitchTransformersForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -658,6 +687,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_encoder_decoder_shared_weights(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
+
+    def test_with_sequence_classification_head(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_model_fp16_forward(self):
