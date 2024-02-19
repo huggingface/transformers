@@ -1754,7 +1754,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> image = example["image"]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
-        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
+        >>> question = "Question answering. What is the title of the presentation?"
+        >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
 
         >>> # autoregressive generation
         >>> predicted_ids = model.generate(**encoding)
