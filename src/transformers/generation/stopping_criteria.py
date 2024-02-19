@@ -250,7 +250,7 @@ class StopStringCriteria(StoppingCriteria):
             max_valid_end_lens = self.max_valid_end_lens[stop_string]
 
             # The embedding vec contains the valid positions, end_lengths and total lengths for each token
-            embedding_vec = self.embedding_vecs[stop_string]
+            embedding_vec = self.embedding_vecs[stop_string].to(flipped_ids.device)
             embedded = F.embedding(flipped_ids, embedding_vec)
 
             # end_lengths is the number of characters from the string, counting from the end, that the token
