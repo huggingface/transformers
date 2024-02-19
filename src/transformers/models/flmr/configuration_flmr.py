@@ -248,56 +248,55 @@ class FLMRTextConfig(PretrainedConfig):
 
 class FLMRConfig(PretrainedConfig):
     r"""
-    [*FLMRConfig*] is the configuration class to store the configuration of a *FLMRModelForRetrieval*.
-
-    This is the configuration class to store the configuration of a [*FLMRModelForRetrieval*]. It is used to instantiate the components of the FLMR model according to the specified arguments,
+    [`FLMRConfig`] is the configuration class to store the configuration of a *FLMRModelForRetrieval*.
+    This is the configuration class to store the configuration of a [`FLMRModelForRetrieval`]. It is used to instantiate the components of the FLMR model according to the specified arguments,
     defining the model component architectures. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the FLMR
     [LinWeizheDragon/PreFLMR_ViT-G](https://huggingface.co/LinWeizheDragon/PreFLMR_ViT-G)
     architecture.
 
     Args:
-        vision_config ([`FLMRVisionConfig`], *optional*):
+        vision_config (`FLMRVisionConfig`, *optional*):
             Configuration for the vision encoder.
-        text_config ([`FLMRTextConfig`], *optional*):
+        text_config (`FLMRTextConfig`, *optional*):
             Configuration for the text encoder.
-        mask_punctuation (*bool*, *optional*, defaults to *True*):
+        mask_punctuation (`bool`, *optional*, defaults to `True`):
             Whether to mask punctuation tokens in the input.
-        mapping_network_prefix_length (*int*, *optional*, defaults to 32):
+        mapping_network_prefix_length (`int`, *optional*, defaults to 32):
             The output length of the linear mapping network.
-        dim (*int*, *optional*, defaults to 128):
+        dim (`int`, *optional*, defaults to 128):
             The late-interaction dimension of the model. The output of the text encoder, vision encoder, transformer mapping network should all be projected to this dimension for late-interaction scoring.
-        use_vision_encoder (*bool*, *optional*, defaults to *True*):
-            Whether to load the vision encoder. When no vision encoder is loaded, *image_features* should be used in the forward pass rather than *pixel_values*.
-        initializer_range (*float*, *optional*, defaults to 0.02):
+        use_vision_encoder (`bool`, *optional*, defaults to `True`):
+            Whether to load the vision encoder. When no vision encoder is loaded, `image_features` should be used in the forward pass rather than `pixel_values`.
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        separate_query_and_context_text_encoder (*bool*, *optional*, defaults to *False*):
+        separate_query_and_context_text_encoder (`bool`, *optional*, defaults to `False`):
             Whether to use separate text encoders for query and context.
-        separate_query_and_context_vision_encoder (*bool*, *optional*, defaults to *False*):
+        separate_query_and_context_vision_encoder (`bool`, *optional*, defaults to `False`):
             Whether to use separate vision encoders for query and context.
-        query_concat_output_from_vision_encoder (*bool*, *optional*, defaults to *True*):
+        query_concat_output_from_vision_encoder (`bool`, *optional*, defaults to `True`):
             Whether to concatenate the output from the vision encoder to the output from the text encoder for the query.
-        query_concat_output_from_text_encoder (*bool*, *optional*, defaults to *True*):
+        query_concat_output_from_text_encoder (`bool`, *optional*, defaults to `True`):
             Whether to concatenate the output from the text encoder to the output from the vision encoder for the query.
-        context_concat_output_from_vision_encoder (*bool*, *optional*, defaults to *False*):
+        context_concat_output_from_vision_encoder (`bool`, *optional*, defaults to `False`):
             Whether to concatenate the output from the vision encoder to the output from the text encoder for the context.
-        context_concat_output_from_text_encoder (*bool*, *optional*, defaults to *True*):
+        context_concat_output_from_text_encoder (`bool`, *optional*, defaults to `True`):
             Whether to concatenate the output from the text encoder to the output from the vision encoder for the context.
-        use_transformer_mapping_network (*bool*, *optional*, defaults to *False*):
+        use_transformer_mapping_network (`bool`, *optional*, defaults to `False`):
             Whether to add a transformer mapping network to map the features from the vision encoder to the embedding space. This option is used in PreFLMR.
-        transformer_mapping_config_base (*str*, *optional*):
-            The base configuration for the transformer mapping network. This option is used in PreFLMR. An example of this argument is *bert-base-uncased*.
-        transformer_mapping_num_hidden_layers (*int*, *optional*):
+        transformer_mapping_config_base (`str`, *optional*):
+            The base configuration for the transformer mapping network. This option is used in PreFLMR. An example of this argument is `bert-base-uncased`.
+        transformer_mapping_num_hidden_layers (`int`, *optional*):
             The number of hidden layers in the transformer mapping network. This option is used in PreFLMR.
-        load_cpu_extension (*bool*, *optional*, defaults to *False*):
-            Whether to load the CPU extension. Only set this to *True* if a CPU is used in training and inference. In any case, GPU is recommended for training and inference.
-        mask_instruction_token (*str*, *optional*):
+        load_cpu_extension (`bool`, *optional*, defaults to `False`):
+            Whether to load the CPU extension. Only set this to `True` if a CPU is used in training and inference. In any case, GPU is recommended for training and inference.
+        mask_instruction_token (`str`, *optional*):
             The token that indicates the end of the input instruction. All tokens before this token (the first one in a sequence) will be masked. This option is used in PreFLMR.
-        transformer_mapping_cross_attention_length (*int*, *optional*, defaults to 32):
+        transformer_mapping_cross_attention_length (`int`, *optional*, defaults to 32):
             The length of the cross attention in the transformer mapping network. This option is used in PreFLMR.
-        vision_model_version (*str*, *optional*, defaults to *"openai/clip-vit-base-patch32"*):
+        vision_model_version (`str`, *optional*, defaults to `"openai/clip-vit-base-patch32"`):
             The version of the vision model being used in this FLMR model.
-            This option is used in performing retrieval only. Though it does not affect the model architecture, it is highly recommended to set this argument so that it properly reflects the version of the vision model being used in the FLMR model. This arugment will be saved in the model configuration, and it can be read by the indexing engine. The indexing engine will use this argument to initialize an image processor, which can process the input image files. Find more details under *examples/research_projects/flmr-retrieval*.
+            This option is used in performing retrieval only. Though it does not affect the model architecture, it is highly recommended to set this argument so that it properly reflects the version of the vision model being used in the FLMR model. This arugment will be saved in the model configuration, and it can be read by the indexing engine. The indexing engine will use this argument to initialize an image processor, which can process the input image files. Find more details under `examples/research_projects/flmr-retrieval`.
 
     Example:
 

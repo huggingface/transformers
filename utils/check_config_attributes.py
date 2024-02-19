@@ -111,6 +111,30 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    # These attributes are passed to an internal model directly
+    "FLMRTextConfig": [
+        "attention_probs_dropout_prob",
+        "hidden_act",
+        "hidden_dropout_prob",
+        "intermediate_size",
+        "layer_norm_eps",
+        "max_position_embeddings",
+        "num_attention_heads",
+        "position_embedding_type",
+        "type_vocab_size",
+        "vocab_size",
+    ],
+    # These attributes are passed to an internal model directly
+    "FLMRVisionConfig": [
+        "attention_dropout",
+        "hidden_act",
+        "initializer_factor",
+        "intermediate_size",
+        "layer_norm_eps",
+        "num_attention_heads",
+        "num_channels",
+        "patch_size",
+    ],
 }
 
 

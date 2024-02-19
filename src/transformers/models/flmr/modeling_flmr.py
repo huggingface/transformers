@@ -242,9 +242,9 @@ FLMR_START_DOCSTRING = r"""
         config ([`FLMRConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        query_tokenizer ([`FLMRQueryEncoderTokenizer]): The tokenizer used for tokenizing the query.
+        query_tokenizer ([`FLMRQueryEncoderTokenizer`], *optional*): The tokenizer used for tokenizing the query.
             The query tokenizer can be initialized with `FLMRQueryEncoderTokenizer.from_pretrained(pretrained_model_name_or_path)`.
-        context_tokenizer ([`FLMRContextEncoderTokenizer]): The tokenizer used for tokenizing the context.
+        context_tokenizer ([`FLMRContextEncoderTokenizer`], *optional*): The tokenizer used for tokenizing the context.
             The context tokenizer can be initialized with `FLMRContextEncoderTokenizer.from_pretrained(pretrained_model_name_or_path)`.
 """
 
@@ -415,6 +415,23 @@ FLMR_MODEL_CONTEXT_INPUTS_DOCSTRING = r"""
 """
 
 
+FLMR_TEXT_ENCODERS_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`FLMRTextConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
 # Modified from transformers.models.dpr.modeling_dpr with DPR -> FLMR
 FLMR_TEXT_ENCODERS_INPUTS_DOCSTRING = r"""
     Args:
@@ -472,6 +489,21 @@ FLMR_TEXT_ENCODERS_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+FLMR_VISION_ENCODERS_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`FLMRVisionConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
 # Modified from transformers.models.clip.modeling_clip with CLIP -> FLMR
 FLMR_VISION_ENCODERS_INPUTS_DOCSTRING = r"""
     Args:
@@ -519,6 +551,7 @@ class FLMRModelForRetrieval(FLMRPretrainedModelForRetrieval):
     def __init__(self, config: FLMRConfig, query_tokenizer=None, context_tokenizer=None):
         super().__init__(config)
         self.config = config
+        self.vision_model_version = config.vision_model_version
 
         self.context_text_encoder = FLMRTextModel(config.text_config)
         self.context_text_encoder_linear = nn.Linear(config.text_config.hidden_size, config.dim, bias=False)
@@ -1334,7 +1367,7 @@ class FLMRModelForRetrieval(FLMRPretrainedModelForRetrieval):
 
 @add_start_docstrings(
     "The bare FLMR text encoder that can be used to generate late-interaction embeddings for texts in queries and contexts. This model is based on a `BertModel`. It can be used like a `BertModel` model for encoding text.",
-    FLMR_TEXT_ENCODERS_INPUTS_DOCSTRING,
+    FLMR_TEXT_ENCODERS_START_DOCSTRING,
 )
 class FLMRTextModel(FLMRPreTrainedModel):
     base_model_prefix = "bert_model"
@@ -1351,6 +1384,8 @@ class FLMRTextModel(FLMRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(FLMR_TEXT_ENCODERS_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=FLMRTextConfig)
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
@@ -1361,6 +1396,10 @@ class FLMRTextModel(FLMRPreTrainedModel):
         output_hidden_states: bool = None,
         return_dict: bool = None,
     ) -> Union[BaseModelOutputWithPooling, Tuple[Tensor, ...]]:
+        r"""
+        Returns:
+
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1401,7 +1440,7 @@ class FLMRTextModel(FLMRPreTrainedModel):
 
 @add_start_docstrings(
     "The bare FLMR vision encoder that can be used to generate late-interaction embeddings for images in queries and contexts. This model is based on a `CLIPVisionModel`. It can be used like a `CLIPVisionModel` model for encoding images.",
-    FLMR_VISION_ENCODERS_INPUTS_DOCSTRING,
+    FLMR_VISION_ENCODERS_START_DOCSTRING,
 )
 class FLMRVisionModel(FLMRPreTrainedModel):
     base_model_prefix = "vision_model"
