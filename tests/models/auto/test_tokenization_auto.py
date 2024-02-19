@@ -223,7 +223,7 @@ class AutoTokenizerTest(unittest.TestCase):
         config = get_tokenizer_config("google-bert/bert-base-cased")
         _ = config.pop("_commit_hash", None)
         # If we ever update google-bert/bert-base-cased tokenizer config, this dict here will need to be updated.
-        self.assertEqual(config, {"do_lower_case": False})
+        self.assertEqual(config, {"do_lower_case": False, "model_max_length": 512})
 
         # This model does not have a tokenizer_config so we get back an empty dict.
         config = get_tokenizer_config(SMALL_MODEL_IDENTIFIER)
