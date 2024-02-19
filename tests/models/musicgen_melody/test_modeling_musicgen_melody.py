@@ -24,14 +24,15 @@ from transformers import (
     EncodecConfig,
     MusicgenMelodyConfig,
     MusicgenMelodyDecoderConfig,
-    MusicgenMelodyProcessor,
     PretrainedConfig,
     T5Config,
 )
 from transformers.testing_utils import (
     is_torch_available,
+    is_torchaudio_available,
     require_torch,
     require_torch_fp16,
+    require_torchaudio,
     slow,
     torch_device,
 )
@@ -57,6 +58,9 @@ if is_torch_available():
         InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
     )
+
+if is_torchaudio_available():
+    from transformers import MusicgenMelodyProcessor
 
 
 def _config_zero_init(config):
@@ -171,7 +175,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     all_model_classes = (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
     greedy_sample_model_classes = (
         (MusicgenMelodyForCausalLM,) if is_torch_available() else ()
-    )  # we don't want to run all the generation tests, only a specific subset
+    )  # the model uses a custom generation method so we only run a specific subset of the generation tests 
     test_pruning = False
     test_resize_embeddings = False
 
@@ -218,15 +222,15 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             lm_heads = model.get_output_embeddings()
             self.assertTrue(lm_heads is None or isinstance(lm_heads[0], torch.nn.Linear))
 
-    # skip as this model doesn't support all arguments tested
+    @unittest.skip("this model doesn't support all arguments tested")
     def test_model_outputs_equivalence(self):
         pass
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip("this model has multiple inputs embeds and lm heads that should not be tied")
     def test_tie_model_weights(self):
         pass
 
-    # skip as this model has multiple inputs embeds and lm heads that should not be tied
+    @unittest.skip("this model has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
 
@@ -1119,14 +1123,8 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
     return wav * envelope
 
 
-def place_dict_on_device(dict_to_place, device):
-    for key in dict_to_place:
-        if dict_to_place[key] is not None and isinstance(dict_to_place[key], torch.Tensor):
-            dict_to_place[key] = dict_to_place[key].to(device)
-    return dict_to_place
-
-
 @require_torch
+@require_torchaudio
 class MusicgenMelodyIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
@@ -1225,8 +1223,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         model = self.model
 
         # only generate 1 sample with greedy - since it's deterministic all elements of the batch will be the same
-        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1)
-        unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
+        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1).to(torch_device)
 
         output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=10, guidance_scale=1.0)
 
@@ -1248,8 +1245,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         model = self.model
 
         # for stochastic sampling we can generate multiple outputs
-        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=2)
-        unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
+        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=2).to(torch_device)
 
         set_seed(0)
 
@@ -1366,8 +1362,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         audio = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
         text = ["80s music", "Club techno"]
 
-        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt")
-        inputs = place_dict_on_device(inputs, device=torch_device)
+        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt").to(torch_device)
 
         output_values = model.generate(**inputs, do_sample=False, guidance_scale=None, max_new_tokens=10)
 
@@ -1386,6 +1381,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 
 
 @require_torch
+@require_torchaudio
 class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
@@ -1402,8 +1398,7 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         model = self.model
 
         # only generate 1 sample with greedy - since it's deterministic all elements of the batch will be the same
-        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1)
-        unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
+        unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1).to(torch_device)
 
         output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=12, guidance_scale=1.0)
 
@@ -1430,8 +1425,7 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         audio = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
         text = ["80s music", "Club techno"]
 
-        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt")
-        inputs = place_dict_on_device(inputs, device=torch_device)
+        inputs = processor(audio=audio, text=text, padding=True, return_tensors="pt").to(torch_device)
 
         output_values = model.generate(**inputs, do_sample=False, guidance_scale=3.0, max_new_tokens=12)
 
