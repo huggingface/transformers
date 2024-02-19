@@ -54,9 +54,12 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
 
     Args:
-        image_size (tuple): The size of the input image in the format (width, height).
-        grid_pinpoints (str): A string representation of a list of possible resolutions.
-        patch_size (int): The size of each image patch.
+        image_size (`tuple`):
+            The size of the input image in the format (width, height).
+        grid_pinpoints (`str`):
+            A string representation of a list of possible resolutions.
+        patch_size (`int`):
+            The size of each image patch.
 
     Returns:
         tuple: The shape of the image patch grid in the format (width, height).
@@ -74,11 +77,13 @@ def unpad_image(tensor, original_size):
     Unpads a PyTorch tensor of a padded and resized image.
 
     Args:
-    tensor (torch.Tensor): The image tensor, assumed to be in CxHxW format.
-    original_size (tuple): The original size of the image (height, width).
+        tensor (`torch.Tensor`):
+            The image tensor, assumed to be in CxHxW format.
+        original_size (`tuple`):
+            The original size of the image (height, width).
 
     Returns:
-    torch.Tensor: The unpadded image tensor.
+        `torch.Tensor`: The unpadded image tensor.
     """
     original_width, original_height = original_size
     current_height, current_width = tensor.shape[1:]
@@ -295,7 +300,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
 
-        if "unpad" in getattr(config, "multimodal_patch_merge_type", ""):
+        if config.use_image_newline_parameter:
             self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
 
         self.vocab_size = config.vocab_size
@@ -496,46 +501,41 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
 
-                    multimodal_patch_merge_type = self.config.multimodal_patch_merge_type
-
-                    if multimodal_patch_merge_type == "flat":
-                        image_features = [x.flatten(0, 1) for x in image_features]
-                    elif multimodal_patch_merge_type.startswith("spatial"):
-                        new_image_features = []
-                        for image_idx, image_feature in enumerate(image_features):
-                            if image_feature.shape[0] > 1:
-                                base_image_feature = image_feature[0]
-                                image_feature = image_feature[1:]
-                                height = width = self.num_patches_per_side()
-                                assert height * width == base_image_feature.shape[0]
-                                num_patch_width, num_patch_height = get_anyres_image_grid_shape(
-                                        image_sizes[image_idx],
-                                        self.config.image_grid_pinpoints,
-                                        self.config.vision_config.image_size,
-                                )
-                                image_feature = image_feature.view(
-                                    num_patch_height, num_patch_width, height, width, -1
-                                )
-                                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                                image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                                image_feature = torch.cat(
-                                    (
-                                        image_feature,
-                                        self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
-                                    ),
-                                    dim=-1,
-                                )
-                                image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                                image_feature = torch.cat((base_image_feature, image_feature), dim=0)
-                            else:
-                                image_feature = image_feature[0]
-                                image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
-                            new_image_features.append(image_feature)
-                        image_features = new_image_features
-                        image_features = torch.stack(image_features, dim=0)
-                    else:
-                        raise ValueError(f"Unexpected multimodal_patch_merge_type: {self.config.multimodal_patch_merge_type}")
+                    # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
+                    new_image_features = []
+                    for image_idx, image_feature in enumerate(image_features):
+                        if image_feature.shape[0] > 1:
+                            base_image_feature = image_feature[0]
+                            image_feature = image_feature[1:]
+                            height = width = self.num_patches_per_side()
+                            if height * width != base_image_feature.shape[0]:
+                                raise ValueError("The number of patches is not consistent with the image size.")
+                            num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                                image_sizes[image_idx],
+                                self.config.image_grid_pinpoints,
+                                self.config.vision_config.image_size,
+                            )
+                            image_feature = image_feature.view(
+                                num_patch_height, num_patch_width, height, width, -1
+                            )
+                            image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                            image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                            image_feature = unpad_image(image_feature, image_sizes[image_idx])
+                            image_feature = torch.cat(
+                                (
+                                    image_feature,
+                                    self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+                                ),
+                                dim=-1,
+                            )
+                            image_feature = image_feature.flatten(1, 2).transpose(0, 1)
+                            image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+                        else:
+                            image_feature = image_feature[0]
+                            image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
+                        new_image_features.append(image_feature)
+                    image_features = new_image_features
+                    image_features = torch.stack(image_features, dim=0)
 
                 else:
                     # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.

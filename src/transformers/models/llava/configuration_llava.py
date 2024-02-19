@@ -54,8 +54,8 @@ class LlavaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`].
-        multimodal_patch_merge_type (`str`, *optional*, defaults to `"pad"`):
-            The patch merging type to use to merge the image features with the text features.
+        use_image_newline_parameter (`bool`, *optional*, defaults to `False`):
+            Whether to add a trainable parameter for the image newline token.
         image_grid_pinpoints (`str`, *optional*):
             The grid pinpoints of the image. Only used by the newer LLaVa 1.6 variant.
 
@@ -93,7 +93,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         vocab_size=32000,
-        multimodal_patch_merge_type="pad",
+        use_image_newline_parameter=False,
         image_grid_pinpoints=None,
         **kwargs,
     ):
@@ -103,7 +103,7 @@ class LlavaConfig(PretrainedConfig):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
-        self.multimodal_patch_merge_type = multimodal_patch_merge_type
+        self.use_image_newline_parameter = use_image_newline_parameter
         self.image_grid_pinpoints = image_grid_pinpoints
 
         self.vision_config = vision_config
