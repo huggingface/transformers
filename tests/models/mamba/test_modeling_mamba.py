@@ -456,7 +456,7 @@ class MambaIntegrationTests(unittest.TestCase):
             ],
         )
 
-    def test_simple_generate_bf16(self):
+    def test_simple_generate_cuda_kernels(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
