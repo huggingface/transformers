@@ -119,8 +119,17 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_bos_token=True,
         add_eos_token=False,
         use_default_system_prompt=False,
+        add_prefix_space=None,
+        from_slow=False,
         **kwargs,
     ):
+        
+        if add_prefix_space is not None:
+            logger.warning_once(
+                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
+            )
+            from_slow = True
+    
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -131,6 +140,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
+            from_slow=from_slow,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
