@@ -1216,7 +1216,6 @@ class GenerationMixin:
 
     @torch.no_grad()
     def prepare_static_cache(self, max_batch_size: int, max_total_tokens: int):
-        # if we don't pass `past_key_values` and a cache_implementation is specified
         cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
         if not callable(getattr(self, "_setup_cache", None)):
             raise ValueError(
@@ -1464,6 +1463,10 @@ class GenerationMixin:
 
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
             if generation_config.cache_implementation == "static":
+                if model_kwargs.get("past_key_values", False) is not False:
+                    raise ValueError(
+                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
+                    )
                 if not self.is_stateful_cache_initalized:
                     if hasattr(self.forward, "get_compiler_config"):
                         raise ValueError(
