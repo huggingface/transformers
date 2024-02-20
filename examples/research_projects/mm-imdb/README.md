@@ -10,7 +10,7 @@ Based on the script [`run_mmimdb.py`](https://github.com/huggingface/transformer
 python run_mmimdb.py \
     --data_dir /path/to/mmimdb/dataset/ \
     --model_type bert \
-    --model_name_or_path bert-base-uncased \
+    --model_name_or_path google-bert/bert-base-uncased \
     --output_dir /path/to/save/dir/ \
     --do_train \
     --do_eval \

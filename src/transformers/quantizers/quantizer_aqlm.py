@@ -77,7 +77,6 @@ class AqlmHfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model._is_quantized_training_enabled = False
         return model
 
     @property

@@ -152,7 +152,6 @@ class QuantizationConfigMixin:
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    # Copied from transformers.generation.configuration_utils.GenerationConfig.update
     def update(self, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
@@ -171,7 +170,7 @@ class QuantizationConfigMixin:
                 setattr(self, key, value)
                 to_remove.append(key)
 
-        # remove all the attributes that were updated, without modifying the input dict
+        # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
@@ -393,8 +392,6 @@ class GPTQConfig(QuantizationConfigMixin):
             The tokenizer used to process the dataset. You can pass either:
                 - A custom tokenizer object.
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                    Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                    user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
         dataset (`Union[List[str]]`, *optional*):

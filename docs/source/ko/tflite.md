@@ -38,10 +38,10 @@ pip install optimum[exporters-tf]
 optimum-cli export tflite --help
 ```
 
-예를 들어 🤗 Hub에서의 `bert-base-uncased` 모델 체크포인트를 내보내려면, 다음 명령을 실행하세요:
+예를 들어 🤗 Hub에서의 `google-bert/bert-base-uncased` 모델 체크포인트를 내보내려면, 다음 명령을 실행하세요:
 
 ```bash
-optimum-cli export tflite --model bert-base-uncased --sequence_length 128 bert_tflite/
+optimum-cli export tflite --model google-bert/bert-base-uncased --sequence_length 128 bert_tflite/
 ```
 
 다음과 같이 진행 상황을 나타내는 로그와 결과물인 `model.tflite`가 저장된 위치를 보여주는 로그가 표시됩니다:

@@ -83,6 +83,7 @@ IMPORTANT_MODELS = [
     "wav2vec2",
     "deberta-v2",
     "layoutlm",
+    "llama",
     "opt",
     "longformer",
     "vit",

@@ -91,7 +91,7 @@ Il seguente comando abilita due processi sul nodo Xeon, con un processo in esecu
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -124,7 +124,7 @@ A questo punto, esegui il seguente comando nel nodo0 e **4DDP** sarà abilitato 
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
