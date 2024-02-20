@@ -874,7 +874,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
-
     @require_peft
     def test_bnb_compile(self):
         from peft import LoraConfig, get_peft_model
@@ -911,7 +910,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # TODO: In the future (once we have bnb + compile support), uncomment this
             # trainer.train()
-            
+
     @require_bitsandbytes
     def test_rmsprop_bnb(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
@@ -961,7 +960,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Check that it trains without errors
             trainer.train()
-            
+
     def test_neftune(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
