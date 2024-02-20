@@ -1207,7 +1207,11 @@ class LlamaConverter(SpmConverter):
         return unk_id
 
     def decoder(self, replacement, add_prefix_space):
-        sequence = [decoders.Replace("▁", " "),decoders.ByteFallback(),decoders.Fuse(),]
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
         return decoders.Sequence(sequence)
