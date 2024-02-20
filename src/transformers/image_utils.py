@@ -759,3 +759,11 @@ def validate_annotations(
                 "(batch of images) with the following keys: `image_id`, `file_name` and `segments_info`, with "
                 "the latter being a list of annotations in the COCO format."
             )
+
+
+def validate_kwargs(valid_processor_keys: List[str], captured_kwargs: List[str]):
+    unused_keys = set(captured_kwargs).difference(set(valid_processor_keys))
+    if unused_keys:
+        unused_key_str = ", ".join(unused_keys)
+        # TODO raise a warning here instead of simply logging?
+        logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
