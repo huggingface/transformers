@@ -710,6 +710,7 @@ class WhisperGenerationMixin:
                     seek[prev_i] += seek_num_frames[prev_i]
                     continue
 
+                token_timestamps = seek_outputs[i]['token_timestamps']
                 segments, segment_offset = self._retrieve_segment(
                     seek_sequence=seek_sequence,
                     seek_outputs=seek_outputs,
@@ -720,6 +721,7 @@ class WhisperGenerationMixin:
                     input_stride=input_stride,
                     prev_idx=prev_i,
                     idx=i,
+                    token_timestamps=token_timestamps,
                 )
 
                 current_segments[prev_i] += segments
@@ -809,11 +811,13 @@ class WhisperGenerationMixin:
                 # remove eos token id
                 if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
+                    seek_outputs[i]['token_timestamps'] = seek_outputs[i]['token_timestamps'][:-1]
 
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
+                    seek_outputs[i]['token_timestamps'] = seek_outputs[i]['token_timestamps'][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -880,13 +884,14 @@ class WhisperGenerationMixin:
             )
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
+        seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, decoder_input_ids.shape[-1] :]
 
         def split_by_batch_index(values, key, batch_idx):
-            if key == "scores":
-                return [v[batch_idx].cpu() for v in values]
             if key == "past_key_values":
                 # we don't save `past_key_values` as this is too costly
                 return None
+            elif isinstance(values[batch_idx], tuple) and torch.is_tensor(values[batch_idx][0]):
+                return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
             return values[batch_idx].cpu()
 
         sequence_tokens = seek_outputs["sequences"]
@@ -1611,6 +1616,7 @@ class WhisperGenerationMixin:
         input_stride,
         prev_idx,
         idx,
+        token_timestamps,
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
@@ -1634,12 +1640,14 @@ class WhisperGenerationMixin:
                 sliced_tokens = seek_sequence[last_slice:current_slice]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
+                start = time_offset[prev_idx] + start_timestamp_pos * time_precision
                 segments.append(
                     {
                         "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
                         "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
                         "tokens": sliced_tokens,
                         "result": seek_outputs[idx],
+                        "token_timestamps": token_timestamps[last_slice:current_slice] + time_offset[prev_idx],
                     }
                 )
                 last_slice = current_slice
@@ -1661,13 +1669,13 @@ class WhisperGenerationMixin:
             if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 last_timestamp_pos = timestamps[-1].item() - timestamp_begin
-
             segments = [
                 {
                     "start": time_offset[prev_idx],
                     "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
                     "tokens": seek_sequence,
                     "result": seek_outputs[idx],
+                    "token_timestamps": token_timestamps - time_offset[prev_idx],
                 }
             ]
             segment_offset = seek_num_frames[prev_idx]
