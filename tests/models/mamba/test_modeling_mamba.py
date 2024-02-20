@@ -46,15 +46,12 @@ class MambaModelTester:
         batch_size=14,
         seq_length=7,
         is_training=True,
-        use_token_type_ids=False,
-        use_input_mask=True,
         use_labels=True,
-        use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
         intermediate_size=37,
-        hidden_act="gelu",
+        hidden_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
@@ -68,17 +65,13 @@ class MambaModelTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
         self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
@@ -90,24 +83,12 @@ class MambaModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return MambaConfig.from_pretrained("sgugger/mamba-4-pile-7b")
+        return MambaConfig.from_pretrained("ArthurZ/mamba-130m")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        mc_token_ids = None
-        if self.use_mc_token_ids:
-            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
 
         sequence_labels = None
         token_labels = None
@@ -126,10 +107,7 @@ class MambaModelTester:
         return (
             config,
             input_ids,
-            input_mask,
             None,
-            token_type_ids,
-            mc_token_ids,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -144,8 +122,8 @@ class MambaModelTester:
             num_hidden_layers=self.num_hidden_layers,
             intermediate_size=self.intermediate_size,
             activation_function=self.hidden_act,
-            resid_pdrop=self.hidden_dropout_prob,
-            attn_pdrop=self.attention_probs_dropout_prob,
+            # resid_pdrop=self.hidden_dropout_prob,
+            # attn_pdrop=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             use_cache=True,
@@ -153,8 +131,6 @@ class MambaModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
-            scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
-            reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
     def get_pipeline_config(self):
@@ -166,32 +142,20 @@ class MambaModelTester:
         (
             config,
             input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
             sequence_labels,
             token_labels,
             choice_labels,
         ) = self.prepare_config_and_inputs()
 
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
         return (
             config,
             input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
             sequence_labels,
             token_labels,
             choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
         )
 
-    def create_and_check_mamba_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
         model = MambaModel(config=config)
         model.to(torch_device)
@@ -202,7 +166,7 @@ class MambaModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
-    def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_causl_lm(self, config, input_ids, *args):
         model = MambaForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -211,7 +175,7 @@ class MambaModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_state_equivalency(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_state_equivalency(self, config, input_ids, *args):
         model = MambaModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -229,7 +193,7 @@ class MambaModelTester:
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+        self, config, input_ids, *args, gradient_checkpointing=False
     ):
         model = MambaForCausalLM(config)
         model.to(torch_device)
@@ -242,22 +206,8 @@ class MambaModelTester:
         result.loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-
+        config, input_ids = self.prepare_config_and_inputs()
         inputs_dict = {"input_ids": input_ids}
-
         return config, inputs_dict
 
 
@@ -267,12 +217,11 @@ class MambaModelTester:
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
-    # all_generative_model_classes = (MambaForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
+    fx_compatible = True
     test_missing_keys = False
-    test_model_parallel = False
+    test_model_parallel = True
     test_pruning = False
-    test_head_masking = False  # Mamba does not support head masking
+    test_head_masking = False  # Mamba does not have attention heads
 
     def setUp(self):
         self.model_tester = MambaModelTester(self)
@@ -323,96 +272,27 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             for name, param in model.named_parameters():
-                if "time_decay" in name:
+                if "A" in name:
                     if param.requires_grad:
                         self.assertTrue(param.data.max().item() == 3.0)
                         self.assertTrue(param.data.min().item() == -5.0)
-                elif "time_first" in name:
+                elif "B" in name:
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-                elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                elif "time_mix_value" in name:
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.3],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
+        # TODO handle initialization scheme!
+
+    @unittest.skip("Mamba does not use attention equivalent test should be `test_ssm_outputs`")
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the attention outputs of Mamba are different from other models
         it has a shape `batch_size, seq_len, hidden_size`.
         """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
+        pass
 
-        seq_len = getattr(self.model_tester, "seq_length", None)
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            batch_size = inputs["input_ids"].shape[0]
-            with torch.no_grad():
-                outputs = model(**inputs)
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            batch_size = inputs["input_ids"].shape[0]
-            with torch.no_grad():
-                outputs = model(**inputs)
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [batch_size, seq_len, config.hidden_size],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            batch_size = inputs["input_ids"].shape[0]
-            with torch.no_grad():
-                outputs = model(**inputs)
-
-            added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [batch_size, seq_len, config.hidden_size],
-            )
+    def test_ssm_outputs(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -431,7 +311,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         from transformers import AutoTokenizer, MambaForCausalLM
 
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/mamba-130m")
         tokenizer.pad_token = tokenizer.eos_token
 
         model = MambaForCausalLM.from_pretrained(
@@ -461,6 +341,29 @@ class MambaIntegrationTests(unittest.TestCase):
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16).to(torch_device)
+
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+
+    def test_simple_generate_cuda_kernels(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-1.4b", torch_dtype=torch.float16).to(torch_device)
+
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+    def test_simple_generate_cuda_kernels(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-2.8b", torch_dtype=torch.float16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
