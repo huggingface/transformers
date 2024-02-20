@@ -58,9 +58,6 @@ def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
     global MultiScaleDeformableAttention
-    # Only load the kernel if it's not been loaded yet or if we changed the context length
-    if MultiScaleDeformableAttention is not None:
-        return
 
     root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
     src_files = [
