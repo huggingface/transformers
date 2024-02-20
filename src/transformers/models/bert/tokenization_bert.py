@@ -30,34 +30,34 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
-        "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/vocab.txt",
-        "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/vocab.txt",
-        "bert-base-multilingual-uncased": (
-            "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/vocab.txt"
+        "google-bert/bert-base-uncased": "https://huggingface.co/google-bert/bert-base-uncased/resolve/main/vocab.txt",
+        "google-bert/bert-large-uncased": "https://huggingface.co/google-bert/bert-large-uncased/resolve/main/vocab.txt",
+        "google-bert/bert-base-cased": "https://huggingface.co/google-bert/bert-base-cased/resolve/main/vocab.txt",
+        "google-bert/bert-large-cased": "https://huggingface.co/google-bert/bert-large-cased/resolve/main/vocab.txt",
+        "google-bert/bert-base-multilingual-uncased": (
+            "https://huggingface.co/google-bert/bert-base-multilingual-uncased/resolve/main/vocab.txt"
         ),
-        "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/vocab.txt",
-        "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/vocab.txt",
-        "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking": (
-            "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt"
+        "google-bert/bert-base-multilingual-cased": "https://huggingface.co/google-bert/bert-base-multilingual-cased/resolve/main/vocab.txt",
+        "google-bert/bert-base-chinese": "https://huggingface.co/google-bert/bert-base-chinese/resolve/main/vocab.txt",
+        "google-bert/bert-base-german-cased": "https://huggingface.co/google-bert/bert-base-german-cased/resolve/main/vocab.txt",
+        "google-bert/bert-large-uncased-whole-word-masking": (
+            "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt"
         ),
-        "bert-large-cased-whole-word-masking": (
-            "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/vocab.txt"
+        "google-bert/bert-large-cased-whole-word-masking": (
+            "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking/resolve/main/vocab.txt"
         ),
-        "bert-large-uncased-whole-word-masking-finetuned-squad": (
-            "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
+        "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
         ),
-        "bert-large-cased-whole-word-masking-finetuned-squad": (
-            "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
+        "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": (
+            "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
         ),
-        "bert-base-cased-finetuned-mrpc": (
-            "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt"
+        "google-bert/bert-base-cased-finetuned-mrpc": (
+            "https://huggingface.co/google-bert/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt"
         ),
-        "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
-        "bert-base-german-dbmdz-uncased": (
-            "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt"
+        "google-bert/bert-base-german-dbmdz-cased": "https://huggingface.co/google-bert/bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
+        "google-bert/bert-base-german-dbmdz-uncased": (
+            "https://huggingface.co/google-bert/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt"
         ),
         "TurkuNLP/bert-base-finnish-cased-v1": (
             "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt"
@@ -72,42 +72,42 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bert-base-uncased": 512,
-    "bert-large-uncased": 512,
-    "bert-base-cased": 512,
-    "bert-large-cased": 512,
-    "bert-base-multilingual-uncased": 512,
-    "bert-base-multilingual-cased": 512,
-    "bert-base-chinese": 512,
-    "bert-base-german-cased": 512,
-    "bert-large-uncased-whole-word-masking": 512,
-    "bert-large-cased-whole-word-masking": 512,
-    "bert-large-uncased-whole-word-masking-finetuned-squad": 512,
-    "bert-large-cased-whole-word-masking-finetuned-squad": 512,
-    "bert-base-cased-finetuned-mrpc": 512,
-    "bert-base-german-dbmdz-cased": 512,
-    "bert-base-german-dbmdz-uncased": 512,
+    "google-bert/bert-base-uncased": 512,
+    "google-bert/bert-large-uncased": 512,
+    "google-bert/bert-base-cased": 512,
+    "google-bert/bert-large-cased": 512,
+    "google-bert/bert-base-multilingual-uncased": 512,
+    "google-bert/bert-base-multilingual-cased": 512,
+    "google-bert/bert-base-chinese": 512,
+    "google-bert/bert-base-german-cased": 512,
+    "google-bert/bert-large-uncased-whole-word-masking": 512,
+    "google-bert/bert-large-cased-whole-word-masking": 512,
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": 512,
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": 512,
+    "google-bert/bert-base-cased-finetuned-mrpc": 512,
+    "google-bert/bert-base-german-dbmdz-cased": 512,
+    "google-bert/bert-base-german-dbmdz-uncased": 512,
     "TurkuNLP/bert-base-finnish-cased-v1": 512,
     "TurkuNLP/bert-base-finnish-uncased-v1": 512,
     "wietsedv/bert-base-dutch-cased": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "bert-base-uncased": {"do_lower_case": True},
-    "bert-large-uncased": {"do_lower_case": True},
-    "bert-base-cased": {"do_lower_case": False},
-    "bert-large-cased": {"do_lower_case": False},
-    "bert-base-multilingual-uncased": {"do_lower_case": True},
-    "bert-base-multilingual-cased": {"do_lower_case": False},
-    "bert-base-chinese": {"do_lower_case": False},
-    "bert-base-german-cased": {"do_lower_case": False},
-    "bert-large-uncased-whole-word-masking": {"do_lower_case": True},
-    "bert-large-cased-whole-word-masking": {"do_lower_case": False},
-    "bert-large-uncased-whole-word-masking-finetuned-squad": {"do_lower_case": True},
-    "bert-large-cased-whole-word-masking-finetuned-squad": {"do_lower_case": False},
-    "bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
-    "bert-base-german-dbmdz-cased": {"do_lower_case": False},
-    "bert-base-german-dbmdz-uncased": {"do_lower_case": True},
+    "google-bert/bert-base-uncased": {"do_lower_case": True},
+    "google-bert/bert-large-uncased": {"do_lower_case": True},
+    "google-bert/bert-base-cased": {"do_lower_case": False},
+    "google-bert/bert-large-cased": {"do_lower_case": False},
+    "google-bert/bert-base-multilingual-uncased": {"do_lower_case": True},
+    "google-bert/bert-base-multilingual-cased": {"do_lower_case": False},
+    "google-bert/bert-base-chinese": {"do_lower_case": False},
+    "google-bert/bert-base-german-cased": {"do_lower_case": False},
+    "google-bert/bert-large-uncased-whole-word-masking": {"do_lower_case": True},
+    "google-bert/bert-large-cased-whole-word-masking": {"do_lower_case": False},
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": {"do_lower_case": True},
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": {"do_lower_case": False},
+    "google-bert/bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
+    "google-bert/bert-base-german-dbmdz-cased": {"do_lower_case": False},
+    "google-bert/bert-base-german-dbmdz-uncased": {"do_lower_case": True},
     "TurkuNLP/bert-base-finnish-cased-v1": {"do_lower_case": False},
     "TurkuNLP/bert-base-finnish-uncased-v1": {"do_lower_case": True},
     "wietsedv/bert-base-dutch-cased": {"do_lower_case": False},

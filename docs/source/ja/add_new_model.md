@@ -430,7 +430,7 @@ def _init_weights(self, module):
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True
@@ -571,7 +571,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 
 **7. 順伝播（forward pass）の実装**
 
-🤗 Transformers実装で事前学習済みの重みを正しく読み込んだ後、順伝播が正しく実装されていることを確認する必要があります。[元のリポジトリを理解する](#34-run-a-pretrained-checkpoint-using-the-original-repository)で、元のリポジトリを使用してモデルの順伝播を実行するスクリプトをすでに作成しました。今度は、元のリポジトリの代わりに🤗 Transformers実装を使用して類似のスクリプトを作成する必要があります。以下のようになります：
+🤗 Transformers実装で事前学習済みの重みを正しく読み込んだ後、順伝播が正しく実装されていることを確認する必要があります。[元のリポジトリを理解する](#3-4-run-a-pretrained-checkpoint-using-the-original-repository)で、元のリポジトリを使用してモデルの順伝播を実行するスクリプトをすでに作成しました。今度は、元のリポジトリの代わりに🤗 Transformers実装を使用して類似のスクリプトを作成する必要があります。以下のようになります：
 
 ```python
 model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")

@@ -31,6 +31,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     keras_serializable,
     shape_list,
     unpack_inputs,
@@ -151,29 +152,27 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
     cross_encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
-class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
+class TFLxmertVisualFeatureEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         # Object feature encoding
-        self.visn_fc = tf.keras.layers.Dense(
+        self.visn_fc = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="visn_fc",
         )
-        self.visn_layer_norm = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="visn_layer_norm"
-        )
+        self.visn_layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="visn_layer_norm")
 
         # Box position encoding
-        self.box_fc = tf.keras.layers.Dense(
+        self.box_fc = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="box_fc",
         )
-        self.box_layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="box_layer_norm")
+        self.box_layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="box_layer_norm")
 
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.feat_dim = config.visual_feat_dim
         self.pos_dim = config.visual_pos_dim
         self.config = config
@@ -208,7 +207,7 @@ class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
                 self.box_layer_norm.build([None, None, self.config.hidden_size])
 
 
-class TFLxmertEmbeddings(tf.keras.layers.Layer):
+class TFLxmertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -218,8 +217,8 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -278,7 +277,7 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFLxmertAttention(tf.keras.layers.Layer):
+class TFLxmertAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         if config.hidden_size % config.num_attention_heads != 0:
@@ -292,23 +291,23 @@ class TFLxmertAttention(tf.keras.layers.Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="query",
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="key",
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="value",
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.ctx_dim = config.hidden_size
         self.config = config
 
@@ -370,10 +369,10 @@ class TFLxmertAttention(tf.keras.layers.Layer):
                 self.value.build([None, None, self.ctx_dim])
 
 
-class TFLxmertIntermediate(tf.keras.layers.Layer):
+class TFLxmertIntermediate(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.intermediate_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -398,17 +397,17 @@ class TFLxmertIntermediate(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFLxmertOutput(tf.keras.layers.Layer):
+class TFLxmertOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -429,16 +428,16 @@ class TFLxmertOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFLxmertAttentionOutput(tf.keras.layers.Layer):
+class TFLxmertAttentionOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -459,7 +458,7 @@ class TFLxmertAttentionOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFLxmertSelfAttentionLayer(tf.keras.layers.Layer):
+class TFLxmertSelfAttentionLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.self = TFLxmertAttention(config, name="self")
@@ -485,7 +484,7 @@ class TFLxmertSelfAttentionLayer(tf.keras.layers.Layer):
                 self.attention_output.build(None)
 
 
-class TFLxmertCrossAttentionLayer(tf.keras.layers.Layer):
+class TFLxmertCrossAttentionLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.att = TFLxmertAttention(config, name="att")
@@ -518,7 +517,7 @@ class TFLxmertCrossAttentionLayer(tf.keras.layers.Layer):
                 self.attention_output.build(None)
 
 
-class TFLxmertLayer(tf.keras.layers.Layer):
+class TFLxmertLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFLxmertSelfAttentionLayer(config, name="attention")
@@ -548,7 +547,7 @@ class TFLxmertLayer(tf.keras.layers.Layer):
                 self.transformer_output.build(None)
 
 
-class TFLxmertXLayer(tf.keras.layers.Layer):
+class TFLxmertXLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.visual_attention = TFLxmertCrossAttentionLayer(config, name="visual_attention")
@@ -679,7 +678,7 @@ class TFLxmertXLayer(tf.keras.layers.Layer):
                 self.visn_output.build(None)
 
 
-class TFLxmertEncoder(tf.keras.layers.Layer):
+class TFLxmertEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -789,7 +788,7 @@ class TFLxmertEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFLxmertMainLayer(tf.keras.layers.Layer):
+class TFLxmertMainLayer(keras.layers.Layer):
     config_class = LxmertConfig
 
     def __init__(self, config, **kwargs):
@@ -991,7 +990,7 @@ LXMERT_START_DOCSTRING = r"""
     genome, using a combination of masked language modeling, region of interest feature regression, cross entropy loss
     for question answering attribute prediction, and object tag prediction.
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1145,10 +1144,10 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
                 self.lxmert.build(None)
 
 
-class TFLxmertPooler(tf.keras.layers.Layer):
+class TFLxmertPooler(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -1173,11 +1172,11 @@ class TFLxmertPooler(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Lxmert
-class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
+class TFLxmertPredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config: LxmertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -1188,7 +1187,7 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -1211,8 +1210,8 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Lxmert
-class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: LxmertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFLxmertLMPredictionHead(keras.layers.Layer):
+    def __init__(self, config: LxmertConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -1234,7 +1233,7 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
             with tf.name_scope(self.transform.name):
                 self.transform.build(None)
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+    def get_output_embeddings(self) -> keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -1260,8 +1259,8 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Lxmert
-class TFLxmertMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config: LxmertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFLxmertMLMHead(keras.layers.Layer):
+    def __init__(self, config: LxmertConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFLxmertLMPredictionHead(config, input_embeddings, name="predictions")
@@ -1280,12 +1279,12 @@ class TFLxmertMLMHead(tf.keras.layers.Layer):
                 self.predictions.build(None)
 
 
-class TFLxmertPreTrainingHeads(tf.keras.layers.Layer):
+class TFLxmertPreTrainingHeads(keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.predictions = TFLxmertLMPredictionHead(config, input_embeddings, name="predictions")
 
-        self.seq_relationship = tf.keras.layers.Dense(
+        self.seq_relationship = keras.layers.Dense(
             2,
             kernel_initializer=get_initializer(config.initializer_range),
             name="seq_relationship",
@@ -1309,18 +1308,18 @@ class TFLxmertPreTrainingHeads(tf.keras.layers.Layer):
                 self.seq_relationship.build([None, None, self.config.hidden_size])
 
 
-class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
+class TFLxmertVisualAnswerHead(keras.layers.Layer):
     def __init__(self, config, num_labels, **kwargs):
         super().__init__(**kwargs)
         hid_dim = config.hidden_size
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             hid_dim * 2,
             kernel_initializer=get_initializer(config.initializer_range),
             name="logit_fc_._0",
         )
         self.activation = get_tf_activation("gelu")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="logit_fc_._2")
-        self.dense_1 = tf.keras.layers.Dense(
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="logit_fc_._2")
+        self.dense_1 = keras.layers.Dense(
             num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="logit_fc_._3",
@@ -1350,7 +1349,7 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
                 self.dense_1.build([None, None, self.hid_dim * 2])
 
 
-class TFLxmertVisualObjHead(tf.keras.layers.Layer):
+class TFLxmertVisualObjHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.transform = TFLxmertPredictionHeadTransform(config, name="transform")
@@ -1368,7 +1367,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder_dict = {
-            key: tf.keras.layers.Dense(
+            key: keras.layers.Dense(
                 self.visual_losses[key]["num"],
                 kernel_initializer=get_initializer(config.initializer_range),
                 name=f"decoder_dict.{key}",
@@ -1424,9 +1423,9 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
         # Loss functions
         self.loss_fcts = {
-            "l2": tf.keras.losses.Huber(delta=1.0, name="huber_loss"),
-            "visn_ce": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-            "ce": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+            "l2": keras.losses.Huber(delta=1.0, name="huber_loss"),
+            "visn_ce": keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+            "ce": keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         }
 
         visual_losses = {}

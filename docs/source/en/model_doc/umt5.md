@@ -47,7 +47,7 @@ found [here](https://github.com/google-research/t5x).
 
 - UMT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
-- Since umT5 was pre-trained in an unsupervise manner, there's no real advantage to using a task prefix during single-task
+- Since umT5 was pre-trained in an unsupervised manner, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 ## Differences with mT5?
@@ -98,6 +98,11 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 ## UMT5ForSequenceClassification
 
 [[autodoc]] UMT5ForSequenceClassification
+    - forward
+
+## UMT5ForTokenClassification
+
+[[autodoc]] UMT5ForTokenClassification
     - forward
 
 ## UMT5ForQuestionAnswering
