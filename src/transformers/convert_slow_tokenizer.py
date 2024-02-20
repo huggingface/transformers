@@ -1247,6 +1247,7 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
+        return normalizers.Replace(pattern=" ", content="▁"),
         return None
 
     def post_processor(self):
