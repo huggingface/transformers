@@ -809,7 +809,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        self.is_stateful_cache_initalized = False
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
@@ -827,8 +826,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
             layer.self_attn.past_key_value = cache_cls(
                 self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
             )
-
-        self.is_stateful_cache_initalized = True
 
     def _reset_cache(self):
         for layer in self.model.layers:
@@ -976,13 +973,13 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = 0
-            if use_cache:  # kept for BC (cache positions)
-                if not isinstance(past_key_values, StaticCache):
-                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                past_seen_tokens = past_key_values.get_seq_length()
+        past_seen_tokens = 0
+        if use_cache:  # kept for BC (cache positions)
+            if not isinstance(past_key_values, StaticCache):
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length()
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
