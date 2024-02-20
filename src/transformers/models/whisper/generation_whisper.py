@@ -924,7 +924,6 @@ class WhisperGenerationMixin:
                 needs_fallback = True
 
         if generation_config.logprob_threshold is not None:
-            print(seek_outputs[0].keys())
             if "sequences_scores" in seek_outputs[0]:
                 logprobs = [s["sequences_scores"] for s in seek_outputs][index]
             else:
