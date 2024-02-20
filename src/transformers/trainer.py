@@ -1968,7 +1968,11 @@ class Trainer:
                     # if loss is nan or inf simply add the average of previous logged losses
                     tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
-                    tr_loss += tr_loss_step
+                    tr_loss += (
+                        torch.as_tensor(tr_loss_step, device=tr_loss.device)
+                        if tr_loss_step.device != tr_loss.device
+                        else tr_loss_step
+                    )
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
