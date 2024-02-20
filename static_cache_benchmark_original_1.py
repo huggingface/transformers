@@ -24,7 +24,7 @@ torch.set_printoptions(linewidth=200)  # you can better see how the mask is shap
 
 
 
-device = "cuda:2"
+device = "cuda"
 attn_implementation = "sdpa"
 all_dtype = torch.bfloat16
 
