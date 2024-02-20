@@ -316,7 +316,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
-        self.assertEqual(slow_.tokenize(inputs), ["He", "y", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.tokenize(inputs), ["H", "ey", "▁how", "▁are", "▁you", "▁doing"])
         self.assertEqual(slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True), inputs)
         self.assertEqual(
             slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
