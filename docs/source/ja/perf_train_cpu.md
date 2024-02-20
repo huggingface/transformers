@@ -49,7 +49,7 @@ TrainerでIPEXの自動混合精度を有効にするには、ユーザーはト
 
 - CPU上でBF16自動混合精度を使用してIPEXでトレーニングを行う場合：
 <pre> python run_qa.py \
---model_name_or_path bert-base-uncased \
+--model_name_or_path google-bert/bert-base-uncased \
 --dataset_name squad \
 --do_train \
 --do_eval \
