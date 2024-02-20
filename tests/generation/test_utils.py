@@ -1503,6 +1503,7 @@ class GenerationTesterMixin:
             for output in (output_contrastive, output_generate):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
+    @is_flaky(description="low_memory changes the order of FP operations, which may result in different tokens.")
     def test_contrastive_generate_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
@@ -1542,6 +1543,7 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
+    @is_flaky(description="low_memory changes the order of FP operations, which may result in different tokens.")
     def test_beam_search_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
