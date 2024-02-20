@@ -84,7 +84,14 @@ class AqlmHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        return version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.2dev")
+        aqlm_supports_training = version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.2dev")
+        if aqlm_supports_training:
+            return True
+        else:
+            logger.warn(
+                f"Currently installed `aqlm` version ({importlib.metadata.version('aqlm')}) doesn't support training. If you wish to train a quantized model, please update `aqlm` with `pip install aqlm>=1.0.2`"
+            )
+            return False
 
     @property
     def is_serializable(self):
