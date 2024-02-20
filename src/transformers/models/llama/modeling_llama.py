@@ -830,22 +830,9 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
         self.is_stateful_cache_initalized = True
 
-    def _validate_cache_for_shapes(self, batch_size: int, total_tokens: int):
-        max_batch_size = self.model.layers[0].self_attn.past_key_value.max_batch_size
-        max_cache_len = self.model.layers[0].self_attn.past_key_value.max_cache_len
-
-        if batch_size > max_batch_size:
-            raise ValueError(
-                f"Trying to run inference with a static KV cache for a batch size of {batch_size}, while the initialized static KV cache has a maximum batch size of {max_batch_size}."
-            )
-        if total_tokens > max_cache_len:
-            raise ValueError(
-                f"Trying to run inference with a static KV cache for a maximum sequence lengths of {total_tokens}, while the initialized static KV cache can only handle up to {max_cache_len} tokens."
-            )
-
     def _reset_cache(self):
         for layer in self.model.layers:
-            layer.self_attn.past_key_value.seen_tokens.sub_(layer.self_attn.past_key_value.seen_tokens)
+            layer.self_attn.past_key_value = None
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -989,13 +976,13 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length()
-
         if cache_position is None:
+            past_seen_tokens = 0
+            if use_cache:  # kept for BC (cache positions)
+                if not isinstance(past_key_values, StaticCache):
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                past_seen_tokens = past_key_values.get_seq_length()
+
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -1273,20 +1260,20 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
+        if getattr(self.model.layers[0].self_attn, "past_key_value", None) is not None:
             # generation with static cache
-            past_length = past_key_value.get_seq_length()
-            print("past_length", past_length)
+            cache_position = kwargs.get("cache_position", None)
+            if cache_position is None:
+                past_length = 0
+            else:
+                past_length = cache_position[-1] + 1
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
 
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
-        cache_position = kwargs.get("cache_position", None)
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_length, past_length + position_ids.shape[-1], device=position_ids.device
-            )
+        # cache_position = kwargs.get("cache_position", None)
+        cache_position = torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

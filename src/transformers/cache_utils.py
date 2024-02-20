@@ -358,10 +358,6 @@ class StaticCache(Cache):
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
 
-        # NOTE: self.seen_tokens being in an int results in bugs with torch.compile, where it is somehow not updated.
-        # TODO: We may want to remove `self.seen_tokens` altogether from the modeling, and leave it in the non-compiled `GenerationMixin.generate()`.
-        self.seen_tokens = torch.tensor(0, dtype=torch.int64, device=device)
-
     def update(
         self,
         key_states: torch.Tensor,
@@ -389,23 +385,26 @@ class StaticCache(Cache):
         """
         new_cache_positions = cache_kwargs.get("cache_position")
 
-        # `self.max_batch_size` may be larger than the current batch size.
-        k_out = self.key_cache[: key_states.shape[0]]
-        v_out = self.value_cache[: value_states.shape[0]]
+        k_out = self.key_cache
+        v_out = self.value_cache
 
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
 
-        # # This NEEDS to be in-place as in the modeling we are not calling directly `self.past_key_value.update()`, but are rather using getattr.
-        self.seen_tokens.add_(key_states.shape[2])
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
-        return self.seen_tokens
+        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
+        raise ValueError(
+            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
+        )
 
     def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
-        return self.seen_tokens
+        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
+        raise ValueError(
+            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
+        )
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""

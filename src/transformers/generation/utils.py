@@ -648,6 +648,7 @@ class GenerationMixin:
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
@@ -676,6 +677,8 @@ class GenerationMixin:
                     [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
                     dim=-1,
                 )
+
+        model_kwargs["cache_position"] = model_inputs.get("cache_position", None)
 
         return model_kwargs
 
@@ -1214,6 +1217,7 @@ class GenerationMixin:
                     UserWarning,
                 )
 
+    """
     @torch.no_grad()
     def prepare_static_cache(self, max_batch_size: int, max_total_tokens: int):
         cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
@@ -1223,6 +1227,7 @@ class GenerationMixin:
                 " Make sure it has a `_setup_cache` function."
             )
         self._setup_cache(cache_cls, max_batch_size=max_batch_size, max_cache_len=max_total_tokens)
+    """
 
     @torch.no_grad()
     def generate(
@@ -1467,23 +1472,13 @@ class GenerationMixin:
                     raise ValueError(
                         "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
                     )
-                if not self.is_stateful_cache_initalized:
-                    if hasattr(self.forward, "get_compiler_config"):
-                        raise ValueError(
-                            "Using `generate` with a compile model through torch.compile with a static cache implementation, but the static cache has not been initialized prior to calling torch.compile. This may lead to unexpected behavior. Please call `model.prepare_static_cache(max_batch_size=maximum_batch_size, max_total_tokens=max_total_tokens)` with the expected maximum batch size and maximum sequence length to be later used."
-                        )
-                    else:
-                        cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-                        if not callable(getattr(self, "_setup_cache", None)):
-                            raise ValueError(
-                                "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                                " Make sure it has a `_setup_cache` function."
-                            )
-                        self._setup_cache(
-                            cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length
-                        )
-                else:
-                    self._validate_cache_for_shapes(batch_size=batch_size, total_tokens=generation_config.max_length)
+                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
+                if not callable(getattr(self, "_setup_cache", None)):
+                    raise ValueError(
+                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                        " Make sure it has a `_setup_cache` function."
+                    )
+                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -2007,6 +2002,7 @@ class GenerationMixin:
                     model_kwargs,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     standardize_cache_format=True,
+                    model_inputs=model_inputs,
                 )
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -2201,7 +2197,7 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2420,7 +2416,6 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         count = 0
         while True:
-            print("----- call forward")
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2433,11 +2428,6 @@ class GenerationMixin:
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            print("model_inputs input ids shape", model_inputs["input_ids"].shape)
-            print("model_inputs input ids stride", model_inputs["input_ids"].stride())
-            print("model_inputs attention_mask shape", model_inputs["attention_mask"].shape)
-            print("model_inputs attention_mask stride", model_inputs["attention_mask"].stride())
 
             count += 1
             # forward pass to get next token
@@ -2490,7 +2480,10 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                model_inputs=model_inputs,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2784,7 +2777,7 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -3177,7 +3170,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3524,7 +3517,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3923,7 +3916,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -4275,7 +4268,7 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -4682,7 +4675,7 @@ class GenerationMixin:
                         )
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
