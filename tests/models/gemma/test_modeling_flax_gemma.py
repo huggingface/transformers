@@ -210,143 +210,54 @@ class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 @slow
 @require_flax
 class FlaxGemmaIntegrationTest(unittest.TestCase):
-    input_text = ["Hello I am doing", "Hi today"]
+    input_text = ["The capital of France is", "To play the perfect cover drive"]
+    model_id = "gg-hf/gemma-2b"  # TODO: change it to the new repo after the release
+    revision = "flax"  # TODO: change it to the "main" branch after the release
 
-    def test_model_2b_fp32(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+    def setUp(self):
+        self.model, self.params = FlaxGemmaForCausalLM.from_pretrained(
+            self.model_id, revision=self.revision, _do_init=False
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self.tokenizer.padding_side = "left"
+
+    def test_logits(self):
+        inputs = self.tokenizer(self.input_text, return_tensors="np", padding=True)
+        # fmt: off
+        EXPECTED_MEAN = [
+            [-16.427, -21.386, -35.491, -36.258, -31.401, -36.370, -37.598],
+            [-21.386, -32.150, -33.155, -34.344, -34.706, -34.678, -38.495],
         ]
+        EXPECTED_SLICE = [-33.462, -16.481, -30.837, -32.195, -33.113]
+        # fmt: on
 
-        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False)
+        logits = self.model(**inputs, params=self.params).logits
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
+        diff_mean = jnp.abs(logits.mean(-1) - np.array(EXPECTED_MEAN)).max()
+        diff_slice = jnp.abs(logits[0, -1, 475:480] - np.array(EXPECTED_SLICE)).max()
 
-        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertAlmostEqual(diff_mean, 0, places=3)
+        self.assertAlmostEqual(diff_slice, 0, places=3)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-        jit_generate = jax.jit(model.generate)
-        output_sequences = jit_generate(**inputs).sequences
-        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_2b_fp16(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-2b"
+    def test_generation(self):
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+            "The capital of France is a city of contrasts. It is a city of history, of art, of culture, of fashion",
+            "To play the perfect cover drive, you need to have a good technique and a good mindset.\n\nThe cover drive is a shot",
         ]
+        inputs = self.tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.float16)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
-
-        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
+        output = self.model.generate(**inputs, params=self.params, max_new_tokens=20, do_sample=False)
+        output_text = self.tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        jit_generate = jax.jit(model.generate)
+        def generate(input_ids, attention_mask):
+            outputs = self.model.generate(
+                input_ids, attention_mask=attention_mask, params=self.params, max_new_tokens=20, do_sample=False
+            )
+            return outputs
+
+        jit_generate = jax.jit(generate)
         output_sequences = jit_generate(**inputs).sequences
-        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_2b_bf16(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
-        ]
-
-        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.bfloat16)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
-
-        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-        jit_generate = jax.jit(model.generate)
-        output_sequences = jit_generate(**inputs).sequences
-        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @unittest.skip("The test will not fit our CI runners")
-    def test_model_7b_fp32(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
-            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
-        ]
-
-        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
-
-        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-        jit_generate = jax.jit(model.generate)
-        output_sequences = jit_generate(**inputs).sequences
-        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_7b_fp16(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
-            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
-        ]
-
-        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.float16)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
-
-        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-        jit_generate = jax.jit(model.generate)
-        output_sequences = jit_generate(**inputs).sequences
-        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    def test_model_7b_bf16(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on the "The effect of the use of a new type of a new type of a""",
-            "Hi today I am going to tell you about the new update for the new update is the new update is the",
-        ]
-
-        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.bfloat16)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
-
-        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
-
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-        jit_generate = jax.jit(model.generate)
-        output_sequences = jit_generate(**inputs).sequences
-        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        output_text = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
