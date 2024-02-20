@@ -14,12 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ CrystalCoder configuration"""
-from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
 
@@ -28,7 +24,6 @@ logger = logging.get_logger(__name__)
 CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "LLM360/CrystalChat": "https://huggingface.co/LLM360/CrystalChat/resolve/main/config.json",
 }
-
 
 
 class CrystalCoderConfig(PretrainedConfig):
@@ -171,4 +166,3 @@ class CrystalCoderConfig(PretrainedConfig):
         self.mup_scale_qk_dot_by_d = mup_scale_qk_dot_by_d
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-

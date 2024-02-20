@@ -18,33 +18,25 @@
 import math
 import os
 import warnings
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from torch import nn
-from torch.cuda.amp import autocast
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch import Tensor, nn
+from torch.cuda.amp import autocast
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_crystalcoder import CrystalCoderConfig
@@ -86,24 +78,20 @@ class RotaryPositionEmbeddingHelper:
         # self.offset = 0
 
     def create_fixed_pos_emb(self, x, offset):
-        if (self.sin_cached is not None and self.cos_cached is not None
+        if (
+            self.sin_cached is not None
+            and self.cos_cached is not None
             and x.device == self.sin_cached.device
             and x.device == self.cos_cached.device
-            ):
+        ):
             sin, cos = self.sin_cached, self.cos_cached
-        else:    
+        else:
             # compute sin and cos for the fixed positional embeddings, using the maximum possible sequence length
             # store as cache for future use
             # self.offset = offset
             device = x.device
 
-            inv_freq = 1.0 / (
-                self.base
-                ** (
-                    torch.arange(0, self.rotary_dim, 2, device=device)
-                    / self.rotary_dim
-                )
-            )
+            inv_freq = 1.0 / (self.base ** (torch.arange(0, self.rotary_dim, 2, device=device) / self.rotary_dim))
             sinusoid_inp = torch.einsum(
                 "i , j -> i j",
                 torch.arange(self.max_position_embeddings, device=device),
@@ -118,16 +106,18 @@ class RotaryPositionEmbeddingHelper:
 
             self.sin_cached = sin
             self.cos_cached = cos
-        
+
         assert (
             self.max_position_embeddings >= x.shape[1] + offset
         ), "RoPE requires max position embeddings ({}) >= sequence length ({}) + offset ({})".format(
-            self.max_position_embeddings, x.shape[1], offset,
+            self.max_position_embeddings,
+            x.shape[1],
+            offset,
         )
 
         def slice_at_offset(t):
             return t[None, offset : x.shape[1] + offset, None, :]
-        
+
         sin, cos = map(slice_at_offset, (sin, cos))
 
         return sin, cos
@@ -149,14 +139,10 @@ class RotaryPositionEmbeddingHelper:
         return (x * cos) + (rotate_every_two(x) * sin)
 
     def rotate_tensor(self, x, offset=0):
-        assert (
-            len(x.shape) == 4
-        ), "Tensor should be of shape [batch_size, seq_length, num_heads, head_dim] !"
+        assert len(x.shape) == 4, "Tensor should be of shape [batch_size, seq_length, num_heads, head_dim] !"
         x_rotary = x[:, :, :, : self.rotary_dim]
         x_pass = x[:, :, :, self.rotary_dim :]
-        x_rotated = self._apply_rotary_pos_emb(
-            x_rotary, offset=offset
-        )
+        x_rotated = self._apply_rotary_pos_emb(x_rotary, offset=offset)
         x = torch.cat([x_rotated, x_pass], dim=-1)
         return x
 
@@ -180,12 +166,8 @@ class AlibiPositionEmbeddingLayer(nn.Module):
         key_length,
         cached_qk_len,
     ):
-        context_position = torch.arange(
-            cached_qk_len, cached_qk_len + seq_length, device=self.slopes.device
-        )[:, None]
-        memory_position = torch.arange(
-            key_length + cached_qk_len, device=self.slopes.device
-        )[None, :]
+        context_position = torch.arange(cached_qk_len, cached_qk_len + seq_length, device=self.slopes.device)[:, None]
+        memory_position = torch.arange(key_length + cached_qk_len, device=self.slopes.device)[None, :]
         relative_position = memory_position - context_position
         relative_position = torch.abs(relative_position).unsqueeze(0).expand(self.num_heads, -1, -1)
         alibi = (self.slopes * -1.0).unsqueeze(1) * relative_position
@@ -297,7 +279,6 @@ class CrystalCoderAttention(nn.Module):
             self.rope_helper = RotaryPositionEmbeddingHelper(max_positions, rotary_dim)
         else:
             self.rope_helper = None
-
 
         self.scale_attn_weights = config.scale_attn_weights
         self.is_cross_attention = is_cross_attention
@@ -673,7 +654,7 @@ class CrystalCoderPreTrainedModel(PreTrainedModel):
         group 1: embedding layer gets non-scaled learning rate and weight decay.
         group 2: normalization layers and biases get non-scaled learning rate only.
 
-        The output can be passed to Adam-base optimizers 
+        The output can be passed to Adam-base optimizers
         e.g.
             param_groups = model.get_mup_param_groups(lr=1e-3, weight_decay=0.1)
             torch.optim.AdamW(param_groups, betas=(0.9, 0.95), eps=1e-8)
@@ -1356,4 +1337,3 @@ class CrystalCoderLMHeadModel(CrystalCoderPreTrainedModel):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
         )
-    

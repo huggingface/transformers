@@ -312,6 +312,7 @@ _import_structure = {
         "CpmAntConfig",
         "CpmAntTokenizer",
     ],
+    "models.crystalcoder": ["CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP", "CrystalCoderConfig"],
     "models.ctrl": [
         "CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CTRLConfig",
@@ -467,10 +468,6 @@ _import_structure = {
         "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPT2Config",
         "GPT2Tokenizer",
-    ],
-    "models.crystalcoder": [
-        "CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CrystalCoderConfig"
     ],
     "models.gpt_bigcode": [
         "GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1165,6 +1162,7 @@ else:
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
+    _import_structure["models.crystalcoder"].append("CrystalCoderTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
     _import_structure["models.deberta_v2"].append("DebertaV2TokenizerFast")
     _import_structure["models.deprecated.retribert"].append("RetriBertTokenizerFast")
@@ -1180,7 +1178,6 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
-    _import_structure["models.crystalcoder"].append("CrystalCoderTokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
@@ -1259,8 +1256,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_keras_nlp_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
     _import_structure["models.crystalcoder"].append("TFCrystalCoderTokenizer")
+    _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
 
 # Vision-specific objects
 try:
@@ -1852,6 +1849,14 @@ else:
             "CpmAntPreTrainedModel",
         ]
     )
+    _import_structure["models.crystalcoder"].extend(
+        [
+            "CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CrystalCoderLMHeadModel",
+            "CrystalCoderModel",
+            "CrystalCoderPreTrainedModel",
+        ]
+    )
     _import_structure["models.ctrl"].extend(
         [
             "CTRL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2272,19 +2277,6 @@ else:
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
-        ]
-    )
-    _import_structure["models.crystalcoder"].extend(
-        [
-            "CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            # "CrystalCoderDoubleHeadsModel",
-            # "CrystalCoderForQuestionAnswering",
-            # "CrystalCoderForSequenceClassification",
-            # "CrystalCoderForTokenClassification",
-            "CrystalCoderLMHeadModel",
-            "CrystalCoderModel",
-            "CrystalCoderPreTrainedModel",
-            # "load_tf_weights_in_crystalcoder",
         ]
     )
     _import_structure["models.gpt_bigcode"].extend(
@@ -5078,6 +5070,11 @@ if TYPE_CHECKING:
         CpmAntConfig,
         CpmAntTokenizer,
     )
+    from .models.crystalcoder import (
+        CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CrystalCoderConfig,
+        CrystalCoderTokenizer,
+    )
     from .models.ctrl import (
         CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CTRLConfig,
@@ -5226,11 +5223,6 @@ if TYPE_CHECKING:
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2Config,
         GPT2Tokenizer,
-    )
-    from .models.crystalcoder import (
-        CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CrystalCoderConfig,
-        CrystalCoderTokenizer,
     )
     from .models.gpt_bigcode import (
         GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5919,6 +5911,7 @@ if TYPE_CHECKING:
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
+        from .models.crystalcoder import CrystalCoderTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.deprecated.retribert import RetriBertTokenizerFast
@@ -5932,7 +5925,6 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
-        from .models.crystalcoder import CrystalCoderTokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
@@ -5996,8 +5988,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_keras_nlp_objects import *
     else:
-        from .models.gpt2 import TFGPT2Tokenizer
         from .models.crystalcoder import TFCrystalCoderTokenizer
+        from .models.gpt2 import TFGPT2Tokenizer
 
     try:
         if not is_vision_available():
@@ -6531,6 +6523,12 @@ if TYPE_CHECKING:
             CpmAntModel,
             CpmAntPreTrainedModel,
         )
+        from .models.crystalcoder import (
+            CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CrystalCoderLMHeadModel,
+            CrystalCoderModel,
+            CrystalCoderPreTrainedModel,
+        )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             CTRLForSequenceClassification,
@@ -6883,17 +6881,6 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
-        )
-        from .models.crystalcoder import (
-            CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            # CrystalCoderDoubleHeadsModel,
-            # CrystalCoderForQuestionAnswering,
-            # CrystalCoderForSequenceClassification,
-            # CrystalCoderForTokenClassification,
-            CrystalCoderLMHeadModel,
-            CrystalCoderModel,
-            CrystalCoderPreTrainedModel,
-            # load_tf_weights_in_crystalcoder,
         )
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
