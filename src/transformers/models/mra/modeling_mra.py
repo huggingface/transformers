@@ -58,41 +58,8 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Mra models at https://huggingface.co/models?filter=mra
 ]
 
-
-# Copied from models.deformable_detr.load_cuda_kernels
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global MultiScaleDeformableAttention
-    # Only load the kernel if it's not been loaded yet or if we changed the context length
-    if MultiScaleDeformableAttention is not None:
-        return
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
-    src_files = [
-        root / filename
-        for filename in [
-            "vision.cpp",
-            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
-            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
-        ]
-    ]
-
-    load(
-        "MultiScaleDeformableAttention",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cflags=["-DWITH_CUDA=1"],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=1",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
-
 mra_cuda_kernel = None
+
 
 def load_cuda_kernels():
     global mra_cuda_kernel
@@ -104,8 +71,6 @@ def load_cuda_kernels():
     src_files = append_root(["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"])
 
     mra_cuda_kernel = load("cuda_kernel", src_files, verbose=True)
-
-    import mra_cuda_kernel
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -130,7 +95,7 @@ def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
     indices = indices.int()
     indices = indices.contiguous()
 
-    max_vals, max_vals_scatter = cuda_kernel.index_max(index_vals, indices, query_num_block, key_num_block)
+    max_vals, max_vals_scatter = mra_cuda_kernel.index_max(index_vals, indices, query_num_block, key_num_block)
     max_vals_scatter = max_vals_scatter.transpose(-1, -2)[:, :, None, :]
 
     return max_vals, max_vals_scatter
@@ -196,7 +161,7 @@ def mm_to_sparse(dense_query, dense_key, indices, block_size=32):
     indices = indices.int()
     indices = indices.contiguous()
 
-    return cuda_kernel.mm_to_sparse(dense_query, dense_key, indices.int())
+    return mra_cuda_kernel.mm_to_sparse(dense_query, dense_key, indices.int())
 
 
 def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_size=32):
@@ -234,7 +199,7 @@ def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_siz
     indices = indices.contiguous()
     dense_key = dense_key.contiguous()
 
-    dense_qk_prod = cuda_kernel.sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
+    dense_qk_prod = mra_cuda_kernel.sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
     dense_qk_prod = dense_qk_prod.transpose(-1, -2).reshape(batch_size, query_num_block * block_size, dim)
     return dense_qk_prod
 
@@ -411,7 +376,7 @@ def mra2_attention(
     """
     Use Mra to approximate self-attention.
     """
-    if cuda_kernel is None:
+    if mra_cuda_kernel is None:
         return torch.zeros_like(query).requires_grad_()
 
     batch_size, num_head, seq_len, head_dim = query.size()
@@ -585,7 +550,6 @@ class MraSelfAttention(nn.Module):
                 load_cuda_kernels()
             except Exception as e:
                 logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)

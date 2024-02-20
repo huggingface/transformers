@@ -35,7 +35,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_ninja_available,
+    is_torch_cuda_available,
+    logging,
+)
 from .configuration_yoso import YosoConfig
 
 
@@ -50,6 +57,7 @@ YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 lsh_cumulation = None
+
 
 def load_cuda_kernels():
     global lsh_cumulation
@@ -312,7 +320,6 @@ class YosoSelfAttention(nn.Module):
                 load_cuda_kernels()
             except Exception as e:
                 logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
