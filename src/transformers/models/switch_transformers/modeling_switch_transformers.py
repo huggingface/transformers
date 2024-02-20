@@ -127,7 +127,8 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
-class ClassificationHead(nn.Module):
+# Copied from transformers.models.t5.modeling_t5.T5ClassificationHead with T5->SwitchTransformers
+class SwtichTransformersClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config: SwitchTransformersConfig, model_dim: int):
