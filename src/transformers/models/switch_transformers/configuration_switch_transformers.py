@@ -75,6 +75,8 @@ class SwitchTransformersConfig(PretrainedConfig):
             The maximum distance of the longer sequences for the bucket separation.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for classifier.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         router_z_loss_coef (`float`, *optional*, defaults to 0.001):
@@ -117,6 +119,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
+        classifier_dropout=0.0,
         layer_norm_epsilon=1e-6,
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
@@ -168,6 +171,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.relative_attention_max_distance = relative_attention_max_distance
 
         self.dropout_rate = dropout_rate
+        self.classifier_dropout = classifier_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
         self.use_cache = use_cache

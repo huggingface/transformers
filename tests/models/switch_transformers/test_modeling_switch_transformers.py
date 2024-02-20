@@ -15,10 +15,13 @@
 
 
 import copy
+import os
+import pickle
 import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
+from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
@@ -27,12 +30,16 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_torch_fx_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
+if is_torch_fx_available():
+    from transformers.utils.fx import symbolic_trace
 
 if is_torch_available():
     import torch
@@ -612,6 +619,126 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
+
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        if not is_torch_fx_available() or not self.fx_compatible:
+            return
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.return_dict = False
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "T5ForSequenceClassification":
+                continue
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
+
+            try:
+                if model.config.is_encoder_decoder:
+                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                    labels = inputs.get("labels", None)
+                    input_names = [
+                        "attention_mask",
+                        "decoder_attention_mask",
+                        "decoder_input_ids",
+                        "input_features",
+                        "input_ids",
+                        "input_values",
+                    ]
+                    if labels is not None:
+                        input_names.append("labels")
+
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
+
+                    model_output = model(**filtered_inputs)
+
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
+                else:
+                    input_names = [
+                        "attention_mask",
+                        "bbox",
+                        "input_features",
+                        "input_ids",
+                        "input_values",
+                        "pixel_values",
+                        "token_type_ids",
+                        "visual_feats",
+                        "visual_pos",
+                    ]
+
+                    labels = inputs.get("labels", None)
+                    start_positions = inputs.get("start_positions", None)
+                    end_positions = inputs.get("end_positions", None)
+                    if labels is not None:
+                        input_names.append("labels")
+                    if start_positions is not None:
+                        input_names.append("start_positions")
+                    if end_positions is not None:
+                        input_names.append("end_positions")
+
+                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
+                    input_names = list(filtered_inputs.keys())
+
+                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
+                        not hasattr(model.config, "problem_type") or model.config.problem_type is None
+                    ):
+                        model.config.problem_type = "single_label_classification"
+
+                    traced_model = symbolic_trace(model, input_names)
+                    traced_output = traced_model(**filtered_inputs)
+                    model_output = model(**filtered_inputs)
+
+            except Exception as e:
+                self.fail(f"Couldn't trace module: {e}")
+
+            def flatten_output(output):
+                flatten = []
+                for x in output:
+                    if isinstance(x, (tuple, list)):
+                        flatten += flatten_output(x)
+                    elif not isinstance(x, torch.Tensor):
+                        continue
+                    else:
+                        flatten.append(x)
+                return flatten
+
+            model_output = flatten_output(model_output)
+            traced_output = flatten_output(traced_output)
+            num_outputs = len(model_output)
+
+            for i in range(num_outputs):
+                self.assertTrue(
+                    torch.allclose(model_output[i], traced_output[i]),
+                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
+                )
+
+            # Test that the model can be serialized and restored properly
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                try:
+                    with open(pkl_file_name, "wb") as f:
+                        pickle.dump(traced_model, f)
+                    with open(pkl_file_name, "rb") as f:
+                        loaded = pickle.load(f)
+                except Exception as e:
+                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
+
+                loaded_output = loaded(**filtered_inputs)
+                loaded_output = flatten_output(loaded_output)
+
+                for i in range(num_outputs):
+                    self.assertTrue(
+                        torch.allclose(model_output[i], loaded_output[i]),
+                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                    )
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
     def test_config(self):
         self.config_tester.run_common_tests()

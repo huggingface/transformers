@@ -128,14 +128,14 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
 
 # Copied from transformers.models.t5.modeling_t5.T5ClassificationHead with T5->SwitchTransformers
-class SwtichTransformersClassificationHead(nn.Module):
+class SwitchTransformersClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config: SwitchTransformersConfig, model_dim: int):
+    def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
-        self.dense = nn.Linear(model_dim, model_dim, bias=False)
-        self.dropout = nn.Dropout(p=0.1)
-        self.out_proj = nn.Linear(model_dim, config.num_labels, bias=False)
+        self.dense = nn.Linear(config.d_model, config.d_model)
+        self.dropout = nn.Dropout(p=config.classifier_dropout)
+        self.out_proj = nn.Linear(config.d_model, config.num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dropout(hidden_states)
@@ -1906,7 +1906,6 @@ class SwitchTransformersForSequenceClassification(SwitchTransformersPreTrainedMo
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
-        self.model_dim = config.d_model
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
@@ -1920,11 +1919,10 @@ class SwitchTransformersForSequenceClassification(SwitchTransformersPreTrainedMo
         decoder_config.is_encoder_decoder = False
         self.decoder = SwitchTransformersStack(decoder_config, self.shared)
         # Classifier head
-        self.classification_head = SwitchTransformersClassificationHead(config, self.model_dim)
+        self.classification_head = SwitchTransformersClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def get_input_embeddings(self):
         return self.shared
