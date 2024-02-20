@@ -28,6 +28,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -165,9 +166,12 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_pad=do_pad,
+            size_divisibility=pad_size,  # Here the pad function simply requires pad_size.
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

@@ -101,11 +101,34 @@ class LlamaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
+    @property
+    def sin_cached(self):
+        logger.warning_once(
+            "The sin_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead."
+        )
+        return self._sin_cached
+
+    @property
+    def cos_cached(self):
+        logger.warning_once(
+            "The cos_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead."
+        )
+        return self._cos_cached
+
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        freqs = (self.inv_freq[:, None].float().expand(-1, position_ids.shape[0]) @ (position_ids.float())).t()
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
+        cos = emb.cos().to(dtype=x.dtype)
+        sin = emb.sin().to(dtype=x.dtype)
+        # backwards compatibility
+        self._cos_cached = cos
+        self._sin_cached = sin
+        return cos, sin
 
 
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
@@ -181,6 +204,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -961,7 +986,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        
+
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
         # embed positions
@@ -1038,6 +1063,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
+        device = input_tensor.device
 
         # support going beyond cached `max_position_embedding`
         if seq_length > self.causal_mask.shape[-1]:
@@ -1049,6 +1075,7 @@ class LlamaModel(LlamaPreTrainedModel):
             self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
         )
 
+        causal_mask = causal_mask.to(dtype=dtype, device=device)
         if attention_mask is not None and attention_mask.dim() == 2:
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
@@ -1223,7 +1250,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 and cache_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
-        
+
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1239,7 +1266,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             print("past_length here", past_length)
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
-        
+
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)

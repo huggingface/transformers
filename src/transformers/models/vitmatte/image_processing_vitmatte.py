@@ -31,6 +31,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -197,25 +198,28 @@ class VitMatteImageProcessor(BaseImageProcessor):
         images = make_list_of_images(images)
         trimaps = make_list_of_images(trimaps, expected_ndims=2)
 
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
         if not valid_images(trimaps):
             raise ValueError(
                 "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        images = make_list_of_images(images)
 
-        if do_pad and size_divisibility is None:
-            raise ValueError("Size divisilibyt must be specified if do_pad is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisibility=size_divisibility,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

@@ -35,7 +35,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_ninja_available,
+    is_torch_cuda_available,
+    logging,
+)
 from .configuration_yoso import YosoConfig
 
 
@@ -49,28 +56,22 @@ YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all YOSO models at https://huggingface.co/models?filter=yoso
 ]
 
+lsh_cumulation = None
+
 
 def load_cuda_kernels():
     global lsh_cumulation
-    try:
-        from torch.utils.cpp_extension import load
+    from torch.utils.cpp_extension import load
 
-        def append_root(files):
-            src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
-            return [src_folder / file for file in files]
+    def append_root(files):
+        src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
+        return [src_folder / file for file in files]
 
-        src_files = append_root(
-            ["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"]
-        )
+    src_files = append_root(["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"])
 
-        load("fast_lsh_cumulation", src_files, verbose=True)
+    load("fast_lsh_cumulation", src_files, verbose=True)
 
-        import fast_lsh_cumulation as lsh_cumulation
-
-        return True
-    except Exception:
-        lsh_cumulation = None
-        return False
+    import fast_lsh_cumulation as lsh_cumulation
 
 
 def to_contiguous(input_tensors):
@@ -305,6 +306,12 @@ class YosoSelfAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
+        kernel_loaded = lsh_cumulation is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -619,9 +626,6 @@ class YosoLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
-
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -860,7 +864,6 @@ class YosoForMaskedLM(YosoPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
-        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
