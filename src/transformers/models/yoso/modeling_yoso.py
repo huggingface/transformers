@@ -61,25 +61,17 @@ lsh_cumulation = None
 
 def load_cuda_kernels():
     global lsh_cumulation
-    try:
-        from torch.utils.cpp_extension import load
+    from torch.utils.cpp_extension import load
 
-        def append_root(files):
-            src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
-            return [src_folder / file for file in files]
+    def append_root(files):
+        src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
+        return [src_folder / file for file in files]
 
-        src_files = append_root(
-            ["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"]
-        )
+    src_files = append_root(["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"])
 
-        load("fast_lsh_cumulation", src_files, verbose=True)
+    load("fast_lsh_cumulation", src_files, verbose=True)
 
-        import fast_lsh_cumulation as lsh_cumulation
-
-        return True
-    except Exception:
-        lsh_cumulation = None
-        return False
+    import fast_lsh_cumulation as lsh_cumulation
 
 
 def to_contiguous(input_tensors):
