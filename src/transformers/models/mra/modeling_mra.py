@@ -59,8 +59,43 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from models.deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
-    global cuda_kernel
+    from torch.utils.cpp_extension import load
+
+    global MultiScaleDeformableAttention
+    # Only load the kernel if it's not been loaded yet or if we changed the context length
+    if MultiScaleDeformableAttention is not None:
+        return
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    src_files = [
+        root / filename
+        for filename in [
+            "vision.cpp",
+            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
+            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
+        ]
+    ]
+
+    load(
+        "MultiScaleDeformableAttention",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cflags=["-DWITH_CUDA=1"],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
+
+mra_cuda_kernel = None
+
+def load_cuda_kernels():
+    global mra_cuda_kernel
     src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "mra"
 
     def append_root(files):
@@ -68,26 +103,9 @@ def load_cuda_kernels():
 
     src_files = append_root(["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"])
 
-    cuda_kernel = load("cuda_kernel", src_files, verbose=True)
+    mra_cuda_kernel = load("cuda_kernel", src_files, verbose=True)
 
-    import cuda_kernel
-
-
-cuda_kernel = None
-
-
-if is_torch_cuda_available() and is_ninja_available():
-    logger.info("Loading custom CUDA kernels...")
-
-    try:
-        load_cuda_kernels()
-    except Exception as e:
-        logger.warning(
-            "Failed to load CUDA kernels. Mra requires custom CUDA kernels. Please verify that compatible versions of"
-            f" PyTorch and CUDA Toolkit are installed: {e}"
-        )
-else:
-    pass
+    import mra_cuda_kernel
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -560,6 +578,14 @@ class MraSelfAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
+
+        kernel_loaded = mra_cuda_kernel is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
