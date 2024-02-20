@@ -102,8 +102,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not the default system prompt for Llama should be used.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
-        from_slow (`book`, *optional*, defaults to `False`):
-            Whether or not the tokenizer should be converted from a slow one. If `add_prefix_space` is set, this will be set to `True`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -124,14 +122,13 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token=False,
         use_default_system_prompt=False,
         add_prefix_space=None,
-        from_slow=False,
         **kwargs,
     ):
         if add_prefix_space is not None:
             logger.warning_once(
                 "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
             )
-            from_slow = True
+            kwargs["from_slow"] = True
 
         super().__init__(
             vocab_file=vocab_file,
@@ -143,7 +140,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
-            from_slow=from_slow,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
