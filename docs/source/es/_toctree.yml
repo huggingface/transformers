@@ -31,6 +31,8 @@
       title: Generación de resúmenes
     - local: tasks/multiple_choice
       title: Selección múltiple
+    - local: tasks/image_captioning
+      title: Subtítulos de imágenes
     title: Procesamiento del Lenguaje Natural
   - isExpanded: false
     sections:
