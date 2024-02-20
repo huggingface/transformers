@@ -429,7 +429,7 @@ class Trainer:
             getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
         )
 
-        # Filter out
+        # Filter out quantized + compiled models
         if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
             raise ValueError(
                 "You cannot fine-tune quantized model with `torch.compile()` make sure to pass a non-compiled model when fine-tuning a quantized model with PEFT"
