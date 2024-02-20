@@ -351,6 +351,8 @@ class EncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
 
         inputs = input_values if input_features is None else input_features
 
