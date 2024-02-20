@@ -466,16 +466,20 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         EXPECTED_WO_SPACE = [3845, 63, 149, 33, 25, 692, 1]
 
         slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
-        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
+        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False, from_slow=True)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["He", "y", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE), inputs)
+        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE), fast_.decode(EXPECTED_WO_SPACE))
 
         slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
         fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WITH_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["▁Hey", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE), inputs)
+        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE), fast_.decode(EXPECTED_WITH_SPACE))
 
 
 @require_sentencepiece
