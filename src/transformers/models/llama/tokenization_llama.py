@@ -194,6 +194,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 

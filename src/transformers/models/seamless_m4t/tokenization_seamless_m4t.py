@@ -191,6 +191,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 

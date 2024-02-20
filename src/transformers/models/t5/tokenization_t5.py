@@ -214,6 +214,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
