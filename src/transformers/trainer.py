@@ -62,7 +62,11 @@ from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_h
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
-from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
+from .models.auto.modeling_auto import (
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from .optimization import Adafactor, get_scheduler
 from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -388,7 +392,7 @@ class Trainer:
                 )
             self.model_init = model_init
 
-        if model.__class__.__name__ in MODEL_MAPPING_NAMES:
+        if model.__class__.__name__ in MODEL_MAPPING_NAMES or model.__class__name__ in MODEL_FOR_IMAGE_MAPPING_NAMES:
             raise ValueError(
                 f"The model you have picked ({model.__class__.__name__}) cannot be used as is for training: it only "
                 "computes hidden states and does not accept any labels. You should choose a model with a head "
