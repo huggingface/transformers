@@ -682,16 +682,17 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 # prepend the input_ids and token_type_ids with image tokens
                 batch_size = input_ids.shape[0]
 
-                vision_input_ids = (
-                    torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens)
-                    .repeat(batch_size, 1)
-                    .to(input_ids.device)
+                vision_input_ids = torch.tensor(
+                    [self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens
                 )
-                vision_token_type_ids = (
-                    torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * self.num_vision_tokens)
-                    .repeat(batch_size, 1)
-                    .to(token_type_ids.device)
+                vision_input_ids = vision_input_ids.repeat(batch_size, 1)
+                vision_input_ids = vision_input_ids.to(input_ids.device)
+
+                vision_token_type_ids = torch.tensor(
+                    [LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * self.num_vision_tokens
                 )
+                vision_token_type_ids = vision_token_type_ids.repeat(batch_size, 1)
+                vision_token_type_ids = vision_token_type_ids.to(token_type_ids.device)
 
                 input_ids = torch.cat([vision_input_ids, input_ids[:, 1:]], dim=1)
                 token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:, 1:]], dim=1)
