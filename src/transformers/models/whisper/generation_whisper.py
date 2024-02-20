@@ -811,14 +811,14 @@ class WhisperGenerationMixin:
                 if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps:
-                        seek_outputs[i]['token_timestamps'] = seek_outputs[i]['token_timestamps'][:-1]
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
 
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps:
-                        seek_outputs[i]['token_timestamps'] = seek_outputs[i]['token_timestamps'][:-num_paddings]
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -886,7 +886,7 @@ class WhisperGenerationMixin:
             seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, decoder_input_ids.shape[-1] :]
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
-    
+
         def split_by_batch_index(values, key, batch_idx):
             if key == "scores":
                 return [v[batch_idx].cpu() for v in values]
@@ -1653,7 +1653,9 @@ class WhisperGenerationMixin:
                     }
                 )
                 if return_token_timestamps:
-                    segments[-1]["token_timestamps"] = token_timestamps[last_slice:current_slice] + time_offset[prev_idx]
+                    segments[-1]["token_timestamps"] = (
+                        token_timestamps[last_slice:current_slice] + time_offset[prev_idx]
+                    )
                 last_slice = current_slice
 
             if single_timestamp_ending:
