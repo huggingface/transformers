@@ -47,6 +47,9 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
+            # TODO: Discuss if we should do that for quanto. I think that we should probably not do that and let the user cast the torch_dtype by themselves.
+            # since in this case, quanto can also work on cpu.
+            # If a user have both a cpu and cuda and he wants to play with quanto on cpu, he will have a specify manually torch_dtype to torch.float32.
             if torch.cuda.is_available():
                 torch_dtype = torch.float16
                 logger.info(
@@ -61,19 +64,18 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:
-            replace_with_quanto_layers(model, quantization_config=self.quantization_config)
+            model, _ = replace_with_quanto_layers(model, quantization_config=self.quantization_config)
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model):
         if not self.pre_quantized:
-            from quanto import freeze, quantize
-
-            mapping = {"torch.int8": torch.int8, None: None}
-
+            from quanto import freeze, qfloat8_e4m3fn, qfloat8_e5m2, qint8, quantize
+            w_mapping = {"int8": qint8}
+            a_mapping = {None: None, "int8": qint8, "fp8_e5m2": qfloat8_e5m2, "fp8_e4m3": qfloat8_e4m3fn}
             quantize(
                 model,
-                weights=mapping[self.quantization_config.weights],
-                activations=mapping[self.quantization_config.activations],
+                weights=w_mapping[self.quantization_config.weights],
+                activations=a_mapping[self.quantization_config.activations],
             )
             freeze(model)
 

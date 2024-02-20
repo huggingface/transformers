@@ -44,7 +44,10 @@ def replace_with_quanto_layers(
             A boolean that indicates if the conversion has been successful or not. This is used for recursion and
             should not be passed by the user.
     """
-    from quanto import QLayerNorm, QLinear
+    from quanto import QLayerNorm, QLinear, qfloat8_e4m3fn, qfloat8_e5m2, qint8
+
+    w_mapping = {"int8": qint8}
+    a_mapping = {None: None, "int8": qint8, "fp8_e5m2": qfloat8_e5m2, "fp8_e4m3": qfloat8_e4m3fn}
 
     if modules_to_not_convert is None:
         modules_to_not_convert = []
@@ -61,8 +64,8 @@ def replace_with_quanto_layers(
                     out_features=module.out_features,
                     bias=module.bias is not None,
                     dtype=module.weight.dtype,
-                    weights=quantization_config.weights,
-                    activations=quantization_config.activations,
+                    weights=w_mapping[quantization_config.weights],
+                    activations=a_mapping[quantization_config.activations],
                 )
                 model._modules[name].requires_grad_(False)
                 has_been_replaced = True
@@ -73,7 +76,7 @@ def replace_with_quanto_layers(
                         module.eps,
                         module.elementwise_affine,
                         module.bias is not None,
-                        activations=quantization_config.activations,
+                        activations=a_mapping[quantization_config.activations],
                     )
                     has_been_replaced = True
         if len(list(module.children())) > 0:

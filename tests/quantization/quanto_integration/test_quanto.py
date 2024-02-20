@@ -16,8 +16,6 @@
 import tempfile
 import unittest
 
-from parameterized import parameterized
-
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, QuantoConfig
 from transformers.testing_utils import require_accelerate, require_quanto, require_torch_gpu, slow
 from transformers.utils import is_accelerate_available, is_quanto_available, is_torch_available
@@ -64,7 +62,7 @@ class QuantoTestIntegration(unittest.TestCase):
         """
 
         # Try with weight only quantization
-        quantization_config = QuantoConfig(weights="torch.int8", activations=None)
+        quantization_config = QuantoConfig(weights="int8", activations=None)
         self.model, _ = replace_with_quanto_layers(self.model, quantization_config=quantization_config)
 
         nb_qlinear = 0
@@ -80,7 +78,7 @@ class QuantoTestIntegration(unittest.TestCase):
         """
 
         # Try with weight + activatioin quantization
-        quantization_config = QuantoConfig(weights="torch.int8", activations="torch.int8")
+        quantization_config = QuantoConfig(weights="int8", activations="int8")
         self.model, _ = replace_with_quanto_layers(self.model, quantization_config=quantization_config)
 
         nb_qlinear = 0
@@ -100,7 +98,7 @@ class QuantoTestIntegration(unittest.TestCase):
         """
 
         # Try with weight + activatioin quantization
-        quantization_config = QuantoConfig(weights="torch.int8", activations="torch.int8")
+        quantization_config = QuantoConfig(weights="int8", activations="int8")
         self.model, _ = replace_with_quanto_layers(
             self.model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
         )
@@ -178,7 +176,7 @@ class QuantoQuantizationTest(unittest.TestCase):
 
     model_name = "bigscience/bloom-560m"
 
-    weights = "torch.int8"
+    weights = "int8"
     activations = None
     device_map = "cpu"
 
@@ -244,22 +242,25 @@ class QuantoQuantizationTest(unittest.TestCase):
             self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, "cuda"
         )
 
-    @parameterized.expand(
-        [
-            ("safe_serialization", False, True),
-            ("device_map", None, "cpu", "cuda"),
-        ]
-    )
-    def test_serialization(self, safe_serialization, device_map):
+    def test_serialization_bin(self):
         """
         Test the serialization, the loading and the inference of the quantized weights
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=device_map)
+            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float32, device_map="cpu")
             # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
             self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
+    def test_serialization_safetensors(self):
+        """
+        Test the serialization, the loading and the inference of the quantized weights
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float32, device_map="cpu")
+            # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
+            self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
 # class QuantoQuantizationW4Test(QuantoQuantizationTest):
 #     weights = "torch.int4"
