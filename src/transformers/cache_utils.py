@@ -387,14 +387,13 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         new_cache_positions = cache_kwargs.get("cache_position")
-        k_out = self.key_cache
-        v_out = self.value_cache
+        k_out = self.key_cache[: key_states.shape[0]]
+        v_out = self.value_cache[: value_states.shape[0]]
 
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
-        
+
         # # This NEEDS to be in-place as in the modeling we are not calling directly `self.past_key_value.update()`, but are rather using getattr.
-        # print("update seen_tokens with", key_states.shape[2])
         self.seen_tokens.add_(key_states.shape[2])
         return k_out, v_out
 

@@ -1215,6 +1215,17 @@ class GenerationMixin:
                 )
 
     @torch.no_grad()
+    def prepare_static_cache(self, max_batch_size: int, max_total_tokens: int):
+        # if we don't pass `past_key_values` and a cache_implementation is specified
+        cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
+        if not callable(getattr(self, "_setup_cache", None)):
+            raise ValueError(
+                "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                " Make sure it has a `_setup_cache` function."
+            )
+        self._setup_cache(cache_cls, max_batch_size=max_batch_size, max_cache_len=max_total_tokens)
+
+    @torch.no_grad()
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1463,10 +1474,11 @@ class GenerationMixin:
                     " Make sure it has a `_setup_cache` function."
                 )
             self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+        """
+        # TODO: sanity check on batch_size
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
-        """
-        
+
         # 7. determine generation mode
         generation_mode = self._get_generation_mode(generation_config, assistant_model)
 
@@ -1525,7 +1537,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            return self.assisted_decoding(
+            result = self.assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
@@ -1543,7 +1555,7 @@ class GenerationMixin:
             )
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
-            return self.greedy_search(
+            result = self.greedy_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -1561,7 +1573,7 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
 
-            return self.contrastive_search(
+            result = self.contrastive_search(
                 input_ids,
                 top_k=generation_config.top_k,
                 penalty_alpha=generation_config.penalty_alpha,
@@ -1591,7 +1603,7 @@ class GenerationMixin:
             )
 
             # 13. run sample
-            return self.sample(
+            result = self.sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
@@ -1625,7 +1637,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.beam_search(
+            result = self.beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1664,7 +1676,7 @@ class GenerationMixin:
             )
 
             # 14. run beam sample
-            return self.beam_sample(
+            result = self.beam_sample(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1699,7 +1711,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.group_beam_search(
+            result = self.group_beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1773,7 +1785,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.constrained_beam_search(
+            result = self.constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1786,6 +1798,16 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
+
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if not callable(getattr(self, "_reset_cache", None)):
+                raise ValueError(
+                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                    " Make sure it has a `_reset_cache` function."
+                )
+            self._reset_cache()
+
+        return result
 
     @torch.no_grad()
     def contrastive_search(
@@ -2409,7 +2431,7 @@ class GenerationMixin:
             print("model_inputs attention_mask shape", model_inputs["attention_mask"].shape)
             print("model_inputs attention_mask stride", model_inputs["attention_mask"].stride())
 
-            count += 1 
+            count += 1
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
