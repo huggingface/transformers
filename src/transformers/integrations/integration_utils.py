@@ -918,7 +918,9 @@ class WandbCallback(TrainerCallback):
             )
             artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
             artifact.add_dir(artifact_path)
-            self._wandb.log_artifact(artifact, aliases=[f"checkpoint", f"epoch_{round(state.epoch, 2)}", f"global_step_{state.global_step}"])
+            self._wandb.log_artifact(
+                artifact, aliases=["checkpoint", f"epoch_{round(state.epoch, 2)}", f"global_step_{state.global_step}"]
+            )
 
     def on_predict(self, args, state, control, metrics, **kwargs):
         if self._wandb is None:
