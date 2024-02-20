@@ -58,6 +58,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_staging_test,
     require_accelerate,
+    require_bitsandbytes,
     require_deepspeed,
     require_intel_extension_for_pytorch,
     require_optuna,
@@ -872,6 +873,56 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
+    @require_bitsandbytes
+    def test_rmsprop_bnb(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb_8bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_8bit"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb_32bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_32bit"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
     def test_neftune(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
@@ -1588,18 +1639,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 8
-        self.assertEqual(trainer._train_batch_size, 8)
-
-        # We can then make a new Trainer
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        # Check we are at 16 to start
-        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
-        trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 8)
+        # Note: This can have issues, for now we don't support this functionality
+        # ref: https://github.com/huggingface/transformers/pull/29057
+        with self.assertRaises(NotImplementedError):
+            _ = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)

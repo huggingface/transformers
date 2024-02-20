@@ -216,6 +216,9 @@ class GenerationConfig(PushToHubMixin):
             more details.
         output_scores (`bool`, *optional*, defaults to `False`):
             Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+        output_logits (`bool`, *optional*):
+            Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
+            more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
@@ -315,6 +318,7 @@ class GenerationConfig(PushToHubMixin):
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_scores = kwargs.pop("output_scores", False)
+        self.output_logits = kwargs.pop("output_logits", None)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
 
         # Special tokens that can be used at generation time
