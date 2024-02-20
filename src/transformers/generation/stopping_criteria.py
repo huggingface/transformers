@@ -1,8 +1,10 @@
+import re
 import time
 import warnings
 from abc import ABC
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union, List, Tuple, Dict
 
 import numpy as np
 import torch
@@ -319,3 +321,42 @@ def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_leng
     elif stopping_max_length is None:
         new_stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
     return new_stopping_criteria
+
+
+class StopStringCriteria2(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever the full generated string matches a given string.
+
+    It works by keeping a buffer of n tokens and checking if the last n tokens match the stop string.
+    The number of tokens n is calculated as the maximum number of bytes of the strings in `stop_strings`
+
+    Args:
+        tokenizer (`PreTrainedTokenizer`):
+            The tokenizer used to encode the stop strings and decode generate strings.
+        stop_strings (`str` or `List[str]`):
+            The string or list of strings to match.
+    """
+
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]) -> None:
+        if isinstance(stop_strings, str):
+            stop_strings = [stop_strings]
+
+        self.tokenizer = tokenizer
+        self.vocab = tokenizer.get_vocab()
+        self.stop_strings = stop_strings
+        # Find the buffer size as the maximum number of bytes of the stop strings. Add 1 to account for the space
+        self.buffer_size = max(len(s.encode("utf-8")) for s in stop_strings) + 1
+
+        # Build a regex pattern to match the stop strings
+        self.stop_pattern = "|".join([f"({re.escape(s)})" for s in stop_strings])
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor = None, **kwargs) -> bool:
+        # If this is the first time calling the buffer, initialize it as a tensor of input_ids of buffer_size
+        buffer = input_ids[:, -self.buffer_size:]
+        decoded_strings = self.tokenizer.batch_decode(buffer, skip_special_tokens=True)
+
+        # Run an regex match to check if the last n tokens match with any of the stop strings
+        if any(re.search(self.stop_pattern, decoded_string) is not None for decoded_string in decoded_strings):
+            return True
+        return False
