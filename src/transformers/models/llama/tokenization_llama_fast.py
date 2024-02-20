@@ -100,6 +100,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
+        add_prefix_space (`<fill_type>`, *optional*): <fill_docstring>
+        from_slow (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
