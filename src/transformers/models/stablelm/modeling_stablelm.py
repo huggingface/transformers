@@ -439,7 +439,7 @@ class StableLmSdpaAttention(StableLmAttention):
             key_states,
             value_states,
             attn_mask=attention_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
+            dropout_p=self.attention_dropout.p if self.training else 0.0,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -937,7 +937,9 @@ class StableLmModel(StableLmPreTrainedModel):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._attn_implementation == "sdpa":
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
