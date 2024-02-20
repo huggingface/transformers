@@ -54,7 +54,7 @@ from .configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 
 # TokenClassification docstring
@@ -78,21 +78,21 @@ _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bert-base-uncased",
-    "bert-large-uncased",
-    "bert-base-cased",
-    "bert-large-cased",
-    "bert-base-multilingual-uncased",
-    "bert-base-multilingual-cased",
-    "bert-base-chinese",
-    "bert-base-german-cased",
-    "bert-large-uncased-whole-word-masking",
-    "bert-large-cased-whole-word-masking",
-    "bert-large-uncased-whole-word-masking-finetuned-squad",
-    "bert-large-cased-whole-word-masking-finetuned-squad",
-    "bert-base-cased-finetuned-mrpc",
-    "bert-base-german-dbmdz-cased",
-    "bert-base-german-dbmdz-uncased",
+    "google-bert/bert-base-uncased",
+    "google-bert/bert-large-uncased",
+    "google-bert/bert-base-cased",
+    "google-bert/bert-large-cased",
+    "google-bert/bert-base-multilingual-uncased",
+    "google-bert/bert-base-multilingual-cased",
+    "google-bert/bert-base-chinese",
+    "google-bert/bert-base-german-cased",
+    "google-bert/bert-large-uncased-whole-word-masking",
+    "google-bert/bert-large-cased-whole-word-masking",
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad",
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
+    "google-bert/bert-base-cased-finetuned-mrpc",
+    "google-bert/bert-base-german-dbmdz-cased",
+    "google-bert/bert-base-german-dbmdz-uncased",
     "cl-tohoku/bert-base-japanese",
     "cl-tohoku/bert-base-japanese-whole-word-masking",
     "cl-tohoku/bert-base-japanese-char",
@@ -692,6 +692,9 @@ class BertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -1062,6 +1065,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1101,8 +1105,8 @@ class BertForPreTraining(BertPreTrainedModel):
         >>> from transformers import AutoTokenizer, BertForPreTraining
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = BertForPreTraining.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        >>> model = BertForPreTraining.from_pretrained("google-bert/bert-base-uncased")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1171,6 +1175,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1324,6 +1329,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1453,8 +1459,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> from transformers import AutoTokenizer, BertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = BertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        >>> model = BertForNextSentencePrediction.from_pretrained("google-bert/bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."

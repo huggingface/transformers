@@ -621,7 +621,9 @@ class TFAutoModelForSeq2SeqLM(_BaseAutoModelClass):
 
 
 TFAutoModelForSeq2SeqLM = auto_class_update(
-    TFAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+    TFAutoModelForSeq2SeqLM,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="google-t5/t5-base",
 )
 
 

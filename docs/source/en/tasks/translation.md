@@ -24,7 +24,7 @@ Translation converts a sequence of text from one language to another. It is one 
 
 This guide will show you how to:
 
-1. Finetune [T5](https://huggingface.co/t5-small) on the English-French subset of the [OPUS Books](https://huggingface.co/datasets/opus_books) dataset to translate English text to French.
+1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the English-French subset of the [OPUS Books](https://huggingface.co/datasets/opus_books) dataset to translate English text to French.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -88,7 +88,7 @@ The next step is to load a T5 tokenizer to process the English-French language p
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 

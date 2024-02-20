@@ -365,7 +365,7 @@ class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
         dim = config.hidden_size // config.speech_encoder_attention_heads
         base = config.rotary_embedding_base
 
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
@@ -414,9 +414,9 @@ class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
         # are to the left (i>j) and negative relative positions otherwise (i<j).
         pe_positive = torch.zeros(x.size(1), self.d_model)
         pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.d_model)
         )
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
@@ -1021,8 +1021,8 @@ class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad

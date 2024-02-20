@@ -449,9 +449,9 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from transformers import FlaxEncoderDecoderModel, BertTokenizer
 
         >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-cased", "openai-community/gpt2")
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        >>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> input_ids = tokenizer.encode(text, return_tensors="np")
@@ -527,9 +527,9 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> import jax.numpy as jnp
 
         >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-cased", "openai-community/gpt2")
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        >>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> input_ids = tokenizer.encode(text, max_length=1024, return_tensors="np")
@@ -653,8 +653,8 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> # load a fine-tuned bert2gpt2 model
         >>> model = FlaxEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
         >>> # load input & output tokenizer
-        >>> tokenizer_input = BertTokenizer.from_pretrained("bert-base-cased")
-        >>> tokenizer_output = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> tokenizer_input = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+        >>> tokenizer_output = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         >>> article = '''Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members
         >>> singing a racist chant. SAE's national chapter suspended the students,
@@ -774,8 +774,6 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
@@ -783,8 +781,6 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
@@ -807,7 +803,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from transformers import FlaxEncoderDecoderModel
 
         >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-cased", "openai-community/gpt2")
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./bert2gpt2")
         >>> # load fine-tuned model
