@@ -317,16 +317,17 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["He", "y", "▁how", "▁are", "▁you", "▁doing"])
-        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE), inputs)
-        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE), fast_.decode(EXPECTED_WO_SPACE))
+        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True), inputs)
+        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True), fast_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True))
 
         slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
         fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WITH_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["▁Hey", "▁how", "▁are", "▁you", "▁doing"])
-        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE), inputs)
-        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE), fast_.decode(EXPECTED_WITH_SPACE))
+        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True), inputs)
+        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True), fast_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True))
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers
