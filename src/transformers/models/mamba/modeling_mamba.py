@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MAMBA model."""
 
-import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -66,7 +65,7 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "state-spaces/mamba-1.4b",
     "state-spaces/mamba-2.8b",
     "state-spaces/mamba-2.8b-slimpj",
-] # See all Mamba models at https://huggingface.co/models?filter=mamba
+]  # See all Mamba models at https://huggingface.co/models?filter=mamba
 
 
 class MambaMixer(nn.Module):
@@ -102,7 +101,9 @@ class MambaMixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # THe core is to load them, compute the discrete states, then write the updates state. Keeps the memory bounded
         A = torch.arange(1, self.d_state + 1, dtype=torch.float32)[None, :].expand(self.d_inner, -1).contiguous()
-        self.A_log = nn.Parameter(torch.log(A)) # TODO this parameter should be kept in float32. We don't have support for that I think
+        self.A_log = nn.Parameter(
+            torch.log(A)
+        )  # TODO this parameter should be kept in float32. We don't have support for that I think
 
         # D "skip" parameter
         self.D = nn.Parameter(torch.ones(self.d_inner))  # Keep in fp32
@@ -117,7 +118,9 @@ class MambaMixer(nn.Module):
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
         if inference_params is not None and inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
-            hidden_states = causal_conv1d_update(hidden_states.squeeze(-1), conv_state, conv_weights, self.conv1d.bias, self.activation)
+            hidden_states = causal_conv1d_update(
+                hidden_states.squeeze(-1), conv_state, conv_weights, self.conv1d.bias, self.activation
+            )
             hidden_states = hidden_states.unsqueeze(-1)
         else:
             conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
@@ -290,7 +293,7 @@ class MambaBlock(nn.Module):
 
         self.mixer = MIXER_CLS(config, layer_idx=layer_idx)
 
-    def forward(self, hidden_states, inference_params=None):
+    def forward(self, hidden_states, output_ssm_states=False, inference_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -539,7 +542,9 @@ class MambaModel(MambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in enumerate(self.layers):
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(mixer_block.__call__, hidden_states, inference_params)
+                hidden_states = self._gradient_checkpointing_func(
+                    mixer_block.__call__, hidden_states, inference_params
+                )
             else:
                 hidden_states = mixer_block(hidden_states, inference_params=inference_params)
 
@@ -637,7 +642,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         output_ssm_states: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs, #for now we need this for generation
+        **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, MambaCausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

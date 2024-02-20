@@ -22,7 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -192,9 +192,7 @@ class MambaModelTester:
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
 
-    def create_and_check_forward_and_backwards(
-        self, config, input_ids, *args, gradient_checkpointing=False
-    ):
+    def create_and_check_forward_and_backwards(self, config, input_ids, *args, gradient_checkpointing=False):
         model = MambaForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
@@ -206,7 +204,14 @@ class MambaModelTester:
         result.loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            _,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
         inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
@@ -347,8 +352,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-
-    def test_simple_generate_cuda_kernels(self):
+    def test_simple_generate_cuda_kernels_mid(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
@@ -359,7 +363,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-    def test_simple_generate_cuda_kernels(self):
+    def test_simple_generate_cuda_kernels_big(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
