@@ -87,6 +87,17 @@ class HfQuantizer(ABC):
         """
         return device_map
 
+    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str,Any]) -> Dict[str,Any]:
+        """
+        Override this method if you want to pass a override the existing weights_only_kwarg with a new
+        one.
+
+        Args:
+            weights_only_kwarg (`dict`, *optional*):
+                The weights_only_kwarg kwarg that will be passed `torch.load()`
+        """
+        return weights_only_kwarg
+
     def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         """
         Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`

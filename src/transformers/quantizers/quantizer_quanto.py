@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from .base import HfQuantizer
 
@@ -61,6 +61,10 @@ class QuantoHfQuantizer(HfQuantizer):
                     "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `torch_dtype` manually."
                 )
         return torch_dtype
+
+    def update_weights_only_kwarg(self,weights_only_kwarg: Dict[str,Any]) -> Dict[str,Any]:
+        weights_only_kwarg["weights_only"]=False
+        return weights_only_kwarg
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:

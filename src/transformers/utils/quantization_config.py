@@ -810,7 +810,7 @@ class QuantoConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        weights="torch.int8",
+        weights="int8",
         activations=None,
         **kwargs,
     ):
