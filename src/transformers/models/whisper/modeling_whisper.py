@@ -286,6 +286,8 @@ class WhisperAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+
+        print(f"layer_head_mask: {layer_head_mask}")
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -427,6 +429,8 @@ class WhisperFlashAttention2(WhisperAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        print(f"layer_head_mask: {layer_head_mask}")
+
         # WhisperFlashAttention2 attention does not support output_attentions
         if output_attentions:
             raise ValueError("WhisperFlashAttention2 attention does not support output_attentions")
