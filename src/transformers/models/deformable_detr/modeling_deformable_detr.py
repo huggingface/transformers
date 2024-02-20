@@ -617,7 +617,6 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: DeformableDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
-        # Move this to not compile only when importing, this needs to happen later, like in __init__.
         kernel_loaded = MultiScaleDeformableAttention is not None
         if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
             try:
