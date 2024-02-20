@@ -25,7 +25,6 @@ import torch.distributed as dist
 from torch import nn
 
 from ..cache_utils import Cache, DynamicCache, StaticCache
-from ..cache_utils import Cache, DynamicCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
