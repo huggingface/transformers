@@ -766,4 +766,4 @@ def validate_kwargs(valid_processor_keys: List[str], captured_kwargs: List[str])
     if unused_keys:
         unused_key_str = ", ".join(unused_keys)
         # TODO raise a warning here instead of simply logging?
-        logger.info(f"Unused or unrecognized kwargs: {unused_key_str}.")
+        logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
