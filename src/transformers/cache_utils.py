@@ -384,7 +384,6 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         new_cache_positions = cache_kwargs.get("cache_position")
-
         k_out = self.key_cache
         v_out = self.value_cache
 

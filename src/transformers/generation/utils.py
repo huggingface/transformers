@@ -1217,18 +1217,6 @@ class GenerationMixin:
                     UserWarning,
                 )
 
-    """
-    @torch.no_grad()
-    def prepare_static_cache(self, max_batch_size: int, max_total_tokens: int):
-        cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-        if not callable(getattr(self, "_setup_cache", None)):
-            raise ValueError(
-                "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                " Make sure it has a `_setup_cache` function."
-            )
-        self._setup_cache(cache_cls, max_batch_size=max_batch_size, max_cache_len=max_total_tokens)
-    """
-
     @torch.no_grad()
     def generate(
         self,
@@ -2414,7 +2402,6 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
-        count = 0
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2429,7 +2416,6 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            count += 1
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
