@@ -14,7 +14,7 @@ ARG PYTORCH='2.1.1'
 ARG CUDA='cu118'
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3.10 python3-pip ffmpeg
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python python3-pip ffmpeg
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
@@ -42,7 +42,7 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # Add aqlm for quantization testing
-RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.1
+RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
 # Add autoawq for quantization testing
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.1.8/autoawq-0.1.8+cu118-cp38-cp38-linux_x86_64.whl
