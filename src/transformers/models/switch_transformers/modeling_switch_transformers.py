@@ -1925,8 +1925,6 @@ class SwitchTransformersForSequenceClassification(SwitchTransformersPreTrainedMo
         # Initialize weights and apply final processing
         self.post_init()
 
-        # Model parallel
-        self.device_map = None
 
     def get_input_embeddings(self):
         return self.shared
