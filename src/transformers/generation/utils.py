@@ -698,9 +698,12 @@ class GenerationMixin:
         Returns the candidate generator to be used in `assisted_generation`
         """
         if generation_config.prompt_lookup_num_tokens is not None:
-            candidate_generator = PromptLookupCandidateGenerator(
+            candidate_generator_params = dict(
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
             )
+            if generation_config.max_matching_ngram_size:
+                candidate_generator_params["max_matching_ngram_size"] = generation_config.max_matching_ngram_size
+            candidate_generator = PromptLookupCandidateGenerator(**candidate_generator_params)
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,

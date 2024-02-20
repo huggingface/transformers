@@ -339,6 +339,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
+        self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
