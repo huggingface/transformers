@@ -1920,7 +1920,7 @@ class SwitchTransformersForSequenceClassification(SwitchTransformersPreTrainedMo
         decoder_config.is_encoder_decoder = False
         self.decoder = SwitchTransformersStack(decoder_config, self.shared)
         # Classifier head
-        self.classification_head = ClassificationHead(config, self.model_dim)
+        self.classification_head = SwitchTransformersClassificationHead(config, self.model_dim)
 
         # Initialize weights and apply final processing
         self.post_init()
