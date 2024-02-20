@@ -875,6 +875,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(train_output.global_step, 10)
 
     @require_peft
+    @require_bitsandbytes
     def test_bnb_compile(self):
         from peft import LoraConfig, get_peft_model
 
@@ -906,10 +907,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
             )
-            trainer = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
-
-            # TODO: In the future (once we have bnb + compile support), uncomment this
-            # trainer.train()
+            with self.assertRaises(ValueError):
+                _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
 
     @require_bitsandbytes
     def test_rmsprop_bnb(self):

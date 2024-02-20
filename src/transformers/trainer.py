@@ -224,14 +224,7 @@ def _is_peft_model(model):
             from peft import PeftMixedModel
 
             classes_to_check = (*classes_to_check, PeftMixedModel)
-
-        model_to_check = model
-
-        # Handle torch.compile models
-        if hasattr(model, "_orig_mod"):
-            model_to_check = model._orig_mod
-
-        return isinstance(model_to_check, classes_to_check)
+        return isinstance(model, classes_to_check)
     return False
 
 
@@ -435,6 +428,12 @@ class Trainer:
         _quantization_method_supports_training = (
             getattr(model, "hf_quantizer", None) is not None and model.hf_quantizer.is_trainable
         )
+
+        # Filter out
+        if _is_quantized_and_base_model and hasattr(model, "_orig_mod"):
+            raise ValueError(
+                "You cannot fine-tune quantized model with `torch.compile()` make sure to pass a non-compiled model when fine-tuning a quantized model with PEFT"
+            )
 
         # At this stage the model is already loaded
         if _is_quantized_and_base_model and not _is_peft_model(model):
