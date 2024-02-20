@@ -1263,6 +1263,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
             # generation with static cache
             past_length = past_key_value.get_seq_length()
+            print("past_length here", past_length)
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
 

@@ -2386,7 +2386,10 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+        count = 0
         while True:
+            print("------- forward in generate", count)
+            count += 1
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence

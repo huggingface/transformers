@@ -395,6 +395,7 @@ class StaticCache(Cache):
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        print("self.seen_tokens in get_seq_length", self.seen_tokens)
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
         return self.seen_tokens
 
