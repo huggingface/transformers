@@ -1953,7 +1953,7 @@ class GenerationMixin:
             if model_kwargs.get("past_key_values") is None:
                 # prepare inputs
                 model_kwargs["use_cache"] = True
-                model_kwargs["output_attentions"] = output_attentions
+                self.config.output_attentions = output_attentions
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save
