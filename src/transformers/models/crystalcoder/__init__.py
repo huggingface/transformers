@@ -45,14 +45,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_crystalcoder"] = [
         "CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        # "CrystalCoderDoubleHeadsModel",
-        # "CrystalCoderForQuestionAnswering",
-        # "CrystalCoderForSequenceClassification",
-        # "CrystalCoderForTokenClassification",
         "CrystalCoderLMHeadModel",
         "CrystalCoderModel",
         "CrystalCoderPreTrainedModel",
-        # "load_tf_weights_in_crystalcoder",
     ]
 
 try:
@@ -64,8 +59,11 @@ else:
     _import_structure["tokenization_crystalcoder_tf"] = ["TFCrystalCoderTokenizer"]
 
 if TYPE_CHECKING:
-    from .configuration_crystalcoder import CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP, CrystalCoderConfig, CrystalCoderOnnxConfig
-    # from .tokenization_crystalcoder import CrystalCoderTokenizer
+    from .configuration_crystalcoder import (
+        CRYSTALCODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CrystalCoderConfig,
+        CrystalCoderOnnxConfig,
+    )
 
     try:
         if not is_tokenizers_available():
@@ -83,14 +81,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_crystalcoder import (
             CRYSTALCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            # CrystalCoderDoubleHeadsModel,
-            # CrystalCoderForQuestionAnswering,
-            # CrystalCoderForSequenceClassification,
-            # CrystalCoderForTokenClassification,
             CrystalCoderLMHeadModel,
             CrystalCoderModel,
             CrystalCoderPreTrainedModel,
-            # load_tf_weights_in_crystalcoder,
         )
 
     try:
@@ -99,7 +92,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        # from .tokenization_crystalcoder_tf import TFCrystalCoderTokenizer
         pass
 
 else:

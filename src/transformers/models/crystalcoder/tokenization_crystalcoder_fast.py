@@ -15,15 +15,16 @@
 """Tokenization classes for OpenAI GPT."""
 
 
-import json
-from typing import Optional, Tuple
 import os
 from shutil import copyfile
+from typing import Optional, Tuple
+
 from tokenizers import processors
-import os
-from ...tokenization_utils_base import BatchEncoding
+
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+
+
 # from .tokenization_crystalcoder import CrystalCoderTokenizer
 
 
@@ -41,8 +42,6 @@ correct. If you don't know the answer to a question, please don't share false in
 
 
 class CrystalCoderTokenizerFast(PreTrainedTokenizerFast):
-    
-
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = None
     padding_side = "left"
@@ -144,7 +143,6 @@ class CrystalCoderTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
@@ -155,4 +153,3 @@ class CrystalCoderTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
-    
