@@ -251,6 +251,13 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    def test_jit_generation(self):
+        EXPECTED_TEXTS = [
+            "The capital of France is a city of contrasts. It is a city of history, culture, and art, but it is",
+            "To play the perfect cover drive, you need to have a good technique and a good mindset.\n\nThe cover drive is a shot",
+        ]
+        inputs = self.tokenizer(self.input_text, return_tensors="np", padding=True)
+
         def generate(input_ids, attention_mask):
             outputs = self.model.generate(
                 input_ids, attention_mask=attention_mask, params=self.params, max_new_tokens=20, do_sample=False
@@ -260,4 +267,5 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         jit_generate = jax.jit(generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = self.tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+
         self.assertEqual(output_text, EXPECTED_TEXTS)
