@@ -61,8 +61,12 @@ _CONFIG_FOR_DOC = "MambaConfig"
 
 MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "state-spaces/mamba-130m",
-    # See all Mamba models at https://huggingface.co/models?filter=mamba
-]
+    "state-spaces/mamba-370m",
+    "state-spaces/mamba-790m",
+    "state-spaces/mamba-1.4b",
+    "state-spaces/mamba-2.8b",
+    "state-spaces/mamba-2.8b-slimpj",
+] # See all Mamba models at https://huggingface.co/models?filter=mamba
 
 
 class MambaMixer(nn.Module):
@@ -73,9 +77,7 @@ class MambaMixer(nn.Module):
         self.d_conv = config.conv_kernel
         self.expand = config.expand
         self.d_inner = int(self.expand * self.d_model)
-        self.time_step_rank = (
-            math.ceil(self.d_model / 16) if config.time_step_rank == "auto" else config.time_step_rank
-        )
+        self.time_step_rank = config.time_step_rank
         self.layer_idx = layer_idx
 
         self.conv1d = nn.Conv1d(
@@ -96,17 +98,14 @@ class MambaMixer(nn.Module):
         self.x_proj = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.d_inner, bias=True)
+
         # S4D real initialization. These are not discretized!
-        # THe core is to load them, compute the discrete states, then write the updates state.
-        # Keeps the memory bounded
+        # THe core is to load them, compute the discrete states, then write the updates state. Keeps the memory bounded
         A = torch.arange(1, self.d_state + 1, dtype=torch.float32)[None, :].expand(self.d_inner, -1).contiguous()
-        A_log = torch.log(A)  # Keep A_log in fp32
-        self.A_log = nn.Parameter(A_log)
-        self.A_log._no_weight_decay = True
+        self.A_log = nn.Parameter(torch.log(A)) # TODO this parameter should be kept in float32. We don't have support for that I think
 
         # D "skip" parameter
         self.D = nn.Parameter(torch.ones(self.d_inner))  # Keep in fp32
-        self.D._no_weight_decay = True
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
@@ -118,24 +117,19 @@ class MambaMixer(nn.Module):
         conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
         if inference_params is not None and inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
-            hidden_states = causal_conv1d_update(
-                hidden_states.squeeze(-1), conv_state, conv_weights, self.conv1d.bias, self.activation
-            ).unsqueeze(-1)
+            hidden_states = causal_conv1d_update(hidden_states.squeeze(-1), conv_state, conv_weights, self.conv1d.bias, self.activation)
+            hidden_states = hidden_states.unsqueeze(-1)
         else:
             conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
             inference_params.conv_states[self.layer_idx].copy_(conv_state)
-            hidden_states = causal_conv1d_fn(
-                hidden_states,
-                conv_weights,
-                self.conv1d.bias,
-                activation=self.activation,
-            )
+            hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
         discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
+
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         A = -torch.exp(self.A_log.float())
 
@@ -155,14 +149,12 @@ class MambaMixer(nn.Module):
                 dt_softplus=True,
             ).unsqueeze(-1)
         else:
-            B = B.transpose(1, 2)
-            C = C.transpose(1, 2)
             y, last_state = selective_scan_fn(
                 hidden_states,
                 discrete_time_step,
                 A,
-                B,
-                C,
+                B.transpose(1, 2),
+                C.transpose(1, 2),
                 self.D.float(),
                 gate,
                 self.dt_proj.bias.float(),
@@ -330,6 +322,10 @@ class MambaPreTrainedModel(PreTrainedModel):
                     nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, std=self.config.initializer_range)
+
+        # TODO make sure we properly init
+        # self.A_log._no_weight_decay = True
+        # self.D._no_weight_decay = True
         #
         # # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
         # dt = torch.exp(
@@ -384,18 +380,16 @@ class MambaOutput(ModelOutput):
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        ssm_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_ssm_statess=True` is passed or when `config.output_ssm_states=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            State space model states weights after the selective scan.
     """
 
     last_hidden_state: torch.FloatTensor = None
     inference_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    states: Optional[Tuple[torch.FloatTensor]] = None
+    ssm_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -416,18 +410,17 @@ class MambaCausalLMOutput(ModelOutput):
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+        ssm_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_ssm_statess=True` is passed or when `config.output_ssm_states=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,sequence_length)`.
 
-            Last known states.
+            State space model states weights after the selective scan.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     inference_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    states: Optional[Tuple[torch.FloatTensor]] = None
+    ssm_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 MAMBA_START_DOCSTRING = r"""
@@ -469,9 +462,8 @@ MAMBA_INPUTS_DOCSTRING = r"""
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
             If set to `True`, the last state is returned and can be used to quickly generate the next logits.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
+        output_ssm_states (`bool`, *optional*):
+            Whether or not to return the ssm_states of all `MambaMixer` layers.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -514,21 +506,19 @@ class MambaModel(MambaPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         inference_params: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MambaOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is None and inputs_embeds is None:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
@@ -541,28 +531,22 @@ class MambaModel(MambaPreTrainedModel):
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`"
                 )
                 use_cache = False
 
         hidden_states = inputs_embeds
-        all_last_states = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
-        for idx, layer in enumerate(self.layers):
+        for mixer_block in enumerate(self.layers):
             if self.gradient_checkpointing and self.training:
-                hidden_states, conv_state, ssm_state = self._gradient_checkpointing_func(
-                    layer.__call__, hidden_states, inference_params
-                )
+                hidden_states = self._gradient_checkpointing_func(mixer_block.__call__, hidden_states, inference_params)
             else:
-                hidden_states, conv_state, ssm_state = layer(hidden_states, inference_params=inference_params)
-                # inference_params.ssm_states[idx].copy_(ssm_state)
-                # inference_params.conv_states[idx].copy_(conv_state)
+                hidden_states = mixer_block(hidden_states, inference_params=inference_params)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if output_attentions:
-                all_last_states = all_last_states + (ssm_state,)
+        # TODO this is not curcial as long as you know you are decoding vs not decoding
         inference_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.norm_f(hidden_states)
@@ -573,15 +557,14 @@ class MambaModel(MambaPreTrainedModel):
         if not return_dict:
             return tuple(
                 hidden_states
-                for hidden_states in [hidden_states, inference_params, all_hidden_states, all_last_states]
+                for hidden_states in [hidden_states, inference_params if use_cache else None, all_hidden_states]
                 if hidden_states is not None
             )
 
         return MambaOutput(
             last_hidden_state=hidden_states,
-            inference_params=inference_params,
+            inference_params=inference_params if use_cache else None,
             hidden_states=all_hidden_states,
-            states=all_last_states,
         )
 
 
@@ -631,7 +614,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
         if inference_params is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and inference_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
@@ -652,7 +634,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         inference_params: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
+        output_ssm_states: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MambaCausalLMOutput]:
@@ -668,7 +650,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
             input_ids,
             inference_params=inference_params,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
+            output_ssm_states=output_ssm_states,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -696,5 +678,5 @@ class MambaForCausalLM(MambaPreTrainedModel):
             logits=logits,
             inference_params=mamba_outputs.inference_params,
             hidden_states=mamba_outputs.hidden_states,
-            states=mamba_outputs.states,
+            ssm_states=mamba_outputs.ssm_states,
         )
