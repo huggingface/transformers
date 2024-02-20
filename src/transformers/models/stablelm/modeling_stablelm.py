@@ -438,7 +438,7 @@ class StableLmSdpaAttention(StableLmAttention):
 
         if past_key_value is not None:
             # Specific to RoPE models with partial rotation
-             cache_kwargs = {"sin": sin, "cos": cos, "partial_rotation_size": self.rotary_emb.dim}
+            cache_kwargs = {"sin": sin, "cos": cos, "partial_rotation_size": self.rotary_emb.dim}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # Repeat k/v heads if n_kv_heads < n_heads
