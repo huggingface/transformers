@@ -49,6 +49,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
@@ -845,6 +846,26 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self._valid_processor_keys = [
+            "images",
+            "annotations",
+            "return_segmentation_masks",
+            "masks_path",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "do_convert_annotations",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "format",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->ConditionalDetr
@@ -1299,6 +1320,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
 
