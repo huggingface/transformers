@@ -2041,7 +2041,7 @@ class GenerationMixin:
                 new_key_values.append(tuple(items))
             model_kwargs["past_key_values"] = tuple(new_key_values)
 
-            model_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             if sequential:
                 all_outputs = []
                 for i in range(top_k):
@@ -2099,7 +2099,7 @@ class GenerationMixin:
                 next_decoder_hidden_states += (layer,)
 
             # generate past_key_values cache of only the selected token
-            model_kwargs["output_attentions"] = False
+            self.config.output_attentions = False
             if sequential:
                 next_model_input = self.prepare_inputs_for_generation(
                     top_k_ids[:, selected_idx].view(-1, 1), **model_kwargs
@@ -2398,7 +2398,9 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-
+            
+            self.config.output_attentions = output_attentions
+            self.config.output_hidden_states = output_hidden_states
             # prepare model inputs. Non attention compatible models can pop whatever they need
             model_inputs = self.prepare_inputs_for_generation(input_ids,  **model_kwargs)
 
@@ -2687,7 +2689,7 @@ class GenerationMixin:
                     break
 
             # prepare model inputs
-            model_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
@@ -3024,7 +3026,7 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            model_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # if sequential is True, split the input to batches of batch_size and run sequentially
@@ -3402,7 +3404,7 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
         
-            model_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -3762,7 +3764,7 @@ class GenerationMixin:
             reordering_indices = torch.zeros(batch_size * num_beams, dtype=torch.long, device=device)
 
             # do one decoder step on all beams of all sentences in batch
-            model_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             outputs = self(
                 **model_inputs,
@@ -4154,7 +4156,7 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            model_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -4521,7 +4523,7 @@ class GenerationMixin:
             )
             candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
-            candidate_kwargs["output_attentions"] = output_attentions
+            self.config.output_attentions = output_attentions
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
 
             # 2.2. Run a forward pass on the candidate sequence
