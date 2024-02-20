@@ -115,49 +115,57 @@ class MambaMixer(nn.Module):
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
+        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
         if inference_params is not None and inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
             hidden_states = causal_conv1d_update(
-                hidden_states.squeeze(-1),
-                conv_state,
-                self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
-                self.conv1d.bias,
-                self.activation,
+                hidden_states.squeeze(-1), conv_state, conv_weights, self.conv1d.bias, self.activation
             ).unsqueeze(-1)
         else:
             conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
             inference_params.conv_states[self.layer_idx].copy_(conv_state)
             hidden_states = causal_conv1d_fn(
-                x=hidden_states,
-                weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
-                bias=self.conv1d.bias,
+                hidden_states,
+                conv_weights,
+                self.conv1d.bias,
                 activation=self.activation,
             )
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        x_dbl = self.x_proj(hidden_states.transpose(1, 2))
+        x_dbl = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
         time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
         discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
-
         A = -torch.exp(self.A_log.float())
+
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
         if inference_params is not None and inference_params.seqlen_offset > 0:
             y = selective_state_update(
-                ssm_state, hidden_states.squeeze(-1), discrete_time_step.squeeze(-1), A, B.squeeze(1), C.squeeze(1), self.D, z=gate.squeeze(-1), dt_bias=self.dt_proj.bias, dt_softplus=True
-            ).unsqueeze(-1)  # fmt: skip
+                ssm_state,
+                hidden_states[..., 0],
+                discrete_time_step[..., 0],
+                A,
+                B[:, 0],
+                C[:, 0],
+                self.D,
+                gate[..., 0],
+                self.dt_proj.bias,
+                dt_softplus=True,
+            ).unsqueeze(-1)
         else:
+            B = B.transpose(1, 2)
+            C = C.transpose(1, 2)
             y, last_state = selective_scan_fn(
                 hidden_states,
                 discrete_time_step,
                 A,
-                B.transpose(1, 2),
-                C.transpose(1, 2),
+                B,
+                C,
                 self.D.float(),
-                z=gate,
-                delta_bias=self.dt_proj.bias.float(),
+                gate,
+                self.dt_proj.bias.float(),
                 delta_softplus=True,
                 return_last_state=True,
             )
