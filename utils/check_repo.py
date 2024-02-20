@@ -732,6 +732,8 @@ def check_all_auto_object_names_being_defined():
                         # module, if it's a private model defined in this file.
                         if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
                             continue
+                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
+                            continue
                         failures.append(
                             f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
                         )

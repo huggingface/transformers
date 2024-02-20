@@ -50,6 +50,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -698,7 +699,11 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if (
                 model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_IMAGE_MAPPING_NAMES),
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -738,6 +743,7 @@ class ModelTesterMixin:
             if model_class.__name__ in [
                 *get_values(MODEL_MAPPING_NAMES),
                 *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_MAPPING_NAMES),
             ]:
                 continue
 

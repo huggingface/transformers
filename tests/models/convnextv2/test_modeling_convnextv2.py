@@ -19,7 +19,11 @@ import unittest
 
 from transformers import ConvNextV2Config
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -229,6 +233,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             if model_class.__name__ in [
                 *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
             ]:
                 continue
@@ -251,7 +256,10 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             if (
                 model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES) * get_values(MODEL_FOR_IMAGE_MAPPING_NAMES),
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
