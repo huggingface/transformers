@@ -1048,9 +1048,9 @@ class Pipeline(_ScikitCompat):
     def _sanitize_parameters(self, **pipeline_parameters):
         """
         _sanitize_parameters will be called with any excessive named arguments from either `__init__` or `__call__`
-        methods. It should return 3 dictionnaries of the resolved parameters used by the various `preprocess`,
-        `forward` and `postprocess` methods. Do not fill dictionnaries if the caller didn't specify a kwargs. This
-        let's you keep defaults in function signatures, which is more "natural".
+        methods. It should return 3 dictionaries of the resolved parameters used by the various `preprocess`,
+        `forward` and `postprocess` methods. Do not fill dictionaries if the caller didn't specify a kwargs. This
+        lets you keep defaults in function signatures, which is more "natural".
 
         It is not meant to be called directly, it will be automatically called and the final parameters resolved by
         `__init__` and `__call__`
