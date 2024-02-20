@@ -251,7 +251,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             return super().tokenize(text, **kwargs)
 
         text = text.replace(SPIECE_UNDERLINE, " ")
-        if kwargs.pop("add_prefix_space", self.add_prefix_space):
+        if self.add_prefix_space:
             text = SPIECE_UNDERLINE + text
 
         tokens = super().tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
@@ -292,7 +292,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         # since we manually add the prefix space, we have to remove it when decoding
-        if tokens[0].startswith(SPIECE_UNDERLINE):
+        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
             tokens[0] = tokens[0][1:]
 
         current_sub_tokens = []

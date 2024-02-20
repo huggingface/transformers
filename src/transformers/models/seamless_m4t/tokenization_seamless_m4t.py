@@ -497,7 +497,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        if tokens[0].startswith(SPIECE_UNDERLINE):
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
             tokens[0] = tokens[0][1:]
 
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
