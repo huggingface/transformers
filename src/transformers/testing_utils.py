@@ -137,8 +137,8 @@ if is_pytest_available():
         _patch_unwrap_mock_aware,
         get_optionflags,
     )
-    from _pytest.pathlib import import_path
     from _pytest.outcomes import skip
+    from _pytest.pathlib import import_path
     from pytest import DoctestItem
 else:
     Module = object
