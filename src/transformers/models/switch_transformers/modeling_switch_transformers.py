@@ -834,7 +834,12 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
             module,
-            (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
+            (
+                SwitchTransformersModel,
+                SwitchTransformersForConditionalGeneration,
+                SwitchTransformersEncoderModel,
+                SwitchTransformersForSequenceClassification,
+            ),
         ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
@@ -1902,6 +1907,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersForSequenceClassification(SwitchTransformersPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = ["classificiation_head.out_proj.weight", "classificiation_head.out_proj.bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
