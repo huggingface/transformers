@@ -977,12 +977,14 @@ class LlamaModel(LlamaPreTrainedModel):
         if use_cache:  # kept for BC (cache positions)
             if not isinstance(past_key_values, StaticCache):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
-            if cache_position is None:
                 past_seen_tokens = past_key_values.get_seq_length()
-                cache_position = torch.arange(
-                    past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-                )
+
+        if cache_position is None:
+            if isinstance(past_key_values, StaticCache):
+                raise ValueError("cache_position is a required argument when using StaticCache.")
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
