@@ -3819,7 +3819,11 @@ class GenerationMixin:
                 vocab_size = next_token_scores.shape[-1]
 
                 next_token_scores_processed = logits_processor(
-                    group_input_ids, next_token_scores, cur_len=cur_len, current_tokens=current_tokens, beam_group_idx=beam_group_idx
+                    group_input_ids,
+                    next_token_scores,
+                    cur_len=cur_len,
+                    current_tokens=current_tokens,
+                    beam_group_idx=beam_group_idx,
                 )
                 next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(-1)
                 next_token_scores = next_token_scores.expand_as(next_token_scores_processed)
@@ -4552,10 +4556,14 @@ class GenerationMixin:
             next_token_logits = new_logits.clone()
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
-                    new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :], cur_len=cur_len + i)
+                    new_logits[:, i, :] = logits_processor(
+                        candidate_input_ids[:, : cur_len + i], new_logits[:, i, :], cur_len=cur_len + i
+                    )
             if len(logits_warper) > 0:
                 for i in range(candidate_length + 1):
-                    new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :], cur_len=cur_len + i)
+                    new_logits[:, i, :] = logits_warper(
+                        candidate_input_ids[:, : cur_len + i], new_logits[:, i, :], cur_len=cur_len + i
+                    )
 
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
