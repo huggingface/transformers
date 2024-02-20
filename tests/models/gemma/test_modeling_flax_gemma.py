@@ -49,15 +49,15 @@ class FlaxGemmaModelTester:
         use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
-        hidden_size=16,
+        hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=64,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        window_size=7,
         initializer_range=0.02,
     ):
         self.parent = parent
@@ -71,12 +71,12 @@ class FlaxGemmaModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.window_size = window_size
         self.initializer_range = initializer_range
         self.scope = None
         self.bos_token_id = vocab_size - 1
@@ -95,6 +95,8 @@ class FlaxGemmaModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.hidden_size // self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -105,7 +107,7 @@ class FlaxGemmaModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return (config, input_ids, input_mask)
+        return config, input_ids, input_mask
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
