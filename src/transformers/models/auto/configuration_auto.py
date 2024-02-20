@@ -21,7 +21,10 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import CONFIG_NAME, logging
 
 
@@ -219,6 +222,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertConfig"),
         ("stablelm", "StableLmConfig"),
         ("starcoder2", "Starcoder2Config"),
+        ("superpoint", "SuperPointConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
@@ -450,6 +454,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("stablelm", "STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("starcoder2", "STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("superpoint", "SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swiftformer", "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin2sr", "SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -711,6 +716,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("squeezebert", "SqueezeBERT"),
         ("stablelm", "StableLm"),
         ("starcoder2", "Starcoder2"),
+        ("superpoint", "SuperPoint"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),

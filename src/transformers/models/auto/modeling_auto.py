@@ -207,6 +207,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertModel"),
         ("stablelm", "StableLmModel"),
         ("starcoder2", "Starcoder2Model"),
+        ("superpoint", "SuperPointModel"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
@@ -1275,6 +1276,12 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("superpoint", "SuperPointModel"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -1370,6 +1377,10 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING = _LazyAutoMapping(
 )
 
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
+
+MODEL_FOR_KEYPOINT_DETECTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES
+)
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
@@ -1668,3 +1679,12 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
             FutureWarning,
         )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+
+class AutoModelForKeypointPointDetection(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_KEYPOINT_DETECTION_MAPPING
+
+
+AutoModelForKeypointPointDetection = auto_class_update(
+    AutoModelForKeypointPointDetection, head_doc="image keypoint detection"
+)

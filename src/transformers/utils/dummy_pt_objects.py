@@ -606,6 +606,9 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = None
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_KEYPOINT_DETECTION_MAPPING = None
+
+
 MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
@@ -8020,6 +8023,23 @@ class Starcoder2Model(metaclass=DummyObject):
 
 
 class Starcoder2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SuperPointModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SuperPointPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
