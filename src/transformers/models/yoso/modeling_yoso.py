@@ -49,6 +49,7 @@ YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all YOSO models at https://huggingface.co/models?filter=yoso
 ]
 
+lsh_cumulation = None
 
 def load_cuda_kernels():
     global lsh_cumulation
@@ -305,6 +306,13 @@ class YosoSelfAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
+        kernel_loaded = lsh_cumulation is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)

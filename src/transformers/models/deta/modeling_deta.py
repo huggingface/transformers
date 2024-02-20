@@ -52,6 +52,7 @@ logger = logging.get_logger(__name__)
 
 MultiScaleDeformableAttention = None
 
+
 # Copied from models.deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
@@ -588,7 +589,6 @@ class DetaMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: DetaConfig, num_heads: int, n_points: int):
         super().__init__()
 
-        # Move this to not compile only when importing, this needs to happen later, like in __init__.
         kernel_loaded = MultiScaleDeformableAttention is not None
         if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
             try:
