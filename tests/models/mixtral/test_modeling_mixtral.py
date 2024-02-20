@@ -283,7 +283,9 @@ class MixtralModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Mixtral
 class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification) if is_torch_available() else ()
+        (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification, MixtralForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (MixtralForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -292,6 +294,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "text-classification": MixtralForSequenceClassification,
             "text-generation": MixtralForCausalLM,
             "zero-shot": MixtralForSequenceClassification,
+            "question-answering": MixtralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
