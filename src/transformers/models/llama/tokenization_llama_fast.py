@@ -123,13 +123,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         from_slow=False,
         **kwargs,
     ):
-        
         if add_prefix_space is not None:
             logger.warning_once(
                 "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
             )
             from_slow = True
-    
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,

@@ -455,7 +455,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             return super().tokenize(text, **kwargs)
 
         text = text.replace(SPIECE_UNDERLINE, " ")
-        if kwargs.pop("add_prefix_space", self.add_prefix_space):
+        if self.add_prefix_space:
             text = SPIECE_UNDERLINE + text
 
         tokens = super().tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
