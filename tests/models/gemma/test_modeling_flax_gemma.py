@@ -207,26 +207,26 @@ class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
             self.assertIsNotNone(outputs)
 
 
-# @slow
+@slow
 @require_flax
 class FlaxGemmaIntegrationTest(unittest.TestCase):
-    input_text = ["Hello my name is", "Hi"]
+    input_text = ["Hello I am doing", "Hi today"]
 
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -239,17 +239,17 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -262,17 +262,17 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
-            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
+            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
+            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -286,17 +286,17 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
+            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
+            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -309,17 +309,17 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear about",
-            "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
+            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
+            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -332,17 +332,17 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is***** and I am a licensed veterinarian with Just Answer. I am so sorry to hear that you are",
-            'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
+            """Hello I am doing a project on the "The effect of the use of a new type of a new type of a""",
+            "Hi today I am going to tell you about the new update for the new update is the new update is the",
         ]
 
-        model = FlaxGemmaForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+        model, params = FlaxGemmaForCausalLM.from_pretrained(model_id, revision="flax", _do_init=False, dtype=jnp.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        output = model.generate(**inputs, params=params, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output.sequences, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
