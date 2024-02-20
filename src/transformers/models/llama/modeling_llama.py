@@ -809,6 +809,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        self.is_stateful_cache_initalized = False
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
@@ -825,6 +826,21 @@ class LlamaPreTrainedModel(PreTrainedModel):
             weights = layer.self_attn.o_proj.weight
             layer.self_attn.past_key_value = cache_cls(
                 self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
+            )
+
+        self.is_stateful_cache_initalized = True
+
+    def _validate_cache_for_shapes(self, batch_size: int, total_tokens: int):
+        max_batch_size = self.model.layers[0].self_attn.past_key_value.max_batch_size
+        max_cache_len = self.model.layers[0].self_attn.past_key_value.max_cache_len
+
+        if batch_size > max_batch_size:
+            raise ValueError(
+                f"Trying to run inference with a static KV cache for a batch size of {batch_size}, while the initialized static KV cache has a maximum batch size of {max_batch_size}."
+            )
+        if total_tokens > max_cache_len:
+            raise ValueError(
+                f"Trying to run inference with a static KV cache for a maximum sequence lengths of {total_tokens}, while the initialized static KV cache can only handle up to {max_cache_len} tokens."
             )
 
     def _reset_cache(self):

@@ -1462,20 +1462,25 @@ class GenerationMixin:
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
 
-        """
-        # if we don't pass `past_key_values` and a cache_implementation is specified
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
-            "past_key_values", False
-        ):
-            cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
-            if not callable(getattr(self, "_setup_cache", None)):
-                raise ValueError(
-                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                    " Make sure it has a `_setup_cache` function."
-                )
-            self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
-        """
-        # TODO: sanity check on batch_size
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation == "static":
+                if not self.is_stateful_cache_initalized:
+                    if hasattr(self.forward, "get_compiler_config"):
+                        raise ValueError(
+                            "Using `generate` with a compile model through torch.compile with a static cache implementation, but the static cache has not been initialized prior to calling torch.compile. This may lead to unexpected behavior. Please call `model.prepare_static_cache(max_batch_size=maximum_batch_size, max_total_tokens=max_total_tokens)` with the expected maximum batch size and maximum sequence length to be later used."
+                        )
+                    else:
+                        cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
+                        if not callable(getattr(self, "_setup_cache", None)):
+                            raise ValueError(
+                                "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                                " Make sure it has a `_setup_cache` function."
+                            )
+                        self._setup_cache(
+                            cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length
+                        )
+                else:
+                    self._validate_cache_for_shapes(batch_size=batch_size, total_tokens=generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 

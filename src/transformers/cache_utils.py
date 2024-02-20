@@ -359,6 +359,7 @@ class StaticCache(Cache):
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
 
         # NOTE: self.seen_tokens being in an int results in bugs with torch.compile, where it is somehow not updated.
+        # TODO: We may want to remove `self.seen_tokens` altogether from the modeling, and leave it in the non-compiled `GenerationMixin.generate()`.
         self.seen_tokens = torch.tensor(0, dtype=torch.int64, device=device)
 
     def update(
@@ -387,6 +388,8 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         new_cache_positions = cache_kwargs.get("cache_position")
+
+        # `self.max_batch_size` may be larger than the current batch size.
         k_out = self.key_cache[: key_states.shape[0]]
         v_out = self.value_cache[: value_states.shape[0]]
 
