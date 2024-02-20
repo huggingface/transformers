@@ -637,6 +637,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         output_ssm_states: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs, #for now we need this for generation
     ) -> Union[Tuple, MambaCausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
