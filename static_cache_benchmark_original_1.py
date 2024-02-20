@@ -11,7 +11,7 @@ import torch._inductor.config
 from torch.utils import benchmark
 from transformers import AutoModelForCausalLM, AutoTokenizer, StaticCache, DynamicCache, set_seed
 
-from generation import  sample, model_forward
+# from generation import  sample, model_forward
 
 torch._inductor.config.coordinate_descent_tuning = True
 torch._inductor.config.triton.unique_kernel_names = True
