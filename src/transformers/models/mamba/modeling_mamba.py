@@ -509,6 +509,7 @@ class MambaModel(MambaPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         inference_params: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
+        output_ssm_states: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MambaOutput]:
@@ -540,7 +541,7 @@ class MambaModel(MambaPreTrainedModel):
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
-        for mixer_block in enumerate(self.layers):
+        for mixer_block in self.layers:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
                     mixer_block.__call__, hidden_states, inference_params
