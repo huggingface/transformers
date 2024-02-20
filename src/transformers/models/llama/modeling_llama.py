@@ -101,14 +101,34 @@ class LlamaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
+    @property
+    def sin_cached(self):
+        logger.warning_once(
+            "The sin_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead."
+        )
+        return self._sin_cached
+
+    @property
+    def cos_cached(self):
+        logger.warning_once(
+            "The cos_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead."
+        )
+        return self._cos_cached
+
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        freqs = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1) @ (
-            position_ids[:, None, :].float()
-        )
-        freqs = freqs.transpose(1, 2)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
+        cos = emb.cos().to(dtype=x.dtype)
+        sin = emb.sin().to(dtype=x.dtype)
+        # backwards compatibility
+        self._cos_cached = cos
+        self._sin_cached = sin
+        return cos, sin
 
 
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
