@@ -370,3 +370,21 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             labels=input_ids,
         ).loss
         loss.backward()
+
+    @slow
+    def test_llava_1_6_model_integration_test(self):
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True
+        ).to(torch_device)
+
+        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
+        prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+        image = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+
+        inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along', 'USER:  \nWhat is this?\nASSISTANT: Cats']  # fmt: skip
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)

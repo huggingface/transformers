@@ -56,8 +56,9 @@ class LlavaConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`].
         use_image_newline_parameter (`bool`, *optional*, defaults to `False`):
             Whether to add a trainable parameter for the image newline token.
-        image_grid_pinpoints (`str`, *optional*):
-            The grid pinpoints of the image. Only used by the newer LLaVa 1.6 variant.
+        image_grid_pinpoints (`List`, *optional*):
+            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
+            of the form `(height, width)`. Only used by the newer LLaVa 1.6 variant.
 
     Example:
 

@@ -242,8 +242,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if push_to_hub:
         repo_id = model_id.split("/")[-1]
-        model.push_to_hub(f"nielsr/{repo_id}-hf")
-        processor.push_to_hub(f"nielsr/{repo_id}-hf")
+        model.push_to_hub(f"llava-hf/{repo_id}-hf")
+        processor.push_to_hub(f"llava-hf/{repo_id}-hf")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch Llava model."""
 
-from ast import literal_eval
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -56,19 +55,19 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     Args:
         image_size (`tuple`):
             The size of the input image in the format (width, height).
-        grid_pinpoints (`str`):
-            A string representation of a list of possible resolutions.
+        grid_pinpoints (`List`):
+            A list containing possible resolutions. Each item in the list should be a tuple or list
+            of the form `(height, width)`.
         patch_size (`int`):
             The size of each image patch.
 
     Returns:
         tuple: The shape of the image patch grid in the format (width, height).
     """
-    if isinstance(grid_pinpoints, list):
-        possible_resolutions = grid_pinpoints
-    else:
-        possible_resolutions = literal_eval(grid_pinpoints)
-    width, height = select_best_resolution(image_size, possible_resolutions)
+    if not isinstance(grid_pinpoints, list):
+        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+
+    width, height = select_best_resolution(image_size, grid_pinpoints)
     return width // patch_size, height // patch_size
 
 
@@ -78,7 +77,7 @@ def unpad_image(tensor, original_size):
 
     Args:
         tensor (`torch.Tensor`):
-            The image tensor, assumed to be in CxHxW format.
+            The image tensor, assumed to be of shape (num_channels, height, width).
         original_size (`tuple`):
             The original size of the image (height, width).
 
