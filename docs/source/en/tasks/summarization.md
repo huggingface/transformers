@@ -27,7 +27,7 @@ Summarization creates a shorter version of a document or an article that capture
 
 This guide will show you how to:
 
-1. Finetune [T5](https://huggingface.co/t5-small) on the California state bill subset of the [BillSum](https://huggingface.co/datasets/billsum) dataset for abstractive summarization.
+1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the California state bill subset of the [BillSum](https://huggingface.co/datasets/billsum) dataset for abstractive summarization.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -92,7 +92,7 @@ The next step is to load a T5 tokenizer to process `text` and `summary`:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 

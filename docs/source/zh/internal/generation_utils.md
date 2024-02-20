@@ -36,14 +36,14 @@ rendered properly in your Markdown viewer.
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-`generation_output` 的对象是 [`~generation.GreedySearchDecoderOnlyOutput`] 的一个实例，从该类的文档中我们可以看到，这意味着它具有以下属性：
+`generation_output` 的对象是 [`~generation.GenerateDecoderOnlyOutput`] 的一个实例，从该类的文档中我们可以看到，这意味着它具有以下属性：
 
 - `sequences`: 生成的tokens序列
 - `scores`（可选）: 每个生成步骤的语言建模头的预测分数
@@ -70,25 +70,13 @@ generation_output[:2]
 
 ### PyTorch
 
-[[autodoc]] generation.GreedySearchEncoderDecoderOutput
+[[autodoc]] generation.GenerateDecoderOnlyOutput
 
-[[autodoc]] generation.GreedySearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateEncoderDecoderOutput
 
-[[autodoc]] generation.SampleEncoderDecoderOutput
+[[autodoc]] generation.GenerateBeamDecoderOnlyOutput
 
-[[autodoc]] generation.SampleDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.ContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.ContrastiveSearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
 ### TensorFlow
 

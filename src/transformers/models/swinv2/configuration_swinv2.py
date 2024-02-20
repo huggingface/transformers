@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +28,7 @@ SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Swinv2Config(PretrainedConfig):
+class Swinv2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swin
     Transformer v2 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -53,6 +54,8 @@ class Swinv2Config(PretrainedConfig):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
+        pretrained_window_sizes (`list(int)`, *optional*, defaults to `[0, 0, 0, 0]`):
+            Size of windows during pretraining.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
         qkv_bias (`bool`, *optional*, defaults to `True`):
@@ -74,6 +77,14 @@ class Swinv2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, *optional*, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
@@ -106,6 +117,7 @@ class Swinv2Config(PretrainedConfig):
         depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
         window_size=7,
+        pretrained_window_sizes=[0, 0, 0, 0],
         mlp_ratio=4.0,
         qkv_bias=True,
         hidden_dropout_prob=0.0,
@@ -116,6 +128,8 @@ class Swinv2Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -128,6 +142,7 @@ class Swinv2Config(PretrainedConfig):
         self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
+        self.pretrained_window_sizes = pretrained_window_sizes
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -138,7 +153,10 @@ class Swinv2Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.encoder_stride = encoder_stride
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
-        self.pretrained_window_sizes = (0, 0, 0, 0)

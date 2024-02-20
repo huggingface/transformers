@@ -52,7 +52,7 @@ for zero-shot object detection from a [checkpoint on the Hugging Face Hub](https
 ```python
 >>> from transformers import pipeline
 
->>> checkpoint = "google/owlvit-base-patch32"
+>>> checkpoint = "google/owlv2-base-patch16-ensemble"
 >>> detector = pipeline(model=checkpoint, task="zero-shot-object-detection")
 ```
 
@@ -299,11 +299,3 @@ as before except now there are no labels.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_6.png" alt="Cats with bounding boxes"/>
 </div>
 
-If you'd like to interactively try out inference with OWL-ViT, check out this demo:
-
-<iframe
-	src="https://adirik-owl-vit.hf.space"
-	frameborder="0"
-	width="850"
-	height="450"
-></iframe>

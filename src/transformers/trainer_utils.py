@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+PyTorch-independent utilities for the Trainer class.
 """
 
 import copy
@@ -373,6 +373,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
+    - num_steps: number of steps processed
     - num_tokens: number of tokens processed
     """
     runtime = time.time() - start_time

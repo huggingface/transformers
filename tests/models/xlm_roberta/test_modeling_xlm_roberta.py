@@ -32,7 +32,7 @@ if is_torch_available():
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_base(self):
-        model = XLMRobertaModel.from_pretrained("xlm-roberta-base")
+        model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base")
         input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
         # The dog is cute and lives in the garden house
 
@@ -51,7 +51,7 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_xlm_roberta_large(self):
-        model = XLMRobertaModel.from_pretrained("xlm-roberta-large")
+        model = XLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-large")
         input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
         # The dog is cute and lives in the garden house
 

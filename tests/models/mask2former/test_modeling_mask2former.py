@@ -114,6 +114,7 @@ class Mask2FormerModelTester:
         config.backbone_config.hidden_size = 16
         config.backbone_config.num_channels = self.num_channels
         config.backbone_config.num_heads = [1, 1, 2, 2]
+        config.backbone = None
 
         config.hidden_dim = self.hidden_dim
         config.mask_feature_size = self.hidden_dim
@@ -190,13 +191,13 @@ class Mask2FormerModelTester:
         comm_check_on_output(result)
 
         self.parent.assertTrue(result.loss is not None)
-        self.parent.assertEqual(result.loss.shape, torch.Size([1]))
+        self.parent.assertEqual(result.loss.shape, torch.Size([]))
 
 
 @require_torch
 class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Mask2FormerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
     test_pruning = False

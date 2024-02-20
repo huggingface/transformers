@@ -51,7 +51,8 @@ The methods and tools covered in this guide can be classified based on the effec
 | [Data preloading](#data-preloading)                        | Yes                     | No                           |
 | [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
 | [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
-
+| [Parameter-Efficient Fine Tuning (PEFT)](#using--peft)            | No                      | Yes                          |
+ 
 <Tip>
 
 Note: when using mixed precision with a small model and a large batch size, there will be some memory savings but with a 
@@ -61,12 +62,12 @@ large model and a small batch size, the memory use will be larger.
 
 You can combine the above methods to get a cumulative effect. These techniques are available to you whether you are 
 training your model with [`Trainer`] or writing a pure PyTorch loop, in which case you can [configure these optimizations 
-with 🤗 Accelerate](#using-accelerate).
+with 🤗 Accelerate](#using--accelerate).
 
 If these methods do not result in sufficient gains, you can explore the following options: 
 * [Look into building your own custom Docker container with efficient softare prebuilds](#efficient-software-prebuilds)
 * [Consider a model that uses Mixture of Experts (MoE)](#mixture-of-experts)
-* [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention)
+* [Convert your model to BetterTransformer to leverage PyTorch native attention](#using-pytorch-native-attention-and-flash-attention)
 
 Finally, if all of the above is still not enough, even after switching to a server-grade GPU like A100, consider moving 
 to a multi-GPU setup. All these approaches are still valid in a multi-GPU setup, plus you can leverage additional parallelism 
@@ -109,7 +110,7 @@ training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumu
 In the above example, your effective batch size becomes 4. 
 
 Alternatively, use 🤗 Accelerate to gain full control over the training loop. Find the 🤗 Accelerate example 
-[further down in this guide](#using-accelerate).
+[further down in this guide](#using--accelerate).
 
 While it is advised to max out GPU usage as much as possible, a high number of gradient accumulation steps can 
 result in a more pronounced training slowdown. Consider the following example. Let's say, the `per_device_train_batch_size=4` 
@@ -142,7 +143,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
+Alternatively, use 🤗 Accelerate - find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
 
 <Tip>
 
@@ -178,7 +179,7 @@ To enable mixed precision training, set the `fp16` flag to `True`:
 training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args)
 ```
 
-If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using-accelerate). 
+If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further in this guide](#using--accelerate). 
 
 ### BF16
 
@@ -200,7 +201,7 @@ of 23 bits precision it has only 10 bits (same as fp16) and uses only 19 bits in
 you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput 
 improvement. All you need to do is to add the following to your code:
 
-```
+```python
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -247,7 +248,7 @@ Let's take a closer look at two alternatives to AdamW optimizer:
 1. `adafactor` which is available in [`Trainer`]
 2. `adamw_bnb_8bit` is also available in Trainer, but a third-party integration is provided below for demonstration.
 
-For comparison, for a 3B-parameter model, like “t5-3b”: 
+For comparison, for a 3B-parameter model, like “google-t5/t5-3b”: 
 * A standard AdamW optimizer will need 24GB of GPU memory because it uses 8 bytes for each parameter (8*3 => 24GB)
 * Adafactor optimizer will need more than 12GB. It uses slightly more than 4 bytes for each parameter, so 4*3 and then some extra.
 * 8bit BNB quantized optimizer will use only (2*3) 6GB if all optimizer states are quantized.
@@ -399,6 +400,25 @@ Choose which backend to use by specifying it via `torch_compile_backend` in the 
 * `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
 
 For an example of using `torch.compile` with 🤗 Transformers, check out this [blog post on fine-tuning a BERT model for Text Classification using the newest PyTorch 2.0 features](https://www.philschmid.de/getting-started-pytorch-2-0-transformers)
+
+## Using 🤗 PEFT
+
+[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) methods freeze the pretrained model parameters during fine-tuning and add a small number of trainable parameters (the adapters) on top of it.
+
+As a result the [memory associated to the optimizer states and gradients](https://huggingface.co/docs/transformers/model_memory_anatomy#anatomy-of-models-memory) are greatly reduced.
+
+For example with a vanilla AdamW, the memory requirement for the optimizer state would be:
+* fp32 copy of parameters: 4 bytes/param
+* Momentum: 4 bytes/param
+* Variance: 4 bytes/param
+
+Suppose a model with 7B parameters and 200 millions parameters injected with [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora).
+
+The memory requirement for the optimizer state of the plain model would be 12 * 7 = 84 GB (assuming 7B trainable parameters).
+
+Adding Lora increases slightly the memory associated to the model weights and substantially decreases memory requirement for the optimizer state to 12 * 0.2 = 2.4GB.
+
+Read more about PEFT and its detailed usage in [the PEFT documentation](https://huggingface.co/docs/peft/) or [PEFT repository](https://github.com/huggingface/peft).
 
 ## Using 🤗 Accelerate
 

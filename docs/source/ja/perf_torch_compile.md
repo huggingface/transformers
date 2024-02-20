@@ -42,7 +42,7 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 
 ### Image Classification with ViT
 
-```
+```python
 from PIL import Image
 import requests
 import numpy as np

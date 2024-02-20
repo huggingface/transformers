@@ -109,7 +109,7 @@ seen before, by decomposing them into known subwords. For instance, the [`~trans
 ```py
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 >>> tokenizer.tokenize("I have a new GPU!")
 ["i", "have", "a", "new", "gp", "##u", "!"]
 ```
@@ -123,7 +123,7 @@ As another example, [`~transformers.XLNetTokenizer`] tokenizes our previously ex
 ```py
 >>> from transformers import XLNetTokenizer
 
->>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+>>> tokenizer = XLNetTokenizer.from_pretrained("xlnet/xlnet-base-cased")
 >>> tokenizer.tokenize("Don't you love 🤗 Transformers? We sure do.")
 ["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 ```
@@ -143,7 +143,7 @@ Byte-Pair Encoding (BPE) was introduced in [Neural Machine Translation of Rare W
 al., 2015)](https://arxiv.org/abs/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
 words. Pretokenization can be as simple as space tokenization, e.g. [GPT-2](model_doc/gpt2), [RoBERTa](model_doc/roberta). More advanced pre-tokenization include rule-based tokenization, e.g. [XLM](model_doc/xlm),
 [FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/gpt) which uses
-Spacy and ftfy, to count the frequency of each word in the training corpus.
+spaCy and ftfy, to count the frequency of each word in the training corpus.
 
 After pre-tokenization, a set of unique words has been created and the frequency with which each word occurred in the
 training data has been determined. Next, BPE creates a base vocabulary consisting of all symbols that occur in the set

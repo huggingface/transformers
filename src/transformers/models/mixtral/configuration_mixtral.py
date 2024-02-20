@@ -79,7 +79,7 @@ class MixtralConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        sliding_window (`int`, *optional*, defaults to 4096):
+        sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -128,7 +128,7 @@ class MixtralConfig(PretrainedConfig):
         eos_token_id=2,
         tie_word_embeddings=False,
         rope_theta=1e6,
-        sliding_window=4096,
+        sliding_window=None,
         attention_dropout=0.0,
         num_experts_per_tok=2,
         num_local_experts=8,

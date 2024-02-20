@@ -123,6 +123,7 @@ SPECIAL_CASES_TO_ALLOW.update(
         "DinatConfig": True,
         "DonutSwinConfig": True,
         "EfficientFormerConfig": True,
+        "FastSpeech2ConformerConfig": True,
         "FSMTConfig": True,
         "JukeboxConfig": True,
         "LayoutLMv2Config": True,
@@ -218,6 +219,12 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "out_features",
         "out_indices",
         "sampling_rate",
+        # backbone related arguments passed to load_backbone
+        "use_pretrained_backbone",
+        "backbone",
+        "backbone_config",
+        "use_timm_backbone",
+        "backbone_kwargs",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

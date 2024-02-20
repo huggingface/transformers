@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. 抽出的質問応答用に [SQuAD](https://huggingface.co/datasets/squad) データセット上の [DistilBERT](https://huggingface.co/distilbert-base-uncased) を微調整します。
+1. 抽出的質問応答用に [SQuAD](https://huggingface.co/datasets/squad) データセット上の [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) を微調整します。
 2. 微調整したモデルを推論に使用します。
 
 <Tip>
@@ -102,7 +102,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 質問応答タスクに特有の、注意すべき前処理手順がいくつかあります。
@@ -208,7 +208,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 
->>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 この時点で残っている手順は次の 3 つだけです。
@@ -276,7 +276,7 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
->>> model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
+>>> model = TFAutoModelForQuestionAnswering("distilbert/distilbert-base-uncased")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。

@@ -65,7 +65,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     num_shards = 1
 
     # For some reason this is a string in the params.json
-    sliding_window = int(params["sliding_window"])
+    sliding_window = int(params["sliding_window"]) if "sliding_window" in params else None
     n_layers = params["num_hidden_layers"]
     n_heads = params["num_attention_heads"]
     n_heads_per_shard = n_heads // num_shards
