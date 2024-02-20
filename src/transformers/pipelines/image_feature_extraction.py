@@ -71,7 +71,9 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
         if pool:
             if "pooler_output" not in model_outputs:
-                raise ValueError("The model needs to have a `pooler` layer to use the `pool` option.")
+                raise ValueError(
+                    "No pooled output was returned. Make sure the model has a `pooler` layer when using the `pool` option."
+                )
             outputs = model_outputs["pooler_output"]
         else:
             # [0] is the first available tensor, logits or last_hidden_state.
