@@ -961,11 +961,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-
-        # print("attention_mask", attention_mask.shape)
-        # print("attention_mask", attention_mask.stride())
-        # print("inputs_embeds", inputs_embeds.shape)
-        # print("inputs_embeds", inputs_embeds.stride())
+        
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
         # embed positions
@@ -1029,7 +1025,11 @@ class LlamaModel(LlamaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
+    
+    # TODO: As of 20/02/2024, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+    # (`recording cudagraph tree for symint key 13`, etc.). Ideally, we would want to pass a statically-shaped 4D mask as input to the model.
+    @torch.compiler.disable
     def _update_causal_mask(self, attention_mask, input_tensor):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
@@ -1044,16 +1044,10 @@ class LlamaModel(LlamaPreTrainedModel):
             causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
-        if hasattr(self, "causal_mask"):  # we use the current dtype to avoid any overflows
-            causal_mask = (
-                self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
-            )
-        else:
-            mask = torch.full(
-                (self.config.max_position_embeddings, self.config.max_position_embeddings),
-                fill_value=torch.finfo(dtype).min,
-            )
-            causal_mask = torch.triu(mask, diagonal=1).to(dtype)
+        # We use the current dtype to avoid any overflows
+        causal_mask = (
+            self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
+        )
 
         if attention_mask is not None and attention_mask.dim() == 2:
             mask_length = attention_mask.shape[-1]
@@ -1241,11 +1235,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
             # generation with static cache
             past_length = past_key_value.get_seq_length()
+            print("input_ids shape here", input_ids.shape)
+            print("past_length here", past_length)
             input_ids = input_ids[:, past_length:]
             position_ids = position_ids[:, past_length:]
         
-        print("input_ids after update", input_ids.shape)
-
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
         cache_position = kwargs.get("cache_position", None)
@@ -1253,6 +1247,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             cache_position = torch.arange(
                 past_length, past_length + position_ids.shape[-1], device=position_ids.device
             )
+        print("cache_position", cache_position)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1267,7 +1262,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         model_inputs.update(
             {
-                "position_ids": position_ids,
+                "position_ids": position_ids.contiguous(),
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),

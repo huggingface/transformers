@@ -1432,6 +1432,7 @@ class GenerationMixin:
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
 
+        """
         # if we don't pass `past_key_values` and a cache_implementation is specified
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
             "past_key_values", False
@@ -1445,7 +1446,8 @@ class GenerationMixin:
             self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
-
+        """
+        
         # 7. determine generation mode
         generation_mode = self._get_generation_mode(generation_config, assistant_model)
 
@@ -2345,6 +2347,7 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         count = 0
         while True:
+            print("----- call forward")
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2355,12 +2358,14 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            print("------------ call forward", count)
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            print("model_inputs intut_ids shape", model_inputs["input_ids"].shape)
-            print("model_inputs intut_ids stride", model_inputs["input_ids"].stride())
+            print("model_inputs input ids shape", model_inputs["input_ids"].shape)
+            print("model_inputs input ids stride", model_inputs["input_ids"].stride())
+            print("model_inputs attention_mask shape", model_inputs["attention_mask"].shape)
+            print("model_inputs attention_mask stride", model_inputs["attention_mask"].stride())
+
             count += 1 
             # forward pass to get next token
             outputs = self(
@@ -2398,8 +2403,6 @@ class GenerationMixin:
 
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
-
-            print("next_tokens", next_tokens.shape)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:

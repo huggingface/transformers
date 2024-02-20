@@ -394,6 +394,7 @@ class StaticCache(Cache):
         v_out[:, :, new_cache_positions] = value_states
         
         # # This NEEDS to be in-place as in the modeling we are not calling directly `self.past_key_value.update()`, but are rather using getattr.
+        # print("update seen_tokens with", key_states.shape[2])
         self.seen_tokens.add_(key_states.shape[2])
         return k_out, v_out
 
