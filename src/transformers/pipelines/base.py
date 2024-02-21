@@ -975,6 +975,8 @@ class Pipeline(_ScikitCompat):
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
         elif isinstance(inputs, torch.Tensor):
+            if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
+                logger.warning(f"Please check your device if it support {inputs.dtype}")
             return inputs.to(device)
         else:
             return inputs
