@@ -53,31 +53,6 @@ SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def patchify(tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
-    batch_size, num_channels, height, width = tensor.shape
-    patch_height = height // patch_size
-    patch_width = width // patch_size
-
-    tensor = tensor.reshape(shape=(batch_size, num_channels, patch_height, patch_size, patch_width, patch_size))
-    tensor = tensor.permute(0, 2, 4, 3, 5, 1)
-    tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
-
-    return tensor
-
-
-def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
-    batch_size = tensor.shape[0]
-    patch_size = int((tensor.shape[-1] / 3) ** 0.5)
-    if patch_height * patch_width != tensor.shape[1]:
-        raise ValueError(f"Number of patches {tensor.shape[1]} does not match patch height and width.")
-
-    tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
-    tensor = tensor.permute(0, 5, 1, 3, 2, 4)
-    tensor = tensor.reshape(shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size))
-
-    return tensor
-
-
 @dataclass
 class SegGptEncoderOutput(ModelOutput):
     """
@@ -850,6 +825,31 @@ class SegGptModel(SegGptPreTrainedModel):
         )
 
         return encoder_outputs
+
+
+def patchify(tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
+    batch_size, num_channels, height, width = tensor.shape
+    patch_height = height // patch_size
+    patch_width = width // patch_size
+
+    tensor = tensor.reshape(shape=(batch_size, num_channels, patch_height, patch_size, patch_width, patch_size))
+    tensor = tensor.permute(0, 2, 4, 3, 5, 1)
+    tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
+
+    return tensor
+
+
+def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
+    batch_size = tensor.shape[0]
+    patch_size = int((tensor.shape[-1] / 3) ** 0.5)
+    if patch_height * patch_width != tensor.shape[1]:
+        raise ValueError(f"Number of patches {tensor.shape[1]} does not match patch height and width.")
+
+    tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
+    tensor = tensor.permute(0, 5, 1, 3, 2, 4)
+    tensor = tensor.reshape(shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size))
+
+    return tensor
 
 
 class SegGptLoss(nn.Module):
