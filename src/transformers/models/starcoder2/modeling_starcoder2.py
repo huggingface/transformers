@@ -70,24 +70,6 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Starcoder2
-class Starcoder2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Starcoder2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Starcoder2
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
@@ -175,25 +157,6 @@ class Starcoder2MLP(nn.Module):
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
-        return hidden_states
-
-
-class Starcoder2GatedMLP(nn.Module):
-    def __init__(self, config: Starcoder2Config):
-        # TODO: Dropout?
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.residual_dropout = config.residual_dropout
-
-    def forward(self, x):
-        hidden_states = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
         return hidden_states
 
@@ -734,18 +697,6 @@ STARCODER2_ATTENTION_CLASSES = {
 }
 
 
-STARCODER2_NORMALIZATION_CLASSES = {
-    "layer_norm": nn.LayerNorm,
-    "rms_norm": Starcoder2RMSNorm,
-}
-
-
-STARCODER2_MLP_CLASSES = {
-    "default": Starcoder2MLP,
-    "gated": Starcoder2GatedMLP,
-}
-
-
 class Starcoder2DecoderLayer(nn.Module):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__()
@@ -753,12 +704,12 @@ class Starcoder2DecoderLayer(nn.Module):
 
         self.self_attn = STARCODER2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.mlp = STARCODER2_MLP_CLASSES[config.mlp_type](config)
+        self.mlp = Starcoder2MLP(config)
 
-        self.input_layernorm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](
+        self.input_layernorm = nn.LayerNorm(
             config.hidden_size, eps=config.norm_epsilon
         )
-        self.post_attention_layernorm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](
+        self.post_attention_layernorm = nn.LayerNorm(
             config.hidden_size, eps=config.norm_epsilon
         )
 
@@ -960,7 +911,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
             [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](config.hidden_size, eps=config.norm_epsilon)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
