@@ -34,6 +34,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
@@ -160,6 +161,26 @@ class SamImageProcessor(BaseImageProcessor):
         self.pad_size = pad_size
         self.mask_pad_size = mask_pad_size
         self.do_convert_rgb = do_convert_rgb
+        self._valid_processor_keys = [
+            "images",
+            "segmentation_maps",
+            "do_resize",
+            "size",
+            "mask_size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "pad_size",
+            "mask_pad_size",
+            "do_convert_rgb",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def pad_image(
         self,
@@ -490,6 +511,8 @@ class SamImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

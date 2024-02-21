@@ -354,6 +354,8 @@
         title: Funnel Transformer
       - local: model_doc/fuyu
         title: Fuyu
+      - local: model_doc/gemma
+        title: Gemma
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo

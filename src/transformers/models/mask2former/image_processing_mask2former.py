@@ -39,6 +39,7 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
@@ -439,6 +440,25 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
         self.reduce_labels = reduce_labels
+        self._valid_processor_keys = [
+            "images",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "reduce_labels",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -707,6 +727,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

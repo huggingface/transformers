@@ -28,6 +28,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
@@ -65,6 +66,16 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
         self.pad_size = pad_size
+        self._valid_processor_keys = [
+            "images",
+            "do_rescale",
+            "rescale_factor",
+            "do_pad",
+            "pad_size",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def pad(
         self,
@@ -160,6 +171,8 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         pad_size = pad_size if pad_size is not None else self.pad_size
 
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

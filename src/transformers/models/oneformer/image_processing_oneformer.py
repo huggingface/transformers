@@ -42,6 +42,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
@@ -467,6 +468,25 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.repo_path = repo_path
         self.metadata = prepare_metadata(load_metadata(repo_path, class_info_file))
         self.num_text = num_text
+        self._valid_processor_keys = [
+            "images",
+            "task_inputs",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "do_reduce_labels",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -714,6 +734,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

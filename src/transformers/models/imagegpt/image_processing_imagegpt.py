@@ -29,6 +29,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -102,6 +103,18 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_normalize = do_normalize
         self.do_color_quantize = do_color_quantize
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_normalize",
+            "do_color_quantize",
+            "clusters",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -237,6 +250,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         clusters = np.array(clusters)
 
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
