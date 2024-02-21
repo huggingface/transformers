@@ -344,7 +344,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
+        tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
         tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False

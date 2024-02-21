@@ -45,7 +45,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
 
     >>> tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/dummy-gemma")
     >>> tokenizer.encode("Hello this is a test")
-    [1, 15043, 445, 338, 263, 1243]
+    [2, 4521, 736, 603, 476, 2121]
     ```
 
     If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
