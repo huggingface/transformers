@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,29 +41,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
     },
 }
-B_INST, E_INST = "[INST]", "[/INST]"
-B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
-
-# fmt: off
-DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
-answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
- that your responses are socially unbiased and positive in nature.
-
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
-correct. If you don't know the answer to a question, please don't share false information."""
-# fmt: on
 
 
 class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding.
 
-    This uses notably ByteFallback and no normalization.
+    This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with SPIECE_UNDERLINE
 
     ```python
     >>> from transformers import GemmaTokenizerFast
 
-    >>> tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer = GemmaTokenizerFast.from_pretrained("google/gemma-2b")
     >>> tokenizer.encode("Hello this is a test")
     [1, 15043, 445, 338, 263, 1243]
     ```
@@ -100,8 +89,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
-        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Gemma should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

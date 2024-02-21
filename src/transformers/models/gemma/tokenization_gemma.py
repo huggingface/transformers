@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,17 +44,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 SPIECE_UNDERLINE = "▁"
 
-B_INST, E_INST = "[INST]", "[/INST]"
-B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
-
-# fmt: off
-DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
-answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
- that your responses are socially unbiased and positive in nature.
-
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
-correct. If you don't know the answer to a question, please don't share false information."""
-# fmt: on
 
 
 class GemmaTokenizer(PreTrainedTokenizer):
