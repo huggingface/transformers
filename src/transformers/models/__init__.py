@@ -92,6 +92,7 @@ from . import (
     fsmt,
     funnel,
     fuyu,
+    gemma,
     git,
     glpn,
     gpt2,

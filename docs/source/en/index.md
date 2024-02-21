@@ -142,6 +142,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [FocalNet](model_doc/focalnet)                      |       ✅        |         ❌         |      ❌      |
 |                  [Funnel Transformer](model_doc/funnel)                  |       ✅        |         ✅         |      ❌      |
 |                          [Fuyu](model_doc/fuyu)                          |       ✅        |         ❌         |      ❌      |
+|                         [Gemma](model_doc/gemma)                         |       ✅        |         ❌         |      ✅      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
