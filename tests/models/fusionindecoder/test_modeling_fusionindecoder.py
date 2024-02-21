@@ -108,10 +108,10 @@ class FusionInDecoderModelTester:
         self.decoder_layers = decoder_layers
 
     def get_large_model_config(self):
-        return FusionInDecoderConfig.from_pretrained("google-fusionindecoder/fusionindecoder-base")
+        return FusionInDecoderConfig.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2).unsqueeze(1)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
@@ -777,7 +777,7 @@ class FusionInDecoderEncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return FusionInDecoderConfig.from_pretrained("google-fusionindecoder/fusionindecoder-base")
+        return FusionInDecoderConfig.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -975,23 +975,23 @@ class FusionInDecoderModelFp16Tests(unittest.TestCase):
 class FusionInDecoderModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return FusionInDecoderForConditionalGeneration.from_pretrained("google-fusionindecoder/fusionindecoder-base").to(torch_device)
+        return FusionInDecoderForConditionalGeneration.from_pretrained("google-t5/t5-base").to(torch_device)
 
     @cached_property
     def tokenizer(self):
-        return T5Tokenizer.from_pretrained("google-fusionindecoder/fusionindecoder-base")
+        return T5Tokenizer.from_pretrained("google-t5/t5-base")
 
     @slow
     def test_torch_quant(self):
         r"""
         Test that a simple `torch.quantization.quantize_dynamic` call works on a FusionInDecoder model.
         """
-        model_name = "google/flan-fusionindecoder-small"
+        model_name = "google/flan-t5-small"
         tokenizer = T5Tokenizer.from_pretrained(model_name)
         model = FusionInDecoderForConditionalGeneration.from_pretrained(model_name)
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
         input_text = "Answer the following yes/no question by reasoning step-by-step. Can you write a whole Haiku in a single tweet?"
-        input_ids = tokenizer(input_text, return_tensors="pt").input_ids
+        input_ids = tokenizer([input_text], return_tensors="pt").input_ids
         _ = model.generate(input_ids)
 
     @slow
@@ -1002,7 +1002,7 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
         model.config.do_sample = False
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base")
 
-        input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(["summarize: Hello there"], return_tensors="pt").input_ids.to(torch_device)
 
         sequences = model.generate(input_ids)
 
@@ -1013,12 +1013,12 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
     def test_small_integration_test(self):
         """
         For comparision run:
-        >>> import fusionindecoder  # pip install fusionindecoder==0.7.1
-        >>> from fusionindecoder.data.sentencepiece_vocabulary import SentencePieceVocabulary
+        >>> import t5  # pip install fusionindecoder==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
         >>> path_to_mtf_small_fusionindecoder_checkpoint = '<fill_in>'
         >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> fusionindecoder_model = fusionindecoder.models.MtfModel(model_dir=path_to_mtf_small_fusionindecoder_checkpoint, batch_size=1, tpu=None)
+        >>> fusionindecoder_model = t5.models.MtfModel(model_dir=path_to_mtf_small_fusionindecoder_checkpoint, batch_size=1, tpu=None)
         >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
         >>> score = fusionindecoder_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
@@ -1026,7 +1026,7 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
         model = FusionInDecoderForConditionalGeneration.from_pretrained("google-t5/t5-base").to(torch_device)
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base")
 
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        input_ids = tokenizer(["Hello there"], return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
 
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
@@ -1039,20 +1039,20 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
     def test_small_v1_1_integration_test(self):
         """
         For comparision run:
-        >>> import fusionindecoder  # pip install fusionindecoder==0.7.1
-        >>> from fusionindecoder.data.sentencepiece_vocabulary import SentencePieceVocabulary
+        >>> import t5  # pip install fusionindecoder==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
         >>> path_to_mtf_small_fusionindecoder_v1_1_checkpoint = '<fill_in>'
         >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> fusionindecoder_model = fusionindecoder.models.MtfModel(model_dir=path_to_mtf_small_fusionindecoder_v1_1_checkpoint, batch_size=1, tpu=None)
+        >>> fusionindecoder_model = t5.models.MtfModel(model_dir=path_to_mtf_small_fusionindecoder_v1_1_checkpoint, batch_size=1, tpu=None)
         >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
         >>> score = fusionindecoder_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FusionInDecoderForConditionalGeneration.from_pretrained("google/fusionindecoder-v1_1-small").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("google/fusionindecoder-v1_1-small")
+        model = FusionInDecoderForConditionalGeneration.from_pretrained("google/t5-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("google/t5-small")
 
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        input_ids = tokenizer(["Hello there"], return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
 
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
@@ -1065,18 +1065,18 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
     def test_small_byfusionindecoder_integration_test(self):
         """
         For comparision run:
-        >>> import fusionindecoder  # pip install fusionindecoder==0.9.1
+        >>> import t5  # pip install fusionindecoder==0.9.1
 
         >>> path_to_byfusionindecoder_small_checkpoint = '<fill_in>'
-        >>> fusionindecoder_model = fusionindecoder.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = fusionindecoder.data.ByteVocabulary()
+        >>> fusionindecoder_model = t5.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = t5.data.ByteVocabulary()
         >>> score = fusionindecoder_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FusionInDecoderForConditionalGeneration.from_pretrained("google/byfusionindecoder-small").to(torch_device)
-        tokenizer = ByT5Tokenizer.from_pretrained("google/byfusionindecoder-small")
+        model = FusionInDecoderForConditionalGeneration.from_pretrained("google/t5-small").to(torch_device)
+        tokenizer = ByT5Tokenizer.from_pretrained("google/t5-small")
 
-        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        input_ids = tokenizer(["Hello there"], return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
 
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
@@ -1413,8 +1413,8 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
             " up to four years in prison.  Her next court appearance is scheduled for May 18."
         )
         article = "summarize: " + article.strip()
-        fusionindecoder_tokenizer = AutoTokenizer.from_pretrained("flax-community/fusionindecoder-base-cnn-dm")
-        fusionindecoder_model = FusionInDecoderForConditionalGeneration.from_pretrained("flax-community/fusionindecoder-base-cnn-dm").to(torch_device)
+        fusionindecoder_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
+        fusionindecoder_model = FusionInDecoderForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(torch_device)
         input_ids = fusionindecoder_tokenizer(
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
@@ -1444,6 +1444,7 @@ class TestAsymmetricFusionInDecoder(unittest.TestCase):
             lm_labels,
         ) = inputs
         model = FusionInDecoderForConditionalGeneration(config=config).to(torch_device).eval()
+
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,

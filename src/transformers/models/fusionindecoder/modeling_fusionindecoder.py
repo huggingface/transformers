@@ -1016,7 +1016,6 @@ class FusionInDecoderStack(FusionInDecoderPreTrainedModel):
             if self.embed_tokens is None:
                 raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
-
         batch_size, seq_length = input_shape
 
         # required mask seq length can be calculated via length of past
@@ -1282,7 +1281,6 @@ class FusionInDecoderWrapper(FusionInDecoderPreTrainedModel):
 
         previous_batch_size, n_passages, passage_length = input_ids.size()
         input_ids = input_ids.view(previous_batch_size * n_passages, passage_length)
-
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
@@ -1431,11 +1429,12 @@ class FusionInDecoderWrapper(FusionInDecoderPreTrainedModel):
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        hidden_states = hidden_states.view(previous_batch_size, n_passages * passage_length)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        hidden_states = hidden_states.view(previous_batch_size, n_passages * passage_length, -1)
 
         if not return_dict:
             return tuple(
