@@ -819,6 +819,7 @@ _import_structure = {
         "SwitchTransformersConfig",
     ],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
+    "models.fusionindecoder": ["FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP", "FusionInDecoderConfig"],
     "models.table_transformer": [
         "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TableTransformerConfig",
@@ -3320,6 +3321,19 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
+    _import_structure["models.fusionindecoder"].extend(
+        [
+            "FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FusionInDecoderEncoderModel",
+            "FusionInDecoderForConditionalGeneration",
+            "FusionInDecoderForQuestionAnswering",
+            "FusionInDecoderForSequenceClassification",
+            "FusionInDecoderForTokenClassification",
+            "FusionInDecoderModel",
+            "FusionInDecoderPreTrainedModel",
+            "load_tf_weights_in_fusionindecoder",
+        ]
+    )
     _import_structure["models.table_transformer"].extend(
         [
             "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5574,6 +5588,7 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+    from .models.fusionindecoder import FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP, FusionInDecoderConfig
     from .models.table_transformer import (
         TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TableTransformerConfig,
@@ -7726,6 +7741,17 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+        from .models.fusionindecoder import (
+            FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FusionInDecoderEncoderModel,
+            FusionInDecoderForConditionalGeneration,
+            FusionInDecoderForQuestionAnswering,
+            FusionInDecoderForSequenceClassification,
+            FusionInDecoderForTokenClassification,
+            FusionInDecoderModel,
+            FusionInDecoderPreTrainedModel,
+            load_tf_weights_in_fusionindecoder,
         )
         from .models.table_transformer import (
             TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

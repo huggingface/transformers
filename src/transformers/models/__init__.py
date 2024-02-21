@@ -209,6 +209,7 @@ from . import (
     swinv2,
     switch_transformers,
     t5,
+    fusionindecoder,
     table_transformer,
     tapas,
     time_series_transformer,
