@@ -29,7 +29,7 @@ The following example fine-tunes BERT on CoNLL-2003:
 
 ```bash
 python run_ner.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --dataset_name conll2003 \
   --output_dir /tmp/test-ner \
   --do_train \
@@ -42,7 +42,7 @@ To run on your own training and validation files, use the following command:
 
 ```bash
 python run_ner.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --train_file path_to_train_file \
   --validation_file path_to_validation_file \
   --output_dir /tmp/test-ner \
@@ -84,7 +84,7 @@ then
 export TASK_NAME=ner
 
 python run_ner_no_trainer.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --dataset_name conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \
@@ -112,7 +112,7 @@ that will check everything is ready for training. Finally, you can launch traini
 export TASK_NAME=ner
 
 accelerate launch run_ner_no_trainer.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --dataset_name conll2003 \
   --task_name $TASK_NAME \
   --max_length 128 \

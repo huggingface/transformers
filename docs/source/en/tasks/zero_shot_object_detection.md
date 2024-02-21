@@ -52,7 +52,7 @@ for zero-shot object detection from a [checkpoint on the Hugging Face Hub](https
 ```python
 >>> from transformers import pipeline
 
->>> checkpoint = "google/owlvit-base-patch32"
+>>> checkpoint = "google/owlv2-base-patch16-ensemble"
 >>> detector = pipeline(model=checkpoint, task="zero-shot-object-detection")
 ```
 

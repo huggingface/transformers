@@ -131,6 +131,8 @@ class TableTransformerModelTester:
             num_labels=self.num_labels,
             use_timm_backbone=False,
             backbone_config=resnet_config,
+            backbone=None,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -198,7 +200,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        {"image-feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
         if is_torch_available()
         else {}
     )

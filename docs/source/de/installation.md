@@ -94,7 +94,7 @@ Installieren wir 🤗 Transformers aus dem Quellcode mit dem folgenden Befehl:
 pip install git+https://github.com/huggingface/transformers
 ```
 
-Dieser Befehl installiert die aktuelle `main` Version und nicht die neueste `stable` Version. Die `main`-Version ist nützlich, um mit den neuesten Entwicklungen Schritt zu halten. Zum Beispiel, wenn ein Fehler seit der letzten offiziellen Version behoben wurde, aber eine neue Version noch nicht veröffentlicht wurde. Das bedeutet jedoch, dass die "Hauptversion" nicht immer stabil ist. Wir bemühen uns, die Hauptversion einsatzbereit zu halten, und die meisten Probleme werden normalerweise innerhalb weniger Stunden oder eines Tages behoben. Wenn Sie auf ein Problem stoßen, öffnen Sie bitte ein [Issue] (https://github.com/huggingface/transformers/issues), damit wir es noch schneller beheben können!
+Dieser Befehl installiert die aktuelle `main` Version und nicht die neueste `stable` Version. Die `main`-Version ist nützlich, um mit den neuesten Entwicklungen Schritt zu halten. Zum Beispiel, wenn ein Fehler seit der letzten offiziellen Version behoben wurde, aber eine neue Version noch nicht veröffentlicht wurde. Das bedeutet jedoch, dass die "Hauptversion" nicht immer stabil ist. Wir bemühen uns, die Hauptversion einsatzbereit zu halten, und die meisten Probleme werden normalerweise innerhalb weniger Stunden oder eines Tages behoben. Wenn Sie auf ein Problem stoßen, öffnen Sie bitte ein [Issue](https://github.com/huggingface/transformers/issues), damit wir es noch schneller beheben können!
 
 Überprüfen wir, ob 🤗 Transformers richtig installiert wurde, indem Sie den folgenden Befehl ausführen:
 
@@ -173,14 +173,14 @@ Fügen sie [🤗 Datasets](https://huggingface.co/docs/datasets/) zu Ihrem Offli
 So würden Sie beispielsweise ein Programm in einem normalen Netzwerk mit einer Firewall für externe Instanzen mit dem folgenden Befehl ausführen:
 
 ```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Führen Sie das gleiche Programm in einer Offline-Instanz mit aus:
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Das Skript sollte nun laufen, ohne sich aufzuhängen oder eine Zeitüberschreitung abzuwarten, da es weiß, dass es nur nach lokalen Dateien suchen soll.
@@ -245,6 +245,6 @@ Sobald Ihre Datei heruntergeladen und lokal zwischengespeichert ist, geben Sie d
 
 <Tip>
 
-Weitere Informationen zum Herunterladen von Dateien, die auf dem Hub gespeichert sind, finden Sie im Abschnitt [Wie man Dateien vom Hub herunterlädt] (https://huggingface.co/docs/hub/how-to-downstream).
+Weitere Informationen zum Herunterladen von Dateien, die auf dem Hub gespeichert sind, finden Sie im Abschnitt [Wie man Dateien vom Hub herunterlädt](https://huggingface.co/docs/hub/how-to-downstream).
 
 </Tip>
