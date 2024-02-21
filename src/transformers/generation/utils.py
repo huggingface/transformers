@@ -1793,8 +1793,8 @@ class GenerationMixin:
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
             if not callable(getattr(self, "_reset_cache", None)):
                 raise ValueError(
-                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                    " Make sure it has a `_reset_cache` function."
+                    "A `static_cache` was used to generate but there was a failure when trying to  release the cache. "
+                    " Make sure this model implements a `_reset_cache` function."
                 )
             self._reset_cache()
 
