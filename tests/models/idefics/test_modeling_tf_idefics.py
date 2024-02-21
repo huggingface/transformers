@@ -520,7 +520,6 @@ class TFIdeficsModelIntegrationTest(TestCasePlus):
         inputs = processor(prompts, return_tensors="tf")
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        print("generated_ids:", generated_ids)
         # keep for debugging
         for i, t in enumerate(generated_text):
             t = bytes(t, "utf-8").decode("unicode_escape")
