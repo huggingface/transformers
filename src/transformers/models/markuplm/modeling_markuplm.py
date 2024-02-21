@@ -807,7 +807,7 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMModel(MarkupLMPreTrainedModel):
-    # Adapted from transformers.models.bert.modeling_bert.BertModel.__init__
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config

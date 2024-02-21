@@ -1214,7 +1214,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
     config_class = AltCLIPTextConfig
 
-    # Adapted from transformers.models.bert.modeling_bert.BertModel.__init__
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1241,7 +1241,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    # Adapted from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

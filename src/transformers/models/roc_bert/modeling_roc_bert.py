@@ -888,7 +888,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    # Adapted from transformers.models.bert.modeling_bert.BertModel.__init__
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->RoCBert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
