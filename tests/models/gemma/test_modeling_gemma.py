@@ -470,8 +470,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
@@ -488,8 +488,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -508,8 +508,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -530,8 +530,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 198-199 Ford Mustang GT. I am trying to",
-            "Hi today I am going to show you how to make a simple and easy to make a simple and easy to",
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -551,8 +551,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-2b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a 200 cherokee build and have a few questions.\n\n1. I have a ",
-            "Hi today we are going to talk about the <strong>best way to remove the blackheads</strong>.\n\nBlack",
+            "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
+            "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
@@ -588,8 +588,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
-            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
+            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -608,8 +608,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            """Hello I am doing a project on the "The effect of the use of a new type of a new type of a""",
-            "Hi today I am going to tell you about the new update for the new update is the new update is the",
+            """Hello I am doing a project on a 1991 240sx and I am trying to find""",
+            "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -628,8 +628,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            """Hello I am doing a project on the topic "The role of the media in the fight against corruption in Cameroon". I""",
-            "Hi today I am going to tell you about my favorite book. My favorite book is called The Hunger Games.",
+            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
+            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -651,8 +651,8 @@ class GemmaIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/gemma-7b"
         EXPECTED_TEXTS = [
-            "Hello I am doing a project for my school. I have a problem. I have a program that is a program that",
-            """Hi today I am going to talk about the book "The Hunger Games" by Suzanne Collins.\n\nThe first""",
+            "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
+            """Hi today I am going to talk about the new update for the game called "The new update" and I""",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
