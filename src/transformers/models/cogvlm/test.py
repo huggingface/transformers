@@ -5,11 +5,11 @@
 # model.push_to_hub("nielsr/cogvlm-tiny-random")
 import torch
 
-from transformers import CogVLMForCausalLM, ViTImageProcessor
+from transformers import CogvlmForCausalLM, ViTImageProcessor
 
 
 processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
-reload_model = CogVLMForCausalLM.from_pretrained("nielsr/cogvlm-tiny-random")
+reload_model = CogvlmForCausalLM.from_pretrained("nielsr/cogvlm-tiny-random")
 
 # dummy forward pass
 with torch.no_grad():
