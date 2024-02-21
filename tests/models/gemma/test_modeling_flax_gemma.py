@@ -207,8 +207,8 @@ class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 @require_flax
 class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["The capital of France is", "To play the perfect cover drive"]
-    model_id = "gg-hf/gemma-2b"  # TODO: change it to the new repo after the release
-    revision = "flax"  # TODO: change it to the "main" branch after the release
+    model_id = "google/gemma-2b"
+    revision = "flax"
 
     def setUp(self):
         self.model, self.params = FlaxGemmaForCausalLM.from_pretrained(
