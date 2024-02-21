@@ -76,7 +76,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         image_num_channels: Optional[int] = 3,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -85,7 +84,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self.image_num_channels = image_num_channels
         self.image_mean = image_mean
         self.image_std = image_std
-        self.return_tensors = return_tensors
 
     def preprocess(
         self,
@@ -95,6 +93,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         transform: Callable = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> TensorType:
         """
@@ -167,6 +166,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = [self.normalize(x, mean=image_mean, std=image_std) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
         # TODO: this converts to torch tensors - switch to convert_to_tensors once it becomes available
-        images = BatchFeature(data={"pixel_values": images}, tensor_type=self.return_tensors)["pixel_values"]
+        images = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)["pixel_values"]
 
         return images

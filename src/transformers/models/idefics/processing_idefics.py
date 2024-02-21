@@ -181,7 +181,7 @@ class IdeficsProcessor(ProcessorMixin):
         add_eos_token=False,
         add_end_of_utterance_token=None,
         debug=False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors="pt",
     ) -> BatchEncoding:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
         the model was trained on and prepares the image pixel values for the model to process.
@@ -344,7 +344,7 @@ class IdeficsProcessor(ProcessorMixin):
             if debug is True:
                 print(f"{full_text=}")
 
-            image_objects = self.image_processor(image_objects, transform=transform)
+            image_objects = self.image_processor(image_objects, transform=transform, return_tensors=return_tensors)
 
             all_prompts.append(full_text)
             all_images.append(image_objects)
