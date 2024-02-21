@@ -14,8 +14,6 @@
 # limitations under the License.
 """ Wav2Vec2Bert model configuration"""
 
-import functools
-import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -311,4 +309,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
 
     @property
     def inputs_to_logits_ratio(self):
-        return functools.reduce(operator.mul, self.conv_stride, 1)
+        ratio = self.feature_projection_input_dim * 2
+        if self.add_adapter:
+            ratio = ratio * (self.adapter_stride**self.num_adapter_layers)
+        return ratio
