@@ -61,7 +61,7 @@ python examples/movement-pruning/masked_run_squad.py \
     --predict_file dev-v1.1.json \
     --do_train --do_eval --do_lower_case \
     --model_type masked_bert \
-    --model_name_or_path bert-base-uncased \
+    --model_name_or_path google-bert/bert-base-uncased \
     --per_gpu_train_batch_size 16 \
     --warmup_steps 5400 \
     --num_train_epochs 10 \
@@ -84,7 +84,7 @@ python examples/movement-pruning/masked_run_squad.py \
     --predict_file dev-v1.1.json \
     --do_train --do_eval --do_lower_case \
     --model_type masked_bert \
-    --model_name_or_path bert-base-uncased \
+    --model_name_or_path google-bert/bert-base-uncased \
     --per_gpu_train_batch_size 16 \
     --warmup_steps 5400 \
     --num_train_epochs 10 \
@@ -104,7 +104,7 @@ python examples/movement-pruning/masked_run_squad.py \
     --predict_file dev-v1.1.json \
     --do_train --do_eval --do_lower_case \
     --model_type masked_bert \
-    --model_name_or_path bert-base-uncased \
+    --model_name_or_path google-bert/bert-base-uncased \
     --per_gpu_train_batch_size 16 \
     --warmup_steps 5400 \
     --num_train_epochs 10 \
@@ -124,7 +124,7 @@ python examples/movement-pruning/masked_run_squad.py \
     --predict_file dev-v1.1.json \
     --do_train --do_eval --do_lower_case \
     --model_type masked_bert \
-    --model_name_or_path bert-base-uncased \
+    --model_name_or_path google-bert/bert-base-uncased \
     --per_gpu_train_batch_size 16 \
     --warmup_steps 5400 \
     --num_train_epochs 10 \
@@ -173,7 +173,7 @@ In particular, hardware manufacturers are announcing devices that will speedup i
 
 If you find this resource useful, please consider citing the following paper:
 
-```
+```bibtex
 @article{sanh2020movement,
     title={Movement Pruning: Adaptive Sparsity by Fine-Tuning},
     author={Victor Sanh and Thomas Wolf and Alexander M. Rush},
