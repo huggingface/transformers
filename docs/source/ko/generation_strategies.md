@@ -18,11 +18,6 @@ rendered properly in your Markdown viewer.
 
 텍스트 생성은 개방형 텍스트 작성, 요약, 번역 등 다양한 자연어 처리(NLP) 작업에 필수적입니다. 이는 또한 음성-텍스트 변환, 시각-텍스트 변환과 같이 텍스트를 출력으로 하는 여러 혼합 모달리티 응용 프로그램에서도 중요한 역할을 합니다. 텍스트 생성을 가능하게 하는 몇몇 모델로는 GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper 등이 있습니다.
 
-Check out a few examples that use [`~transformers.generation_utils.GenerationMixin.generate`] method to produce
-text outputs for different tasks:
-* [Text summarization](./tasks/summarization#inference)
-* [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
-* [Audio transcription](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
 
 [`~transformers.generation_utils.GenerationMixin.generate`] 메서드를 활용하여 다음과 같은 다양한 작업들에 대해 텍스트 결과물을 생성하는 몇 가지 예시를 살펴보세요:
 * [텍스트 요약](./tasks/summarization#inference)
@@ -33,7 +28,6 @@ generate 메소드에 입력되는 값들은 모델의 형태에 따라 달라�
 
 텍스트를 생성하기 위해 출력 토큰을 선택하는 과정을 디코딩이라고 하며, `generate()` 메소드가 사용할 디코딩 전략을 사용자가 커스터마이징할 수 있습니다. 디코딩 전략을 수정하는 것은 훈련 가능한 매개변수의 값들을 변경하지 않지만, 생성된 출력의 품질에 눈에 띄는 영향을 줄 수 있습니다. 이는 텍스트에서 반복을 줄이고, 더 일관성 있게 만드는 데 도움을 줄 수 있습니다.
 
-* saving and sharing custom generation configurations with your fine-tuned model on 🤗 Hub
 
 이 가이드에서는 다음과 같은 내용을 다룹니다:
 * 기본 생성 설정
