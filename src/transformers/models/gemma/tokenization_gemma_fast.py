@@ -35,19 +35,19 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokeniz
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
+        "gemma/gemma-2b": "https://huggingface.co/gemma/gemma-2b/resolve/main/tokenizer.model",
     },
     "tokenizer_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
+        "gemma/gemma-2b": "https://huggingface.co/gemma/gemma-2b/resolve/main/tokenizer_config.json",
     },
 }
 
 
 class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct a Gemma tokenizer fast. Based on byte-level Byte-Pair-Encoding.
 
-    This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with SPIECE_UNDERLINE
+    This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with `"▁"`
 
     ```python
     >>> from transformers import GemmaTokenizerFast
@@ -108,7 +108,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         add_bos_token=True,
         add_eos_token=False,
-        use_default_system_prompt=False,
         **kwargs,
     ):
         super().__init__(
@@ -121,19 +120,18 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             pad_token=pad_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
-            use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
-        self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -178,6 +176,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
@@ -201,7 +200,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
     def default_chat_template(self):
         raise NotImplementedError
 
-    # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
