@@ -52,6 +52,8 @@ from .configuration_grounding_dino import GroundingDinoConfig, GroundingDinoText
 
 logger = logging.get_logger(__name__)
 
+MultiScaleDeformableAttention = None
+
 
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
@@ -609,7 +611,7 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->GroundingDino,Deformable DETR->Grounding DINO
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->GroundingDino, Deformable DETR->Grounding DINO
 class GroundingDinoMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
@@ -617,6 +619,14 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
 
     def __init__(self, config: GroundingDinoConfig, num_heads: int, n_points: int):
         super().__init__()
+
+        kernel_loaded = MultiScaleDeformableAttention is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
         if config.d_model % num_heads != 0:
             raise ValueError(
                 f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
@@ -3012,6 +3022,106 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         )
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
+class GroundingDinoMLPPredictionHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+
+    """
+
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
+
+
+# Copied from transformers.models.detr.modeling_detr._upcast
+def _upcast(t: Tensor) -> Tensor:
+    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    else:
+        return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+
+# Copied from transformers.models.detr.modeling_detr.box_area
+def box_area(boxes: Tensor) -> Tensor:
+    """
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
+
+    Returns:
+        `torch.FloatTensor`: a tensor containing the area for each box.
+    """
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+# Copied from transformers.models.detr.modeling_detr.box_iou
+def box_iou(boxes1, boxes2):
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter
+
+    iou = inter / union
+    return iou, union
+
+
+# Copied from transformers.models.detr.modeling_detr.generalized_box_iou
+def generalized_box_iou(boxes1, boxes2):
+    """
+    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
+
+    Returns:
+        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+    """
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
+    iou, union = box_iou(boxes1, boxes2)
+
+    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+
+    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
+    area = width_height[:, :, 0] * width_height[:, :, 1]
+
+    return iou - (area - union) / area
+
+
+# Copied from transformers.models.detr.modeling_detr._max_by_axis
+def _max_by_axis(the_list):
+    # type: (List[List[int]]) -> List[int]
+    maxes = the_list[0]
+    for sublist in the_list[1:]:
+        for index, item in enumerate(sublist):
+            maxes[index] = max(maxes[index], item)
+    return maxes
+
+
 # Copied from transformers.models.detr.modeling_detr.dice_loss
 def dice_loss(inputs, targets, num_boxes):
     """
@@ -3062,6 +3172,127 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
         loss = alpha_t * loss
 
     return loss.mean(1).sum() / num_boxes
+
+
+# Copied from transformers.models.detr.modeling_detr.NestedTensor
+class NestedTensor(object):
+    def __init__(self, tensors, mask: Optional[Tensor]):
+        self.tensors = tensors
+        self.mask = mask
+
+    def to(self, device):
+        cast_tensor = self.tensors.to(device)
+        mask = self.mask
+        if mask is not None:
+            cast_mask = mask.to(device)
+        else:
+            cast_mask = None
+        return NestedTensor(cast_tensor, cast_mask)
+
+    def decompose(self):
+        return self.tensors, self.mask
+
+    def __repr__(self):
+        return str(self.tensors)
+
+
+# Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
+def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+    if tensor_list[0].ndim == 3:
+        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+        batch_shape = [len(tensor_list)] + max_size
+        batch_size, num_channels, height, width = batch_shape
+        dtype = tensor_list[0].dtype
+        device = tensor_list[0].device
+        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
+        for img, pad_img, m in zip(tensor_list, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            m[: img.shape[1], : img.shape[2]] = False
+    else:
+        raise ValueError("Only 3-dimensional tensors are supported")
+    return NestedTensor(tensor, mask)
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrHungarianMatcher with DeformableDetr->GroundingDino
+class GroundingDinoHungarianMatcher(nn.Module):
+    """
+    This class computes an assignment between the targets and the predictions of the network.
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
+    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+    un-matched (and thus treated as non-objects).
+
+    Args:
+        class_cost:
+            The relative weight of the classification error in the matching cost.
+        bbox_cost:
+            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+        giou_cost:
+            The relative weight of the giou loss of the bounding box in the matching cost.
+    """
+
+    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+
+        self.class_cost = class_cost
+        self.bbox_cost = bbox_cost
+        self.giou_cost = giou_cost
+        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
+
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        """
+        Args:
+            outputs (`dict`):
+                A dictionary that contains at least these entries:
+                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
+            targets (`List[dict]`):
+                A list of targets (len(targets) = batch_size), where each target is a dict containing:
+                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
+                  ground-truth
+                 objects in the target) containing the class labels
+                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
+
+        Returns:
+            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            - index_i is the indices of the selected predictions (in order)
+            - index_j is the indices of the corresponding selected targets (in order)
+            For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+        """
+        batch_size, num_queries = outputs["logits"].shape[:2]
+
+        # We flatten to compute the cost matrices in a batch
+        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
+
+        # Also concat the target labels and boxes
+        target_ids = torch.cat([v["class_labels"] for v in targets])
+        target_bbox = torch.cat([v["boxes"] for v in targets])
+
+        # Compute the classification cost.
+        alpha = 0.25
+        gamma = 2.0
+        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
+        class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
+
+        # Compute the L1 cost between boxes
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
+
+        # Compute the giou cost between boxes
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
+
+        # Final cost matrix
+        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
+
+        sizes = [len(v["boxes"]) for v in targets]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss with DeformableDetr->GroundingDino
@@ -3240,227 +3471,6 @@ class GroundingDinoLoss(nn.Module):
                 losses.update(l_dict)
 
         return losses
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
-class GroundingDinoMLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-
-    """
-
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrHungarianMatcher with DeformableDetr->GroundingDino
-class GroundingDinoHungarianMatcher(nn.Module):
-    """
-    This class computes an assignment between the targets and the predictions of the network.
-
-    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
-    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
-    un-matched (and thus treated as non-objects).
-
-    Args:
-        class_cost:
-            The relative weight of the classification error in the matching cost.
-        bbox_cost:
-            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-        giou_cost:
-            The relative weight of the giou loss of the bounding box in the matching cost.
-    """
-
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
-        super().__init__()
-        requires_backends(self, ["scipy"])
-
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
-            raise ValueError("All costs of the Matcher can't be 0")
-
-    @torch.no_grad()
-    def forward(self, outputs, targets):
-        """
-        Args:
-            outputs (`dict`):
-                A dictionary that contains at least these entries:
-                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
-                A list of targets (len(targets) = batch_size), where each target is a dict containing:
-                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
-                  ground-truth
-                 objects in the target) containing the class labels
-                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
-
-        Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
-            - index_i is the indices of the selected predictions (in order)
-            - index_j is the indices of the corresponding selected targets (in order)
-            For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
-        """
-        batch_size, num_queries = outputs["logits"].shape[:2]
-
-        # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
-
-        # Also concat the target labels and boxes
-        target_ids = torch.cat([v["class_labels"] for v in targets])
-        target_bbox = torch.cat([v["boxes"] for v in targets])
-
-        # Compute the classification cost.
-        alpha = 0.25
-        gamma = 2.0
-        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
-        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
-
-        # Compute the L1 cost between boxes
-        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-
-        # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
-
-        # Final cost matrix
-        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
-
-        sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
-
-
-# Copied from transformers.models.detr.modeling_detr._upcast
-def _upcast(t: Tensor) -> Tensor:
-    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
-    if t.is_floating_point():
-        return t if t.dtype in (torch.float32, torch.float64) else t.float()
-    else:
-        return t if t.dtype in (torch.int32, torch.int64) else t.int()
-
-
-# Copied from transformers.models.detr.modeling_detr.box_area
-def box_area(boxes: Tensor) -> Tensor:
-    """
-    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
-
-    Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
-            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
-            < x2` and `0 <= y1 < y2`.
-
-    Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
-    """
-    boxes = _upcast(boxes)
-    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-
-# Copied from transformers.models.detr.modeling_detr.box_iou
-def box_iou(boxes1, boxes2):
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
-    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / union
-    return iou, union
-
-
-# Copied from transformers.models.detr.modeling_detr.generalized_box_iou
-def generalized_box_iou(boxes1, boxes2):
-    """
-    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
-
-    Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
-    """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
-    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
-        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
-    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
-        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
-    iou, union = box_iou(boxes1, boxes2)
-
-    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
-
-    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
-    area = width_height[:, :, 0] * width_height[:, :, 1]
-
-    return iou - (area - union) / area
-
-
-# Copied from transformers.models.detr.modeling_detr._max_by_axis
-def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
-    maxes = the_list[0]
-    for sublist in the_list[1:]:
-        for index, item in enumerate(sublist):
-            maxes[index] = max(maxes[index], item)
-    return maxes
-
-
-# Copied from transformers.models.detr.modeling_detr.NestedTensor
-class NestedTensor(object):
-    def __init__(self, tensors, mask: Optional[Tensor]):
-        self.tensors = tensors
-        self.mask = mask
-
-    def to(self, device):
-        cast_tensor = self.tensors.to(device)
-        mask = self.mask
-        if mask is not None:
-            cast_mask = mask.to(device)
-        else:
-            cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
-
-    def decompose(self):
-        return self.tensors, self.mask
-
-    def __repr__(self):
-        return str(self.tensors)
-
-
-# Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    if tensor_list[0].ndim == 3:
-        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        batch_shape = [len(tensor_list)] + max_size
-        batch_size, num_channels, height, width = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = False
-    else:
-        raise ValueError("Only 3-dimensional tensors are supported")
-    return NestedTensor(tensor, mask)
 
 
 @add_start_docstrings(
