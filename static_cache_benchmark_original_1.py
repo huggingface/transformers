@@ -13,6 +13,32 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, StaticCache, Dynam
 
 # from generation import  sample, model_forward
 
+from typing import Optional
+
+
+def multinomial_sample_one_no_sync(probs_sort): # Does multinomial sampling without a cuda synchronization
+    q = torch.empty_like(probs_sort).exponential_(1)
+    return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
+
+
+def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+    logits = logits / max(temperature, 1e-5)
+
+    if top_k is not None:
+        v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+        pivot = v.select(-1, -1).unsqueeze(-1)
+        logits = torch.where(logits < pivot, -float("Inf"), logits)
+    probs = torch.nn.functional.softmax(logits, dim=-1)
+    return probs
+
+
+def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+    probs = logits_to_probs(logits[:, -1], temperature, top_k)
+    idx_next = multinomial_sample_one_no_sync(probs)
+    return idx_next, probs
+
+
+
 torch._inductor.config.coordinate_descent_tuning = True
 torch._inductor.config.triton.unique_kernel_names = True
 # torch._inductor.config.fx_graph_cache = True # Experimental feature to reduce compilation times, will be on by default in future
