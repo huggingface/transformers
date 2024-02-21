@@ -1277,11 +1277,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            # The `contiguous()` here is necessary to have a static stride during (non-speculative) decoding. torchdynamo otherwise
-            # recompiles graphs as the stride of the inputs is a guard.
-            # TODO: We don't really need to handle the input_ids here, and this contiguous() call could be removed if we were
-            # simply using GenerationMixin.greedy_search `next_tokens` variable directly (which is already contiguous), instead of
-            # doing a torch.cat + then slice.
+            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
+            # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs.update(
