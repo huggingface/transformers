@@ -438,8 +438,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     """
 
     def test_edge_case_tabulation(self):
-        fast_tokenizer = GemmaTokenizerFast.from_pretrained("gg-hf/gemma-7b")
-        slow_tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
+        fast_tokenizer = GemmaTokenizerFast.from_pretrained("google/gemma-7b")
+        slow_tokenizer = GemmaTokenizer.from_pretrained("google/gemma-7b")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
         EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
         EXPECTED_TOKENS = [ "Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁▁▁▁▁", ",", "▁", "1", "2", "3", "4", "▁", "1", "5", "▁", "5", ",", "6", "1"]  # fmt: skip
