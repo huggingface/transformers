@@ -336,7 +336,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b", legacy=False)
+        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
         tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -404,7 +404,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b", legacy=False)
+        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
 
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
@@ -441,39 +441,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         slow_tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
         EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
-        EXPECTED_TOKENS = [
-            "Hey",
-            "<eos>",
-            ".",
-            "▁",
-            "\t\t",
-            "▁",
-            "\n\n",
-            "you",
-            "▁▁",
-            "é",
-            "▁▁",
-            "@#",
-            "😈",
-            "▁▁",
-            "🤗",
-            "!",
-            "▁▁▁▁▁▁▁",
-            ",",
-            "▁",
-            "1",
-            "2",
-            "3",
-            "4",
-            "▁",
-            "1",
-            "5",
-            "▁",
-            "5",
-            ",",
-            "6",
-            "1",
-        ]
+        EXPECTED_TOKENS = [ "Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁▁▁▁▁", ",", "▁", "1", "2", "3", "4", "▁", "1", "5", "▁", "5", ",", "6", "1"] # fmt: skip
 
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
