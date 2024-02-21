@@ -599,8 +599,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_7b_bf16(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-7b"
+        model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             """Hello I am doing a project on a 1991 240sx and I am trying to find""",
             "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
