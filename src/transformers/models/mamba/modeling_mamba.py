@@ -527,7 +527,7 @@ class MambaModel(MambaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if use_cache and inference_params is None:
+        if inference_params is None:
             inference_params = MambaCache(
                 self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
