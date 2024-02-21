@@ -390,6 +390,12 @@ class AutoModelTest(unittest.TestCase):
         model = AutoModel.from_pretrained("Rocketknight1/test_dynamic_model_v1.0", trust_remote_code=True)
         self.assertEqual(model.__class__.__name__, "NewModel")
 
+        # Test that it works with a custom cache dir too
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModel.from_pretrained(
+                "Rocketknight1/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
+            )
+
     def test_new_model_registration(self):
         AutoConfig.register("custom", CustomConfig)
 
