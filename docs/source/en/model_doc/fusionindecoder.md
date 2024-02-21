@@ -18,24 +18,45 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The FusionInDecoder model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The FusionInDecoder model was proposed in [Leveraging Passage Retrieval with Generative Models
+for Open Domain Question Answering
+](https://arxiv.org/pdf/2007.01282.pdf) by Facebook AI Research.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+Generative models for open domain question
+answering have proven to be competitive, without resorting to external knowledge. While
+promising, this approach requires to use models with billions of parameters, which are expensive to train and query. In this paper, we
+investigate how much these models can benefit from retrieving text passages, potentially
+containing evidence. We obtain state-of-theart results on the Natural Questions and TriviaQA open benchmarks. Interestingly, we observe that the performance of this method significantly improves when increasing the number of retrieved passages. This is evidence that
+sequence-to-sequence models offers a flexible
+framework to efficiently aggregate and combine evidence from multiple passages.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+This model is designed to address the issue of excessive computational demand in self-attention when concatenating multiple passages.
+Except for bundling multiple passages into ```batch_size * passage ```and unbundling them, it operates identically to T5.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+While the input doesn't necessarily have to be three-dimensional, it's typically expected to have the shape ```(batch_size, n_passages, passage_length)``` by default.
+
+```python
+question = "question"
+contexts = ["context-1", "context-2", "context-3", "context-4"]
+prefix = "\n"
+
+inputs = [question + prefix + context for context in contexts]
+
+input_ids = tokenizer(inputs, return_tensors="pt").input_ids
+```
 
 
-## FusionInDecoderConfig
+This model was contributed by [ohgnues](https://huggingface.co/ohgnues).
+The original code can be found [here](https://github.com/facebookresearch/FiD).
 
-[[autodoc]] FusionInDecoderConfig
+
+## T5Config
+
+[[autodoc]] T5Config
 
 ## FusionInDecoderModel
 
