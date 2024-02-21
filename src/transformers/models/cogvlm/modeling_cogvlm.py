@@ -379,8 +379,10 @@ class CogvlmVisionExpertAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         batch_size, q_len, hidden_size = hidden_states.size()
         vision_token_mask, language_token_mask = get_expert_mask(token_type_ids)
-        
-        mixed_raw_layer = torch.empty((batch_size, q_len, hidden_size*3), dtype=hidden_states.dtype, device=hidden_states.device)
+
+        mixed_raw_layer = torch.empty(
+            (batch_size, q_len, hidden_size * 3), dtype=hidden_states.dtype, device=hidden_states.device
+        )
         mixed_raw_layer[vision_token_mask] = self.vision_expert_query_key_value(hidden_states[vision_token_mask])
         mixed_raw_layer[language_token_mask] = self.language_expert_query_key_value(hidden_states[language_token_mask])
 
@@ -592,6 +594,13 @@ class CogvlmModel(CogvlmPreTrainedModel):
         self.layers = nn.ModuleList([CogvlmDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        vision_input_ids = torch.tensor(
+            [self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens
+        )
+        self.register_buffer("vision_input_ids", vision_input_ids, persistent=False)
+        vision_token_type_ids = torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * self.num_vision_tokens)
+        self.register_buffer("vision_token_type_ids", vision_token_type_ids, persistent=False)
+
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -680,16 +689,10 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 # prepend the input_ids and token_type_ids with image tokens
                 batch_size = input_ids.shape[0]
 
-                vision_input_ids = torch.tensor(
-                    [self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens
-                )
-                vision_input_ids = vision_input_ids.repeat(batch_size, 1)
+                vision_input_ids = self.vision_input_ids.repeat(batch_size, 1)
                 vision_input_ids = vision_input_ids.to(input_ids.device)
 
-                vision_token_type_ids = torch.tensor(
-                    [LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * self.num_vision_tokens
-                )
-                vision_token_type_ids = vision_token_type_ids.repeat(batch_size, 1)
+                vision_token_type_ids = self.vision_token_type_ids.repeat(batch_size, 1)
                 vision_token_type_ids = vision_token_type_ids.to(token_type_ids.device)
 
                 input_ids = torch.cat([vision_input_ids, input_ids[:, 1:]], dim=1)
