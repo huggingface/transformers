@@ -1289,7 +1289,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = None,
-    ) -> Union[Tuple, TFIdeficsBaseModelOutputWithPast]:
+    ) -> Union[TFIdeficsBaseModelOutputWithPast, Tuple[tf.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1589,7 +1589,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = None,
-    ) -> Union[Tuple, TFIdeficsBaseModelOutputWithPast]:
+    ) -> Union[TFIdeficsBaseModelOutputWithPast, Tuple[tf.Tensor]]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1695,7 +1695,7 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training=False,
-    ) -> Union[Tuple, TFIdeficsCausalLMOutputWithPast]:
+    ) -> Union[TFIdeficsCausalLMOutputWithPast, Tuple[tf.Tensor]]:
         r"""
         Args:
             labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
