@@ -153,7 +153,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="gg-hf/gemma-7b",
+        default="google/gemma-7b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
