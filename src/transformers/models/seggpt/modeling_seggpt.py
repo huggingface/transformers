@@ -386,12 +386,7 @@ class SegGptAttention(nn.Module):
 
         attn_output = self.proj(attn_output)
 
-        if output_attentions:
-            outputs = (attn_output, attn_weights_reshaped)
-        else:
-            outputs = (attn_output, None)
-
-        return outputs
+        return (attn_output, attn_weights_reshaped)
 
 
 # Copied from transformers.models.sam.modeling_sam.SamMLPBlock with SamMLPBlock->SegGptMlp
