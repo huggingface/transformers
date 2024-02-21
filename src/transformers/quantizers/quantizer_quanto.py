@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, List
 
 from .base import HfQuantizer
+from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ class QuantoHfQuantizer(HfQuantizer):
     """
 
     required_packages = ["quanto", "accelerate"]
+    requires_parameters_quantization = True
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
         self.requires_calibration = quantization_config.activations is not None
@@ -62,26 +64,76 @@ class QuantoHfQuantizer(HfQuantizer):
                 )
         return torch_dtype
 
-    def update_weights_only_kwarg(self,weights_only_kwarg: Dict[str,Any]) -> Dict[str,Any]:
+    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str,Any]) -> Dict[str,Any]:
         weights_only_kwarg["weights_only"]=False
         return weights_only_kwarg
 
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+        import quanto
+        # if the model is prequantized, we don't need to remove any keys
         if self.pre_quantized:
-            model, _ = replace_with_quanto_layers(model, quantization_config=self.quantization_config)
+            return missing_keys
+        not_missing_keys = []
+        model_state_dict_keys = model.state_dict().keys()
+        for key in missing_keys:
+            updated_key = None
+            if key in list(model_state_dict_keys):
+                updated_key = key
+            elif f"{prefix}.{key}" in list(model_state_dict_keys):
+                updated_key = f"{prefix}.{key}"
+            elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict_keys):
+                updated_key = ".".join(key.split(".")[1:])
+            module, tensor_name = get_module_from_name(model, updated_key)
+        # we remove some of the missing keys since when we replaced the modules by QModuleMixin, we created a few buffers.
+            if isinstance(module,quanto.QModuleMixin):
+                if (tensor_name != "weight" and tensor_name != "bias"):
+                    not_missing_keys.append(key)
+        return [k for k in missing_keys if k not in not_missing_keys]
+
+    def check_quantized_param(
+        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+    ) -> bool:
+        """
+        Check if a parameter needs to be quantized.
+        """
+        import quanto
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, quanto.QModuleMixin) and tensor_name == "weight":
+            # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
+            if module.frozen:
+                return False
+            else:
+                return True
+        else:
+            return False
+
+    def create_quantized_param(
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        target_device: "torch.device",
+        *args,
+        **kwargs
+    ):
+        """
+        Create the quantized parameter by calling .freeze() after setting it to the mpdule.
+        """
+        from accelerate.utils import set_module_tensor_to_device
+
+        set_module_tensor_to_device(model, param_name, target_device, param_value)
+        module, tensor_name = get_module_from_name(model, param_name)
+        # we don't freeze the module if the module is on the meta device
+        if module._parameters[tensor_name].device != torch.device("meta"):
+            module.freeze()
+            module.weight.requires_grad = False
+
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        model, _ = replace_with_quanto_layers(model, quantization_config=self.quantization_config)
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model):
-        if not self.pre_quantized:
-            from quanto import freeze, qfloat8_e4m3fn, qfloat8_e5m2, qint8, quantize
-            w_mapping = {"int8": qint8}
-            a_mapping = {None: None, "int8": qint8, "fp8_e5m2": qfloat8_e5m2, "fp8_e4m3": qfloat8_e4m3fn}
-            quantize(
-                model,
-                weights=w_mapping[self.quantization_config.weights],
-                activations=a_mapping[self.quantization_config.activations],
-            )
-            freeze(model)
+        return model
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):

@@ -45,6 +45,7 @@ def replace_with_quanto_layers(
             should not be passed by the user.
     """
     from quanto import QLayerNorm, QLinear, qfloat8_e4m3fn, qfloat8_e5m2, qint8
+    from accelerate import init_empty_weights
 
     w_mapping = {"int8": qint8}
     a_mapping = {None: None, "int8": qint8, "fp8_e5m2": qfloat8_e5m2, "fp8_e4m3": qfloat8_e4m3fn}
@@ -58,27 +59,28 @@ def replace_with_quanto_layers(
         current_key_name.append(name)
 
         if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
-            if isinstance(module, torch.nn.Linear):
-                model._modules[name] = QLinear(
-                    in_features=module.in_features,
-                    out_features=module.out_features,
-                    bias=module.bias is not None,
-                    dtype=module.weight.dtype,
-                    weights=w_mapping[quantization_config.weights],
-                    activations=a_mapping[quantization_config.activations],
-                )
-                model._modules[name].requires_grad_(False)
-                has_been_replaced = True
-            elif isinstance(module, torch.nn.LayerNorm):
-                if quantization_config.activations is not None:
-                    model._modules[name] = QLayerNorm(
-                        module.normalized_shape,
-                        module.eps,
-                        module.elementwise_affine,
-                        module.bias is not None,
+            with init_empty_weights():
+                if isinstance(module, torch.nn.Linear):
+                    model._modules[name] = QLinear(
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        bias=module.bias is not None,
+                        dtype=module.weight.dtype,
+                        weights=w_mapping[quantization_config.weights],
                         activations=a_mapping[quantization_config.activations],
                     )
+                    model._modules[name].requires_grad_(False)
                     has_been_replaced = True
+                elif isinstance(module, torch.nn.LayerNorm):
+                    if quantization_config.activations is not None:
+                        model._modules[name] = QLayerNorm(
+                            module.normalized_shape,
+                            module.eps,
+                            module.elementwise_affine,
+                            module.bias is not None,
+                            activations=a_mapping[quantization_config.activations],
+                        )
+                        has_been_replaced = True
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_quanto_layers(
                 module,

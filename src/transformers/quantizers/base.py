@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union, List
 
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin
@@ -109,6 +109,16 @@ class HfQuantizer(ABC):
                 The torch_dtype that is used to compute the device_map.
         """
         return torch_dtype
+
+    def update_missing_keys(self, model, missing_keys: List[str]) -> List[str]:
+        """
+        Override this method if you want to adjust the `missing_keys`.
+
+        Args:
+            missing_keys (`List[str]`, *optional*):
+                The list of missing keys in the checkpoint compared to the state dict of the model
+        """
+        return missing_keys
 
     def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
         """

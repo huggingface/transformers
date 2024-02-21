@@ -266,15 +266,10 @@ class QuantoQuantizationTest(unittest.TestCase):
 #     weights = "torch.int4"
 
 # class QuantoQuantizationActivationTest(unittest.TestCase):
-#     @parameterized.expand(
-#         [
-#             ("activation", "torch.int8", "torch.fp8"),
-#         ]
-#     )
 #     def test_quantize_activation(self, activation):
 #         quantization_config = QuantoConfig(
-#             weights="torch.int8",
-#             activations="torch.int8",
+#             weights="int8",
+#             activations="int8",
 #         )
 #         with self.assertRaises(RuntimeError):
 #             AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", quantization_config=quantization_config)
