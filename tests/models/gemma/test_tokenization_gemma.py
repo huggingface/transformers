@@ -412,7 +412,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
+        tokenizer = GemmaTokenizer.from_pretrained("google/gemma-7b")
 
         test_chats = [
             [{"role": "user", "content": "Hello!"}],
