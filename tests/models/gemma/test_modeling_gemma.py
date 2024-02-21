@@ -639,8 +639,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_bitsandbytes
     def test_model_7b_4bit(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-7b"
+        model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
             """Hi today I am going to talk about the new update for the game called "The new update" and I""",
