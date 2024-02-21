@@ -139,7 +139,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_encoding =  {'input_ids': [[2, 158434, 591, 84193, 3836, 685, 6599, 31223, 235290, 140247, 578, 6599, 31223, 235290, 145139, 235290, 3491, 235275, 6572, 3311, 235290, 38197, 109959, 591, 25894, 235269, 162174, 235290, 235284, 235269, 1791, 6362, 12481, 235269, 1576, 18622, 235269, 2900, 1136, 86684, 235269, 29092, 4632, 16994, 604, 13146, 14944, 40371, 591, 19700, 235327, 235275, 578, 13146, 14944, 25511, 591, 235300, 12474, 235275, 675, 1163, 235248, 235304, 235284, 235340, 229903, 5377, 575, 235248, 235274, 235276, 235276, 235340, 17044, 578, 5271, 1061, 118345, 1865, 125247, 235269, 8745, 111226, 578, 176888, 235265], [2, 25894, 603, 6869, 577, 953, 235290, 8297, 5271, 209099, 41642, 774, 748, 78253, 2793, 731, 51506, 34346, 611, 2145, 2731, 578, 1833, 4807, 575, 832, 16630, 235265], [2, 651, 4320, 8426, 25341, 36271, 1163, 573, 27894, 5929, 235265]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="google/gemma-7b",
+            model_name="hf-internal-testing/dummy-gemma",
             revision="",
             padding=False,
         )
@@ -167,7 +167,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class GemmaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "google/gemma-7b"
+        checkpoint_name = "hf-internal-testing/dummy-gemma"
         cls.tokenizer: GemmaTokenizer = GemmaTokenizer.from_pretrained(
             checkpoint_name, eos_token="<s>"
         )  # add this token
@@ -383,7 +383,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_some_edge_cases(self):
-        tokenizer = GemmaTokenizer.from_pretrained("google/gemma-7b")
+        tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
 
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<s>", ">"])
@@ -412,7 +412,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = GemmaTokenizer.from_pretrained("google/gemma-7b")
+        tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
 
         test_chats = [
             [{"role": "user", "content": "Hello!"}],
@@ -438,8 +438,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     """
 
     def test_edge_case_tabulation(self):
-        fast_tokenizer = GemmaTokenizerFast.from_pretrained("google/gemma-7b")
-        slow_tokenizer = GemmaTokenizer.from_pretrained("google/gemma-7b")
+        fast_tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/dummy-gemma")
+        slow_tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
         EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
         EXPECTED_TOKENS = [ "Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁▁▁▁▁", ",", "▁", "1", "2", "3", "4", "▁", "1", "5", "▁", "5", ",", "6", "1"]  # fmt: skip
