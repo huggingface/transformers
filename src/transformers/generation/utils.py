@@ -4413,7 +4413,7 @@ class GenerationMixin:
         ...     assistant_model=assistant_model,
         ...     generation_config=model.generation_config,
         ...     logits_processor=logits_processor,
-        ...     model_kwargs=**{},
+        ...     model_kwargs={},
         ... )
         >>> outputs = model.assisted_decoding(
         ...     input_ids,
