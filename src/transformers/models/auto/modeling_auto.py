@@ -57,6 +57,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("chinese_clip", "ChineseCLIPModel"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
         ("clip_vision_model", "CLIPVisionModel"),
@@ -102,6 +103,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetModel"),
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
+        ("gemma", "GemmaModel"),
         ("git", "GitModel"),
         ("glpn", "GLPNModel"),
         ("gpt-sw3", "GPT2Model"),
@@ -426,6 +428,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieForCausalLM"),
         ("falcon", "FalconForCausalLM"),
         ("fuyu", "FuyuForCausalLM"),
+        ("gemma", "GemmaForCausalLM"),
         ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
@@ -764,6 +767,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("funnel", "FunnelForSequenceClassification"),
+        ("gemma", "GemmaForSequenceClassification"),
         ("gpt-sw3", "GPT2ForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
         ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
@@ -1355,7 +1359,7 @@ class AutoModelForSeq2SeqLM(_BaseAutoModelClass):
 AutoModelForSeq2SeqLM = auto_class_update(
     AutoModelForSeq2SeqLM,
     head_doc="sequence-to-sequence language modeling",
-    checkpoint_for_example="t5-base",
+    checkpoint_for_example="google-t5/t5-base",
 )
 
 
