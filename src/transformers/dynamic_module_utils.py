@@ -190,6 +190,7 @@ def get_class_in_module(repo_id: str, class_name: str, module_path: Union[str, o
     Import a module on the cache directory for modules and extract a class from it.
 
     Args:
+        repo_id (`str`): The repo containing the module. Used for path manipulation.
         class_name (`str`): The name of the class to import.
         module_path (`str` or `os.PathLike`): The path to the module to import.
 
