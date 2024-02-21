@@ -33,15 +33,6 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "gemma/gemma-2b": "https://huggingface.co/gemma/gemma-2b/resolve/main/tokenizer.model",
-    },
-    "tokenizer_file": {
-        "gemma/gemma-2b": "https://huggingface.co/gemma/gemma-2b/resolve/main/tokenizer_config.json",
-    },
-}
-
 
 class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -92,7 +83,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     slow_tokenizer_class = GemmaTokenizer
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
@@ -195,10 +185,6 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    @property
-    def default_chat_template(self):
-        raise NotImplementedError
 
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):

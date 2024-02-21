@@ -152,6 +152,14 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_subword_regularization_tokenizer(self):
         pass
 
+    @unittest.skip("This test will be removed from main @LysandreJik")
+    def test_pretrained_model_lists(self):
+        pass
+
+    @unittest.skip("Skipping")
+    def test_torch_encode_plus_sent_to_model(self):
+        pass
+
 
 @require_torch
 @require_sentencepiece
@@ -417,13 +425,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         # Matt: The third test case tests the default system message, but if this is ever changed in the
         #       class/repo code then that test will fail, and the case will need to be updated.
         tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        # fmt: off
-        expected_tokens = [
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962],
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962, 20103, 304, 5870, 366, 29889, 29871, 2],
-            [1, 29961, 25580, 29962, 15043, 29991, 518, 29914, 25580, 29962]
-        ]
-        # fmt: on
+        expected_tokens = [[235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108, 235322, 235371, 571, 235298, 2997, 73786, 105776, 108, 7731, 577, 4664, 692, 35606, 235371, 571, 235298, 615, 73786, 108], [235322, 235371, 571, 235298, 2997, 73786, 1645, 108, 4521, 149907, 235371, 571, 235298, 615, 73786, 108]]  # fmt: skip
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
 

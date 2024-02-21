@@ -31,17 +31,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/gemma-2b": "https://huggingface.co/google/gemma-2b/resolve/main/tokenizer.model",
-    },
-    "tokenizer_file": {
-        "google/gemma-2b": "https://huggingface.co/google/gemma-2b/resolve/main/tokenizer_config.json",
-    },
-}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/gemma-2b": 2048,
-}
 SPIECE_UNDERLINE = "▁"
 
 
@@ -93,8 +82,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -337,7 +324,3 @@ class GemmaTokenizer(PreTrainedTokenizer):
             output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
 
         return output
-
-    @property
-    def default_chat_template(self):
-        raise NotImplementedError
