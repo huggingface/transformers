@@ -969,8 +969,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if isinstance(ids, int):
             if ids in self._added_tokens_decoder:
                 return self._added_tokens_decoder[ids].content
-            else:
+            elif ids < self.vocab_size:
                 return self._convert_id_to_token(ids)
+            else:
+                return ""
+            # Note: Although `_convert_id_to_token` is declared to return a 
+            # `str` type, specific implementations in subclasses may return 
+            # `None` for out-of-vocabulary (OOV) IDs (e.g., in the `codegen` 
+            # tokenizer) or may raise exceptions (e.g., in the `llama` 
+            # tokenizer). On the other hand, the fast tokenizer developed in 
+            # Rust uniformly returns an empty string for such cases. To 
+            # ensure consistency across different implementations, OOV IDs are 
+            # manually converted to an empty string here.
+
         tokens = []
         for index in ids:
             index = int(index)
@@ -978,8 +989,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             if index in self._added_tokens_decoder:
                 tokens.append(self._added_tokens_decoder[index].content)
-            else:
+            elif index < self.vocab_size:
                 tokens.append(self._convert_id_to_token(index))
+            else:
+                tokens.append("")
         return tokens
 
     def _convert_id_to_token(self, index: int) -> str:
