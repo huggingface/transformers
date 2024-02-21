@@ -382,19 +382,20 @@ class AutoModelTest(unittest.TestCase):
 
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
-            model = AutoModel.from_pretrained("Rocketknight1/test_dynamic_model_v1.0")
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_v1.0")
         # If remote code is disabled, we can't load this config.
         with self.assertRaises(ValueError):
-            model = AutoModel.from_pretrained("Rocketknight1/test_dynamic_model_v1.0", trust_remote_code=False)
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=False)
 
-        model = AutoModel.from_pretrained("Rocketknight1/test_dynamic_model_v1.0", trust_remote_code=True)
+        model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True)
         self.assertEqual(model.__class__.__name__, "NewModel")
 
         # Test that it works with a custom cache dir too
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = AutoModel.from_pretrained(
-                "Rocketknight1/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
+                "hf-internal-testing/test_dynamic_model_v1.0", trust_remote_code=True, cache_dir=tmp_dir
             )
+            self.assertEqual(model.__class__.__name__, "NewModel")
 
     def test_new_model_registration(self):
         AutoConfig.register("custom", CustomConfig)
