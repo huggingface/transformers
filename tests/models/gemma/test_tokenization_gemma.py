@@ -167,7 +167,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class GemmaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "gg-hf/gemma-7b"
+        checkpoint_name = "google/gemma-7b"
         cls.tokenizer: GemmaTokenizer = GemmaTokenizer.from_pretrained(
             checkpoint_name, eos_token="<s>"
         )  # add this token
