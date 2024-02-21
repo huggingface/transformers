@@ -383,7 +383,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_some_edge_cases(self):
-        tokenizer = GemmaTokenizer.from_pretrained("gg-hf/gemma-7b")
+        tokenizer = GemmaTokenizer.from_pretrained("google/gemma-7b")
 
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<s>", ">"])
