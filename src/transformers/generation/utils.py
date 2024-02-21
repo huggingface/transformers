@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import time
 import copy
 import inspect
 import warnings
@@ -2402,7 +2402,10 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+        count = 0
         while True:
+            print("----- in forward", count)
+            count += 1
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -2416,6 +2419,17 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
+            for name, inp in model_inputs.items():
+                if isinstance(inp, torch.Tensor):
+                    print(f"name={name}, shape={inp.shape}, stride={inp.stride()}, dtype={inp.dtype}, device={inp.device}")
+                elif name == "past_key_values" and inp is not None:
+                    print("past_key_values not None")
+                else:
+                    print(f"name={name}, value={inp}")
+
+            torch.cuda.synchronize()
+
+            start = time.time_ns()
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -2423,6 +2437,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            torch.cuda.synchronize()
+            end = time.time_ns()
+
+            print(f"forward call latency: {(end - start) * 1e-6:.3f} ms")
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
