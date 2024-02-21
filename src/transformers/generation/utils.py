@@ -4391,6 +4391,7 @@ class GenerationMixin:
 
         ```python
         >>> from transformers import (
+        ....    AssistedCandidateGenerator,
         ...     AutoTokenizer,
         ...     AutoModelForCausalLM,
         ...     LogitsProcessorList,
@@ -4413,33 +4414,22 @@ class GenerationMixin:
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
+        >>> candidate_generator = AssistedCandidateGenerator(
+        ...     input_ids=input_ids,
+        ...     assistant_model=assistant_model,
+        ...     generation_config=model.generation_config,
+        ...     logits_processor=logits_processor,
+        ...     model_kwargs=**{},
+        ... )
         >>> outputs = model.assisted_decoding(
         ...     input_ids,
-        ...     assistant_model=assistant_model,
+        ...     candidate_generator=candidate_generator
         ...     logits_processor=logits_processor,
         ...     stopping_criteria=stopping_criteria,
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
-        # handling deprecated arguments
-        if (assistant_model is None) == (candidate_generator is None):
-            raise ValueError("One (and only one) of `assistant_model` and `candidate_generator` should be defined.")
-
-        if assistant_model is not None:
-            candidate_generator = AssistedCandidateGenerator(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                logits_processor=logits_processor,
-                model_kwargs=model_kwargs,
-                eos_token_id=eos_token_id,
-            )
-            warnings.warn(
-                "Passing `assistant_model` to `assisted_decoding` is deprecated and will be removed in v4.38. "
-                "Pass the `candidate_generator` argument instead.",
-                FutureWarning,
-            )
-
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
