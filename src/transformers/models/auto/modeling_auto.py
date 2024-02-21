@@ -57,6 +57,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("chinese_clip", "ChineseCLIPModel"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
         ("clip_vision_model", "CLIPVisionModel"),

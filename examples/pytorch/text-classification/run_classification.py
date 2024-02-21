@@ -404,7 +404,7 @@ def main():
             raw_datasets.pop(split)
 
     if data_args.train_split_name is not None:
-        logger.info(f"using {data_args.validation_split_name} as validation set")
+        logger.info(f"using {data_args.train_split_name} as train set")
         raw_datasets["train"] = raw_datasets[data_args.train_split_name]
         raw_datasets.pop(data_args.train_split_name)
 

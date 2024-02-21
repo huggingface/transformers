@@ -54,6 +54,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertConfig"),
         ("canine", "CanineConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
@@ -512,6 +513,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
         ("chinese_clip", "Chinese-CLIP"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clip_vision_model", "CLIPVisionModel"),
@@ -773,6 +775,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("siglip_vision_model", "siglip"),
+        ("chinese_clip_vision_model", "chinese_clip"),
     ]
 )
 

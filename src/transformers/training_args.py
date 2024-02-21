@@ -157,6 +157,9 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
+    RMSPROP_BNB = "rmsprop_bnb"
+    RMSPROP_8BIT = "rmsprop_bnb_8bit"
+    RMSPROP_32BIT = "rmsprop_bnb_32bit"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
