@@ -4391,7 +4391,7 @@ class GenerationMixin:
 
         ```python
         >>> from transformers import (
-        ....    AssistedCandidateGenerator,
+        ...     AssistedCandidateGenerator,
         ...     AutoTokenizer,
         ...     AutoModelForCausalLM,
         ...     LogitsProcessorList,
