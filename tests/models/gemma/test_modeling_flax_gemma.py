@@ -34,8 +34,6 @@ if is_flax_available():
     )
 
 
-if is_tokenizers_available():
-    pass
 
 
 class FlaxGemmaModelTester:
