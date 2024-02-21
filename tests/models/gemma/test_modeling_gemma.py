@@ -461,6 +461,79 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Gemma flash attention does not support right padding")
 
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_equivalence(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
+                )
+                model_sdpa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="eager"
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                outputs_sdpa = outputs_sdpa.hidden_states[-1]
+
+                # gemma sdpa needs a high tolerance
+                assert torch.allclose(outputs_sdpa, logits, atol=3e-3)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="eager"
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_sdpa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                outputs_sdpa = outputs_sdpa.hidden_states[-1]
+
+                # gemma flash attention 2 needs a high tolerance
+                assert torch.allclose(outputs_sdpa, logits, atol=3e-3)
+
 
 @require_torch_gpu
 @slow
@@ -584,6 +657,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     def test_model_2b_flash_attn(self):
         model_id = "google/gemma-2b"
