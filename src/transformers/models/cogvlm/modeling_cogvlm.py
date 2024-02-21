@@ -377,12 +377,10 @@ class CogvlmVisionExpertAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
+        batch_size, q_len, hidden_size = hidden_states.size()
         vision_token_mask, language_token_mask = get_expert_mask(token_type_ids)
-
-        shape = list(hidden_states.shape)
-        shape[-1] = shape[-1] * 3
-        mixed_raw_layer = torch.empty(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        
+        mixed_raw_layer = torch.empty((batch_size, q_len, hidden_size*3), dtype=hidden_states.dtype, device=hidden_states.device)
         mixed_raw_layer[vision_token_mask] = self.vision_expert_query_key_value(hidden_states[vision_token_mask])
         mixed_raw_layer[language_token_mask] = self.language_expert_query_key_value(hidden_states[language_token_mask])
 
@@ -419,12 +417,12 @@ class CogvlmVisionExpertAttention(nn.Module):
 
         context_layer = torch.matmul(attention_scores, value_states)
 
-        if context_layer.size() != (bsz, self.num_heads, q_len, self.head_dim):
+        if context_layer.size() != (batch_size, self.num_heads, q_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
                 f" {context_layer.size()}"
             )
-        context_layer = context_layer.transpose(1, 2).contiguous().reshape(bsz, q_len, self.hidden_size)
+        context_layer = context_layer.transpose(1, 2).contiguous().reshape(batch_size, q_len, self.hidden_size)
 
         attn_output = torch.empty(context_layer.shape, dtype=hidden_states.dtype, device=hidden_states.device)
         attn_output[vision_token_mask] = self.vision_expert_dense(context_layer[vision_token_mask])
