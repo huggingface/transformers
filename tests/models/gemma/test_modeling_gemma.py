@@ -544,8 +544,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @require_bitsandbytes
     def test_model_2b_4bit(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-2b"
+        model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
             "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
             "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
