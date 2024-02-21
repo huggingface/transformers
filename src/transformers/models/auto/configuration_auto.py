@@ -54,6 +54,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertConfig"),
         ("canine", "CanineConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
@@ -103,6 +104,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
         ("fuyu", "FuyuConfig"),
+        ("gemma", "GemmaConfig"),
         ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
@@ -211,6 +213,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5Config"),
         ("splinter", "SplinterConfig"),
         ("squeezebert", "SqueezeBertConfig"),
+        ("stablelm", "StableLmConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
@@ -336,6 +339,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fuyu", "FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gemma", "GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -434,6 +438,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("stablelm", "STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swiftformer", "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin2sr", "SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -512,6 +517,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
         ("chinese_clip", "Chinese-CLIP"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clip_vision_model", "CLIPVisionModel"),
@@ -567,6 +573,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
         ("fuyu", "Fuyu"),
+        ("gemma", "Gemma"),
         ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -686,6 +693,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("speecht5", "SpeechT5"),
         ("splinter", "Splinter"),
         ("squeezebert", "SqueezeBERT"),
+        ("stablelm", "StableLm"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),
@@ -773,6 +781,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("siglip_vision_model", "siglip"),
+        ("chinese_clip_vision_model", "chinese_clip"),
     ]
 )
 
@@ -1017,8 +1026,7 @@ class AutoConfig:
                 Can be either:
 
                     - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                      huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                      namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      huggingface.co.
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
@@ -1061,7 +1069,7 @@ class AutoConfig:
         >>> from transformers import AutoConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased")
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 
         >>> # Download configuration from huggingface.co (user-uploaded) and cache.
         >>> config = AutoConfig.from_pretrained("dbmdz/bert-base-german-cased")
@@ -1073,12 +1081,12 @@ class AutoConfig:
         >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/my_configuration.json")
 
         >>> # Change some config attributes when loading a pretrained config.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         >>> config.output_attentions
         True
 
         >>> config, unused_kwargs = AutoConfig.from_pretrained(
-        ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        ...     "google-bert/bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         ... )
         >>> config.output_attentions
         True

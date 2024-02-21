@@ -76,7 +76,7 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 
->>> generator = pipeline('text-generation', model = 'gpt2')
+>>> generator = pipeline('text-generation', model = 'openai-community/gpt2')
 >>> prompt = "Hello, I'm a language model"
 
 >>> generator(prompt, max_length = 30)
