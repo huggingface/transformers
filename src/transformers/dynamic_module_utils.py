@@ -185,7 +185,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
     return get_relative_imports(filename)
 
 
-def get_class_in_module(repo_id: str, class_name: str, module_path: Union[str, os.PathLike]) -> typing.Type:
+def get_class_in_module(repo_id: str, class_name: str, module_path: Union[str, os.PathLike], cache_dir: Optional[Union[str, os.PathLike]]) -> typing.Type:
     """
     Import a module on the cache directory for modules and extract a class from it.
 
@@ -202,13 +202,11 @@ def get_class_in_module(repo_id: str, class_name: str, module_path: Union[str, o
     except ModuleNotFoundError as e:
         if not ('.' in repo_id and module_path.startswith("transformers_modules") and repo_id.replace('/', '.') in module_path):
             raise e  # We can't figure this one out, just reraise the original error
-        # TODO The fundamental problem here is that we know one part of the path shouldn't be split on .
-        #      We can hack that but we should really override a Loader with a specific method
-        modules_dir = [dir for dir in ]
-        breakpoint()
-        print()
-    module = importlib.machinery.SourceFileLoader(module_path, os.path.join(sys.path[0], 'program_1.4.py')).exec_module()
-    breakpoint()
+        if cache_dir is None:
+            cache_dir = HF_MODULES_CACHE
+        # TODO Correctly swap in the repo id here
+        monkey_patch_path = os.path.join(working_path, module_path.replace('.', '/')).replace("MyRepo1/0", "MyRepo1.0") + '.py'
+        module = importlib.machinery.SourceFileLoader(module_path, monkey_patch_path).load_module()
 
     return getattr(module, class_name)
 
@@ -509,7 +507,7 @@ def get_class_from_dynamic_module(
         local_files_only=local_files_only,
         repo_type=repo_type,
     )
-    return get_class_in_module(repo_id, class_name, final_module.replace(".py", ""))
+    return get_class_in_module(repo_id, class_name, final_module.replace(".py", ""), cache_dir)
 
 
 def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None) -> List[str]:
