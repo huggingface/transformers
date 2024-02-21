@@ -588,6 +588,9 @@ class SpmConverter(Converter):
 
         replacement = "▁"
         add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
         pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
         if pre_tokenizer is not None:
             tokenizer.pre_tokenizer = pre_tokenizer
@@ -1293,14 +1296,14 @@ class LlamaConverter(SpmConverter):
         return vocab
 
     def decoder(self, replacement, add_prefix_space):
-        return decoders.Sequence(
-            [
-                decoders.Replace("▁", " "),
-                decoders.ByteFallback(),
-                decoders.Fuse(),
-                decoders.Strip(content=" ", left=1),
-            ]
-        )
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
@@ -1334,12 +1337,12 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
-        return normalizers.Sequence(
-            [
-                normalizers.Prepend(prepend="▁"),
-                normalizers.Replace(pattern=" ", content="▁"),
-            ]
-        )
+        sequence = []
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            if self.original_tokenizer.add_prefix_space:
+                sequence += [normalizers.Prepend(prepend="▁")]
+        sequence += [normalizers.Replace(pattern=" ", content="▁")]
+        return normalizers.Sequence(sequence)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         return None
