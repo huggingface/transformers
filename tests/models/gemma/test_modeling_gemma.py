@@ -465,8 +465,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @slow
     def test_sdpa_equivalence(self):
-        import torch
-
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
                 return
@@ -490,20 +488,18 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
 
                 logits = outputs.hidden_states[-1]
-                outputs_sdpa = outputs_sdpa.hidden_states[-1]
+                logits_sdpa = outputs_sdpa.hidden_states[-1]
 
                 # gemma sdpa needs a high tolerance
-                assert torch.allclose(outputs_sdpa, logits, atol=3e-3)
+                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
 
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_equivalence(self):
-        import torch
-
         for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
+            if not model_class._supports_flash_attn_2:
                 return
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -522,13 +518,13 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 dummy_input = inputs_dict[model_class.main_input_name]
                 dummy_input = dummy_input.to(torch_device)
                 outputs = model(dummy_input, output_hidden_states=True)
-                outputs_sdpa = model_fa(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
                 logits = outputs.hidden_states[-1]
-                outputs_sdpa = outputs_sdpa.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
 
                 # gemma flash attention 2 needs a high tolerance
-                assert torch.allclose(outputs_sdpa, logits, atol=3e-3)
+                assert torch.allclose(logits_fa, logits, atol=3e-3)
 
 
 @require_torch_gpu
