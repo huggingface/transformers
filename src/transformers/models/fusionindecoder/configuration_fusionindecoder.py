@@ -99,7 +99,6 @@ class FusionInDecoderConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        classifier_dropout=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -114,11 +113,10 @@ class FusionInDecoderConfig(PretrainedConfig):
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
         self.dropout_rate = dropout_rate
-        self.classifier_dropout = classifier_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.feed_forward_proj = feed_forward_proj
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -141,7 +139,6 @@ class FusionInDecoderConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-
 
 class FusionInDecoderOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
