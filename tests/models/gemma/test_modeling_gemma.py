@@ -562,8 +562,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @unittest.skip("The test will not fit our CI runners")
     def test_model_7b_fp32(self):
-        # TODO: change it to the new repo after the release
-        model_id = "gg-hf/gemma-7b"
+        model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
             "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
             "Hi,\n\nI have a problem with my 2005 1.6 16",
