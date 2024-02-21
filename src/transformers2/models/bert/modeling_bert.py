@@ -180,13 +180,28 @@ class CombinedEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.char_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.word_embeddings = nn.Embedding(config.word_piece_vocab_size, config.hidden_size)
-        self.combination_layer = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.secondary_embeddings = []
+        bigger_dim = config.hidden_size
+        for stok in config.secondary_tokenizers:
+            self.secondary_embeddings.append(nn.Embedding(stok.vocab_size, stok.hidden_size))
+            bigger_dim += stok.hidden_size
+        self.combination_layer = nn.Linear(bigger_dim, config.hidden_size)
+        # self.combination_layer = nn.Linear(config.hidden_size * 2, config.hidden_size)
 
-    def forward(self, input_ids, wp_ids):
+    def forward(self, input_ids, secondary_ids):
+        # print("forward, embeddings", input_ids.shape)
         char_embeds = self.char_embeddings(input_ids)
-        word_embeds =  self.word_embeddings(wp_ids) 
-        combined_embeds = torch.cat([char_embeds, word_embeds], dim=-1)
+        # print(input_ids.shape)
+        combined_embeds = char_embeds
+        # print(secondary_ids[:, 0, :].shape)
+
+        # go through all the different tokenizers
+        for i in range(secondary_ids.shape[1]):
+            secondary_embeds = self.secondary_embeddings[i](secondary_ids[:, i, :])
+            combined_embeds = torch.cat([combined_embeds, secondary_embeds], dim=-1)
+        # word_embeds =  self.secondary_embeddings(secondary_ids) 
+        # combined_embeds = torch.cat([char_embeds, word_embeds], dim=-1)
+        print(combined_embeds.shape)
         embeddings = self.combination_layer(combined_embeds)
         return embeddings
 
@@ -200,7 +215,7 @@ class BertEmbeddings(nn.Module):
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.word_embeddings = self.combined_embeddings
+        # self.word_embeddings = self.combined_embeddings
         # self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
 
         
@@ -221,15 +236,15 @@ class BertEmbeddings(nn.Module):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        wp_ids: Optional[torch.Tensor] = None,
+        secondary_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
-        
-        if wp_ids is not None:
-            input_shape = wp_ids.size()
+        print(secondary_ids.shape)
+        if secondary_ids is not None:
+            input_shape = [secondary_ids.shape[0], secondary_ids.shape[2]]
         else:
             input_shape = inputs_embeds.size()[:-1]
 
@@ -251,8 +266,11 @@ class BertEmbeddings(nn.Module):
 
         # if inputs_embeds is None:
         #     inputs_embeds = self.word_embeddings(input_ids)
-        inputs_embeds = self.combined_embeddings(input_ids, wp_ids)
+        inputs_embeds = self.combined_embeddings(input_ids, secondary_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        print("tte", token_type_embeddings.shape)
+        print("ine", inputs_embeds.shape)
+        print("pie", position_ids.shape)
 
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
@@ -932,7 +950,7 @@ class BertModel(BertPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        wp_ids: Optional[torch.Tensor] = None,
+        secondary_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1029,7 +1047,7 @@ class BertModel(BertPreTrainedModel):
 
         embedding_output = self.embeddings(
             input_ids = input_ids,
-            wp_ids = wp_ids,
+            secondary_ids = secondary_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -1093,7 +1111,7 @@ class BertForPreTraining(BertPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        wp_ids: Optional[torch.Tensor] = None,
+        secondary_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1141,7 +1159,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
         outputs = self.bert(
             input_ids,
-            wp_ids,
+            secondary_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1208,7 +1226,7 @@ class BertLMHeadModel(BertPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        wp_ids: Optional[torch.Tensor] = None,
+        secondary_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1253,7 +1271,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 
         outputs = self.bert(
             input_ids,
-            wp_ids,
+            secondary_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1293,7 +1311,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, wp_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
+        self, input_ids, secondary_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
     ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1305,18 +1323,18 @@ class BertLMHeadModel(BertPreTrainedModel):
             past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
-            if wp_ids.shape[1] > past_length:
+            if secondary_ids.shape[2] > past_length:
                 remove_prefix_length = past_length
             else:
                 # Default to old behavior: keep only final ID
-                remove_prefix_length = wp_ids.shape[1] - 1
+                remove_prefix_length = secondary_ids.shape[2] - 1
 
-            wp_ids = wp_ids[:, remove_prefix_length:]
+            secondary_ids = secondary_ids[:, :, remove_prefix_length:]
             input_ids = input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": input_ids,
-             "wp_ids": wp_ids,
+            "secondary_ids": secondary_ids,
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
@@ -1346,8 +1364,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         self.bert = BertModel(config, add_pooling_layer=False)
         self.cls = BertOnlyMLMHead(config)
         self.char_tokenizer = config.char_tokenizer
-        self.wordpiece_tokenizer = config.wordpiece_tokenizer
-        # self.device2 = config.device2
+        self.secondary_tokenizers = config.secondary_tokenizers
+        # self.wordpiece_tokenizer = config.wordpiece_tokenizer
         
         # Initialize weights and apply final processing
         self.post_init()
@@ -1470,7 +1488,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     #     wp_ids = torch.full(input_ids_tensor.shape, pad_id)
     #     return wp_ids
 
-    def _create_wp_ids(self, input_ids_tensor):
+    def _create_secondary_ids(self, input_ids_tensor):
         if isinstance(input_ids_tensor, torch.Tensor):
             char_ids = input_ids_tensor.tolist()
 
@@ -1484,17 +1502,49 @@ class BertForMaskedLM(BertPreTrainedModel):
         strings = []
         for row in tokens:
             strings.append(self._stringify(row))
-        pad_id = self.wordpiece_tokenizer.encode('[PAD]')[1]
-        wp_ids = torch.full(input_ids_tensor.shape, pad_id)
         
+        # print(input_ids_tensor.shape, "asd;lfkas;dlkfj")
+        # first dimenstion is the batch text index
+        # the second dimension is the secondary tokenization for that text
+        # secondary_ids[i][j] is the jth tokenization of the ith text
+        # print(len(strings))
+        # print(len(self.secondary_tokenizers))
+        secondary_ids = torch.empty([len(strings), len(self.secondary_tokenizers), input_ids_tensor[0].shape[0]], dtype=torch.long)
 
-        for i in range(wp_ids.shape[0]):
-            row = wp_ids[i]
-            row_word_tokens = self.tokenize_preserve_words(strings[i])
-            wp_ids[i, :row_word_tokens.shape[0]] = row_word_tokens
+        for i, string in enumerate(strings):
+            text_ids = torch.empty([len(self.secondary_tokenizers), input_ids_tensor[0].shape[0]])
+            for ii, stok in enumerate(self.secondary_tokenizers):
+                pad_id = stok.encode('[MASK]')[1]
+                # print(input_ids_tensor[i].shape)
+                curr_ids_with_pads = torch.full(input_ids_tensor[i].shape, pad_id, dtype=torch.long) # the i shouldn't matter since it's already padded but just as an extra measure
+                new_ids = stok.tokenize(string)
+                # print(new_ids.shape)
+                curr_ids_with_pads[: new_ids.shape[0]] = new_ids
+                # print(text_ids.shape, "asdf")
+                # print(secondary_ids.shape, "asdf1")
 
-        wp_ids = wp_ids.to(self.device)
-        return wp_ids
+                text_ids[ii] = curr_ids_with_pads
+            secondary_ids[i] = text_ids
+
+            
+        #     all_inputs_for_current_tok = []
+        #     pad_id = stok.encode('[MASK]')[1]
+        #     for i in range(input_ids_tensor.shape[0]):
+        #         all_inputs_for_current_tok = torch.full(input_ids_tensor[i].shape)
+        #     secondary_ids[idx] = torch.full(input_ids_tensor.shape, pad_id)
+
+        # print(secondary_ids)
+        # need a double for loop
+        # for every secondary tokenizer
+        # then for every example in the input_ids
+
+        # for i in range(wp_ids.shape[0]):
+        #     row = wp_ids[i]
+        #     row_word_tokens = self.tokenize_preserve_words(strings[i])
+        #     wp_ids[i, :row_word_tokens.shape[0]] = row_word_tokens
+        secondary_ids = torch.tensor(secondary_ids, dtype=torch.long)
+        secondary_ids = secondary_ids.to(self.device)
+        return secondary_ids
 
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1508,6 +1558,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
+        secondary_ids: Optional[torch.Tensor] = None,
         # wp_ids: Optional[torch.Tensor] = None,
         # char_tokenizer = None,
         # wordpiece_tokenizer = None,
@@ -1529,11 +1580,11 @@ class BertForMaskedLM(BertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        wp_ids = self._create_wp_ids(input_ids)
+        secondary_ids = self._create_secondary_ids(input_ids)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bert(
             input_ids,
-            wp_ids,
+            secondary_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1568,6 +1619,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
+        effective_secondary_id_size = len(self.secondary_tokenizers)
 
         #  add a dummy token
         if self.config.pad_token_id is None:
@@ -1577,11 +1629,14 @@ class BertForMaskedLM(BertPreTrainedModel):
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
-        wp_ids = torch.cat([wp_ids, dummy_token], dim=1)
+        # dummy_token_3d = torch.full(
+        #     (effective_batch_size, effective_secondary_id_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
+        # )
+        # wp_ids = torch.cat([wp_ids, dummy_token], dim=1)
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
 
-        return {"wp_ids": wp_ids, "input_ids": input_ids, "attention_mask": attention_mask}
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @add_start_docstrings(

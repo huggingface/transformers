@@ -27,7 +27,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertConfig", "BertOnnxConfig"],
-    "tokenization_bert": ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"],
+    "tokenization_bert": ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer", "WordPieceToCharTokenizer"],
 }
 
 try:
@@ -111,6 +111,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig, BertOnnxConfig
     from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
+    from .secondary_tokenizer import WordPieceToCharTokenizer
 
     try:
         if not is_tokenizers_available():

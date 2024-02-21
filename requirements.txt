@@ -1,50 +1,53 @@
 accelerate==0.24.1
-Brotli @ file:///work/ci_py311/brotli-split_1676830125088/work
-certifi @ file:///croot/certifi_1700501669400/work/certifi
-cffi @ file:///croot/cffi_1700254295673/work
-charset-normalizer @ file:///tmp/build/80754af9/charset-normalizer_1630003229654/work
-cryptography @ file:///croot/cryptography_1694444244250/work
-filelock @ file:///croot/filelock_1700591183607/work
+Brotli==1.0.9
+certifi==2023.11.17
+cffi==1.16.0
+charset-normalizer==2.0.4
+cryptography==41.0.3
+filelock==3.13.1
 fsspec==2023.10.0
-gmpy2 @ file:///work/ci_py311/gmpy2_1676839849213/work
+gmpy2==2.1.2
 huggingface-hub==0.16.4
-idna @ file:///work/ci_py311/idna_1676822698822/work
-Jinja2 @ file:///work/ci_py311/jinja2_1676823587943/work
-MarkupSafe @ file:///work/ci_py311/markupsafe_1676823507015/work
-mkl-fft @ file:///croot/mkl_fft_1695058164594/work
-mkl-random @ file:///croot/mkl_random_1695059800811/work
-mkl-service==2.4.0
-mpmath @ file:///croot/mpmath_1690848262763/work
-networkx @ file:///croot/networkx_1690561992265/work
-numpy @ file:///croot/numpy_and_numpy_base_1695830428084/work/dist/numpy-1.26.0-cp311-cp311-linux_x86_64.whl#sha256=184178a893ff0b5e0cb1b0b7a0dddff49dc91424c4e4a01e29bcb05f27a698a6
-nvidia-cublas-cu12==12.1.3.1
-nvidia-cuda-cupti-cu12==12.1.105
-nvidia-cuda-nvrtc-cu12==12.1.105
-nvidia-cuda-runtime-cu12==12.1.105
-nvidia-cudnn-cu12==8.9.2.26
-nvidia-cufft-cu12==11.0.2.54
-nvidia-curand-cu12==10.3.2.106
-nvidia-cusolver-cu12==11.4.5.107
-nvidia-cusparse-cu12==12.1.0.106
-nvidia-nccl-cu12==2.18.1
-nvidia-nvjitlink-cu12==12.3.101
-nvidia-nvtx-cu12==12.1.105
+idna==3.4
+Jinja2==3.1.2
+MarkupSafe==2.1.1
+mkl-fft
+mkl-random
+mkl-service
+mpmath==1.3.0
+networkx==3.1
+numpy
+# nvidia-cublas-cu12==12.1.3.1
+# nvidia-cuda-cupti-cu12==12.1.105
+# nvidia-cuda-nvrtc-cu12==12.1.105
+# nvidia-cuda-runtime-cu12==12.1.105
+# nvidia-cudnn-cu12==8.9.2.26
+# nvidia-cufft-cu12==11.0.2.54
+# nvidia-curand-cu12==10.3.2.106
+# nvidia-cusolver-cu12==11.4.5.107
+# nvidia-cusparse-cu12==12.1.0.106
+# nvidia-nccl-cu12==2.18.1
+# nvidia-nvjitlink-cu12==12.3.101
+# nvidia-nvtx-cu12==12.1.105
 packaging==23.2
-Pillow @ file:///croot/pillow_1696580024257/work
+Pillow==10.0.1
+pip==23.3.1
 psutil==5.9.6
-pycparser @ file:///tmp/build/80754af9/pycparser_1636541352034/work
-pyOpenSSL @ file:///croot/pyopenssl_1690223430423/work
-PySocks @ file:///work/ci_py311/pysocks_1676822712504/work
-PyYAML @ file:///croot/pyyaml_1698096049011/work
+pycparser==2.21
+pyOpenSSL==23.2.0
+PySocks==1.7.1
+PyYAML==6.0.1
 regex==2023.10.3
-requests @ file:///croot/requests_1690400202158/work
+requests==2.31.0
 safetensors==0.4.1
-sympy @ file:///work/ci_py311_2/sympy_1679339311852/work
+setuptools==68.0.0
+sympy==1.11.1
 tokenizers==0.14.0
 torch==2.1.1
 torchaudio==2.1.1
 torchvision==0.16.1
 tqdm==4.66.1
-triton==2.1.0
-typing_extensions @ file:///croot/typing_extensions_1690297465030/work
-urllib3 @ file:///croot/urllib3_1698257533958/work
+# triton==2.1.0
+typing_extensions==4.7.1
+urllib3==1.26.18
+wheel==0.41.2
