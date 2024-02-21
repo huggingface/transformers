@@ -423,7 +423,6 @@ class _BaseAutoModelClass:
                 repo_id, class_ref = class_ref.split("--")
             else:
                 repo_id = config.name_or_path
-
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
             if os.path.isdir(config._name_or_path):
                 model_class.register_for_auto_class(cls.__name__)
