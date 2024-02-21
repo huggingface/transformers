@@ -1938,19 +1938,7 @@ class Trainer:
                 rng_to_sync = True
 
             step = -1
-            profile_step = int(os.environ.get('PROFILE_STEP', -1))
-            profile_epoch = int(os.environ.get('PROFILE_EPOCH', -1))
-            profile_duration = int(os.environ.get('PROFILE_DURATION_MS', 20000))
-            profile_logdir = os.environ.get('PROFILE_LOGDIR', None)
-
-            import torch_xla.debug.profiler as xp
-            server = xp.start_server(9012)
-            logger.info(f'Profiling server started: {str(server)}')
-
             for step, inputs in enumerate(epoch_iterator):
-                # if step > 5:
-                #     break
-
                 total_batched_samples += 1
 
                 if self.args.include_num_input_tokens_seen:
@@ -2065,14 +2053,6 @@ class Trainer:
                     if is_torch_xla_available():
                         xm.mark_step()
                     break
-
-                if step == profile_step and epoch == profile_epoch:
-                    # Wait until device execution catches up to tracing before triggering the profile. This will
-                    # interrupt training slightly on the hosts which are capturing, but by waiting after tracing
-                    # for the step, the interruption will be minimal.
-                    xm.wait_device_ops()
-                    import tempfile
-                    xp.trace_detached('127.0.0.1:9012', profile_logdir or tempfile.mkdtemp(), profile_duration or 20000)
 
             if step < 0:
                 logger.warning(
