@@ -34,18 +34,18 @@ from PIL import Image
 import requests
 
 img_urls = ["https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png", "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.jpeg"]
-image_real = Image.open(requests.get(img_urs[0], stream=True).raw).convert("RGB")
+image_real = Image.open(requests.get(img_urls[0], stream=True).raw).convert("RGB")
 image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB")
 ```
 
-Let's see the pipeline in action. We will initialize the pipeline. If we do not pass any model, it will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224).
+Let's see the pipeline in action. We will initialize the pipeline. If we do not pass any model, it will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224). If you'd like to calculate similarity, set `pool` to True.
 
 ```python
 import torch
 from transformers import pipeline
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE)
+pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 
 We can now infer with `pipe`, by passing in both of the images.
@@ -59,12 +59,12 @@ The output is contains embeddings of those two images. To get the similarity, we
 ```python
 from torch.nn.functional import cosine_similarity
 
-similarity_score = cosine_similarity(torch.Tensor(embeddings[0]),
-                                     torch.Tensor(embeddings[1]), dim=1)
+similarity_score = cosine_similarity(torch.Tensor(outputs[0]),
+                                     torch.Tensor(outputs[1]), dim=1)
 
 print(similarity_score)
 
-# tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
+# tensor([0.6043])
 ```
 
 ## Getting Features and Similarities using `AutoModel`
