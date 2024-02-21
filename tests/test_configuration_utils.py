@@ -255,7 +255,7 @@ class ConfigTestUtils(unittest.TestCase):
         )
 
     def test_local_versioning(self):
-        configuration = AutoConfig.from_pretrained("bert-base-cased")
+        configuration = AutoConfig.from_pretrained("google-bert/bert-base-cased")
         configuration.configuration_files = ["config.4.0.0.json"]
 
         with tempfile.TemporaryDirectory() as tmp_dir:

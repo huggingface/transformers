@@ -1,5 +1,5 @@
 datasets >= 1.1.3
-pytest
+pytest<8.0.1
 conllu
 nltk
 rouge-score

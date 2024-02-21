@@ -53,18 +53,18 @@ from .configuration_t5 import T5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-_CHECKPOINT_FOR_DOC = "t5-small"
+_CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 
 ####################################################
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "t5-small",
-    "t5-base",
-    "t5-large",
-    "t5-3b",
-    "t5-11b",
+    "google-t5/t5-small",
+    "google-t5/t5-base",
+    "google-t5/t5-large",
+    "google-t5/t5-3b",
+    "google-t5/t5-11b",
     # See all T5 models at https://huggingface.co/models?filter=t5
 ]
 
@@ -196,17 +196,17 @@ PARALLELIZE_DOCSTRING = r"""
             have fewer attention modules mapped to it than other devices. For reference, the t5 models have the
             following number of attention modules:
 
-                - t5-small: 6
-                - t5-base: 12
-                - t5-large: 24
-                - t5-3b: 24
-                - t5-11b: 24
+                - google-t5/t5-small: 6
+                - google-t5/t5-base: 12
+                - google-t5/t5-large: 24
+                - google-t5/t5-3b: 24
+                - google-t5/t5-11b: 24
 
     Example:
 
     ```python
-    # Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
-    model = T5ForConditionalGeneration.from_pretrained("t5-3b")
+    # Here is an example of a device map on a machine with 4 GPUs using google-t5/t5-3b, which has a total of 24 attention modules:
+    model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-3b")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
@@ -222,8 +222,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Example:
 
     ```python
-    # On a 4 GPU machine with t5-3b:
-    model = T5ForConditionalGeneration.from_pretrained("t5-3b")
+    # On a 4 GPU machine with google-t5/t5-3b:
+    model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-3b")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
@@ -1463,8 +1463,8 @@ class T5Model(T5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, T5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = T5Model.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = T5Model.from_pretrained("google-t5/t5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1678,8 +1678,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, T5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1967,8 +1967,8 @@ class T5EncoderModel(T5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, T5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = T5EncoderModel.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = T5EncoderModel.from_pretrained("google-t5/t5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

@@ -190,7 +190,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
             )
 
-        # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D):
             if fp16_statistics is None:

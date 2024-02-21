@@ -88,14 +88,14 @@ GPU memory occupied: 1343 MB.
 
 ## Load Model
 
-まず、`bert-large-uncased` モデルを読み込みます。モデルの重みを直接GPUに読み込むことで、重みだけがどれだけのスペースを使用しているかを確認できます。
+まず、`google-bert/bert-large-uncased` モデルを読み込みます。モデルの重みを直接GPUに読み込むことで、重みだけがどれだけのスペースを使用しているかを確認できます。
 
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda")
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-large-uncased").to("cuda")
 >>> print_gpu_utilization()
 GPU memory occupied: 2631 MB.
 ```
