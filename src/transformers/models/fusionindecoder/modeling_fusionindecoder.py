@@ -972,6 +972,7 @@ class FusionInDecoderStack(FusionInDecoderPreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
+            input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -1242,7 +1243,13 @@ class FusionInDecoderWrapper(FusionInDecoderPreTrainedModel):
 
         if input_ids is not None:
             if input_ids.dim() == 2:
-                input_ids = input_ids.unsqueeze(0)
+                input_ids = input_ids.unsqueeze(1)
+
+        elif inputs_embeds is not None:
+            if inputs_embeds.dim() == 3:
+                input_ids = torch.randn(inputs_embeds.unsqueeze(1).shape[:-1])
+            else:
+                input_ids = torch.randn(inputs_embeds.shape[:-1])
         else:
             raise ValueError("You have to specify either input_ids")
 

@@ -106,7 +106,7 @@ class FusionInDecoderModelTester:
         return FusionInDecoderConfig.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2).unsqueeze(1)
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
@@ -538,10 +538,12 @@ class FusionInDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     is_encoder_decoder = True
     # The small FUSIONINDECODER model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
+    pipeline_model_mapping = []
 
     def setUp(self):
         self.model_tester = FusionInDecoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FusionInDecoderConfig, d_model=37)
+        self.pipeline_model_mapping = []
 
     # FusionInDecoder does not support only input embeds
     def test_inputs_embeds(self):
