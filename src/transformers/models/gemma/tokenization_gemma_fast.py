@@ -43,7 +43,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import GemmaTokenizerFast
 
-    >>> tokenizer = GemmaTokenizerFast.from_pretrained("google/gemma-2b")
+    >>> tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/dummy-gemma")
     >>> tokenizer.encode("Hello this is a test")
     [1, 15043, 445, 338, 263, 1243]
     ```
