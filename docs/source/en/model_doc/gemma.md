@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Gemma model was proposed in [Gemma: Open Models Based on Gemini Technology and Research](<INSERT PAPER LINK HERE>) by Gemma Team, Google.
+The Gemma model was proposed in [Gemma: Open Models Based on Gemini Technology and Research](https://blog.google/technology/developers/gemma-open-models/) by Gemma Team, Google.
 Gemma models are trained on 6T tokens, and released with 2 versions, 2b and 7b.
 
 The abstract from the paper is the following:
