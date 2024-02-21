@@ -62,7 +62,7 @@ class SentencePieceExtractor:
         """
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
-                        
+
         if vocab_scores is not None:
             vocab_scores, reverse = dict(vocab_scores), True
         else:
@@ -85,7 +85,6 @@ class SentencePieceExtractor:
 
 
 class GemmaSentencePieceExtractor(SentencePieceExtractor):
-
     def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
@@ -97,7 +96,7 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         # there is a missing token in the vocab. We have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
         vocab["\t"] = vocab.pop("<0x09>")
-        
+
         if vocab_scores is not None:
             vocab_scores, reverse = dict(vocab_scores), True
         else:
@@ -117,7 +116,8 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         merges = sorted(merges, key=lambda val: val[2], reverse=reverse)
         merges = [(val[0], val[1]) for val in merges]
         return vocab, merges
-    
+
+
 def check_number_comma(piece: str) -> bool:
     return len(piece) < 2 or piece[-1] != "," or not piece[-2].isdigit()
 
@@ -1248,8 +1248,8 @@ class GemmaConvert(SpmConverter):
             (self.original_tokenizer.bos_token, 0.0),
         ]
         for piece in proto.pieces[3:]:
-            if piece.piece == '<0x09>':
-                vocab += [('\t', piece.score)]
+            if piece.piece == "<0x09>":
+                vocab += [("\t", piece.score)]
             else:
                 vocab += [(piece.piece, piece.score)]
         # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
@@ -1283,7 +1283,6 @@ class GemmaConvert(SpmConverter):
                 tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
 
         elif model_type == 2:
-
             _, merges = GemmaSentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
 
@@ -1311,7 +1310,6 @@ class GemmaConvert(SpmConverter):
             )
 
         return tokenizer
-
 
 
 class LlamaConverter(SpmConverter):
