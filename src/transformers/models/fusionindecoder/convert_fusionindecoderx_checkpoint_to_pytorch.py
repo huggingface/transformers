@@ -35,7 +35,7 @@ import torch
 from flax import traverse_util
 from fusionindecoderx import checkpoints
 
-from transformers import FusionInDecoderConfig, FusionInDecoderEncoderModel, FusionInDecoderForConditionalGeneration
+from transformers import FusionInDecoderConfig, FusionInDecoderForConditionalGeneration
 from transformers.utils import logging
 
 
@@ -69,7 +69,9 @@ def fusionindecoderx_layer_norm_lookup(params, i, prefix, layer_name):
     return params[f"{prefix}/layers_{i}/{layer_name}/scale"]
 
 
-def convert_fusionindecoderx_to_pytorch(variables: dict, *, num_layers: int, num_decoder_layers: int, is_encoder_only: bool):
+def convert_fusionindecoderx_to_pytorch(
+    variables: dict, *, num_layers: int, num_decoder_layers: int, is_encoder_only: bool
+):
     """Converts the parameters from FusionInDecoderX-Flax to Transformers-PyTorch."""
     old = traverse_util.flatten_dict(variables["target"])
     old = {"/".join(k): v for k, v in old.items()}
@@ -197,7 +199,7 @@ def convert_fusionindecoderx_checkpoint_to_pytorch(
     # Non-v1.1 checkpoints could also use FusionInDecoderModel, but this works for all.
     # The v1.0 checkpoints will simply have an LM head that is the word embeddings.
     if is_encoder_only:
-        model = FusionInDecoderEncoderModel(config)
+        model = FusionInDecoderForConditionalGeneration(config).encoder
     else:
         model = FusionInDecoderForConditionalGeneration(config)
 
@@ -214,10 +216,16 @@ def convert_fusionindecoderx_checkpoint_to_pytorch(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Converts a native FusionInDecoderX checkpoint into a PyTorch checkpoint.")
+    parser = argparse.ArgumentParser(
+        description="Converts a native FusionInDecoderX checkpoint into a PyTorch checkpoint."
+    )
     # Required parameters
     parser.add_argument(
-        "--fusionindecoderx_checkpoint_path", default=None, type=str, required=True, help="Path to the FusionInDecoderX checkpoint."
+        "--fusionindecoderx_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the FusionInDecoderX checkpoint.",
     )
     parser.add_argument(
         "--config_file",

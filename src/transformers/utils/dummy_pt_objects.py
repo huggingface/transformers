@@ -3797,6 +3797,34 @@ def load_tf_weights_in_funnel(*args, **kwargs):
     requires_backends(load_tf_weights_in_funnel, ["torch"])
 
 
+FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class FusionInDecoderForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FusionInDecoderModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FusionInDecoderPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_fusionindecoder(*args, **kwargs):
+    requires_backends(load_tf_weights_in_fusionindecoder, ["torch"])
+
+
 class FuyuForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

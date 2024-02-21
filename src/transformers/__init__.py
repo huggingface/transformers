@@ -455,6 +455,7 @@ _import_structure = {
         "FunnelConfig",
         "FunnelTokenizer",
     ],
+    "models.fusionindecoder": ["FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP", "FusionInDecoderConfig"],
     "models.fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
     "models.git": [
         "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -819,7 +820,6 @@ _import_structure = {
         "SwitchTransformersConfig",
     ],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
-    "models.fusionindecoder": ["FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP", "FusionInDecoderConfig"],
     "models.table_transformer": [
         "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TableTransformerConfig",
@@ -2241,6 +2241,15 @@ else:
             "load_tf_weights_in_funnel",
         ]
     )
+    _import_structure["models.fusionindecoder"].extend(
+        [
+            "FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FusionInDecoderForConditionalGeneration",
+            "FusionInDecoderModel",
+            "FusionInDecoderPreTrainedModel",
+            "load_tf_weights_in_fusionindecoder",
+        ]
+    )
     _import_structure["models.fuyu"].extend(["FuyuForCausalLM", "FuyuPreTrainedModel"])
     _import_structure["models.git"].extend(
         [
@@ -3319,19 +3328,6 @@ else:
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
-        ]
-    )
-    _import_structure["models.fusionindecoder"].extend(
-        [
-            "FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FusionInDecoderEncoderModel",
-            "FusionInDecoderForConditionalGeneration",
-            "FusionInDecoderForQuestionAnswering",
-            "FusionInDecoderForSequenceClassification",
-            "FusionInDecoderForTokenClassification",
-            "FusionInDecoderModel",
-            "FusionInDecoderPreTrainedModel",
-            "load_tf_weights_in_fusionindecoder",
         ]
     )
     _import_structure["models.table_transformer"].extend(
@@ -6861,11 +6857,7 @@ if TYPE_CHECKING:
         )
         from .models.fusionindecoder import (
             FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FusionInDecoderEncoderModel,
             FusionInDecoderForConditionalGeneration,
-            FusionInDecoderForQuestionAnswering,
-            FusionInDecoderForSequenceClassification,
-            FusionInDecoderForTokenClassification,
             FusionInDecoderModel,
             FusionInDecoderPreTrainedModel,
             load_tf_weights_in_fusionindecoder,

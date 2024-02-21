@@ -99,11 +99,9 @@ class GenerationTesterMixin:
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
-
         # cut to half length & take max batch_size 3
         sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:batch_size, :sequence_length]
-
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
         if config.eos_token_id is not None and config.pad_token_id is None:

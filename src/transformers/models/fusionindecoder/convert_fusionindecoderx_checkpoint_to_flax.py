@@ -34,24 +34,40 @@ def convert_fusionindecoderx_checkpoint_to_flax(fusionindecoderx_checkpoint_path
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
-        fusionindecoderx_attention_key = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"]["key"]["kernel"]
-        fusionindecoderx_attention_out = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"]["out"]["kernel"]
-        fusionindecoderx_attention_query = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"]["query"]["kernel"]
-        fusionindecoderx_attention_value = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"]["value"]["kernel"]
+        fusionindecoderx_attention_key = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"]["key"][
+            "kernel"
+        ]
+        fusionindecoderx_attention_out = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"]["out"][
+            "kernel"
+        ]
+        fusionindecoderx_attention_query = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"][
+            "query"
+        ]["kernel"]
+        fusionindecoderx_attention_value = fusionindecoderx_model["target"]["encoder"][layer_name]["attention"][
+            "value"
+        ]["kernel"]
 
         # Layer Normalization
-        fusionindecoderx_attention_layer_norm = fusionindecoderx_model["target"]["encoder"][layer_name]["pre_attention_layer_norm"]["scale"]
+        fusionindecoderx_attention_layer_norm = fusionindecoderx_model["target"]["encoder"][layer_name][
+            "pre_attention_layer_norm"
+        ]["scale"]
 
         if split_mlp_wi:
-            fusionindecoderx_mlp_wi_0 = fusionindecoderx_model["target"]["encoder"][layer_name]["mlp"]["wi_0"]["kernel"]
-            fusionindecoderx_mlp_wi_1 = fusionindecoderx_model["target"]["encoder"][layer_name]["mlp"]["wi_1"]["kernel"]
+            fusionindecoderx_mlp_wi_0 = fusionindecoderx_model["target"]["encoder"][layer_name]["mlp"]["wi_0"][
+                "kernel"
+            ]
+            fusionindecoderx_mlp_wi_1 = fusionindecoderx_model["target"]["encoder"][layer_name]["mlp"]["wi_1"][
+                "kernel"
+            ]
         else:
             fusionindecoderx_mlp_wi = fusionindecoderx_model["target"]["encoder"][layer_name]["mlp"]["wi"]["kernel"]
 
         fusionindecoderx_mlp_wo = fusionindecoderx_model["target"]["encoder"][layer_name]["mlp"]["wo"]["kernel"]
 
         # Layer Normalization
-        fusionindecoderx_mlp_layer_norm = fusionindecoderx_model["target"]["encoder"][layer_name]["pre_mlp_layer_norm"]["scale"]
+        fusionindecoderx_mlp_layer_norm = fusionindecoderx_model["target"]["encoder"][layer_name][
+            "pre_mlp_layer_norm"
+        ]["scale"]
 
         # Assigning
         flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["k"][
@@ -91,7 +107,9 @@ def convert_fusionindecoderx_checkpoint_to_flax(fusionindecoderx_checkpoint_path
         ] = fusionindecoderx_mlp_layer_norm
 
     # Only for layer 0:
-    fusionindecoderx_encoder_rel_embedding = fusionindecoderx_model["target"]["encoder"]["relpos_bias"]["rel_embedding"].T
+    fusionindecoderx_encoder_rel_embedding = fusionindecoderx_model["target"]["encoder"]["relpos_bias"][
+        "rel_embedding"
+    ].T
     flax_model.params["encoder"]["block"]["0"]["layer"]["0"]["SelfAttention"]["relative_attention_bias"][
         "embedding"
     ] = fusionindecoderx_encoder_rel_embedding
@@ -105,37 +123,51 @@ def convert_fusionindecoderx_checkpoint_to_flax(fusionindecoderx_checkpoint_path
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
-        fusionindecoderx_attention_key = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"]["key"]["kernel"]
-        fusionindecoderx_attention_out = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"]["out"]["kernel"]
-        fusionindecoderx_attention_query = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"]["query"]["kernel"]
-        fusionindecoderx_attention_value = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"]["value"]["kernel"]
+        fusionindecoderx_attention_key = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"][
+            "key"
+        ]["kernel"]
+        fusionindecoderx_attention_out = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"][
+            "out"
+        ]["kernel"]
+        fusionindecoderx_attention_query = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"][
+            "query"
+        ]["kernel"]
+        fusionindecoderx_attention_value = fusionindecoderx_model["target"]["decoder"][layer_name]["self_attention"][
+            "value"
+        ]["kernel"]
 
         # Layer Normalization
-        fusionindecoderx_pre_attention_layer_norm = fusionindecoderx_model["target"]["decoder"][layer_name]["pre_self_attention_layer_norm"][
-            "scale"
-        ]
+        fusionindecoderx_pre_attention_layer_norm = fusionindecoderx_model["target"]["decoder"][layer_name][
+            "pre_self_attention_layer_norm"
+        ]["scale"]
 
         # Encoder-Decoder-Attention
-        fusionindecoderx_enc_dec_attention_key = fusionindecoderx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["key"][
-            "kernel"
-        ]
-        fusionindecoderx_enc_dec_attention_out = fusionindecoderx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["out"][
-            "kernel"
-        ]
-        fusionindecoderx_enc_dec_attention_query = fusionindecoderx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["query"][
-            "kernel"
-        ]
-        fusionindecoderx_enc_dec_attention_value = fusionindecoderx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["value"][
-            "kernel"
-        ]
+        fusionindecoderx_enc_dec_attention_key = fusionindecoderx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["key"]["kernel"]
+        fusionindecoderx_enc_dec_attention_out = fusionindecoderx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["out"]["kernel"]
+        fusionindecoderx_enc_dec_attention_query = fusionindecoderx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["query"]["kernel"]
+        fusionindecoderx_enc_dec_attention_value = fusionindecoderx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["value"]["kernel"]
 
         # Layer Normalization
-        fusionindecoderx_cross_layer_norm = fusionindecoderx_model["target"]["decoder"][layer_name]["pre_cross_attention_layer_norm"]["scale"]
+        fusionindecoderx_cross_layer_norm = fusionindecoderx_model["target"]["decoder"][layer_name][
+            "pre_cross_attention_layer_norm"
+        ]["scale"]
 
         # MLP
         if split_mlp_wi:
-            fusionindecoderx_mlp_wi_0 = fusionindecoderx_model["target"]["decoder"][layer_name]["mlp"]["wi_0"]["kernel"]
-            fusionindecoderx_mlp_wi_1 = fusionindecoderx_model["target"]["decoder"][layer_name]["mlp"]["wi_1"]["kernel"]
+            fusionindecoderx_mlp_wi_0 = fusionindecoderx_model["target"]["decoder"][layer_name]["mlp"]["wi_0"][
+                "kernel"
+            ]
+            fusionindecoderx_mlp_wi_1 = fusionindecoderx_model["target"]["decoder"][layer_name]["mlp"]["wi_1"][
+                "kernel"
+            ]
         else:
             fusionindecoderx_mlp_wi = fusionindecoderx_model["target"]["decoder"][layer_name]["mlp"]["wi"]["kernel"]
 
@@ -204,7 +236,9 @@ def convert_fusionindecoderx_checkpoint_to_flax(fusionindecoderx_checkpoint_path
     flax_model.params["decoder"]["final_layer_norm"]["weight"] = tx5_decoder_norm
 
     # Only for layer 0:
-    fusionindecoderx_decoder_rel_embedding = fusionindecoderx_model["target"]["decoder"]["relpos_bias"]["rel_embedding"].T
+    fusionindecoderx_decoder_rel_embedding = fusionindecoderx_model["target"]["decoder"]["relpos_bias"][
+        "rel_embedding"
+    ].T
     flax_model.params["decoder"]["block"]["0"]["layer"]["0"]["SelfAttention"]["relative_attention_bias"][
         "embedding"
     ] = fusionindecoderx_decoder_rel_embedding
@@ -227,9 +261,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--fusionindecoderx_checkpoint_path", default=None, type=str, required=True, help="Path the TX5 checkpoint."
     )
-    parser.add_argument("--config_name", default=None, type=str, required=True, help="Config name of FusionInDecoder model.")
+    parser.add_argument(
+        "--config_name", default=None, type=str, required=True, help="Config name of FusionInDecoder model."
+    )
     parser.add_argument(
         "--flax_dump_folder_path", default=None, type=str, required=True, help="Path to the output FLAX model."
     )
     args = parser.parse_args()
-    convert_fusionindecoderx_checkpoint_to_flax(args.fusionindecoderx_checkpoint_path, args.config_name, args.flax_dump_folder_path)
+    convert_fusionindecoderx_checkpoint_to_flax(
+        args.fusionindecoderx_checkpoint_path, args.config_name, args.flax_dump_folder_path
+    )

@@ -526,13 +526,11 @@ class FusionInDecoderModelTester:
 
 @require_torch
 class FusionInDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (FusionInDecoderModel, FusionInDecoderForConditionalGeneration)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (FusionInDecoderModel, FusionInDecoderForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (FusionInDecoderForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (FusionInDecoderModel, FusionInDecoderForConditionalGeneration) if is_torch_available() else ()
+    all_parallelizable_model_classes = (
+        (FusionInDecoderModel, FusionInDecoderForConditionalGeneration) if is_torch_available() else ()
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -704,6 +702,7 @@ class FusionInDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_pipeline_conversational(self):
         pass
 
+
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
 
@@ -733,12 +732,16 @@ class FusionInDecoderModelFp16Tests(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = FusionInDecoderForConditionalGeneration.from_pretrained("google-t5/t5-base", torch_dtype=torch.float16)
+            model = FusionInDecoderForConditionalGeneration.from_pretrained(
+                "google-t5/t5-base", torch_dtype=torch.float16
+            )
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
             # Load without in bf16
-            model = FusionInDecoderForConditionalGeneration.from_pretrained("google-t5/t5-base", torch_dtype=torch.bfloat16)
+            model = FusionInDecoderForConditionalGeneration.from_pretrained(
+                "google-t5/t5-base", torch_dtype=torch.bfloat16
+            )
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
@@ -1216,7 +1219,9 @@ class FusionInDecoderModelIntegrationTests(unittest.TestCase):
         )
         article = "summarize: " + article.strip()
         fusionindecoder_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
-        fusionindecoder_model = FusionInDecoderForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(torch_device)
+        fusionindecoder_model = FusionInDecoderForConditionalGeneration.from_pretrained(
+            "flax-community/t5-base-cnn-dm"
+        ).to(torch_device)
         input_ids = fusionindecoder_tokenizer(
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)

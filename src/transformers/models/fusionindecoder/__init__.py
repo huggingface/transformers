@@ -21,7 +21,13 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_fusionindecoder": ["FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP", "FusionInDecoderConfig", "FusionInDecoderOnnxConfig"]}
+_import_structure = {
+    "configuration_fusionindecoder": [
+        "FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FusionInDecoderConfig",
+        "FusionInDecoderOnnxConfig",
+    ]
+}
 
 try:
     if not is_torch_available():

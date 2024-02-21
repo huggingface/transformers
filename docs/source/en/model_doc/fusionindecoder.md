@@ -56,7 +56,7 @@ The original code can be found [here](https://github.com/facebookresearch/FiD).
 
 ## T5Config
 
-[[autodoc]] T5Config
+[[autodoc]] FusionInDecoderConfig
 
 ## FusionInDecoderModel
 
@@ -66,26 +66,6 @@ The original code can be found [here](https://github.com/facebookresearch/FiD).
 ## FusionInDecoderForConditionalGeneration
 
 [[autodoc]] FusionInDecoderForConditionalGeneration
-    - forward
-
-## FusionInDecoderEncoderModel
-
-[[autodoc]] FusionInDecoderEncoderModel
-    - forward
-
-## FusionInDecoderForSequenceClassification
-
-[[autodoc]] FusionInDecoderForSequenceClassification
-    - forward
-
-## FusionInDecoderForTokenClassification
-
-[[autodoc]] FusionInDecoderForTokenClassification
-    - forward
-
-## FusionInDecoderForQuestionAnswering
-
-[[autodoc]] FusionInDecoderForQuestionAnswering
     - forward
 
 </pt>

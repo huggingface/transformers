@@ -19,11 +19,11 @@ import copy
 import math
 import os
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -31,9 +31,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
@@ -63,7 +60,6 @@ FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google-t5/t5-base",
     # See all FusionInDecoder models at https://huggingface.co/models?filter=fusionindecoder
 ]
-
 
 
 ####################################################
@@ -651,7 +647,9 @@ class FusionInDecoderBlock(nn.Module):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(FusionInDecoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(
+            FusionInDecoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        )
         if self.is_decoder:
             self.layer.append(FusionInDecoderLayerCrossAttention(config))
 
@@ -768,6 +766,7 @@ class FusionInDecoderBlock(nn.Module):
             outputs = outputs + attention_outputs
 
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+
 
 class FusionInDecoderPreTrainedModel(PreTrainedModel):
     """
@@ -1144,6 +1143,7 @@ class FusionInDecoderStack(FusionInDecoderPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
+
 class FusionInDecoderWrapper(FusionInDecoderPreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -1255,7 +1255,6 @@ class FusionInDecoderWrapper(FusionInDecoderPreTrainedModel):
             if self.embed_tokens is None:
                 raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
-
 
         batch_size, seq_length = input_shape
 
@@ -1395,7 +1394,6 @@ class FusionInDecoderWrapper(FusionInDecoderPreTrainedModel):
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
 
         # Add last layer
         if output_hidden_states:
@@ -1793,8 +1791,9 @@ class FusionInDecoderModel(FusionInDecoderPreTrainedModel):
     # def generate(self, input_ids, attention_mask, **kwargs):
 
 
-
-@add_start_docstrings("""FUSIONINDECODER Model with a `language modeling` head on top.""", FUSIONINDECODER_START_DOCSTRING)
+@add_start_docstrings(
+    """FUSIONINDECODER Model with a `language modeling` head on top.""", FUSIONINDECODER_START_DOCSTRING
+)
 class FusionInDecoderForConditionalGeneration(FusionInDecoderPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
