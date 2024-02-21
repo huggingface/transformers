@@ -18,7 +18,7 @@ import unittest
 import jax
 import numpy as np
 
-from transformers import AutoTokenizer, GemmaConfig, is_flax_available, is_tokenizers_available
+from transformers import AutoTokenizer, GemmaConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -32,8 +32,6 @@ if is_flax_available():
         FlaxGemmaForCausalLM,
         FlaxGemmaModel,
     )
-
-
 
 
 class FlaxGemmaModelTester:
