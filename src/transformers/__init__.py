@@ -5221,6 +5221,7 @@ if TYPE_CHECKING:
         FunnelConfig,
         FunnelTokenizer,
     )
+    from .models.fusionindecoder import FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP, FusionInDecoderConfig
     from .models.fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
     from .models.git import (
         GIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5588,7 +5589,6 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
-    from .models.fusionindecoder import FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP, FusionInDecoderConfig
     from .models.table_transformer import (
         TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TableTransformerConfig,
@@ -6859,6 +6859,17 @@ if TYPE_CHECKING:
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
+        from .models.fusionindecoder import (
+            FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FusionInDecoderEncoderModel,
+            FusionInDecoderForConditionalGeneration,
+            FusionInDecoderForQuestionAnswering,
+            FusionInDecoderForSequenceClassification,
+            FusionInDecoderForTokenClassification,
+            FusionInDecoderModel,
+            FusionInDecoderPreTrainedModel,
+            load_tf_weights_in_fusionindecoder,
+        )
         from .models.fuyu import (
             FuyuForCausalLM,
             FuyuPreTrainedModel,
@@ -7741,17 +7752,6 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
-        )
-        from .models.fusionindecoder import (
-            FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FusionInDecoderEncoderModel,
-            FusionInDecoderForConditionalGeneration,
-            FusionInDecoderForQuestionAnswering,
-            FusionInDecoderForSequenceClassification,
-            FusionInDecoderForTokenClassification,
-            FusionInDecoderModel,
-            FusionInDecoderPreTrainedModel,
-            load_tf_weights_in_fusionindecoder,
         )
         from .models.table_transformer import (
             TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

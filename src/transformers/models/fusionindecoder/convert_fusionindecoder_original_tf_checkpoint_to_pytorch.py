@@ -17,7 +17,11 @@
 
 import argparse
 
-from transformers import FusionInDecoderConfig, FusionInDecoderForConditionalGeneration, load_tf_weights_in_fusionindecoder
+from transformers import (
+    FusionInDecoderConfig,
+    FusionInDecoderForConditionalGeneration,
+    load_tf_weights_in_fusionindecoder,
+)
 from transformers.utils import logging
 
 

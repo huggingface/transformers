@@ -31,18 +31,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_fusionindecoder"] = [
         "FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "FusionInDecoderEncoderModel",
         "FusionInDecoderForConditionalGeneration",
         "FusionInDecoderModel",
         "FusionInDecoderPreTrainedModel",
         "load_tf_weights_in_fusionindecoder",
-        "FusionInDecoderForQuestionAnswering",
-        "FusionInDecoderForSequenceClassification",
-        "FusionInDecoderForTokenClassification",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_fusionindecoder import FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP, FusionInDecoderConfig, FusionInDecoderOnnxConfig
+    from .configuration_fusionindecoder import (
+        FUSIONINDECODER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FusionInDecoderConfig,
+        FusionInDecoderOnnxConfig,
+    )
 
     try:
         if not is_torch_available():
@@ -52,11 +52,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_fusionindecoder import (
             FUSIONINDECODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FusionInDecoderEncoderModel,
             FusionInDecoderForConditionalGeneration,
-            FusionInDecoderForQuestionAnswering,
-            FusionInDecoderForSequenceClassification,
-            FusionInDecoderForTokenClassification,
             FusionInDecoderModel,
             FusionInDecoderPreTrainedModel,
             load_tf_weights_in_fusionindecoder,
