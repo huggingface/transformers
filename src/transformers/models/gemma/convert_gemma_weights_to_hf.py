@@ -187,7 +187,6 @@ def main():
     write_model(
         config=config,
         input_base_path=args.input_checkpoint,
-        input_tokenizer_path=spm_path,
         save_path=args.output_dir,
         safe_serialization=not args.pickle_serialization,
         push_to_hub=args.push_to_hub,

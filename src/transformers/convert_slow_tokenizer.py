@@ -1324,6 +1324,10 @@ class LlamaConverter(SpmConverter):
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
 
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
     def decoder(self, replacement, add_prefix_space):
         sequence = [
             decoders.Replace("▁", " "),
