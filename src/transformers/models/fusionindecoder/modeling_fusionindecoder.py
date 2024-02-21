@@ -1932,19 +1932,21 @@ class FusionInDecoderForConditionalGeneration(FusionInDecoderPreTrainedModel):
         >>> model = FusionInDecoderForConditionalGeneration.from_pretrained("google-t5/t5-base")
 
         >>> # training
-        >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
-        >>> labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
+        >>> question = "What is the capital of the United States"
+        >>> contexts = ["It is a liberal democracy and republic of 50 federated states, a federal capital district (Washington, D.C.), "
+        >>>             "and 326 Indian reservations that overlap with state boundaries."]
+        >>> prefix = "\n"
+        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors="pt").input_ids
+        >>> labels = tokenizer("The capital of the United States is Washington DC", return_tensors="pt").input_ids
         >>> outputs = model(input_ids=input_ids, labels=labels)
         >>> loss = outputs.loss
         >>> logits = outputs.logits
 
         >>> # inference
-        >>> input_ids = tokenizer(
-        ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors = "pt").input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
+        >>> # The capital of the United States Washington, D.C. Washington, D.
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
