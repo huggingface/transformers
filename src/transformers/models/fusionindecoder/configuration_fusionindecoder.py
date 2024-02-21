@@ -115,8 +115,8 @@ class FusionInDecoderConfig(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-        self.use_cache = use_cache
         self.feed_forward_proj = feed_forward_proj
+        self.use_cache = use_cache
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -139,6 +139,7 @@ class FusionInDecoderConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+
 
 class FusionInDecoderOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
