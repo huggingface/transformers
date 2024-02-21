@@ -702,7 +702,7 @@ class RobertaModel(RobertaPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward with ClapText->Roberta
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Roberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config

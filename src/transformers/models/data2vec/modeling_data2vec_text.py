@@ -705,7 +705,6 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Data2VecText
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
