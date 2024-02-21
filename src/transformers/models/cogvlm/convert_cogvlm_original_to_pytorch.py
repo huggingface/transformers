@@ -44,7 +44,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     Copy/paste/tweak model's weights to Transformers design.
     """
     # load original model
-    revision = "refs/pr/3" if model_name == "THUDM/cogvlm-chat-hf" else None
+    # note: we need to fix the _update_model_kwargs_for_generation method to include model_inputs
+    # after https://github.com/huggingface/transformers/pull/29114
+    revision = "refs/pr/19" if model_name == "THUDM/cogvlm-chat-hf" else None
     original_model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch.bfloat16,

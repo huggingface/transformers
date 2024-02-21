@@ -62,7 +62,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clvp", "ClvpConfig"),
         ("code_llama", "LlamaConfig"),
         ("codegen", "CodeGenConfig"),
-        ("cogvlm", "CogVLMConfig"),
+        ("cogvlm", "CogvlmConfig"),
         ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
         ("convnext", "ConvNextConfig"),

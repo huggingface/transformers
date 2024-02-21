@@ -397,8 +397,8 @@ class CogvlmVisionExpertAttention(nn.Module):
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         cos, sin = (
-            nn.functional.embedding(position_ids, cos.squeeze(1)).unsqueeze(1),
-            nn.functional.embedding(position_ids, sin.squeeze(1)).unsqueeze(1),
+            nn.functional.embedding(position_ids, cos.squeeze(1)),
+            nn.functional.embedding(position_ids, sin.squeeze(1)),
         )
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -446,7 +446,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -454,9 +454,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -467,6 +466,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -595,7 +596,7 @@ class CogvlmModel(CogvlmPreTrainedModel):
         self.norm = CogvlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         vision_input_ids = torch.tensor(
-            [self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens
+            [self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens,
         )
         self.register_buffer("vision_input_ids", vision_input_ids, persistent=False)
         vision_token_type_ids = torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * self.num_vision_tokens)
@@ -719,6 +720,8 @@ class CogvlmModel(CogvlmPreTrainedModel):
             if position_ids is None:
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
+
+        # next: forward
 
         return self.llm_forward(
             input_ids=input_ids,
@@ -1020,6 +1023,7 @@ class CogvlmForCausalLM(CogvlmPreTrainedModel):
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
