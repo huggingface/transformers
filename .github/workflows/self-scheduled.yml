@@ -33,9 +33,6 @@ env:
 jobs:
   setup:
     name: Setup
-    strategy:
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
@@ -51,24 +48,14 @@ jobs:
           rm -rf tests/models/__pycache__
           rm -rf reports
 
-      - name: Install locally and show env
-        run: |
-          pip install -e .
-          python3 utils/print_env.py
-          pip freeze
-
       - id: set-matrix
         name: Identify models to test
         run: |
           echo "folder_slices=$(python3 ./utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
   run_model_tests_gpu:
-    name: " "
+    name: "Run model tests"
     needs: setup
     strategy:
       fail-fast: false
