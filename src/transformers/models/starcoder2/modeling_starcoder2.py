@@ -222,7 +222,6 @@ class Starcoder2Attention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -306,7 +305,6 @@ class Starcoder2Attention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Starcoder2
 class Starcoder2FlashAttention2(Starcoder2Attention):
     """
     Starcoder2 flash attention module. This module inherits from `Starcoder2Attention` as the weights of the module stays
@@ -922,7 +920,6 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralModel.forward with MISTRAL->STARCODER2,Mistral->Starcoder2
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
         self,
