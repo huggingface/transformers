@@ -30,7 +30,7 @@ from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, list_repo_commits, list_repo_files
+from huggingface_hub import HfFolder, ModelCard, delete_repo, list_repo_commits, list_repo_files
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -58,9 +58,11 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_staging_test,
     require_accelerate,
+    require_bitsandbytes,
     require_deepspeed,
     require_intel_extension_for_pytorch,
     require_optuna,
+    require_peft,
     require_ray,
     require_safetensors,
     require_sentencepiece,
@@ -872,6 +874,92 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
+    @require_peft
+    @require_bitsandbytes
+    def test_bnb_compile(self):
+        from peft import LoraConfig, get_peft_model
+
+        # Simply tests if initializing a Trainer with a PEFT + compiled model works out of the box
+        # QLoRA + torch compile is not really supported yet, but we should at least support the model
+        # loading and let torch throw the
+        tiny_model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", load_in_4bit=True
+        )
+
+        peft_config = LoraConfig(
+            r=8,
+            lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        tiny_model = get_peft_model(tiny_model, peft_config)
+
+        tiny_model = torch.compile(tiny_model)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                learning_rate=1e-9,
+                logging_steps=5,
+            )
+            with self.assertRaises(ValueError):
+                _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb_8bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_8bit"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb_32bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_32bit"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
     def test_neftune(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
@@ -1537,7 +1625,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""
                 run_glue.py
-                --model_name_or_path distilbert-base-uncased
+                --model_name_or_path distilbert/distilbert-base-uncased
                 --task_name mrpc
                 --do_train
                 --do_eval
@@ -1588,18 +1676,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
-        # After `auto_find_batch_size` is ran we should now be at 8
-        self.assertEqual(trainer._train_batch_size, 8)
-
-        # We can then make a new Trainer
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        # Check we are at 16 to start
-        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
-        trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again, picking up based upon the last ran Trainer
-        self.assertEqual(trainer._train_batch_size, 8)
+        # Note: This can have issues, for now we don't support this functionality
+        # ref: https://github.com/huggingface/transformers/pull/29057
+        with self.assertRaises(NotImplementedError):
+            _ = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
@@ -1886,7 +1966,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_mrpc(self):
-        MODEL_ID = "bert-base-cased-finetuned-mrpc"
+        MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
@@ -1901,7 +1981,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_multiple(self):
-        MODEL_ID = "gpt2"
+        MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
@@ -1930,7 +2010,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @slow
     def test_trainer_eval_lm(self):
-        MODEL_ID = "distilroberta-base"
+        MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
@@ -2384,7 +2464,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "launch",
                 script_path,
                 "--model_name_or_path",
-                "t5-small",
+                "google-t5/t5-small",
                 "--per_device_train_batch_size",
                 "1",
                 "--output_dir",
@@ -2564,7 +2644,13 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step", "test-trainer-tensorboard"]:
+        for model in [
+            "test-trainer",
+            "test-trainer-epoch",
+            "test-trainer-step",
+            "test-trainer-tensorboard",
+            "test-trainer-tags",
+        ]:
             try:
                 delete_repo(token=cls._token, repo_id=model)
             except HTTPError:
@@ -2694,6 +2780,31 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 found_log = True
 
         assert found_log is True, "No tensorboard log found in repo"
+
+    def test_push_to_hub_tags(self):
+        # Checks if `trainer.push_to_hub()` works correctly by adding the desired
+        # tag without having to pass `tags` in `push_to_hub`
+        # see:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=os.path.join(tmp_dir, "test-trainer-tags"),
+                push_to_hub=True,
+                hub_token=self._token,
+            )
+
+            trainer.model.add_model_tags(["test-trainer-tags"])
+
+            url = trainer.push_to_hub()
+
+            # Extract repo_name from the url
+            re_search = re.search(ENDPOINT_STAGING + r"/([^/]+/[^/]+)/", url)
+            self.assertTrue(re_search is not None)
+            repo_name = re_search.groups()[0]
+
+            self.assertEqual(repo_name, f"{USER}/test-trainer-tags")
+
+            model_card = ModelCard.load(repo_name)
+            self.assertTrue("test-trainer-tags" in model_card.data.tags)
 
 
 @require_torch

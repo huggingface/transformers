@@ -586,7 +586,7 @@ model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
-For the task `text-classification`, this returns `'facebook/bart-large-mnli'`, for `translation` it returns `'t5-base`.
+For the task `text-classification`, this returns `'facebook/bart-large-mnli'`, for `translation` it returns `'google-t5/t5-base`.
 
 How do we convert this to a tool that the agent can leverage? All tools depend on the superclass `Tool` that holds the
 main attributes necessary. We'll create a class that inherits from it:

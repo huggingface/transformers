@@ -96,8 +96,8 @@ transformers-cli convert --model_type gpt \
 Ecco un esempio del processo di conversione di un modello OpenAI GPT-2 pre-allenato (vedi [qui](https://github.com/openai/gpt-2)):
 
 ```bash
-export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
-transformers-cli convert --model_type gpt2 \
+export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/openai-community/gpt2/pretrained/weights
+transformers-cli convert --model_type openai-community/gpt2 \
   --tf_checkpoint $OPENAI_GPT2_CHECKPOINT_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
   [--config OPENAI_GPT2_CONFIG] \

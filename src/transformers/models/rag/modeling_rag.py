@@ -260,8 +260,6 @@ class RagPreTrainedModel(PreTrainedModel):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -273,8 +271,6 @@ class RagPreTrainedModel(PreTrainedModel):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -304,7 +300,7 @@ class RagPreTrainedModel(PreTrainedModel):
 
         >>> # initialize a RAG from two pretrained models.
         >>> model = RagModel.from_pretrained_question_encoder_generator(
-        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ...     "facebook/dpr-question_encoder-single-nq-base", "google-t5/t5-small"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./rag")

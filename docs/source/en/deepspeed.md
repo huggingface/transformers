@@ -266,7 +266,7 @@ from transformers import T5ForConditionalGeneration, T5Config
 import deepspeed
 
 with deepspeed.zero.Init():
-    config = T5Config.from_pretrained("t5-small")
+    config = T5Config.from_pretrained("google-t5/t5-small")
     model = T5ForConditionalGeneration(config)
 ```
 
@@ -276,7 +276,7 @@ For pretrained models, the DeepSped config file needs to have `is_deepspeed_zero
 from transformers import AutoModel, Trainer, TrainingArguments
 
 training_args = TrainingArguments(..., deepspeed=ds_config)
-model = AutoModel.from_pretrained("t5-small")
+model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
@@ -601,7 +601,7 @@ To deploy DeepSpeed on multiple GPUs, add the `--num_gpus` parameter. If you wan
 ```bash
 deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path t5-small --per_device_train_batch_size 1 \
+--model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
 --output_dir output_dir --overwrite_output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
@@ -616,7 +616,7 @@ To deploy DeepSpeed on a single GPU, add the `--num_gpus` parameter. It isn't ne
 ```bash
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path t5-small --per_device_train_batch_size 1 \
+--model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
 --output_dir output_dir --overwrite_output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
@@ -949,7 +949,7 @@ import deepspeed
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-model = AutoModel.from_pretrained("gpt2")
+model = AutoModel.from_pretrained("openai-community/gpt2")
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
@@ -966,7 +966,7 @@ import deepspeed
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-config = AutoConfig.from_pretrained("gpt2")
+config = AutoConfig.from_pretrained("openai-community/gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```

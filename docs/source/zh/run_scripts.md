@@ -88,11 +88,11 @@ pip install -r requirements.txt
 <frameworkcontent>
 <pt>
 
-示例脚本从🤗 [Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上微调[T5-small](https://huggingface.co/t5-small)。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
+示例脚本从🤗 [Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上微调[T5-small](https://huggingface.co/google-t5/t5-small)。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -107,11 +107,11 @@ python examples/pytorch/summarization/run_summarization.py \
 </pt>
 <tf>
 
-示例脚本从  🤗 [Datasets](https://huggingface.co/docs/datasets/) 库下载并预处理数据集。然后，脚本使用 Keras 在支持摘要的架构上微调数据集。以下示例展示了如何在 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 数据集上微调 [T5-small](https://huggingface.co/t5-small)。T5 模型由于训练方式需要额外的 `source_prefix` 参数。这个提示让 T5 知道这是一个摘要任务。
+示例脚本从  🤗 [Datasets](https://huggingface.co/docs/datasets/) 库下载并预处理数据集。然后，脚本使用 Keras 在支持摘要的架构上微调数据集。以下示例展示了如何在 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 数据集上微调 [T5-small](https://huggingface.co/google-t5/t5-small)。T5 模型由于训练方式需要额外的 `source_prefix` 参数。这个提示让 T5 知道这是一个摘要任务。
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -136,7 +136,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -161,7 +161,7 @@ TensorFlow脚本使用[`MirroredStrategy`](https://www.tensorflow.org/guide/dist
 ```bash
 python xla_spawn.py --num_cores 8 \
     summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -181,7 +181,7 @@ python xla_spawn.py --num_cores 8 \
 ```bash
 python run_summarization.py  \
     --tpu name_of_tpu_resource \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --output_dir /tmp/tst-summarization  \
@@ -219,7 +219,7 @@ accelerate test
 
 ```bash
 accelerate launch run_summarization_no_trainer.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --dataset_name cnn_dailymail \
     --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
@@ -238,7 +238,7 @@ accelerate launch run_summarization_no_trainer.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --train_file path_to_csv_or_jsonlines_file \
@@ -264,7 +264,7 @@ python examples/pytorch/summarization/run_summarization.py \
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
@@ -294,7 +294,7 @@ examples/pytorch/summarization/run_summarization.py -h
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -312,7 +312,7 @@ python examples/pytorch/summarization/run_summarization.py
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \
@@ -343,7 +343,7 @@ huggingface-cli login
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path t5-small \
+    --model_name_or_path google-t5/t5-small \
     --do_train \
     --do_eval \
     --dataset_name cnn_dailymail \

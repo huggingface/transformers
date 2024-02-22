@@ -116,7 +116,7 @@ class TFBertTokenizer(keras.layers.Layer):
         ```python
         from transformers import AutoTokenizer, TFBertTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         tf_tokenizer = TFBertTokenizer.from_tokenizer(tokenizer)
         ```
         """
@@ -155,7 +155,7 @@ class TFBertTokenizer(keras.layers.Layer):
         ```python
         from transformers import TFBertTokenizer
 
-        tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
+        tf_tokenizer = TFBertTokenizer.from_pretrained("google-bert/bert-base-uncased")
         ```
         """
         try:

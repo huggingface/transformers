@@ -159,13 +159,13 @@ to be used, but that everybody in team is on the same page on what type of model
 To give an example, a well-defined project would be the following:
 
 - task: summarization
-- model: [t5-small](https://huggingface.co/t5-small)
+- model: [google-t5/t5-small](https://huggingface.co/google-t5/t5-small)
 - dataset: [CNN/Daily mail](https://huggingface.co/datasets/cnn_dailymail)
 - training script: [run_summarization_flax.py](https://github.com/huggingface/transformers/blob/main/examples/flax/summarization/run_summarization_flax.py)
 - outcome: t5 model that can summarize news
-- work flow: adapt `run_summarization_flax.py` to work with `t5-small`.
+- work flow: adapt `run_summarization_flax.py` to work with `google-t5/t5-small`.
 
-This example is a very easy and not the most interesting project since a `t5-small`
+This example is a very easy and not the most interesting project since a `google-t5/t5-small`
 summarization model exists already for CNN/Daily mail and pretty much no code has to be 
 written. 
 A well-defined project does not need to have the dataset be part of 
@@ -335,7 +335,7 @@ dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', str
 
 dummy_input = next(iter(dataset))["text"]
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
 input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
@@ -492,7 +492,7 @@ dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', str
 
 dummy_input = next(iter(dataset))["text"]
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
 input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
@@ -518,7 +518,7 @@ be available in a couple of days.
 - [BigBird](https://github.com/huggingface/transformers/blob/main/src/transformers/models/big_bird/modeling_flax_big_bird.py)
 - [CLIP](https://github.com/huggingface/transformers/blob/main/src/transformers/models/clip/modeling_flax_clip.py)
 - [ELECTRA](https://github.com/huggingface/transformers/blob/main/src/transformers/models/electra/modeling_flax_electra.py)
-- [GPT2](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_flax_gpt2.py)
+- [GPT2](https://github.com/huggingface/transformers/blob/main/src/transformers/models/openai-community/gpt2/modeling_flax_gpt2.py)
 - [(TODO) MBART](https://github.com/huggingface/transformers/blob/main/src/transformers/models/mbart/modeling_flax_mbart.py)
 - [RoBERTa](https://github.com/huggingface/transformers/blob/main/src/transformers/models/roberta/modeling_flax_roberta.py)
 - [T5](https://github.com/huggingface/transformers/blob/main/src/transformers/models/t5/modeling_flax_t5.py)
@@ -729,7 +729,7 @@ Let's use the base `FlaxRobertaModel` without any heads as an example.
 from transformers import FlaxRobertaModel, RobertaTokenizerFast
 import jax
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
 inputs = tokenizer("JAX/Flax is amazing ", padding="max_length", max_length=128, return_tensors="np")
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
@@ -1011,7 +1011,7 @@ and run the following commands in a Python shell to save a config.
 ```python
 from transformers import RobertaConfig
 
-config = RobertaConfig.from_pretrained("roberta-base")
+config = RobertaConfig.from_pretrained("FacebookAI/roberta-base")
 config.save_pretrained("./")
 ```
 
@@ -1193,12 +1193,12 @@ All the widgets are open sourced in the `huggingface_hub` [repo](https://github.
 **NLP**
 * **Conversational:** To have the best conversations!. [Example](https://huggingface.co/microsoft/DialoGPT-large?).
 * **Feature Extraction:** Retrieve the input embeddings. [Example](https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens?text=test).
-* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/bert-base-uncased?).
-* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
+* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/google-bert/bert-base-uncased?).
+* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad).
 * **Sentence Simmilarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
 * **Summarization:** Given a text, output a summary of it. [Example](https://huggingface.co/sshleifer/distilbart-cnn-12-6).
 * **Table Question Answering:** Given a table and a question, predict the answer. [Example](https://huggingface.co/google/tapas-base-finetuned-wtq).
-* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/gpt2)
+* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/openai-community/gpt2)
 * **Token Classification:** Useful for tasks such as Named Entity Recognition and Part of Speech. [Example](https://huggingface.co/dslim/bert-base-NER).
 * **Zero-Shot Classification:** Too cool to explain with words. Here is an [example](https://huggingface.co/typeform/distilbert-base-uncased-mnli)
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/99)) **Table to Text Generation**.

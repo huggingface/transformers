@@ -87,8 +87,6 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -194,8 +192,6 @@ FROM_PRETRAINED_TF_DOCSTRING = """
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch state_dict save file* (e.g, `./pt_model/pytorch_model.bin`). In this
@@ -295,8 +291,6 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch state_dict save file* (e.g, `./pt_model/pytorch_model.bin`). In this
@@ -642,7 +636,7 @@ def insert_head_doc(docstring, head_doc=""):
     )
 
 
-def auto_class_update(cls, checkpoint_for_example="bert-base-cased", head_doc=""):
+def auto_class_update(cls, checkpoint_for_example="google-bert/bert-base-cased", head_doc=""):
     # Create a new class with the right name from the base class
     model_mapping = cls._model_mapping
     name = cls.__name__

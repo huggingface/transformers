@@ -157,6 +157,9 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
+    RMSPROP_BNB = "rmsprop_bnb"
+    RMSPROP_8BIT = "rmsprop_bnb_8bit"
+    RMSPROP_32BIT = "rmsprop_bnb_32bit"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -1684,6 +1687,7 @@ class TrainingArguments:
         ):
             raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
         self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
+        self.fsdp_config["xla_fsdp_v2"] = self.fsdp_config.get("xla_fsdp_v2", False)
         self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
             if len(self.fsdp) > 0:
