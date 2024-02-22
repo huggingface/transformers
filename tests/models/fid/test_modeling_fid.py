@@ -53,7 +53,7 @@ if is_torch_available():
         FiDModel,
         T5Tokenizer,
     )
-    from transformers.models.fid.modeling_fid import FiD_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.fid.modeling_fid import FID_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class FiDModelTester:
@@ -688,7 +688,7 @@ class FiDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FiD_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in FID_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = FiDModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

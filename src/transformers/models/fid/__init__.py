@@ -21,7 +21,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_fid": ["FiD_PRETRAINED_CONFIG_ARCHIVE_MAP", "FiDConfig", "FiDOnnxConfig"]}
+_import_structure = {"configuration_fid": ["FID_PRETRAINED_CONFIG_ARCHIVE_MAP", "FiDConfig", "FiDOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -30,7 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_fid"] = [
-        "FiD_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "FID_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FiDEncoderModel",
         "FiDForConditionalGeneration",
         "FiDModel",
@@ -42,7 +42,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_fid import FiD_PRETRAINED_CONFIG_ARCHIVE_MAP, FiDConfig, FiDOnnxConfig
+    from .configuration_fid import FID_PRETRAINED_CONFIG_ARCHIVE_MAP, FiDConfig, FiDOnnxConfig
 
     try:
         if not is_torch_available():
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_fid import (
-            FiD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FID_PRETRAINED_MODEL_ARCHIVE_LIST,
             FiDEncoderModel,
             FiDForConditionalGeneration,
             FiDForQuestionAnswering,

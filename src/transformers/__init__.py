@@ -434,7 +434,7 @@ _import_structure = {
         "FastSpeech2ConformerTokenizer",
         "FastSpeech2ConformerWithHifiGanConfig",
     ],
-    "models.fid": ["FiDConfig", "FiD_PRETRAINED_CONFIG_ARCHIVE_MAP"],
+    "models.fid": ["FiDConfig", "FID_PRETRAINED_CONFIG_ARCHIVE_MAP"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2187,7 +2187,7 @@ else:
             "FiDForTokenClassification",
             "FiDModel",
             "FiDPreTrainedModel",
-            "FiD_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FID_PRETRAINED_MODEL_ARCHIVE_LIST",
             "load_tf_weights_in_fid",
         ]
     )
@@ -5212,7 +5212,7 @@ if TYPE_CHECKING:
         FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerWithHifiGanConfig,
     )
-    from .models.fid import FiD_PRETRAINED_CONFIG_ARCHIVE_MAP, FiDConfig
+    from .models.fid import FID_PRETRAINED_CONFIG_ARCHIVE_MAP, FiDConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6815,7 +6815,7 @@ if TYPE_CHECKING:
             FastSpeech2ConformerWithHifiGan,
         )
         from .models.fid import (
-            FiD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FID_PRETRAINED_MODEL_ARCHIVE_LIST,
             FiDEncoderModel,
             FiDForConditionalGeneration,
             FiDForQuestionAnswering,

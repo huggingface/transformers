@@ -59,9 +59,13 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-base"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-FiD_PRETRAINED_MODEL_ARCHIVE_LIST = [
+FID_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google-t5/t5-small",
     "google-t5/t5-base",
-    # See all FusionInDecoder models at https://huggingface.co/models?filter=fid
+    "google-t5/t5-large",
+    "google-t5/t5-3b",
+    "google-t5/t5-11b",
+    # See all T5 models at https://huggingface.co/models?filter=t5
 ]
 
 
@@ -2004,13 +2008,13 @@ class FiDForConditionalGeneration(FiDPreTrainedModel):
         >>> contexts = ["United States is a liberal democracy and republic of 50 federated states, a federal capital district (Washington, D.C.), and 326 Indian reservations.",
         ...             "These reservations overlap with state boundaries."]
         >>> prefix = "\n"
-        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors="pt").input_ids
+        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors="pt", padding=True).input_ids
         >>> labels = tokenizer("The capital of the United States is Washington DC", return_tensors="pt").input_ids
         >>> outputs = model(input_ids=input_ids, labels=labels)
         >>> loss = outputs.loss
 
         >>> # inference
-        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors = "pt").input_ids  # Batch size 1
+        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors = "pt", padding=True).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         ```"""
