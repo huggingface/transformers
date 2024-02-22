@@ -4043,11 +4043,7 @@ class Trainer:
                 torch.cuda.empty_cache()
                 losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
-            elif (
-                args.eval_accumulation_steps is not None
-                and (step + 1) % args.eval_accumulation_steps == 0
-                and self.accelerator.sync_gradients
-            ):
+            elif args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
                 if not prediction_loss_only:
