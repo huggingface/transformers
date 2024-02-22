@@ -45,13 +45,13 @@ Before you go further, it is good to have some basic knowledge of the original T
 
 This model has four main components:
 
-1. A *feature encoder* takes the raw audio waveform, normalizes it to zero mean and unit variance, and converts it into a sequence of feature vectors that are each 20ms long.
+1. A **feature encoder** takes the raw audio waveform, normalizes it to zero mean and unit variance, and converts it into a sequence of feature vectors that are each 20ms long.
 
-2. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. That's why the feature vectors are passed to a *quantization module*, which aims to learn discrete speech units. The speech unit is chosen from a collection of codewords, known as a *codebook* (you can think of this as the vocabulary). From the codebook, the vector or speech unit, that best represents the continuous audio input is chosen and forwarded through the model.
+2. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. That's why the feature vectors are passed to a **quantization module**, which aims to learn discrete speech units. The speech unit is chosen from a collection of codewords, known as a **codebook** (you can think of this as the vocabulary). From the codebook, the vector or speech unit, that best represents the continuous audio input is chosen and forwarded through the model.
 
-3. About half of the feature vectors are randomly masked, and the masked feature vector is fed to a *context network*, which is a Transformer encoder that also adds relative positional embeddings.
+3. About half of the feature vectors are randomly masked, and the masked feature vector is fed to a **context network**, which is a Transformer encoder that also adds relative positional embeddings.
 
-4. The pretraining objective of the context network is a *contrastive task*. The model has to predict the true quantized speech representation of the masked prediction from a set of false ones, encouraging the model to find the most similar context vector and quantized speech unit (the target label).
+4. The pretraining objective of the context network is a **contrastive task**. The model has to predict the true quantized speech representation of the masked prediction from a set of false ones, encouraging the model to find the most similar context vector and quantized speech unit (the target label).
 
 Now that wav2vec2 is pretrained, you can finetune it on your data for audio classification or automatic speech recognition!
 

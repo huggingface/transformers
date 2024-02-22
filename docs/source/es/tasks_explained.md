@@ -14,46 +14,46 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# How 🤗 Transformers solve tasks
+## ¿Cómo los 🤗 Transformers resuelven tareas?
 
-In [What 🤗 Transformers can do](task_summary), you learned about natural language processing (NLP), speech and audio, computer vision tasks, and some important applications of them. This page will look closely at how models solve these tasks and explain what's happening under the hood. There are many ways to solve a given task, some models may implement certain techniques or even approach the task from a new angle, but for Transformer models, the general idea is the same. Owing to its flexible architecture, most models are a variant of an encoder, decoder, or encoder-decoder structure. In addition to Transformer models, our library also has several convolutional neural networks (CNNs), which are still used today for computer vision tasks. We'll also explain how a modern CNN works.
+En [Qué pueden hacer los 🤗 Transformers](task_summary), aprendiste sobre el procesamiento de lenguaje natural (NLP), tareas de voz y audio, visión por computadora y algunas aplicaciones importantes de ellas. Esta página se centrará en cómo los modelos resuelven estas tareas y explicará lo que está sucediendo debajo de la superficie. Hay muchas maneras de resolver una tarea dada, y diferentes modelos pueden implementar ciertas técnicas o incluso abordar la tarea desde un ángulo nuevo, pero para los modelos Transformer, la idea general es la misma. Debido a su arquitectura flexible, la mayoría de los modelos son una variante de una estructura de codificador, descodificador o codificador-descodificador. Además de los modelos Transformer, nuestra biblioteca también tiene varias redes neuronales convolucionales (CNNs) modernas, que todavía se utilizan hoy en día para tareas de visión por computadora. También explicaremos cómo funciona una CNN moderna.
 
-To explain how tasks are solved, we'll walk through what goes on inside the model to output useful predictions.
+Para explicar cómo se resuelven las tareas, caminaremos a través de lo que sucede dentro del modelo para generar predicciones útiles.
 
-- [Wav2Vec2](model_doc/wav2vec2) for audio classification and automatic speech recognition (ASR)
-- [Vision Transformer (ViT)](model_doc/vit) and [ConvNeXT](model_doc/convnext) for image classification
-- [DETR](model_doc/detr) for object detection
-- [Mask2Former](model_doc/mask2former) for image segmentation
-- [GLPN](model_doc/glpn) for depth estimation
-- [BERT](model_doc/bert) for NLP tasks like text classification, token classification and question answering that use an encoder
-- [GPT2](model_doc/gpt2) for NLP tasks like text generation that use a decoder
-- [BART](model_doc/bart) for NLP tasks like summarization and translation that use an encoder-decoder
+- [Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2) para clasificación de audio y reconocimiento automático de habla (ASR)
+- [Transformador de Visión (ViT)](https://huggingface.co/docs/transformers/model_doc/vit) y [ConvNeXT](https://huggingface.co/docs/transformers/model_doc/convnext) para clasificación de imágenes
+- [DETR](https://huggingface.co/docs/transformers/model_doc/detr) para detección de objetos
+- [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) para segmentación de imagen
+- [GLPN](https://huggingface.co/docs/transformers/model_doc/glpn) para estimación de profundidad
+- [BERT](https://huggingface.co/docs/transformers/model_doc/bert) para tareas de NLP como clasificación de texto, clasificación de tokens y preguntas y respuestas que utilizan un codificador
+- [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2) para tareas de NLP como generación de texto que utilizan un descodificador
+- [BART](https://huggingface.co/docs/transformers/model_doc/bart) para tareas de NLP como resumen y traducción que utilizan un codificador-descodificador
 
 <Tip>
 
-Before you go further, it is good to have some basic knowledge of the original Transformer architecture. Knowing how encoders, decoders, and attention work will aid you in understanding how different Transformer models work. If you're just getting started or need a refresher, check out our [course](https://huggingface.co/course/chapter1/4?fw=pt) for more information! 
+Antes de continuar, es bueno tener un conocimiento básico de la arquitectura original del Transformer. Saber cómo funcionan los codificadores, decodificadores y la atención te ayudará a entender cómo funcionan los diferentes modelos de Transformer. Si estás empezando o necesitas repasar, ¡echa un vistazo a nuestro [curso](https://huggingface.co/course/chapter1/4?fw=pt) para obtener más información!
 
 </Tip>
 
-## Speech and audio
+## Habla y audio
 
-[Wav2Vec2](model_doc/wav2vec2) is a self-supervised model pretrained on unlabeled speech data and finetuned on labeled data for audio classification and automatic speech recognition. 
+[Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2) es un modelo auto-supervisado preentrenado en datos de habla no etiquetados y ajustado en datos etiquetados para clasificación de audio y reconocimiento automático de voz. 
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/wav2vec2_architecture.png"/>
 </div>
 
-This model has four main components:
+Este modelo tiene cuatro componentes principales:
 
-1. A *feature encoder* takes the raw audio waveform, normalizes it to zero mean and unit variance, and converts it into a sequence of feature vectors that are each 20ms long.
+1. Un **codificador de características** toma la forma de onda de audio cruda, la normaliza a media cero y varianza unitaria, y la convierte en una secuencia de vectores de características, cada uno de 20 ms de duración.
 
-2. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. That's why the feature vectors are passed to a *quantization module*, which aims to learn discrete speech units. The speech unit is chosen from a collection of codewords, known as a *codebook* (you can think of this as the vocabulary). From the codebook, the vector or speech unit, that best represents the continuous audio input is chosen and forwarded through the model.
+2. Las formas de onda son continuas por naturaleza, por lo que no se pueden dividir en unidades separadas como una secuencia de texto se puede dividir en palabras. Por eso, los vectores de características se pasan a un **módulo de cuantificación**, que tiene como objetivo aprender unidades de habla discretas. La unidad de habla se elige de una colección de palabras de código, conocidas como *codebook* (puedes pensar en esto como el vocabulario). Del codebook, se elige el vector o unidad de habla que mejor representa la entrada de audio continua y se envía a través del modelo.
 
-3. About half of the feature vectors are randomly masked, and the masked feature vector is fed to a *context network*, which is a Transformer encoder that also adds relative positional embeddings.
+3. Alrededor de la mitad de los vectores de características se enmascaran aleatoriamente, y el vector de características enmascarado se alimenta a una **red de contexto**, que es un codificador Transformer que también agrega incrustaciones posicionales relativas.
 
-4. The pretraining objective of the context network is a *contrastive task*. The model has to predict the true quantized speech representation of the masked prediction from a set of false ones, encouraging the model to find the most similar context vector and quantized speech unit (the target label).
+4. El objetivo del preentrenamiento de la red de contexto es una **tarea contrastiva**. El modelo tiene que predecir la verdadera representación de habla cuantizada de la predicción enmascarada a partir de un conjunto de falsas, lo que anima al modelo a encontrar el vector de contexto y la unidad de habla cuantizada más similares (la etiqueta objetivo).
 
-Now that wav2vec2 is pretrained, you can finetune it on your data for audio classification or automatic speech recognition!
+¡Ahora que wav2vec2 está preentrenado, puedes ajustarlo con tus datos para clasificación de audio o reconocimiento automático de voz!
 
 ### Audio classification
 
