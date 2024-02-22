@@ -678,8 +678,6 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        model_kwargs["cache_position"] = model_inputs.get("cache_position", None)
-
         return model_kwargs
 
     def _reorder_cache(self, past_key_values, beam_idx):
@@ -4931,9 +4929,8 @@ def _split_model_inputs(
     # Here we can have four types of values: tensors, tuples of tensors and booleans, and encoder_outputs which is a
     # ModelOutput object.
     # bool should not be split but replicated for each split
-    bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
-    keys_to_ignore = ["cache_position", "encoder_outputs"]
-    non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
+    bool_keys = [k for k in keys if isinstance(model_input[k], bool)]
+    non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k != "encoder_outputs"]
 
     # we split the tensors and tuples of tensors
     data_split_list = [

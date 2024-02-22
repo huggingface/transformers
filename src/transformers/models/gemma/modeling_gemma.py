@@ -247,7 +247,7 @@ class GemmaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -334,7 +334,7 @@ class GemmaFlashAttention2(GemmaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -533,7 +533,7 @@ class GemmaSdpaAttention(GemmaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -835,7 +835,6 @@ class GemmaModel(GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -864,13 +863,21 @@ class GemmaModel(GemmaPreTrainedModel):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_seen_tokens = past_key_values.get_seq_length()
 
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            if isinstance(past_key_values, StaticCache):
+                raise ValueError("position_ids is a required argument when using StaticCache.")
+            position_ids = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            ).unsqueeze(0)
+
+        # One of the rows in `position_ids` contains the highest sequence of cache indexes, excluding left-padding
+        # applied on all batch members. Left-padding on all batch members can be detected from the `attention_mask`.
+        cache_position = torch.max(position_ids, dim=0).values
+        if attention_mask is None:
+            padded_positions = 0
+        else:
+            padded_positions = torch.sum(attention_mask == 0, dim=1).min()
+        cache_position = cache_position + padded_positions
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
@@ -1025,7 +1032,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1069,7 +1075,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1137,23 +1142,9 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids.masked_fill_(attention_mask == 0, 0)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        if getattr(self.model.layers[0].self_attn, "past_key_value", None) is not None:
-            # generation with static cache
-            cache_position = kwargs.get("cache_position", None)
-            if cache_position is None:
-                past_length = 0
-            else:
-                past_length = cache_position[-1] + 1
-            input_ids = input_ids[:, past_length:]
-            position_ids = position_ids[:, past_length:]
-
-        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
-        # same goes for position ids. Could also help with continued generation.
-        cache_position = torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1167,7 +1158,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         model_inputs.update(
             {
                 "position_ids": position_ids.contiguous(),
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
