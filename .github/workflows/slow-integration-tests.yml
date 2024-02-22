@@ -19,14 +19,14 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
-    steps:
-      - env:
-        MACHINE_TYPE: ${{ matrix.machine_type }}
-        RUN_SLOW: 1
-        DS_BUILD_CPU_ADAM: 1 
-        DS_BUILD_FUSED_ADAM: 1
-        MAX_JOBS: 4
+    env:
+      MACHINE_TYPE: ${{ matrix.machine_type }}
+      RUN_SLOW: 1
+      DS_BUILD_CPU_ADAM: 1 
+      DS_BUILD_FUSED_ADAM: 1
+      MAX_JOBS: 4
 
+    steps:
       - uses: actions/checkout@v3
       - name: Cleanup
         run: |
