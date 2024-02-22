@@ -54,7 +54,7 @@ We can now infer with `pipe`, by passing in both of the images.
 outputs = pipe([image_real, image_gen])
 ```
 
-The output is contains embeddings of those two images. To get the similarity, we need to pass them to a similarity function. 
+The output contains embeddings of those two images. To get the similarity, we need to pass them to a similarity function. 
 
 ```python
 from torch.nn.functional import cosine_similarity
