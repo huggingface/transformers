@@ -150,6 +150,11 @@ Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Sin
 [[autodoc]] MistralForSequenceClassification
     - forward
 
+## MistralForQuestionAnswering
+
+[[autodoc]] MistralForQuestionAnswering
+    - forward
+
 ## FlaxMistralModel
 
 [[autodoc]] FlaxMistralModel
