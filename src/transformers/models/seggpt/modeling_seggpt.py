@@ -66,16 +66,16 @@ class SegGptEncoderOutput(ModelOutput):
         attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
             Tuple of *torch.FloatTensor* (one for each layer) of shape
             `(batch_size, num_heads, seq_len, seq_len)`.
-        intermediate_features (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.intermediate_feature_indices` is set):
+        intermediate_hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.intermediate_hidden_state_indices` is set):
             Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-            Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_feature_indices`.
+            Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
             Additionaly, each feature passes through a LayerNorm.
     """
 
     last_hidden_state: torch.FloatTensor
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    intermediate_features: Optional[Tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -481,7 +481,7 @@ class SegGptEncoder(nn.Module):
     ) -> Union[tuple, SegGptEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        intermediate_features = []
+        intermediate_hidden_states = []
 
         for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
@@ -508,8 +508,8 @@ class SegGptEncoder(nn.Module):
                     hidden_states[: hidden_states.shape[0] // 2] + hidden_states[hidden_states.shape[0] // 2 :]
                 ) * 0.5
 
-            if i in self.config.intermediate_feature_indices:
-                intermediate_features.append(self.layernorm(hidden_states))
+            if i in self.config.intermediate_hidden_state_indices:
+                intermediate_hidden_states.append(self.layernorm(hidden_states))
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -520,14 +520,14 @@ class SegGptEncoder(nn.Module):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, all_hidden_states, all_self_attentions, intermediate_features]
+                for v in [hidden_states, all_hidden_states, all_self_attentions, intermediate_hidden_states]
                 if v is not None
             )
         return SegGptEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            intermediate_features=intermediate_features,
+            intermediate_hidden_states=intermediate_hidden_states,
         )
 
 
@@ -590,7 +590,7 @@ class SegGptDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder_embed = nn.Linear(
-            config.hidden_size * len(config.intermediate_feature_indices),
+            config.hidden_size * len(config.intermediate_hidden_state_indices),
             config.patch_size**2 * config.decoder_hidden_size,
             bias=True,
         )
@@ -984,9 +984,9 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             return_dict=return_dict,
         )
 
-        intermediate_features = outputs.intermediate_features if return_dict else outputs[-1]
-        intermediate_features = torch.cat(intermediate_features, dim=-1)
-        pred_masks = self.decoder(intermediate_features)
+        intermediate_hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[-1]
+        intermediate_hidden_states = torch.cat(intermediate_hidden_states, dim=-1)
+        pred_masks = self.decoder(intermediate_hidden_states)
 
         loss = None
         if labels is not None:
