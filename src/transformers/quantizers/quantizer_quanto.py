@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, Optional, List
+import importlib
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+from packaging import version
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -20,7 +23,6 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations import replace_with_quanto_layers
 from ..utils import is_quanto_available, is_torch_available, logging
 from ..utils.quantization_config import QuantoConfig
 
@@ -38,14 +40,30 @@ class QuantoHfQuantizer(HfQuantizer):
 
     required_packages = ["quanto", "accelerate"]
     requires_parameters_quantization = True
+    requires_calibration = False
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
-        self.requires_calibration = quantization_config.activations is not None
         super().__init__(quantization_config, **kwargs)
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker
+        """
+        if self.quantization_config.activations is not None and not self.pre_quantized:
+            raise ValueError("We don't support quantizing the activations with transformers library."
+                            "Use quanto library for more complex use cases such as activations quantization, calibration and quantization aware training."
+                            )
 
     def validate_environment(self, *args, **kwargs):
         if not is_quanto_available():
             raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
+        device_map = kwargs.get("device_map", None)
+        if device_map is not None and isinstance(device_map, dict):
+            if "cpu" in device_map.values() or "disk" in device_map.values():
+                if version.parse(importlib.metadata.version("accelerate")) <= version.parse("0.27.0"):
+                    raise ValueError("You have a version of `accelerate` that is not compatible cpu/disk offload with quanto quantized model. "
+                                    "You need to install a version of accelerate > 0.27.0.")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -98,6 +116,7 @@ class QuantoHfQuantizer(HfQuantizer):
         """
         import quanto
         module, tensor_name = get_module_from_name(model, param_name)
+        #We only quantize the weights and the bias is not quantized.
         if isinstance(module, quanto.QModuleMixin) and tensor_name == "weight":
             # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
             if module.frozen:
@@ -117,19 +136,30 @@ class QuantoHfQuantizer(HfQuantizer):
         **kwargs
     ):
         """
-        Create the quantized parameter by calling .freeze() after setting it to the mpdule.
+        Create the quantized parameter by calling .freeze() after setting it to the module.
         """
         from accelerate.utils import set_module_tensor_to_device
 
         set_module_tensor_to_device(model, param_name, target_device, param_value)
-        module, tensor_name = get_module_from_name(model, param_name)
-        # we don't freeze the module if the module is on the meta device
-        if module._parameters[tensor_name].device != torch.device("meta"):
-            module.freeze()
-            module.weight.requires_grad = False
+        module, _ = get_module_from_name(model, param_name)
+        module.freeze()
+        module.weight.requires_grad = False
 
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model, _ = replace_with_quanto_layers(model, quantization_config=self.quantization_config)
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs):
+        from ..integrations import get_keys_to_not_convert, replace_with_quanto_layers
+
+        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
+        if self.quantization_config.modules_to_not_convert is None:
+            self.modules_to_not_convert = get_keys_to_not_convert(model)
+        else:
+            self.modules_to_not_convert = self.quantization_config.modules_to_not_convert
+
+        if not isinstance(self.modules_to_not_convert, list):
+            self.modules_to_not_convert = [self.modules_to_not_convert]
+
+        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+
+        model, _ = replace_with_quanto_layers(model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config)
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model):

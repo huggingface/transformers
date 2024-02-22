@@ -44,8 +44,7 @@ class QuantoTestIntegration(unittest.TestCase):
     model_id = "facebook/opt-350m"
 
     def setUp(self):
-        # empty model
-        config = AutoConfig.from_pretrained(self.model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        config = AutoConfig.from_pretrained(self.model_id)
         with init_empty_weights():
             self.model = AutoModelForCausalLM.from_config(config)
         self.nb_linear = 0
@@ -114,57 +113,6 @@ class QuantoTestIntegration(unittest.TestCase):
         self.assertEqual(self.nb_linear - 1, nb_qlinear)
 
 
-# @slow
-# @require_torch_gpu
-# @require_quanto
-# @require_accelerate
-# class QuantoInferenceTest(unittest.TestCase):
-#     model_name = ""
-
-#     input_text = "Hello my name is"
-
-#     EXPECTED_OUTPUT = ""
-#     device_map = "cuda"
-
-#     # called only once for all test in this class
-#     @classmethod
-#     def setUpClass(cls):
-#         """
-#         Setup quantized model
-#         """
-#         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-#         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-#             cls.model_name,
-#             device_map=cls.device_map,
-#         )
-
-#     def tearDown(self):
-#         torch.cuda.empty_cache()
-#         gc.collect()
-
-#     def test_quantized_model(self):
-#         """
-#         Simple test that checks if the quantized model is working properly
-#         """
-#         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-#         output = self.quantized_model.generate(**input_ids, max_new_tokens=40)
-#         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-#     def test_save_pretrained(self):
-#         """
-#         Simple test that checks if the quantized model is working properly after being saved and loaded
-#         """
-#         with tempfile.TemporaryDirectory() as tmpdirname:
-#             self.quantized_model.save_pretrained(tmpdirname)
-#             model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
-
-#             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-#             output = model.generate(**input_ids, max_new_tokens=40)
-#             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-
 @slow
 @require_torch_gpu
 @require_quanto
@@ -182,7 +130,7 @@ class QuantoQuantizationTest(unittest.TestCase):
 
     input_text = "Hello my name is"
 
-    EXPECTED_OUTPUTS = "Hello my name is Manjit\nI am a student in Computer"
+    EXPECTED_OUTPUTS = "Hello my name is John, I am a professional photographer and I"
 
     def setUp(self):
         """
@@ -230,14 +178,33 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         self.check_inference_correctness(self.quantized_model, "cuda")
 
-    def test_move_quantized_model(self):
+    def test_quantized_model_layers(self):
+        from quanto import QModuleMixin, QTensor
         """
-        Simple test to check if the quantized weights were properly moved to right device
+        Suite of simple test to check if the layers are quantized and are working properly
         """
-        self.assertEqual(
-            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, "cpu"
+        # Test the type of the quantized layer
+        self.assertTrue(
+            isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value,QModuleMixin)
         )
-        self.quantized_model.to(0)
+        self.assertTrue(
+            isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value.weight,QTensor)
+        )
+        self.assertEqual(
+            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.dtype, torch.int8
+        )
+        self.assertEqual(
+            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._scale.dtype, torch.float32
+        )
+        # check that the lm_head was indeed not quantized, just like bnb
+        self.assertTrue(
+            isinstance(self.quantized_model.lm_head, torch.nn.Linear) and not isinstance(self.quantized_model.lm_head, QModuleMixin)
+        )
+        if self.device_map in ["cpu","cuda"]:
+            self.assertEqual(
+            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, self.device_map
+        )
+            self.quantized_model.to(0)
         self.assertEqual(
             self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, "cuda"
         )
@@ -248,7 +215,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float32, device_map="cpu")
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, torch_dtype=torch.float32, device_map="cpu"
+            )
             # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
             self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
@@ -258,18 +227,121 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, torch_dtype=torch.float32, device_map="cpu")
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, torch_dtype=torch.float32, device_map="cpu"
+            )
             # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
             self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
-# class QuantoQuantizationW4Test(QuantoQuantizationTest):
-#     weights = "torch.int4"
+    def test_compare_with_quanto(self):
+        from quanto import freeze, qint8, quantize
+        w_mapping = {'int8': qint8}
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device_map,
+            torch_dtype=torch.float32,
+        )
+        # we do not quantize the lm_head since we don't do that in transformers
+        quantize(model.transformer,weights=w_mapping[self.weights])
+        freeze(model.transformer)
 
-# class QuantoQuantizationActivationTest(unittest.TestCase):
-#     def test_quantize_activation(self, activation):
-#         quantization_config = QuantoConfig(
-#             weights="int8",
-#             activations="int8",
-#         )
-#         with self.assertRaises(RuntimeError):
-#             AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", quantization_config=quantization_config)
+        d0 = dict(model.named_parameters())
+        d1 = dict(self.quantized_model.named_parameters())
+        self.assertTrue(d0.keys() == d1.keys())
+        for k in d0.keys():
+            self.assertTrue(d0[k].shape == d1[k].shape)
+            self.assertTrue(d0[k].device.type == d1[k].device.type)
+            self.assertTrue(d0[k].device == d1[k].device)
+            self.assertTrue(d0[k].dtype == d1[k].dtype)
+            self.assertTrue(torch.equal(d0[k], d1[k].to(d0[k].device)))
+
+class QuantoQuantizationTestOffload(QuantoQuantizationTest):
+    device_map = {
+        "transformer.word_embeddings": 0,
+        "transformer.word_embeddings_layernorm": 0,
+        "transformer.ln_f": 0,
+        "transformer.h.0": 0,
+        "transformer.h.1": "cpu",
+        "transformer.h.2": "disk",
+        "transformer.h.3": 0,
+        "transformer.h.4": 0,
+        "transformer.h.5": 0,
+        "transformer.h.6": 0,
+        "transformer.h.7": 0,
+        "transformer.h.8": 0,
+        "transformer.h.9": 0,
+        "transformer.h.10": 0,
+        "transformer.h.11": 0,
+        "transformer.h.12": 0,
+        "transformer.h.13": 0,
+        "transformer.h.14": 0,
+        "transformer.h.15": 0,
+        "transformer.h.16": 0,
+        "transformer.h.17": 0,
+        "transformer.h.18": 0,
+        "transformer.h.19": 0,
+        "transformer.h.20": 0,
+        "transformer.h.21": 0,
+        "transformer.h.22": 0,
+        "transformer.h.23": 0,
+        "lm_head": 0,
+    }
+    # we can't save offloaded values
+    def test_serialization_bin(self):
+        pass
+
+    def test_serialization_safetensors(self):
+        pass
+
+    def test_compare_with_quanto(self):
+        pass
+
+    def test_check_offload_quantized(self):
+        """
+        We check that we have quantized value in the cpu and unquantized value for values stored in the disk
+        """
+        import quanto
+        cpu_weights = self.quantized_model.transformer.h[1].self_attention.query_key_value._hf_hook.weights_map["weight"]
+        disk_weights = self.quantized_model.transformer.h[2].self_attention.query_key_value._hf_hook.weights_map["weight"]
+        self.assertTrue(isinstance(cpu_weights,quanto.QTensor))
+        self.assertTrue(isinstance(disk_weights,torch.Tensor) and not isinstance(disk_weights,quanto.QTensor))
+
+class QuantoQuantizationTestSerialization(QuantoQuantizationTest):
+    """"
+    Perform the same tests as in QuantoQuantizationTest but with a serialized model.
+    """
+    def setUp(self):
+        """
+        Setup quantized model
+        """
+        quantization_config = QuantoConfig(
+            weights=self.weights,
+            activations=self.activations,
+        )
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device_map,
+            quantization_config=quantization_config,
+            torch_dtype=torch.float32,
+        )
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
+            self.quantized_model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, torch_dtype=torch.float32, device_map=self.device_map
+            )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        self.have_accelerate_hooks = (
+            getattr(self.quantized_model, "hf_device_map", False) and len(self.quantized_model.hf_device_map) > 1
+        )
+
+class QuantoQuantizationActivationTest(unittest.TestCase):
+    def test_quantize_activation(self):
+        quantization_config = QuantoConfig(
+            weights="int8",
+            activations="int8",
+        )
+        with self.assertRaises(ValueError) as e:
+            AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", quantization_config=quantization_config)
+        self.assertIn("We don't support quantizing the activations with transformers library", str(e.exception))

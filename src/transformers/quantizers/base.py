@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import is_torch_available
 from ..utils.quantization_config import QuantizationConfigMixin
@@ -110,7 +110,7 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
-    def update_missing_keys(self, model, missing_keys: List[str]) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         """
         Override this method if you want to adjust the `missing_keys`.
 

@@ -44,10 +44,10 @@ def replace_with_quanto_layers(
             A boolean that indicates if the conversion has been successful or not. This is used for recursion and
             should not be passed by the user.
     """
-    from quanto import QLayerNorm, QLinear, qfloat8_e4m3fn, qfloat8_e5m2, qint8
     from accelerate import init_empty_weights
+    from quanto import QLayerNorm, QLinear, qfloat8_e4m3fn, qfloat8_e5m2, qint2, qint4, qint8
 
-    w_mapping = {"int8": qint8}
+    w_mapping = {"int8": qint8, "int4": qint4, "int2": qint2}
     a_mapping = {None: None, "int8": qint8, "fp8_e5m2": qfloat8_e5m2, "fp8_e4m3": qfloat8_e4m3fn}
 
     if modules_to_not_convert is None:
