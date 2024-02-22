@@ -87,7 +87,7 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str,Any]) -> Dict[str,Any]:
+    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str, Any]) -> Dict[str, Any]:
         """
         Override this method if you want to pass a override the existing weights_only_kwarg with a new
         one.

@@ -51,9 +51,10 @@ class QuantoHfQuantizer(HfQuantizer):
         Safety checker
         """
         if self.quantization_config.activations is not None and not self.pre_quantized:
-            raise ValueError("We don't support quantizing the activations with transformers library."
-                            "Use quanto library for more complex use cases such as activations quantization, calibration and quantization aware training."
-                            )
+            raise ValueError(
+                "We don't support quantizing the activations with transformers library."
+                "Use quanto library for more complex use cases such as activations quantization, calibration and quantization aware training."
+            )
 
     def validate_environment(self, *args, **kwargs):
         if not is_quanto_available():
@@ -62,8 +63,10 @@ class QuantoHfQuantizer(HfQuantizer):
         if device_map is not None and isinstance(device_map, dict):
             if "cpu" in device_map.values() or "disk" in device_map.values():
                 if version.parse(importlib.metadata.version("accelerate")) <= version.parse("0.27.0"):
-                    raise ValueError("You have a version of `accelerate` that is not compatible cpu/disk offload with quanto quantized model. "
-                                    "You need to install a version of accelerate > 0.27.0.")
+                    raise ValueError(
+                        "You have a version of `accelerate` that is not compatible cpu/disk offload with quanto quantized model. "
+                        "You need to install a version of accelerate > 0.27.0."
+                    )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -82,12 +85,13 @@ class QuantoHfQuantizer(HfQuantizer):
                 )
         return torch_dtype
 
-    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str,Any]) -> Dict[str,Any]:
-        weights_only_kwarg["weights_only"]=False
+    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str, Any]) -> Dict[str, Any]:
+        weights_only_kwarg["weights_only"] = False
         return weights_only_kwarg
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         import quanto
+
         # if the model is prequantized, we don't need to remove any keys
         if self.pre_quantized:
             return missing_keys
@@ -102,9 +106,9 @@ class QuantoHfQuantizer(HfQuantizer):
             elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict_keys):
                 updated_key = ".".join(key.split(".")[1:])
             module, tensor_name = get_module_from_name(model, updated_key)
-        # we remove some of the missing keys since when we replaced the modules by QModuleMixin, we created a few buffers.
-            if isinstance(module,quanto.QModuleMixin):
-                if (tensor_name != "weight" and tensor_name != "bias"):
+            # we remove some of the missing keys since when we replaced the modules by QModuleMixin, we created a few buffers.
+            if isinstance(module, quanto.QModuleMixin):
+                if tensor_name != "weight" and tensor_name != "bias":
                     not_missing_keys.append(key)
         return [k for k in missing_keys if k not in not_missing_keys]
 
@@ -115,8 +119,9 @@ class QuantoHfQuantizer(HfQuantizer):
         Check if a parameter needs to be quantized.
         """
         import quanto
+
         module, tensor_name = get_module_from_name(model, param_name)
-        #We only quantize the weights and the bias is not quantized.
+        # We only quantize the weights and the bias is not quantized.
         if isinstance(module, quanto.QModuleMixin) and tensor_name == "weight":
             # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
             if module.frozen:
@@ -133,7 +138,7 @@ class QuantoHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         *args,
-        **kwargs
+        **kwargs,
     ):
         """
         Create the quantized parameter by calling .freeze() after setting it to the module.
@@ -145,7 +150,9 @@ class QuantoHfQuantizer(HfQuantizer):
         module.freeze()
         module.weight.requires_grad = False
 
-    def _process_model_before_weight_loading(self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs):
+    def _process_model_before_weight_loading(
+        self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs
+    ):
         from ..integrations import get_keys_to_not_convert, replace_with_quanto_layers
 
         # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
@@ -159,7 +166,9 @@ class QuantoHfQuantizer(HfQuantizer):
 
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        model, _ = replace_with_quanto_layers(model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config)
+        model, _ = replace_with_quanto_layers(
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+        )
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model):

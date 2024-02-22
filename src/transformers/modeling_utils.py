@@ -3305,7 +3305,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file,hf_quantizer=hf_quantizer)
+                state_dict = load_state_dict(resolved_archive_file, hf_quantizer=hf_quantizer)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3326,7 +3326,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0],hf_quantizer=hf_quantizer)
+                                one_state_dict = load_state_dict(resolved_archive_file[0], hf_quantizer=hf_quantizer)
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(

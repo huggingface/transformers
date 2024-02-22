@@ -180,15 +180,14 @@ class QuantoQuantizationTest(unittest.TestCase):
 
     def test_quantized_model_layers(self):
         from quanto import QModuleMixin, QTensor
+
         """
         Suite of simple test to check if the layers are quantized and are working properly
         """
         # Test the type of the quantized layer
+        self.assertTrue(isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value, QModuleMixin))
         self.assertTrue(
-            isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value,QModuleMixin)
-        )
-        self.assertTrue(
-            isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value.weight,QTensor)
+            isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value.weight, QTensor)
         )
         self.assertEqual(
             self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.dtype, torch.int8
@@ -198,12 +197,14 @@ class QuantoQuantizationTest(unittest.TestCase):
         )
         # check that the lm_head was indeed not quantized, just like bnb
         self.assertTrue(
-            isinstance(self.quantized_model.lm_head, torch.nn.Linear) and not isinstance(self.quantized_model.lm_head, QModuleMixin)
+            isinstance(self.quantized_model.lm_head, torch.nn.Linear)
+            and not isinstance(self.quantized_model.lm_head, QModuleMixin)
         )
-        if self.device_map in ["cpu","cuda"]:
+        if self.device_map in ["cpu", "cuda"]:
             self.assertEqual(
-            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, self.device_map
-        )
+                self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type,
+                self.device_map,
+            )
             self.quantized_model.to(0)
         self.assertEqual(
             self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.device.type, "cuda"
@@ -235,14 +236,15 @@ class QuantoQuantizationTest(unittest.TestCase):
 
     def test_compare_with_quanto(self):
         from quanto import freeze, qint8, quantize
-        w_mapping = {'int8': qint8}
+
+        w_mapping = {"int8": qint8}
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
             torch_dtype=torch.float32,
         )
         # we do not quantize the lm_head since we don't do that in transformers
-        quantize(model.transformer,weights=w_mapping[self.weights])
+        quantize(model.transformer, weights=w_mapping[self.weights])
         freeze(model.transformer)
 
         d0 = dict(model.named_parameters())
@@ -254,6 +256,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             self.assertTrue(d0[k].device == d1[k].device)
             self.assertTrue(d0[k].dtype == d1[k].dtype)
             self.assertTrue(torch.equal(d0[k], d1[k].to(d0[k].device)))
+
 
 class QuantoQuantizationTestOffload(QuantoQuantizationTest):
     device_map = {
@@ -286,6 +289,7 @@ class QuantoQuantizationTestOffload(QuantoQuantizationTest):
         "transformer.h.23": 0,
         "lm_head": 0,
     }
+
     # we can't save offloaded values
     def test_serialization_bin(self):
         pass
@@ -301,15 +305,22 @@ class QuantoQuantizationTestOffload(QuantoQuantizationTest):
         We check that we have quantized value in the cpu and unquantized value for values stored in the disk
         """
         import quanto
-        cpu_weights = self.quantized_model.transformer.h[1].self_attention.query_key_value._hf_hook.weights_map["weight"]
-        disk_weights = self.quantized_model.transformer.h[2].self_attention.query_key_value._hf_hook.weights_map["weight"]
-        self.assertTrue(isinstance(cpu_weights,quanto.QTensor))
-        self.assertTrue(isinstance(disk_weights,torch.Tensor) and not isinstance(disk_weights,quanto.QTensor))
+
+        cpu_weights = self.quantized_model.transformer.h[1].self_attention.query_key_value._hf_hook.weights_map[
+            "weight"
+        ]
+        disk_weights = self.quantized_model.transformer.h[2].self_attention.query_key_value._hf_hook.weights_map[
+            "weight"
+        ]
+        self.assertTrue(isinstance(cpu_weights, quanto.QTensor))
+        self.assertTrue(isinstance(disk_weights, torch.Tensor) and not isinstance(disk_weights, quanto.QTensor))
+
 
 class QuantoQuantizationTestSerialization(QuantoQuantizationTest):
-    """"
+    """ "
     Perform the same tests as in QuantoQuantizationTest but with a serialized model.
     """
+
     def setUp(self):
         """
         Setup quantized model
@@ -335,6 +346,7 @@ class QuantoQuantizationTestSerialization(QuantoQuantizationTest):
         self.have_accelerate_hooks = (
             getattr(self.quantized_model, "hf_device_map", False) and len(self.quantized_model.hf_device_map) > 1
         )
+
 
 class QuantoQuantizationActivationTest(unittest.TestCase):
     def test_quantize_activation(self):
