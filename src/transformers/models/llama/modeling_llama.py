@@ -984,9 +984,9 @@ class LlamaModel(LlamaPreTrainedModel):
         if attention_mask is None:
             padded_offset = 0
         else:
-            padded_offset = (1 - torch.sum(attention_mask, dim=0).clamp(max=1)).cumsum(-1)
+            padded_offset = (1 - torch.sum(attention_mask.to(torch.int64), dim=0).clamp(max=1)).cumsum(-1)
             padded_offset = torch.cat(
-                (torch.zeros((1,), dtype=padded_offset.dtype, device=padded_offset.device), padded_offset)
+                (torch.zeros((1,), dtype=torch.int64, device=padded_offset.device), padded_offset)
             )[-cache_position.shape[0] - 1 : -1]
         cache_position = cache_position + padded_offset
 
