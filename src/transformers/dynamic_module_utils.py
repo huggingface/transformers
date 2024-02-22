@@ -510,7 +510,7 @@ def get_class_from_dynamic_module(
 
     # And lastly we get the class inside our newly created module
     final_module = get_cached_module_file(
-        pretrained_model_name_or_path,
+        module_path_or_repo_id,
         module_filename,
         cache_dir=cache_dir,
         force_download=force_download,
