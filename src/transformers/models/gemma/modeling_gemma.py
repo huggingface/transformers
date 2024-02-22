@@ -874,10 +874,13 @@ class GemmaModel(GemmaPreTrainedModel):
         # applied on all batch members. Left-padding on all batch members can be detected from the `attention_mask`.
         cache_position = torch.max(position_ids, dim=0).values
         if attention_mask is None:
-            padded_positions = 0
+            padded_offset = 0
         else:
-            padded_positions = torch.sum(attention_mask == 0, dim=1).min()
-        cache_position = cache_position + padded_positions
+            padded_offset = (1 - torch.sum(attention_mask, dim=0).clamp(max=1)).cumsum(-1)
+            padded_offset = torch.cat(
+                (torch.zeros((1,), dtype=padded_offset.dtype, device=padded_offset.device), padded_offset)
+            )[-cache_position.shape[0] - 1 : -1]
+        cache_position = cache_position + padded_offset
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
