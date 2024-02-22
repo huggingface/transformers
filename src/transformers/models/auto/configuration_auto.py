@@ -54,6 +54,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertConfig"),
         ("canine", "CanineConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
@@ -102,6 +103,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
         ("fuyu", "FuyuConfig"),
+        ("gemma", "GemmaConfig"),
         ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
@@ -335,6 +337,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fuyu", "FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gemma", "GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -512,6 +515,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
         ("chinese_clip", "Chinese-CLIP"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clip_vision_model", "CLIPVisionModel"),
@@ -566,6 +570,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
         ("fuyu", "Fuyu"),
+        ("gemma", "Gemma"),
         ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -773,6 +778,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("siglip_vision_model", "siglip"),
+        ("chinese_clip_vision_model", "chinese_clip"),
     ]
 )
 
