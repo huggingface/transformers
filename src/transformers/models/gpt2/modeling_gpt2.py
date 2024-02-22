@@ -181,6 +181,7 @@ class GPT2Attention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.is_causal = True
 
         self.pruned_heads = set()
 
@@ -387,11 +388,7 @@ class GPT2FlashAttention2(GPT2Attention):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
-        output_attentions = False
-        if not output_attentions:
-            attn_weights = None
-
-        batch_size, seq_len, _ = hidden_states.size()
+        bsz, _, _ = hidden_states.size()
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
@@ -410,7 +407,8 @@ class GPT2FlashAttention2(GPT2Attention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
-            past_key, past_value = layer_past
+            past_key = layer_past[0]
+            past_value = layer_past[1]
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
 
@@ -419,20 +417,55 @@ class GPT2FlashAttention2(GPT2Attention):
         else:
             present = None
 
-        # if self.reorder_and_upcast_attn:
-        #     attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
-        # else:
-        #     attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-        dropout_rate = self.attn_dropout.p if self.training else 0.0
-        attn_output = self._flash_attention_forward(query, key, value, attention_mask, seq_len, dropout=dropout_rate)
+        query_length = query.shape[2]
+        tgt_len = key.shape[2]
 
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-        attn_output = self.c_proj(attn_output)
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        query = query.transpose(1, 2).view(bsz, query_length, self.num_heads, self.head_dim)
+        key = key.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
+        value = value.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
+
+        attn_dropout = self.attn_dropout.p if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
+        if query.dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query = query.to(target_dtype)
+            key = key.to(target_dtype)
+            value = value.to(target_dtype)
+
+        attn_output = self._flash_attention_forward(
+            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=1.0
+        )
+
+        attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
+        attn_output = self.c_proj(attn_weights_reshaped)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, present, attn_weights)
+        outputs = (attn_output, present)
+        if output_attentions:
+            outputs += (attn_weights_reshaped,)
 
-        return outputs  # a, present, (attentions)
+        return outputs
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
@@ -549,6 +582,12 @@ class GPT2MLP(nn.Module):
         return hidden_states
 
 
+GPT2_ATTENTION_CLASSES = {
+    "eager": GPT2Attention,
+    "flash_attention_2": GPT2FlashAttention2,
+}
+
+
 class GPT2Block(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -556,7 +595,7 @@ class GPT2Block(nn.Module):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPT2Attention(config, layer_idx=layer_idx)
+        self.attn = GPT2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
@@ -640,6 +679,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
