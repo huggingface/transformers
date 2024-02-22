@@ -6,6 +6,7 @@ export PYTHONPATH = src
 check_dirs := examples tests src utils
 
 exclude_folders := examples/research_projects
+integration_tests_dir := tests/deepspeed tests/fsdp tests/peft_integration tests/trainer tests/extended
 
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
@@ -101,6 +102,11 @@ test-examples:
 test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
 	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
 
+run_integration_tests:
+	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_integration $(integration_tests_dir) 
+
+run_flash_attn_tests:
+	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_flash_attention -m "flash_attn_test" tests/models/
 
 # Release stuff
 

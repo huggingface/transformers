@@ -1,0 +1,95 @@
+name: Self-hosted runner - SLOW integration tests (DeepSpeed, PEFT, FA2, etc.) (scheduled)
+
+on:
+  repository_dispatch:
+  schedule:
+    - cron: "20 5 * * *"
+  push:
+    branches:
+      - run_scheduled_ci*
+
+jobs:
+  run_integration_tests:
+    name: Run all integration tests
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, a10, daily-ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "40gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+
+    steps:
+      - env:
+        MACHINE_TYPE: ${{ matrix.machine_type }}
+        RUN_SLOW: 1
+        DS_BUILD_CPU_ADAM: 1 
+        DS_BUILD_FUSED_ADAM: 1 
+        
+      - uses: actions/checkout@v3
+      - name: Cleanup
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
+          rm -rf reports
+
+      - name: Show installed libraries and their versions
+        run: |
+          pip freeze 
+          python utils/print_env.py
+
+      # To avoid unknown test failures
+      - name: Pre build DeepSpeed *again*
+        run: |
+          python3 -m pip uninstall -y deepspeed
+          python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+
+      - name: Install Flash Attention
+        run: |
+          MAX_JOBS=4 pip install flash-attn --no-build-isolation
+
+      - name: Run integration tests
+        run: |
+          make run_integration_tests
+
+      - name: Run Flash Attention-2 tests
+        run: |
+          make run_flash_attn_tests
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_integration/failures_short.txt
+          cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_flash_attention/failures_short.txt
+
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-22.04
+    if: always()
+    needs: run_integration_tests
+    steps:
+      - name: Preliminary job status
+        shell: bash
+        run: |
+          echo "Tests status: ${{ needs.run_integration_tests.result }}"
+
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Send message to Slack
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-integrations
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          CI_SLACK_REPORT_CHANNEL_ID: transformers-ci-daily-integrations
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          CI_EVENT: scheduled
+          CI_SHA: ${{ github.sha }}
+          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+          SETUP_STATUS: ${{ needs.run_integration_tests.result }}
+        run: |
+          sudo apt-get install -y curl
+          pip install slack_sdk
+          pip show slack_sdk
+          python utils/notification_service.py
