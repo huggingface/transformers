@@ -2018,7 +2018,6 @@ class FiDForConditionalGeneration(FiDPreTrainedModel):
         >>> # The input is always expected to be in the shape of either (batch, length) or (batch, n_passages, length)
         >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors = "pt", padding=True).input_ids.unsqueeze(0)  # Batch size 1
         >>> outputs = model.generate(input_ids)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
