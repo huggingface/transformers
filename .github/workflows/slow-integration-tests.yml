@@ -17,15 +17,16 @@ jobs:
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, a10, daily-ci]
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "40gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "40gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
       - env:
         MACHINE_TYPE: ${{ matrix.machine_type }}
         RUN_SLOW: 1
         DS_BUILD_CPU_ADAM: 1 
-        DS_BUILD_FUSED_ADAM: 1 
-        
+        DS_BUILD_FUSED_ADAM: 1
+        MAX_JOBS: 4
+
       - uses: actions/checkout@v3
       - name: Cleanup
         run: |
@@ -46,7 +47,7 @@ jobs:
 
       - name: Install Flash Attention
         run: |
-          MAX_JOBS=4 pip install flash-attn --no-build-isolation
+          pip install flash-attn --no-build-isolation
 
       - name: Run integration tests
         run: |
