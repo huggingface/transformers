@@ -78,7 +78,7 @@ processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 model = AutoModel.from_pretrained("google/vit-base-patch16-224").to(DEVICE)
 ```
 
-Let's write a simple function for inference. We will pass the inputs to the `processor` first and pass it's outputs to the `model`.
+Let's write a simple function for inference. We will pass the inputs to the `processor` first and pass its outputs to the `model`.
 
 ```python
 def infer(image):
