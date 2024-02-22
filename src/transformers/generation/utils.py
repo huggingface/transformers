@@ -4417,7 +4417,7 @@ class GenerationMixin:
         ... )
         >>> outputs = model.assisted_decoding(
         ...     input_ids,
-        ...     candidate_generator=candidate_generator
+        ...     candidate_generator=candidate_generator,
         ...     logits_processor=logits_processor,
         ...     stopping_criteria=stopping_criteria,
         ... )
