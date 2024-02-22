@@ -26,6 +26,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 </Tip>
 
+## AqlmConfig
+
+[[autodoc]] AqlmConfig
+
 ## AwqConfig
 
 [[autodoc]] AwqConfig

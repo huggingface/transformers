@@ -34,7 +34,7 @@ For example, consider these two sequences:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence_a = "This is a short sequence."
 >>> sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
@@ -159,7 +159,7 @@ The process of selecting and transforming raw data into a set of features that a
 
 In each residual attention block in transformers the self-attention layer is usually followed by 2 feed forward layers.
 The intermediate embedding size of the feed forward layers is often bigger than the hidden size of the model (e.g., for
-`bert-base-uncased`).
+`google-bert/bert-base-uncased`).
 
 For an input of size `[batch_size, sequence_length]`, the memory required to store the intermediate feed forward
 embeddings `[batch_size, sequence_length, config.intermediate_size]` can account for a large fraction of the memory
@@ -212,7 +212,7 @@ tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenize
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
@@ -467,7 +467,7 @@ arguments (and not a list, like before) like this:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
 

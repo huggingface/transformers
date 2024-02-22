@@ -1901,6 +1901,13 @@ class ClapTextModelWithProjection(metaclass=DummyObject):
 CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class CLIPForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CLIPModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3798,6 +3805,34 @@ class FuyuForCausalLM(metaclass=DummyObject):
 
 
 class FuyuPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GemmaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GemmaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GemmaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GemmaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7581,6 +7616,13 @@ class SEWDPreTrainedModel(metaclass=DummyObject):
 
 
 SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SiglipForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class SiglipModel(metaclass=DummyObject):

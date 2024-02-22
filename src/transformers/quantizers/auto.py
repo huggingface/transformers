@@ -16,12 +16,14 @@ from typing import Dict, Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
+    AqlmConfig,
     AwqConfig,
     BitsAndBytesConfig,
     GPTQConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
 )
+from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
@@ -33,6 +35,7 @@ AUTO_QUANTIZER_MAPPING = {
     "bitsandbytes_4bit": Bnb4BitHfQuantizer,
     "bitsandbytes_8bit": Bnb8BitHfQuantizer,
     "gptq": GptqHfQuantizer,
+    "aqlm": AqlmHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -40,6 +43,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
     "gptq": GPTQConfig,
+    "aqlm": AqlmConfig,
 }
 
 

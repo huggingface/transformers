@@ -16,7 +16,7 @@
 """ The examples of running contrastive search on the auto-APIs;
 
 Running this example:
-python run_generation_contrastive_search.py --model_name_or_path=gpt2-large --penalty_alpha=0.6 --k=4 --length=256
+python run_generation_contrastive_search.py --model_name_or_path=openai-community/gpt2-large --penalty_alpha=0.6 --k=4 --length=256
 """
 
 

@@ -1576,8 +1576,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 Information necessary to initiate the text encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `t5-base`, or namespaced under a user or
-                      organization name, like `google/flan-t5-base.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
@@ -1585,8 +1583,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 Information necessary to initiate the audio encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `facebook/encodec_24khz`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
@@ -1594,8 +1590,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `gpt2`, or namespaced under a user or
-                      organization name, like `facebook/musicgen-small`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
@@ -1622,7 +1616,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         >>> # initialize a musicgen model from a t5 text encoder, encodec audio encoder, and musicgen decoder
         >>> model = MusicgenForConditionalGeneration.from_sub_models_pretrained(
-        ...     text_encoder_pretrained_model_name_or_path="t5-base",
+        ...     text_encoder_pretrained_model_name_or_path="google-t5/t5-base",
         ...     audio_encoder_pretrained_model_name_or_path="facebook/encodec_24khz",
         ...     decoder_pretrained_model_name_or_path="facebook/musicgen-small",
         ... )
