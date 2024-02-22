@@ -33,14 +33,15 @@ env:
 jobs:
   setup:
     name: Setup
-    runs-on: [single-gpu, nvidia-gpu, t4, ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    runs-on: ubuntu-latest
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
     steps:
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
       - uses: actions/checkout@v3
       - name: Cleanup
         run: |
