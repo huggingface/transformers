@@ -7,6 +7,7 @@ check_dirs := examples tests src utils
 
 exclude_folders := examples/research_projects
 integration_tests_dir := tests/deepspeed tests/fsdp tests/peft_integration tests/trainer tests/extended tests/sagemaker
+generation_tests_dir := tests/generation
 
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
@@ -107,6 +108,9 @@ run_integration_tests:
 
 run_flash_attn_tests:
 	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_flash_attention -m "flash_attn_test" tests/models/
+
+run_generation_tests:
+	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_generation $(generation_tests_dir) 
 
 # Release stuff
 

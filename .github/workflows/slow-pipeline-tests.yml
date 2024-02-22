@@ -1,0 +1,191 @@
+name: Self-hosted runner - SLOW pipeline tests (scheduled)
+
+# Note that each job's dependencies go into a corresponding docker file.
+#
+# For example for `run_all_tests_torch_cuda_extensions_gpu` the docker image is
+# `huggingface/transformers-pytorch-deepspeed-latest-gpu`, which can be found at
+# `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
+
+on:
+  repository_dispatch:
+  schedule:
+    - cron: "21 2 * * *"
+  push:
+    branches:
+      - run_scheduled_ci*
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
+  NUM_SLICES: 2
+
+jobs:
+  run_pipelines_torch_gpu:
+    name: PyTorch pipelines
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+        docker_image: ["huggingface/transformers-all-latest-gpu"] # TODO: add also PT nightly here
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    container:
+      image: ${{ matrix.docker_image }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - uses: actions/checkout@v3
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Install locally and show env
+        run: |
+          pip install -e .
+          python3 utils/print_env.py
+          pip freeze
+
+      - name: Run all pipeline tests on GPU
+        run: |
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu
+
+  run_pipelines_tf_gpu:
+    name: TensorFlow pipelines
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+        docker_image: ["huggingface/transformers-tensorflow-gpu"] # TODO: add also PT nightly here
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    container:
+      image: ${{ matrix.docker_image }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install locally and show env
+        run: |
+          pip install -e .
+          python3 utils/print_env.py
+          pip freeze
+
+      - name: Run all pipeline tests on GPU
+        run: |
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests/pipelines
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: |
+          cat /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu
+
+
+  run_extract_warnings:
+    name: Extract warnings in CI artifacts
+    runs-on: ubuntu-22.04
+    if: always()
+    needs: [
+      run_pipelines_tf_gpu,
+      run_pipelines_torch_gpu,
+    ]
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Install transformers
+        run: pip install transformers
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Create output directory
+        run: mkdir warnings_in_ci
+
+      - uses: actions/download-artifact@v3
+        with:
+          path: warnings_in_ci
+
+      - name: Show artifacts
+        run: echo "$(python3 -c 'import os; d = os.listdir(); print(d)')"
+        working-directory: warnings_in_ci
+
+      - name: Extract warnings in CI artifacts
+        run: |
+          python3 utils/extract_warnings.py --workflow_run_id ${{ github.run_id }} --output_dir warnings_in_ci --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }} --from_gh
+          echo "$(python3 -c 'import os; import json; fp = open("warnings_in_ci/selected_warnings.json"); d = json.load(fp); d = "\n".join(d) ;print(d)')"
+
+      - name: Upload artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: warnings_in_ci
+          path: warnings_in_ci/selected_warnings.json
+
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-22.04
+    if: always()
+    needs: [
+      run_pipelines_tf_gpu,
+      run_pipelines_torch_gpu,
+    ]
+    steps:
+      - name: Preliminary job status
+        shell: bash
+        run: |
+          echo "TF Pipeline tests status: ${{ needs.run_pipelines_tf_gpu.result }}"
+          echo "Torch Pipeline tests status: ${{ needs.run_pipelines_torch_gpu.result }}"
+
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Send message to Slack
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-pipeline
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          CI_SLACK_REPORT_CHANNEL_ID: transformers-ci-daily-pipeline
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          CI_EVENT: scheduled
+          CI_SHA: ${{ github.sha }}
+          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          sudo apt-get install -y curl
+          pip install slack_sdk
+          pip show slack_sdk
+          python utils/notification_service.py 
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: prev_ci_results
+          path: prev_ci_results
