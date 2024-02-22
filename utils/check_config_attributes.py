@@ -52,6 +52,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GraphormerConfig": ["spatial_pos_max"],
     # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
+    "FiDConfig": ["feed_forward_proj"],
     # used internally in the configuration class file
     # `tokenizer_class` get default value `T5Tokenizer` intentionally
     "MT5Config": ["feed_forward_proj", "tokenizer_class"],
@@ -249,7 +250,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
             if not case_allowed:
                 allowed_cases = SPECIAL_CASES_TO_ALLOW.get(config_class.__name__, [])
                 case_allowed = allowed_cases is True or attribute in allowed_cases
-
     return attribute_used or case_allowed
 
 

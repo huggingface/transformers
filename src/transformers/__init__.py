@@ -434,7 +434,7 @@ _import_structure = {
         "FastSpeech2ConformerTokenizer",
         "FastSpeech2ConformerWithHifiGanConfig",
     ],
-    "models.fid": ["FiDConfig", "FID_PRETRAINED_CONFIG_ARCHIVE_MAP"],
+    "models.fid": ["FID_PRETRAINED_CONFIG_ARCHIVE_MAP", "FiDConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2180,6 +2180,7 @@ else:
     )
     _import_structure["models.fid"].extend(
         [
+            "FID_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FiDEncoderModel",
             "FiDForConditionalGeneration",
             "FiDForQuestionAnswering",
@@ -2187,7 +2188,6 @@ else:
             "FiDForTokenClassification",
             "FiDModel",
             "FiDPreTrainedModel",
-            "FID_PRETRAINED_MODEL_ARCHIVE_LIST",
             "load_tf_weights_in_fid",
         ]
     )

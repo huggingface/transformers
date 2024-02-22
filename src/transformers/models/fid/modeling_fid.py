@@ -2004,17 +2004,19 @@ class FiDForConditionalGeneration(FiDPreTrainedModel):
         >>> model = FiDForConditionalGeneration.from_pretrained("google-t5/t5-base")
 
         >>> # training
+        >>> # The input is always expected to be in the shape of either (batch, length) or (batch, n_passages, length)
         >>> question = "What is the capital of the United States"
         >>> contexts = ["United States is a liberal democracy and republic of 50 federated states, a federal capital district (Washington, D.C.), and 326 Indian reservations.",
         ...             "These reservations overlap with state boundaries."]
         >>> prefix = "\n"
-        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors="pt", padding=True).input_ids
+        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors="pt", padding=True).input_ids.unsqueeze(0)
         >>> labels = tokenizer("The capital of the United States is Washington DC", return_tensors="pt").input_ids
         >>> outputs = model(input_ids=input_ids, labels=labels)
         >>> loss = outputs.loss
 
         >>> # inference
-        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors = "pt", padding=True).input_ids  # Batch size 1
+        >>> # The input is always expected to be in the shape of either (batch, length) or (batch, n_passages, length)
+        >>> input_ids = tokenizer([question + prefix + context for context in contexts], return_tensors = "pt", padding=True).input_ids.unsqueeze(0)  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         ```"""

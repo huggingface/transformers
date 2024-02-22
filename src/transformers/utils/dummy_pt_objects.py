@@ -3484,11 +3484,7 @@ class FastSpeech2ConformerWithHifiGan(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class FID_PRETRAINED_MODEL_ARCHIVE_LIST(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+FID_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class FiDEncoderModel(metaclass=DummyObject):
