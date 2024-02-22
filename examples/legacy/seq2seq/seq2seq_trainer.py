@@ -65,7 +65,7 @@ class Seq2SeqTrainer(Trainer):
 
         if self.args.label_smoothing != 0 or (self.data_args is not None and self.data_args.ignore_pad_token_for_loss):
             assert self.config.pad_token_id is not None, (
-                "Make sure that `config.pad_token_id` is correcly defined when ignoring `pad_token` for loss"
+                "Make sure that `config.pad_token_id` is correctly defined when ignoring `pad_token` for loss"
                 " calculation or doing label smoothing."
             )
 

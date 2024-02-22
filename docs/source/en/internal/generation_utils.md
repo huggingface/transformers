@@ -38,8 +38,8 @@ Here's an example:
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
@@ -373,3 +373,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - get_seq_length
     - reorder_cache
+
+[[autodoc]] StaticCache
+    - update
+    - get_seq_length

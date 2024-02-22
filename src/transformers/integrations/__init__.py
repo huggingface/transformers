@@ -17,6 +17,7 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
+    "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
@@ -84,6 +85,7 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
+    from .aqlm import replace_with_aqlm_linear
     from .awq import (
         fuse_awq_modules,
         post_init_awq_exllama_modules,
