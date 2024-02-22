@@ -198,98 +198,98 @@ Hay tres componentes principales en Mask2Former:
 
 3. Un decodificador ligero toma el último mapa de características (escala 1/32) del codificador y lo aumenta a una escala de 1/16. A partir de aquí, la característica se pasa a un módulo de *Fusión Selectiva de Características (SFF)*, que selecciona y combina características locales y globales de un mapa de atención para cada característica y luego la aumenta a 1/8. Este proceso se repite hasta que las características decodificadas sean del mismo tamaño que la imagen original. La salida se pasa a través de dos capas de convolución y luego se aplica una activación sigmoide para predecir la profundidad de cada píxel.
 
-## Natural language processing
+## Procesamiento del lenguaje natural
 
-The Transformer was initially designed for machine translation, and since then, it has practically become the default architecture for solving all NLP tasks. Some tasks lend themselves to the Transformer's encoder structure, while others are better suited for the decoder. Still, other tasks make use of both the Transformer's encoder-decoder structure.
+El Transformer fue diseñado inicialmente para la traducción automática, y desde entonces, prácticamente se ha convertido en la arquitectura predeterminada para resolver todas las tareas de procesamiento del lenguaje natural (NLP, por sus siglas en inglés). Algunas tareas se prestan a la estructura del codificador del Transformer, mientras que otras son más adecuadas para el decodificador. Todavía hay otras tareas que hacen uso de la estructura codificador-decodificador del Transformer.
 
-### Text classification
+### Clasificación de texto
 
-[BERT](model_doc/bert) is an encoder-only model and is the first model to effectively implement deep bidirectionality to learn richer representations of the text by attending to words on both sides.
+[BERT](https://huggingface.co/docs/transformers/model_doc/bert) es un modelo que solo tiene codificador y es el primer modelo en implementar efectivamente la bidireccionalidad profunda para aprender representaciones más ricas del texto al atender a las palabras en ambos lados.
 
-1. BERT uses [WordPiece](tokenizer_summary#wordpiece) tokenization to generate a token embedding of the text. To tell the difference between a single sentence and a pair of sentences, a special `[SEP]` token is added to differentiate them. A special `[CLS]` token is added to the beginning of every sequence of text. The final output with the `[CLS]` token is used as the input to the classification head for classification tasks. BERT also adds a segment embedding to denote whether a token belongs to the first or second sentence in a pair of sentences.
+1. BERT utiliza la tokenización [WordPiece](https://huggingface.co/docs/transformers/tokenizer_summary#wordpiece) para generar una incrustación de tokens del texto. Para diferenciar entre una sola oración y un par de oraciones, se agrega un token especial `[SEP]` para diferenciarlos. También se agrega un token especial `[CLS]` al principio de cada secuencia de texto. La salida final con el token `[CLS]` se utiliza como la entrada a la cabeza de clasificación para tareas de clasificación. BERT también agrega una incrustación de segmento para indicar si un token pertenece a la primera o segunda oración en un par de oraciones.
 
-2. BERT is pretrained with two objectives: masked language modeling and next-sentence prediction. In masked language modeling, some percentage of the input tokens are randomly masked, and the model needs to predict these. This solves the issue of bidirectionality, where the model could cheat and see all the words and "predict" the next word. The final hidden states of the predicted mask tokens are passed to a feedforward network with a softmax over the vocabulary to predict the masked word.
+2. BERT se preentrena con dos objetivos: modelar el lenguaje enmascarado y predecir de próxima oración. En el modelado de lenguaje enmascarado, un cierto porcentaje de los tokens de entrada se enmascaran aleatoriamente, y el modelo necesita predecir estos. Esto resuelve el problema de la bidireccionalidad, donde el modelo podría hacer trampa y ver todas las palabras y "predecir" la siguiente palabra. Los estados ocultos finales de los tokens de máscara predichos se pasan a una red feedforward con una softmax sobre el vocabulario para predecir la palabra enmascarada.
 
-    The second pretraining object is next-sentence prediction. The model must predict whether sentence B follows sentence A. Half of the time sentence B is the next sentence, and the other half of the time, sentence B is a random sentence. The prediction, whether it is the next sentence or not, is passed to a feedforward network with a softmax over the two classes (`IsNext` and `NotNext`).
+    El segundo objetivo de preentrenamiento es la predicción de próxima oración. El modelo debe predecir si la oración B sigue a la oración A. La mitad del tiempo, la oración B es la siguiente oración, y la otra mitad del tiempo, la oración B es una oración aleatoria. La predicción, ya sea que sea la próxima oración o no, se pasa a una red feedforward con una softmax sobre las dos clases (`EsSiguiente` y `NoSiguiente`).
 
-3. The input embeddings are passed through multiple encoder layers to output some final hidden states.
+3. Las incrustaciones de entrada se pasan a través de múltiples capas codificadoras para producir algunos estados ocultos finales.
 
-To use the pretrained model for text classification, add a sequence classification head on top of the base BERT model. The sequence classification head is a linear layer that accepts the final hidden states and performs a linear transformation to convert them into logits. The cross-entropy loss is calculated between the logits and target to find the most likely label.
+Para usar el modelo preentrenado para clasificación de texto, se añade una cabecera de clasificación de secuencia encima del modelo base de BERT. La cabecera de clasificación de secuencia es una capa lineal que acepta los estados ocultos finales y realiza una transformación lineal para convertirlos en logits. Se calcula la pérdida de entropía cruzada entre los logits y el objetivo para encontrar la etiqueta más probable.
 
-Ready to try your hand at text classification? Check out our complete [text classification guide](tasks/sequence_classification) to learn how to finetune DistilBERT and use it for inference!
+¿Listo para probar la clasificación de texto? ¡Consulta nuestra guía completa de [clasificación de texto](https://huggingface.co/docs/transformers/tasks/sequence_classification) para aprender cómo ajustar DistilBERT y usarlo para inferencia!
 
-### Token classification
+### Clasificación de tokens
 
-To use BERT for token classification tasks like named entity recognition (NER), add a token classification head on top of the base BERT model. The token classification head is a linear layer that accepts the final hidden states and performs a linear transformation to convert them into logits. The cross-entropy loss is calculated between the logits and each token to find the most likely label.
+Para usar BERT en tareas de clasificación de tokens como el reconocimiento de entidades nombradas (NER), añade una cabecera de clasificación de tokens encima del modelo base de BERT. La cabecera de clasificación de tokens es una capa lineal que acepta los estados ocultos finales y realiza una transformación lineal para convertirlos en logits. Se calcula la pérdida de entropía cruzada entre los logits y cada token para encontrar la etiqueta más probable.
 
-Ready to try your hand at token classification? Check out our complete [token classification guide](tasks/token_classification) to learn how to finetune DistilBERT and use it for inference!
+¿Listo para probar la clasificación de tokens? ¡Consulta nuestra guía completa de [clasificación de tokens](https://huggingface.co/docs/transformers/tasks/token_classification) para aprender cómo ajustar DistilBERT y usarlo para inferencia!
 
-### Question answering
+### Respuesta a preguntas
 
-To use BERT for question answering, add a span classification head on top of the base BERT model. This linear layer accepts the final hidden states and performs a linear transformation to compute the `span` start and end logits corresponding to the answer. The cross-entropy loss is calculated between the logits and the label position to find the most likely span of text corresponding to the answer.
+Para usar BERT en la respuesta a preguntas, añade una cabecera de clasificación de span encima del modelo base de BERT. Esta capa lineal acepta los estados ocultos finales y realiza una transformación lineal para calcular los logits de inicio y fin del `span` correspondiente a la respuesta. Se calcula la pérdida de entropía cruzada entre los logits y la posición de la etiqueta para encontrar el span más probable de texto correspondiente a la respuesta.
 
-Ready to try your hand at question answering? Check out our complete [question answering guide](tasks/question_answering) to learn how to finetune DistilBERT and use it for inference!
+¿Listo para probar la respuesta a preguntas? ¡Consulta nuestra guía completa de [respuesta a preguntas](tasks/question_answering) para aprender cómo ajustar DistilBERT y usarlo para inferencia!
 
 <Tip>
 
-💡 Notice how easy it is to use BERT for different tasks once it's been pretrained. You only need to add a specific head to the pretrained model to manipulate the hidden states into your desired output!
+💡 ¡Observa lo fácil que es usar BERT para diferentes tareas una vez que ha sido preentrenado! ¡Solo necesitas añadir una cabecera específica al modelo preentrenado para manipular los estados ocultos en tu salida deseada!
 
 </Tip>
 
-### Text generation
+### Generación de texto
 
-[GPT-2](model_doc/gpt2) is a decoder-only model pretrained on a large amount of text. It can generate convincing (though not always true!) text given a prompt and complete other NLP tasks like question answering despite not being explicitly trained to.
+[GPT-2](https://huggingface.co/docs/transformers/model_doc/gpt2) es un modelo que solo tiene decodificador y se preentrena en una gran cantidad de texto. Puede generar texto convincente (¡aunque no siempre verdadero!) dado un estímulo y completar otras tareas de procesamiento del lenguaje natural como responder preguntas, a pesar de no haber sido entrenado explícitamente para ello.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/gpt2_architecture.png"/>
 </div>
 
-1. GPT-2 uses [byte pair encoding (BPE)](tokenizer_summary#bytepair-encoding-bpe) to tokenize words and generate a token embedding. Positional encodings are added to the token embeddings to indicate the position of each token in the sequence. The input embeddings are passed through multiple decoder blocks to output some final hidden state. Within each decoder block, GPT-2 uses a *masked self-attention* layer which means GPT-2 can't attend to future tokens. It is only allowed to attend to tokens on the left. This is different from BERT's [`mask`] token because, in masked self-attention, an attention mask is used to set the score to `0` for future tokens.
+1. GPT-2 utiliza [codificación de pares de bytes (BPE)](https://huggingface.co/docs/transformers/tokenizer_summary#bytepair-encoding-bpe) para tokenizar palabras y generar una incrustación de token. Se añaden incrustaciones posicionales a las incrustaciones de token para indicar la posición de cada token en la secuencia. Las incrustaciones de entrada se pasan a través de varios bloques decodificadores para producir algún estado oculto final. Dentro de cada bloque decodificador, GPT-2 utiliza una capa de *autoatención enmascarada*, lo que significa que GPT-2 no puede atender a los tokens futuros. Solo puede atender a los tokens a la izquierda. Esto es diferente al token [`mask`] de BERT porque, en la autoatención enmascarada, se utiliza una máscara de atención para establecer la puntuación en `0` para los tokens futuros.
 
-2. The output from the decoder is passed to a language modeling head, which performs a linear transformation to convert the hidden states into logits. The label is the next token in the sequence, which are created by shifting the logits to the right by one. The cross-entropy loss is calculated between the shifted logits and the labels to output the next most likely token.
+2. La salida del decodificador se pasa a una cabecera de modelado de lenguaje, que realiza una transformación lineal para convertir los estados ocultos en logits. La etiqueta es el siguiente token en la secuencia, que se crea desplazando los logits a la derecha en uno. Se calcula la pérdida de entropía cruzada entre los logits desplazados y las etiquetas para obtener el siguiente token más probable.
 
-GPT-2's pretraining objective is based entirely on [causal language modeling](glossary#causal-language-modeling), predicting the next word in a sequence. This makes GPT-2 especially good at tasks that involve generating text.
+El objetivo del preentrenamiento de GPT-2 se basa completamente en el [modelado de lenguaje causal](glossary#causal-language-modeling), prediciendo la siguiente palabra en una secuencia. Esto hace que GPT-2 sea especialmente bueno en tareas que implican la generación de texto.
 
-Ready to try your hand at text generation? Check out our complete [causal language modeling guide](tasks/language_modeling#causal-language-modeling) to learn how to finetune DistilGPT-2 and use it for inference!
+¿Listo para probar la generación de texto? ¡Consulta nuestra guía completa de [modelado de lenguaje causal](tasks/language_modeling#modelado-de-lenguaje-causal) para aprender cómo ajustar DistilGPT-2 y usarlo para inferencia!
 
 <Tip>
 
-For more information about text generation, check out the [text generation strategies](generation_strategies) guide!
+Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
 
 </Tip>
 
-### Summarization
+### Resumir
 
-Encoder-decoder models like [BART](model_doc/bart) and [T5](model_doc/t5) are designed for the sequence-to-sequence pattern of a summarization task. We'll explain how BART works in this section, and then you can try finetuning T5 at the end.
+Los modelos codificador-decodificador como [BART](https://huggingface.co/docs/transformers/model_doc/bart) y [T5](https://huggingface.co/docs/transformers/model_doc/t5) están diseñados para el patrón de secuencia a secuencia de una tarea de resumen. Explicaremos cómo funciona BART en esta sección, y luego podrás probar el ajuste fino de T5 al final.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bart_architecture.png"/>
 </div>
 
-1. BART's encoder architecture is very similar to BERT and accepts a token and positional embedding of the text. BART is pretrained by corrupting the input and then reconstructing it with the decoder. Unlike other encoders with specific corruption strategies, BART can apply any type of corruption. The *text infilling* corruption strategy works the best though. In text infilling, a number of text spans are replaced with a **single** [`mask`] token. This is important because the model has to predict the masked tokens, and it teaches the model to predict the number of missing tokens. The input embeddings and masked spans are passed through the encoder to output some final hidden states, but unlike BERT, BART doesn't add a final feedforward network at the end to predict a word.
+1. La arquitectura del codificador de BART es muy similar a la de BERT y acepta una incrustación de token y posicional del texto. BART se preentrena corrompiendo la entrada y luego reconstruyéndola con el decodificador. A diferencia de otros codificadores con estrategias específicas de corrupción, BART puede aplicar cualquier tipo de corrupción. Sin embargo, la estrategia de corrupción de *relleno de texto* funciona mejor. En el relleno de texto, varios fragmentos de texto se reemplazan con un **único** token [`mask`]. Esto es importante porque el modelo tiene que predecir los tokens enmascarados, y le enseña al modelo a predecir la cantidad de tokens faltantes. Las incrustaciones de entrada y los fragmentos enmascarados se pasan a través del codificador para producir algunos estados ocultos finales, pero a diferencia de BERT, BART no añade una red feedforward final al final para predecir una palabra.
 
-2. The encoder's output is passed to the decoder, which must predict the masked tokens and any uncorrupted tokens from the encoder's output. This gives additional context to help the decoder restore the original text. The output from the decoder is passed to a language modeling head, which performs a linear transformation to convert the hidden states into logits. The cross-entropy loss is calculated between the logits and the label, which is just the token shifted to the right.
+2. La salida del codificador se pasa al decodificador, que debe predecir los tokens enmascarados y cualquier token no corrompido de la salida del codificador. Esto proporciona un contexto adicional para ayudar al decodificador a restaurar el texto original. La salida del decodificador se pasa a una cabeza de modelado de lenguaje, que realiza una transformación lineal para convertir los estados ocultos en logits. Se calcula la pérdida de entropía cruzada entre los logits y la etiqueta, que es simplemente el token desplazado hacia la derecha.
 
-Ready to try your hand at summarization? Check out our complete [summarization guide](tasks/summarization) to learn how to finetune T5 and use it for inference!
+¿Listo para probar la sumarización? ¡Consulta nuestra guía completa de [Generación de resúmenes](tasks/summarization) para aprender cómo ajustar T5 y usarlo para inferencia!
 
 <Tip>
 
-For more information about text generation, check out the [text generation strategies](generation_strategies) guide!
+Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
 
 </Tip>
 
-### Translation
+### Traducción
 
-Translation is another example of a sequence-to-sequence task, which means you can use an encoder-decoder model like [BART](model_doc/bart) or [T5](model_doc/t5) to do it. We'll explain how BART works in this section, and then you can try finetuning T5 at the end.
+La traducción es otro ejemplo de una tarea de secuencia a secuencia, lo que significa que puedes usar un modelo codificador-decodificador como [BART](https://huggingface.co/docs/transformers/model_doc/bart) o [T5](https://huggingface.co/docs/transformers/model_doc/t5) para hacerlo. Explicaremos cómo funciona BART en esta sección, y luego podrás probar el ajuste fino de T5 al final.
 
-BART adapts to translation by adding a separate randomly initialized encoder to map a source language to an input that can be decoded into the target language. This new encoder's embeddings are passed to the pretrained encoder instead of the original word embeddings. The source encoder is trained by updating the source encoder, positional embeddings, and input embeddings with the cross-entropy loss from the model output. The model parameters are frozen in this first step, and all the model parameters are trained together in the second step.
+BART se adapta a la traducción añadiendo un codificador separado inicializado aleatoriamente para mapear un idioma fuente a una entrada que pueda ser decodificada en el idioma objetivo. Las incrustaciones de este nuevo codificador se pasan al codificador preentrenado en lugar de las incrustaciones de palabras originales. El codificador de origen se entrena actualizando el codificador de origen, las incrustaciones posicionales y las incrustaciones de entrada con la pérdida de entropía cruzada de la salida del modelo. Los parámetros del modelo están congelados en este primer paso, y todos los parámetros del modelo se entrenan juntos en el segundo paso.
 
-BART has since been followed up by a multilingual version, mBART, intended for translation and pretrained on many different languages.
+Desde entonces, BART ha sido seguido por una versión multilingüe, mBART, destinada a la traducción y preentrenada en muchos idiomas diferentes.
 
-Ready to try your hand at translation? Check out our complete [translation guide](tasks/summarization) to learn how to finetune T5 and use it for inference!
+¿Listo para probar la traducción? ¡Consulta nuestra guía completa de [traducción](https://huggingface.co/docs/transformers/tasks/translation) para aprender cómo ajustar T5 y usarlo para inferencia!
 
 <Tip>
 
-For more information about text generation, check out the [text generation strategies](generation_strategies) guide!
+Para obtener más información sobre la generación de texto, ¡consulta la guía de [estrategias de generación de texto](https://huggingface.co/docs/transformers/generation_strategies)!
 
 </Tip>
