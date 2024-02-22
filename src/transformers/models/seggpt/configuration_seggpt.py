@@ -22,7 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EduardoPacheco/seggpt-vit-large": "https://huggingface.co/EduardoPacheco/seggpt-vit-large/resolve/main/config.json",
+    "BAAI/seggpt-vit-large": "https://huggingface.co/BAAI/seggpt-vit-large/resolve/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class SegGptConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate a SegGPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the SegGPT
-    [EduardoPacheco/seggpt-vit-large](https://huggingface.co/EduardoPacheco/seggpt-vit-large) architecture.
+    [BAAI/seggpt-vit-large](https://huggingface.co/BAAI/seggpt-vit-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

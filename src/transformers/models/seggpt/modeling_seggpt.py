@@ -43,12 +43,12 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SegGptConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "EduardoPacheco/seggpt-vit-large"
+_CHECKPOINT_FOR_DOC = "BAAI/seggpt-vit-large"
 _EXPECTED_OUTPUT_SHAPE = [3, 896, 448]
 
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EduardoPacheco/seggpt-vit-large",
+    "BAAI/seggpt-vit-large",
     # See all SegGpt models at https://huggingface.co/models?filter=seggpt
 ]
 
@@ -778,7 +778,7 @@ class SegGptModel(SegGptPreTrainedModel):
         >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
         >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw).convert("L")
 
-        >>> checkpoint = "EduardoPacheco/seggpt-vit-large"
+        >>> checkpoint = "BAAI/seggpt-vit-large"
         >>> model = SegGptModel.from_pretrained(checkpoint)
         >>> image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
 
@@ -949,7 +949,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
         >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw).convert("L")
 
-        >>> checkpoint = "EduardoPacheco/seggpt-vit-large"
+        >>> checkpoint = "BAAI/seggpt-vit-large"
         >>> model = SegGptForImageSegmentation.from_pretrained(checkpoint)
         >>> image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
 

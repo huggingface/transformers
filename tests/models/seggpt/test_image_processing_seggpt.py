@@ -193,7 +193,7 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         prompt_image = images[0]
         prompt_mask = masks[0]
 
-        image_processor = SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large")
+        image_processor = SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large")
 
         inputs = image_processor(
             images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"

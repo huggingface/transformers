@@ -264,13 +264,11 @@ def prepare_img():
 class SegGptModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large") if is_vision_available() else None
-        )
+        return SegGptImageProcessor.from_pretrained("BAAI/seggpt-vit-large") if is_vision_available() else None
 
     @slow
     def test_one_shot_inference(self):
-        model = SegGptForImageSegmentation.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
 
         image_processor = self.default_image_processor
 
@@ -312,7 +310,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_few_shot_inference(self):
-        model = SegGptForImageSegmentation.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
         image_processor = self.default_image_processor
 
         images, masks = prepare_img()
