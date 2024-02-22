@@ -1066,20 +1066,21 @@ class LlamaModel(LlamaPreTrainedModel):
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # We use the current dtype to avoid any overflows
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
+        min_dtype = torch.finfo(dtype).min
+        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
 
         causal_mask = causal_mask.to(dtype=dtype, device=device)
         if attention_mask is not None and attention_mask.dim() == 2:
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(
-                padding_mask, torch.finfo(dtype).min
+                padding_mask, min_dtype
             )
 
         if self.config._attn_implementation == "sdpa":
             is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
             if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
+                causal_mask = causal_mask.mul(~torch.all(causal_mask == min_dtype, dim=-1)[..., None]).to(
                     dtype
                 )
 
