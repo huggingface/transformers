@@ -184,7 +184,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 
 <Tip>
 
-FlashAttention can only be used for models with the `fp16` or `bf16` torch type, so make sure to cast your model to the appropriate type first.
+FlashAttention can only be used for models with the `fp16` or `bf16` torch type, so make sure to cast your model to the appropriate type first. The memory-efficient attention backend is able to handle `fp32` models.
 
 </Tip>
 
