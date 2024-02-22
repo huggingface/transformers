@@ -26,6 +26,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -45,6 +46,7 @@ from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    get_torch_version,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -59,6 +61,8 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+
+_is_torch_version_greater_or_equal_than_2_2_0 = version.parse(get_torch_version()) >= version.parse("2.2.0")
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
@@ -757,7 +761,11 @@ class MixtralSdpaAttention(MixtralAttention):
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
+        if (
+            not _is_torch_version_greater_or_equal_than_2_2_0
+            and query_states.device.type == "cuda"
+            and attention_mask is not None
+        ):
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
@@ -1190,6 +1198,7 @@ class MixtralModel(MixtralPreTrainedModel):
                 (batch_size, seq_length),
                 inputs_embeds,
                 past_key_values_length,
+                sliding_window=self.config.sliding_window if _is_torch_version_greater_or_equal_than_2_2_0 else None,
             )
         else:
             # 4d mask is passed through the layers
