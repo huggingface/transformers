@@ -1747,6 +1747,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
             return_dict = False
 
+        if return_dict and not tokenize:
+            raise ValueError("return_dict=True is incompatible with tokenize=False")
+
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
             if self.chat_template is not None:
