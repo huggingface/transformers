@@ -1249,7 +1249,7 @@ Pipeline.push_to_hub = copy_func(Pipeline.push_to_hub)
 if Pipeline.push_to_hub.__doc__ is not None:
     Pipeline.push_to_hub.__doc__ = Pipeline.push_to_hub.__doc__.format(
         object="pipe", object_class="pipeline", object_files="pipeline file"
-    ).replace(".from_pretrained","")
+    ).replace(".from_pretrained", "")
 
 
 class ChunkPipeline(Pipeline):
