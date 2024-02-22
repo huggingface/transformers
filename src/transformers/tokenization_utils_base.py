@@ -1740,7 +1740,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
 
         if return_dict is None:
-            logging.warning_once(
+            logger.warning_once(
                 "In version 4.40, `return_dict` will be set to `True` by default. "
                 "Please explicitly set `return_dict` to `False` to maintain the current behaviour, "
                 "or set it to `True` to get the new behaviour immediately."
