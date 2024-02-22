@@ -1688,7 +1688,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"],
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         tokenize: bool = True,
@@ -1696,9 +1696,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        return_dict: bool = None,
         **tokenizer_kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
         Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
@@ -1730,7 +1730,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*, defaults to `False`):
+            return_dict (`bool`, *optional*, defaults to `None`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
@@ -1739,9 +1739,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
 
-        if hasattr(conversation, "messages"):
-            # Indicates it's a Conversation object
-            conversation = conversation.messages
+        if return_dict is None:
+            logging.warning_once(
+                "In version 4.40, `return_dict` will be set to `True` by default. "
+                "Please explicitly set `return_dict` to `False` to maintain the current behaviour, "
+                "or set it to `True` to get the new behaviour immediately."
+            )
+            return_dict = False
 
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
@@ -1753,33 +1757,44 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
-        rendered = compiled_template.render(
-            messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
-        )
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
+        ):
+            conversations = conversation
+            batched = True
+        else:
+            batched = False
+            conversations = [conversation]
 
-        if padding is True:
-            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        rendered = []
+        for chat in conversations:
+            if hasattr(chat, "messages"):
+                # Indicates it's a Conversation object
+                chat = chat.messages
+
+            rendered.append(
+                compiled_template.render(
+                    messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
+                )
+            )
+
+        if not batched:
+            rendered = rendered[0]
+
         if tokenize:
+            out = self(
+                rendered,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
             if return_dict:
-                return self(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+                return out
             else:
-                return self.encode(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+                return out["input_ids"]
         else:
             return rendered
 
