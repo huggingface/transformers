@@ -42,7 +42,7 @@ Are you unsure whether the model you wish to use already has a corresponding Ten
 &nbsp;
 
 Check the `model_type` field of the `config.json` of your model of choice
-([example](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). If the corresponding model folder in
+([example](https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json#L14)). If the corresponding model folder in
 🤗 Transformers has a file whose name starts with "modeling_tf", it means that it has a corresponding TensorFlow
 architecture ([example](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
 
@@ -83,7 +83,7 @@ don't have your eyes set on a specific architecture, asking the 🤗 Transformer
 maximize your impact - we will guide you towards the most prominent architectures that are missing on the TensorFlow
 side. If the specific model you want to use with TensorFlow already has a TensorFlow architecture implementation in
 🤗 Transformers but is lacking weights, feel free to jump straight into the
-[weight conversion section](#adding-tensorflow-weights-to-hub)
+[weight conversion section](#adding-tensorflow-weights-to--hub)
 of this page.
 
 For simplicity, the remainder of this guide assumes you've decided to contribute with the TensorFlow version of

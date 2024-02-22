@@ -31,6 +31,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -117,6 +119,24 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.include_top = include_top
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "rescale_offset",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "include_top",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.NEAREST
     def resize(
@@ -296,24 +316,25 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_center_crop and crop_size is None:
-            raise ValueError("Crop size must be specified if do_center_crop is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 

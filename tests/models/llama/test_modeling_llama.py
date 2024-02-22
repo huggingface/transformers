@@ -44,6 +44,7 @@ if is_torch_available():
     from transformers import (
         CodeLlamaTokenizer,
         LlamaForCausalLM,
+        LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
         LlamaModel,
         LlamaTokenizer,
@@ -278,7 +279,11 @@ class LlamaModelTester:
 
 @require_torch
 class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -286,12 +291,14 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "text-classification": LlamaForSequenceClassification,
             "text-generation": LlamaForCausalLM,
             "zero-shot": LlamaForSequenceClassification,
+            "question-answering": LlamaForQuestionAnswering,
         }
         if is_torch_available()
         else {}
     )
     test_headmasking = False
     test_pruning = False
+    fx_compatible = True
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
@@ -456,10 +463,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         """
         max_new_tokens = 30
 
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        tokenizer = LlamaTokenizer.from_pretrained("saibo/llama-1B")
 
         model_sdpa = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf",
+            "saibo/llama-1B",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
@@ -467,7 +474,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf",
+            "saibo/llama-1B",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
@@ -487,7 +494,11 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if not has_sdpa:
             raise ValueError("The SDPA model should have SDPA attention layers")
 
-        texts = ["hi", "Hello this is a very long sentence my friend", "Today I am in Paris and"]
+        texts = [
+            "hi here's a longer context, getting longer and",
+            "Hello this is a very long sentence my friend, very long for real",
+            "Today I am in Paris and",
+        ]
 
         for padding_side in ["left", "right"]:
             tokenizer.padding_side = padding_side
@@ -496,9 +507,19 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
             res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
             res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
+            with self.subTest(f"{padding_side}"):
+                torch.testing.assert_close(
+                    res_eager,
+                    res_sdpa,
+                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
+                )
+
+    @unittest.skip("TODO @gante fix this for Llama")
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        pass
 
 
 @require_torch

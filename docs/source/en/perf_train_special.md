@@ -45,7 +45,7 @@ pip install torch torchvision torchaudio
 export TASK_NAME=mrpc
 
 python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
 - --use_mps_device \
   --do_train \
