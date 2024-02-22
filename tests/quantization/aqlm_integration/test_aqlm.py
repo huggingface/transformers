@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
 
 
 if is_torch_available():
@@ -187,7 +187,7 @@ class AqlmTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @unittest.skipUnless(
-        version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.3"),
+        is_aqlm_available() and version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.3"),
         "test requires `aqlm>=1.0.3`",
     )
     def test_quantized_model_compile(self):
