@@ -1050,12 +1050,12 @@ class MLflowCallback(TrainerCallback):
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
 
-                    # "synchronous" only available with mlflow version >= 2.8.0
-                    # https://github.com/mlflow/mlflow/releases/tag/v2.8.0
-                    if packaging.version.parse(self._ml_flow_version) < packaging.version.parse('2.8.0'):
-                        self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
-                    else:
-                        self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
+            # "synchronous" only available with mlflow version >= 2.8.0
+            # https://github.com/mlflow/mlflow/releases/tag/v2.8.0
+            if packaging.version.parse(self._ml_flow_version) < packaging.version.parse('2.8.0'):
+                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+            else:
+                self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
