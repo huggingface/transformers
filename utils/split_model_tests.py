@@ -50,7 +50,7 @@ if __name__ == "__main__":
     tests_dir = os.path.join(os.getcwd(), "tests")
     model_tests_dir = os.path.join(tests_dir, "models")
 
-    model_tests_subfolders = glob(os.path.join(model_tests_dir, '*'))
+    model_tests_subfolders = glob(os.path.join(model_tests_dir, "*"))
 
     d = sorted(filter(os.path.isdir, model_tests_subfolders))
     d = [sub_directory.split("/")[-1] for sub_directory in d]
