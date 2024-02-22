@@ -27,7 +27,8 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
-  NUM_SLICES: 2
+  NUM_SLICES: 2  
+  CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-generation
 
 jobs:
   run_generation_tests:
@@ -129,9 +130,8 @@ jobs:
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
-          CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-generation
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-          CI_SLACK_REPORT_CHANNEL_ID: transformers-ci-daily-generation
+          CI_SLACK_REPORT_CHANNEL_ID: ${{ env.CI_SLACK_CHANNEL_ID_DAILY }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
