@@ -73,7 +73,7 @@ Commencez par créer une instance de [`pipeline`] et spécifiez la tâche pour l
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-Le [`pipeline`] télécharge et stocke en cache un [modèle pré-entraîné](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) et un tokenizer par défaut pour l'analyse des sentiments. Vous pouvez maintenant utiliser le `classifier` sur le texte de votre choix :
+Le [`pipeline`] télécharge et stocke en cache un [modèle pré-entraîné](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) et un tokenizer par défaut pour l'analyse des sentiments. Vous pouvez maintenant utiliser le `classifier` sur le texte de votre choix :
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
@@ -378,7 +378,7 @@ Commencez par importer [`AutoConfig`], puis chargez le modèle pré-entraîné q
 ```py
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
@@ -415,7 +415,7 @@ En fonction de votre tâche, vous passerez généralement les paramètres suivan
    ```py
    >>> from transformers import AutoModelForSequenceClassification
 
-   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. [`TrainingArguments`] contient les hyperparamètres du modèle que vous pouvez changer comme le taux d'apprentissage, la taille de l'échantillon, et le nombre d'époques pour s'entraîner. Les valeurs par défaut sont utilisées si vous ne spécifiez pas d'hyperparamètres d'apprentissage :
@@ -437,7 +437,7 @@ En fonction de votre tâche, vous passerez généralement les paramètres suivan
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 4. Chargez un jeu de données :
@@ -509,7 +509,7 @@ Tous les modèles sont des modèles standard [`tf.keras.Model`](https://www.tens
    ```py
    >>> from transformers import TFAutoModelForSequenceClassification
 
-   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. Une classe de prétraitement comme un tokenizer, un processeur d'images ou un extracteur de caractéristiques :
@@ -517,7 +517,7 @@ Tous les modèles sont des modèles standard [`tf.keras.Model`](https://www.tens
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 3. Créez une fonction qui transforme le texte du jeu de données en token :

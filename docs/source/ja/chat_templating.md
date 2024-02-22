@@ -215,7 +215,7 @@ LLM（Language Model）はさまざまな入力形式を処理できるほどス
 
 If you like this one, here it is in one-liner form, ready to copy into your code:
 
-```
+```python
 tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}"
 ```
 

@@ -33,6 +33,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFViTForImageClassification, TFViTModel
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
@@ -188,9 +189,9 @@ class TFViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
