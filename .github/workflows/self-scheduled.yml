@@ -66,7 +66,7 @@ jobs:
         run: |
           nvidia-smi
 
-  run_tests_gpu:
+  run_model_tests_gpu:
     name: " "
     needs: setup
     strategy:
@@ -122,95 +122,14 @@ jobs:
           name: ${{ matrix.machine_type }}_run_examples_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
 
-  run_pipelines_torch_gpu:
-    name: PyTorch pipelines
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-pytorch-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - uses: actions/checkout@v3
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Install locally and show env
-        run: |
-          pip install -e .
-          python3 utils/print_env.py
-          pip freeze
-
-      - name: Run all pipeline tests on GPU
-        run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu
-
-  run_pipelines_tf_gpu:
-    name: TensorFlow pipelines
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-tensorflow-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - uses: actions/checkout@v3
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Install locally and show env
-        run: |
-          pip install -e .
-          python3 utils/print_env.py
-          pip freeze
-
-      - name: Run all pipeline tests on GPU
-        run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests/pipelines
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: |
-          cat /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu
-
-
   run_extract_warnings:
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
     if: always()
     needs: [
       setup,
-      run_tests_gpu,
+      run_model_tests_gpu,
       run_examples_gpu,
-      run_pipelines_tf_gpu,
-      run_pipelines_torch_gpu,
     ]
     steps:
       - name: Checkout transformers
@@ -253,10 +172,8 @@ jobs:
     if: always()
     needs: [
       setup,
-      run_tests_gpu,
+      run_model_tests_gpu,
       run_examples_gpu,
-      run_pipelines_tf_gpu,
-      run_pipelines_torch_gpu,
       run_extract_warnings
     ]
     steps:
