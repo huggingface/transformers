@@ -773,7 +773,7 @@ class WhisperGenerationMixin:
             generation_config.do_sample = temperature is not None and temperature > 0.0
 
             generation_config.temperature = temperature if generation_config.do_sample else 1.0
-            generation_config.num_beams = kwargs.pop("num_beams", 1) if not generation_config.do_sample else 1
+            generation_config.num_beams = kwargs.get("num_beams", 1) if not generation_config.do_sample else 1
 
             seek_outputs = super().generate(
                 segment_input,
