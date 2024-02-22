@@ -51,10 +51,9 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
 
-YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uw-madison/yoso-4096",
-    # See all YOSO models at https://huggingface.co/models?filter=yoso
-]
+
+from ..deprecated._archive_maps import YOSO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 lsh_cumulation = None
 
@@ -371,10 +370,12 @@ class YosoSelfAttention(nn.Module):
         key_layer = key_layer.reshape(batch_size * num_heads, seq_len, head_dim)
         value_layer = value_layer.reshape(batch_size * num_heads, seq_len, head_dim)
 
-        # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
-            attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len).int()
+            attention_mask.unsqueeze(1)
+            .repeat_interleave(num_heads, dim=1)
+            .reshape(batch_size * num_heads, seq_len)
+            .int()
         )
 
         # The CUDA kernels are most efficient with inputs whose size is a multiple of a GPU's warp size (32). Inputs
@@ -808,10 +809,6 @@ class YosoModel(YosoPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -827,7 +824,7 @@ class YosoModel(YosoPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

@@ -450,7 +450,9 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_pipeline_accelerate_top_p(self):
         import torch
 
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.float16)
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom", device_map=torch_device, torch_dtype=torch.float16
+        )
         pipe("This is a test", do_sample=True, top_p=0.5)
 
     def test_pipeline_length_setting_warning(self):

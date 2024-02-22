@@ -36,7 +36,6 @@ if is_torch_available():
     import torch
 
     from transformers import VitDetConfig, VitMatteForImageMatting
-    from transformers.models.vitmatte.modeling_vitmatte import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -195,9 +194,9 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VitMatteForImageMatting.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hustvl/vitmatte-small-composition-1k"
+        model = VitMatteForImageMatting.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="ViTMatte does not support retaining gradient on attention logits")
     def test_retain_grad_hidden_states_attentions(self):

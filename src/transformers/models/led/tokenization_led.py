@@ -32,21 +32,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 # See all LED models at https://huggingface.co/models?filter=LED
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/led-base-16384": 16384,
-}
 
 
 @lru_cache()
@@ -169,8 +154,6 @@ class LEDTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.__init__

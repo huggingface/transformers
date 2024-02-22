@@ -21,7 +21,7 @@ import re
 
 # The following script is adapted from the script of TaPas.
 # Original: https://github.com/google-research/tapas/master/wikisql_utils.py
-from typing import Any, List, Text
+from typing import Any, List
 
 
 EMPTY_ANSWER = "none"
@@ -114,7 +114,7 @@ class _Operator(enum.Enum):
 class _Condition:
     """Represents an SQL where clauses (e.g A = "a" or B > 5)."""
 
-    column: Text
+    column: str
     operator: _Operator
     cmp_value: Any
 

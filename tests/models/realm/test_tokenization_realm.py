@@ -33,6 +33,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class RealmTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/realm-cc-news-pretrained-embedder"
     tokenizer_class = RealmTokenizer
     rust_tokenizer_class = RealmTokenizerFast
     test_rust_tokenizer = True

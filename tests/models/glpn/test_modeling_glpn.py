@@ -18,7 +18,6 @@
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -29,8 +28,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, GLPNConfig, GLPNForDepthEstimation, GLPNModel
-    from transformers.models.glpn.modeling_glpn import GLPN_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -291,7 +290,7 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_DEPTH_ESTIMATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
@@ -309,9 +308,9 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GLPNModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "vinvino02/glpn-kitti"
+        model = GLPNModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -326,8 +325,8 @@ def prepare_img():
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        image_processor = GLPNImageProcessor.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-        model = GLPNForDepthEstimation.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

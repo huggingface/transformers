@@ -27,14 +27,8 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/config.json",
-    "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/config.json",
-    "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/config.json",
-    "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/config.json",
-    "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/config.json",
-    "microsoft/deberta-xlarge-mnli": "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class DebertaConfig(PretrainedConfig):

@@ -120,7 +120,7 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
         if max_original_size / min_original_size * size > max_size:
             size = int(round(max_size * min_original_size / max_original_size))
 
-    if width < height and width != size:
+    if width <= height and width != size:
         height = int(size * height / width)
         width = size
     elif height < width and height != size:
@@ -1095,7 +1095,14 @@ class YolosImageProcessor(BaseImageProcessor):
             ]
             data["pixel_mask"] = masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in padded_annotations
+            ]
+
+        return encoded_inputs
 
     def preprocess(
         self,
@@ -1314,7 +1321,7 @@ class YolosImageProcessor(BaseImageProcessor):
 
         if do_convert_annotations and annotations is not None:
             annotations = [
-                self.normalize_annotation(annotation, get_image_size(image))
+                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
                 for annotation, image in zip(annotations, images)
             ]
 

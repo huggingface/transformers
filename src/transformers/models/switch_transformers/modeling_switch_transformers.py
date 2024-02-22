@@ -54,18 +54,8 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/switch-base-8",
-    "google/switch-base-16",
-    "google/switch-base-32",
-    "google/switch-base-64",
-    "google/switch-base-128",
-    "google/switch-base-256",
-    "google/switch-large-128",
-    "google/switch-xxl-128",
-    "google/switch-c-2048",
-    # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
-]
+
+from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:

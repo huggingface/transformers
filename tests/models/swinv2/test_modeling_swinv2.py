@@ -32,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Swinv2Backbone, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling, Swinv2Model
-    from transformers.models.swinv2.modeling_swinv2 import SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -432,9 +431,9 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Swinv2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/swinv2-tiny-patch4-window8-256"
+        model = Swinv2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Swinv2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):

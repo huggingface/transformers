@@ -78,10 +78,7 @@ _QA_EXPECTED_LOSS = 0.59
 _QA_EXPECTED_OUTPUT = "' nice puppet'"
 
 
-BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/bart-large",
-    # see all BART models at https://huggingface.co/models?filter=bart
-]
+from ..deprecated._archive_maps import BART_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -430,7 +427,7 @@ class BartFlashAttention2(BartAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -2096,7 +2093,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BART decoder with with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    BART decoder with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     BART_START_DOCSTRING,
 )

@@ -39,6 +39,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -95,6 +96,7 @@ def _generate_supported_model_class_names(
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
         "backbone": MODEL_FOR_BACKBONE_MAPPING_NAMES,
+        "image-feature-extraction": MODEL_FOR_IMAGE_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -133,17 +135,22 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "hubert",
     "layoutlm",
     "llama",
+    "cohere",
     "lxmert",
     "m2m_100",
     "marian",
     "mbart",
     "megatron-bert",
+    "mistral",
+    "mixtral",
     "mobilebert",
     "mt5",
     "nezha",
     "opt",
     "pegasus",
     "plbart",
+    "qwen2",
+    "qwen2_moe",
     "resnet",
     "roberta",
     "segformer",
@@ -257,11 +264,14 @@ def torch_arange(*args, **kwargs):
 
 def torch_full(*args, **kwargs):
     args = list(args)
-    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device("meta"):
-        args[1] = 1  # Any value.
+    # We set the fill value to 1 as its value is not important as long as it's not a tensor on the `meta` device.
+    if len(args) > 1:
+        args[1] = 1
+    else:
+        kwargs["fill_value"] = 1
     kwargs_without_device = dict(kwargs)
     kwargs_without_device.pop("device", None)
-    return torch.full(*args, **kwargs_without_device)
+    return torch.full(*args, **kwargs_without_device, device="meta")
 
 
 def torch_cat(tensors, dim=None, axis=None, *, out=None):
@@ -752,6 +762,7 @@ class HFTracer(Tracer):
         "tensor",
         "clamp",
         "finfo",
+        "tril",
     ]
     supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 

@@ -50,7 +50,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import OwlViTForObjectDetection, OwlViTModel, OwlViTTextModel, OwlViTVisionModel
-    from transformers.models.owlvit.modeling_owlvit import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -217,9 +216,9 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class OwlViTTextModelTester:
@@ -363,9 +362,9 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class OwlViTModelTester:
@@ -381,6 +380,7 @@ class OwlViTModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -572,9 +572,9 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class OwlViTForObjectDetectionTester:
@@ -585,6 +585,7 @@ class OwlViTForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -768,9 +769,9 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OwlViTForObjectDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTForObjectDetection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

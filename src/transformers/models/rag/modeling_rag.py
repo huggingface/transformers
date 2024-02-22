@@ -1539,7 +1539,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " greedy search."
                 )
-            return self.greedy_search(
+            return self._greedy_search(
                 input_ids,
                 logits_processor=pre_processor,
                 max_length=generation_config.max_length,
@@ -1559,7 +1559,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 max_length=generation_config.max_length,
             )
-            return self.beam_search(
+            return self._beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=pre_processor,

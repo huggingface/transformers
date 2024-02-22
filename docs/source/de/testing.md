@@ -452,7 +452,7 @@ Dekorateure werden verwendet, um die Anforderungen von Tests in Bezug auf CPU/GP
 - `require_torch_multi_gpu` - wie `require_torch` und zusätzlich mindestens 2 GPUs erforderlich
 - `require_torch_non_multi_gpu` - wie `require_torch` plus benötigt 0 oder 1 GPUs
 - `require_torch_up_to_2_gpus` - wie `require_torch` plus erfordert 0 oder 1 oder 2 GPUs
-- `require_torch_tpu` - wie `require_torch` plus erfordert mindestens 1 TPU
+- `require_torch_xla` - wie `require_torch` plus erfordert mindestens 1 TPU
 
 Lassen Sie uns die GPU-Anforderungen in der folgenden Tabelle darstellen:
 

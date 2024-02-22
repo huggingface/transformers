@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SeamlessM4Tv2Config(PretrainedConfig):

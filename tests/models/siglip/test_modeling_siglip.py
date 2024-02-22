@@ -48,7 +48,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -217,9 +216,9 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipTextModelTester:
@@ -374,9 +373,9 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipModelTester:
@@ -389,6 +388,7 @@ class SiglipModelTester:
         self.parent = parent
         self.text_model_tester = SiglipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = SiglipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTester.prepare_config_and_inputs
@@ -577,11 +577,10 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_from_pretrained with CLIPModel->SiglipModel, CLIP->SIGLIP
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):

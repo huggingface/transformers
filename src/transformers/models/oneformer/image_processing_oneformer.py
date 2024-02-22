@@ -1244,8 +1244,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             # if this is panoptic segmentation, we only keep the "thing" classes
             if task_type == "panoptic":
                 keep = torch.zeros_like(scores_per_image).bool()
-                for i, lab in enumerate(labels_per_image):
-                    keep[i] = lab in self.metadata["thing_ids"]
+                for j, lab in enumerate(labels_per_image):
+                    keep[j] = lab in self.metadata["thing_ids"]
 
                 scores_per_image = scores_per_image[keep]
                 labels_per_image = labels_per_image[keep]
@@ -1258,8 +1258,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 continue
 
             if "ade20k" in self.class_info_file and not is_demo and "instance" in task_type:
-                for i in range(labels_per_image.shape[0]):
-                    labels_per_image[i] = self.metadata["thing_ids"].index(labels_per_image[i].item())
+                for j in range(labels_per_image.shape[0]):
+                    labels_per_image[j] = self.metadata["thing_ids"].index(labels_per_image[j].item())
 
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None

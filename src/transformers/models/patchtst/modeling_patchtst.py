@@ -33,10 +33,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
 
-PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtst-etth1-pretrain",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtst
-]
+
+from ..deprecated._archive_maps import PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST

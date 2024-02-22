@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openai/clip-vit-base-patch32"
     tokenizer_class = CLIPTokenizer
     rust_tokenizer_class = CLIPTokenizerFast
     test_rust_tokenizer = True

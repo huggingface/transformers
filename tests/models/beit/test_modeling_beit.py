@@ -21,7 +21,6 @@ from datasets import load_dataset
 from packaging import version
 
 from transformers import BeitConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -36,15 +35,13 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_FOR_BACKBONE_MAPPING,
-        MODEL_MAPPING,
         BeitBackbone,
         BeitForImageClassification,
         BeitForMaskedImageModeling,
         BeitForSemanticSegmentation,
         BeitModel,
     )
-    from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -312,10 +309,10 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING),
-                BeitForMaskedImageModeling,
+            if model_class.__name__ in [
+                *MODEL_MAPPING_NAMES.values(),
+                *MODEL_FOR_BACKBONE_MAPPING_NAMES.values(),
+                "BeitForMaskedImageModeling",
             ]:
                 continue
 
@@ -337,8 +334,12 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
             if (
-                model_class
-                in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING), BeitForMaskedImageModeling]
+                model_class.__name__
+                in [
+                    *MODEL_MAPPING_NAMES.values(),
+                    *MODEL_FOR_BACKBONE_MAPPING_NAMES.values(),
+                    "BeitForMaskedImageModeling",
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -383,9 +384,9 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BeitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/beit-base-patch16-224"
+        model = BeitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

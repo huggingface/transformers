@@ -196,8 +196,9 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     Returns:
         `typing.Type`: The class looked for.
     """
-    module_path = module_path.replace(os.path.sep, ".")
-    module = importlib.import_module(module_path)
+    name = os.path.normpath(module_path).replace(".py", "").replace(os.path.sep, ".")
+    module_path = str(Path(HF_MODULES_CACHE) / module_path)
+    module = importlib.machinery.SourceFileLoader(name, module_path).load_module()
     return getattr(module, class_name)
 
 
@@ -497,7 +498,7 @@ def get_class_from_dynamic_module(
         local_files_only=local_files_only,
         repo_type=repo_type,
     )
-    return get_class_in_module(class_name, final_module.replace(".py", ""))
+    return get_class_in_module(class_name, final_module)
 
 
 def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None) -> List[str]:
@@ -591,8 +592,9 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
         if has_local_code:
             trust_remote_code = False
         elif has_remote_code and TIME_OUT_REMOTE_CODE > 0:
+            prev_sig_handler = None
             try:
-                signal.signal(signal.SIGALRM, _raise_timeout_error)
+                prev_sig_handler = signal.signal(signal.SIGALRM, _raise_timeout_error)
                 signal.alarm(TIME_OUT_REMOTE_CODE)
                 while trust_remote_code is None:
                     answer = input(
@@ -613,6 +615,10 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
                     f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
                     f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
                 )
+            finally:
+                if prev_sig_handler is not None:
+                    signal.signal(signal.SIGALRM, prev_sig_handler)
+                    signal.alarm(0)
         elif has_remote_code:
             # For the CI which puts the timeout at 0
             _raise_timeout_error(None, None)

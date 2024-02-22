@@ -50,7 +50,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Owlv2ForObjectDetection, Owlv2Model, Owlv2TextModel, Owlv2VisionModel
-    from transformers.models.owlv2.modeling_owlv2 import OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -138,7 +137,7 @@ class Owlv2VisionModelTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids, inputs_embeds,
@@ -219,9 +218,9 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2VisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2VisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTester with OwlViT->Owlv2
@@ -315,7 +314,7 @@ class Owlv2TextModelTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
@@ -367,9 +366,9 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2TextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2TextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class Owlv2ModelTester:
@@ -385,6 +384,7 @@ class Owlv2ModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -429,7 +429,7 @@ class Owlv2ModelTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -577,9 +577,9 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTester with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
@@ -591,6 +591,7 @@ class Owlv2ForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -642,7 +643,7 @@ class Owlv2ForObjectDetectionTester:
 
 
 @require_torch
-# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2ForObjectDetection,) if is_torch_available() else ()
     fx_compatible = False
@@ -775,9 +776,9 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Owlv2ForObjectDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/owlv2-base-patch16-ensemble"
+        model = Owlv2ForObjectDetection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

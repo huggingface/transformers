@@ -17,12 +17,6 @@ rendered properly in your Markdown viewer.
 
 The 🤗 Transformers library is often able to offer new models thanks to community contributors. But this can be a challenging project and requires an in-depth knowledge of the 🤗 Transformers library and the model to implement. At Hugging Face, we're trying to empower more of the community to actively add models and we've put together this guide to walk you through the process of adding a PyTorch model (make sure you have [PyTorch installed](https://pytorch.org/get-started/locally/)).
 
-<Tip>
-
-If you're interested in implementing a TensorFlow model, take a look at the [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model) guide!
-
-</Tip>
-
 Along the way, you'll:
 
 - get insights into open-source best practices
@@ -89,8 +83,8 @@ model.config  # model has access to its config
 Similar to the model, the configuration inherits basic serialization and deserialization functionalities from
 [`PretrainedConfig`]. Note that the configuration and the model are always serialized into two
 different formats - the model to a *pytorch_model.bin* file and the configuration to a *config.json* file. Calling
-[`~PreTrainedModel.save_pretrained`] will automatically call
-[`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
+the model's [`~PreTrainedModel.save_pretrained`] will automatically call
+the config's [`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
 
 
 ### Code style
@@ -192,46 +186,46 @@ its attention layer, etc. We will be more than happy to help you.
 
 2. Clone your `transformers` fork to your local disk, and add the base repository as a remote:
 
-```bash
-git clone https://github.com/[your Github handle]/transformers.git
-cd transformers
-git remote add upstream https://github.com/huggingface/transformers.git
-```
+   ```bash
+   git clone https://github.com/[your Github handle]/transformers.git
+   cd transformers
+   git remote add upstream https://github.com/huggingface/transformers.git
+   ```
 
 3. Set up a development environment, for instance by running the following command:
 
-```bash
-python -m venv .env
-source .env/bin/activate
-pip install -e ".[dev]"
-```
+   ```bash
+   python -m venv .env
+   source .env/bin/activate
+   pip install -e ".[dev]"
+   ```
 
-Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
-(PyTorch, TensorFlow and/or Flax) then do:
+   Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
+   failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
+   (PyTorch, TensorFlow and/or Flax) then do:
 
-```bash
-pip install -e ".[quality]"
-```
+   ```bash
+   pip install -e ".[quality]"
+   ```
 
-which should be enough for most use cases. You can then return to the parent directory
+   which should be enough for most use cases. You can then return to the parent directory
 
-```bash
-cd ..
-```
+   ```bash
+   cd ..
+   ```
 
 4. We recommend adding the PyTorch version of *brand_new_bert* to Transformers. To install PyTorch, please follow the
    instructions on https://pytorch.org/get-started/locally/.
 
-**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
+   **Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
 
 5. To port *brand_new_bert*, you will also need access to its original repository:
 
-```bash
-git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
-cd brand_new_bert
-pip install -e .
-```
+   ```bash
+   git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
+   cd brand_new_bert
+   pip install -e .
+   ```
 
 Now you have set up a development environment to port *brand_new_bert* to 🤗 Transformers.
 
@@ -404,12 +398,14 @@ In the special case that you are adding a model whose architecture exactly match
 existing model you only have to add a conversion script as described in [this section](#write-a-conversion-script).
 In this case, you can just re-use the whole model architecture of the already existing model.
 
-Otherwise, let's start generating a new model. You have two choices here:
+Otherwise, let's start generating a new model. We recommend using the following script to add a model starting from
+an existing model:
 
-- `transformers-cli add-new-model-like` to add a new model like an existing one
-- `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
+```bash
+transformers-cli add-new-model-like
+```
 
-In both cases, you will be prompted with a questionnaire to fill in the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+You will be prompted with a questionnaire to fill in the basic information of your model.
 
 **Open a Pull Request on the main huggingface/transformers repo**
 
@@ -421,29 +417,29 @@ You should do the following:
 
 1. Create a branch with a descriptive name from your main branch
 
-```bash
-git checkout -b add_brand_new_bert
-```
+   ```bash
+   git checkout -b add_brand_new_bert
+   ```
 
 2. Commit the automatically generated code:
 
-```bash
-git add .
-git commit
-```
+   ```bash
+   git add .
+   git commit
+   ```
 
 3. Fetch and rebase to current main
 
-```bash
-git fetch upstream
-git rebase upstream/main
-```
+   ```bash
+   git fetch upstream
+   git rebase upstream/main
+   ```
 
 4. Push the changes to your account using:
 
-```bash
-git push -u origin a-descriptive-name-for-my-changes
-```
+   ```bash
+   git push -u origin a-descriptive-name-for-my-changes
+   ```
 
 5. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
    GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
@@ -759,7 +755,7 @@ In case you are using Windows, you should replace `RUN_SLOW=1` with `SET RUN_SLO
 </Tip>
 
 Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
-`BrandNewBertModelTester`/``BrandNewBertModelTest`. This part is often forgotten but is extremely useful in two
+`BrandNewBertModelTester`/`BrandNewBertModelTest`. This part is often forgotten but is extremely useful in two
 ways:
 
 - It helps to transfer the knowledge you have acquired during the model addition to the community by showing how the
@@ -776,7 +772,7 @@ It is very important to find/extract the original tokenizer file and to manage t
 Transformers' implementation of the tokenizer.
 
 To ensure that the tokenizer works correctly, it is recommended to first create a script in the original repository
-that inputs a string and returns the `input_ids``. It could look similar to this (in pseudo-code):
+that inputs a string and returns the `input_ids`. It could look similar to this (in pseudo-code):
 
 ```python
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
@@ -827,7 +823,7 @@ the community to add some *Tips* to show how the model should be used. Don't hes
 regarding the docstrings.
 
 Next, make sure that the docstring added to `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` is
-correct and included all necessary inputs and outputs. We have a detailed guide about writing documentation and our docstring format [here](writing-documentation). It is always to good to remind oneself that documentation should
+correct and included all necessary inputs and outputs. We have a detailed guide about writing documentation and our docstring format [here](writing-documentation). It is always good to remind oneself that documentation should
 be treated at least as carefully as the code in 🤗 Transformers since the documentation is usually the first contact
 point of the community with the model.
 

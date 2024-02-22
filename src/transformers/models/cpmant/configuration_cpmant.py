@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openbmb/cpm-ant-10b": "https://huggingface.co/openbmb/cpm-ant-10b/blob/main/config.json"
-    # See all CPMAnt models at https://huggingface.co/models?filter=cpmant
-}
+
+from ..deprecated._archive_maps import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class CpmAntConfig(PretrainedConfig):

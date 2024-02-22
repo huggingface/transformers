@@ -18,7 +18,6 @@
 import unittest
 
 from transformers import Data2VecVisionConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -32,12 +31,11 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_MAPPING,
         Data2VecVisionForImageClassification,
         Data2VecVisionForSemanticSegmentation,
         Data2VecVisionModel,
     )
-    from transformers.models.data2vec.modeling_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -235,7 +233,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in [*get_values(MODEL_MAPPING)]:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
 
             model = model_class(config)
@@ -254,7 +252,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in [*get_values(MODEL_MAPPING)] or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
@@ -299,9 +297,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-vision-base-ft1k"
+        model = Data2VecVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

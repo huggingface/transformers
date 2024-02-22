@@ -38,9 +38,6 @@ if is_tf_available():
         TFEfficientFormerModel,
     )
     from transformers.modeling_tf_utils import keras
-    from transformers.models.efficientformer.modeling_tf_efficientformer import (
-        TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 if is_vision_available():
@@ -299,9 +296,9 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFEfficientFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "snap-research/efficientformer-l1-300"
+        model = TFEfficientFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

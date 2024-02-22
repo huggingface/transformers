@@ -17,7 +17,7 @@
 import math
 import unittest
 
-from transformers import BioGptConfig, is_torch_available
+from transformers import BioGptConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -36,7 +36,6 @@ if is_torch_available():
         BioGptModel,
         BioGptTokenizer,
     )
-    from transformers.models.biogpt.modeling_biogpt import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BioGptModelTester:
@@ -294,7 +293,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "token-classification": BioGptForTokenClassification,
             "zero-shot": BioGptForSequenceClassification,
         }
-        if is_torch_available()
+        if is_torch_available() and is_sacremoses_available()
         else {}
     )
     test_pruning = False
@@ -382,9 +381,9 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BioGptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/biogpt"
+        model = BioGptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
     def test_biogpt_sequence_classification_model(self):
@@ -414,6 +413,10 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
+    def test_beam_sample_generate(self):
+        pass
 
 
 @require_torch

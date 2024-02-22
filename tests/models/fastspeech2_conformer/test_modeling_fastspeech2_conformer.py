@@ -347,6 +347,13 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
+        pass
+
 
 @require_torch
 @require_g2p_en
@@ -760,6 +767,13 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
         pass
 
 

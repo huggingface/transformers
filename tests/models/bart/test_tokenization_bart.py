@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_det
 
 @require_tokenizers
 class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/bart-base"
     tokenizer_class = BartTokenizer
     rust_tokenizer_class = BartTokenizerFast
     test_rust_tokenizer = True

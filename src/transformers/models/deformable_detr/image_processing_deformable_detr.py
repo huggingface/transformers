@@ -1321,7 +1321,6 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
-
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
@@ -1432,8 +1431,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 return_pixel_mask=True,
                 data_format=data_format,
                 input_data_format=input_data_format,
-                return_tensors=return_tensors,
                 update_bboxes=do_convert_annotations,
+                return_tensors=return_tensors,
             )
         else:
             images = [

@@ -51,10 +51,10 @@ seemingly giving the agent some kind of memory.
 Let's take a closer look at how the prompt is structured to understand how it can be best customized.
 The prompt is structured broadly into four parts.
 
-- 1. Introduction: how the agent should behave, explanation of the concept of tools.
-- 2. Description of all the tools. This is defined by a `<<all_tools>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
-- 3. A set of examples of tasks and their solution
-- 4. Current example, and request for solution.
+1. Introduction: how the agent should behave, explanation of the concept of tools.
+2. Description of all the tools. This is defined by a `<<all_tools>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
+3. A set of examples of tasks and their solution
+4. Current example, and request for solution.
 
 To better understand each part, let's look at a shortened version of how the `run` prompt can look like:
 
@@ -301,7 +301,7 @@ and description and try refining your task request with it.
 ### Customizing the tool descriptions
 
 As we've seen before the agent has access to each of the tools' names and descriptions. The base tools 
-should have very precise names and descriptions, however, you might find that it could help to change the 
+should have very precise names and descriptions, however, you might find that it could help to change 
 the description or name of a tool for your specific use case. This might become especially important 
 when you've added multiple tools that are very similar or if you want to use your agent only for a certain 
 domain, *e.g.* image generation and transformations.
@@ -426,6 +426,15 @@ To upload your custom prompt on a repo on the Hub and share it with the communit
 - to put the prompt template for the `chat` command in a file named `chat_prompt_template.txt`
 
 ## Using custom tools
+
+<Tip warning={true}>
+
+Using custom tools in your local runtime means that you'll download code to run on your machine.
+
+ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+installing a package using pip/npm/apt.
+
+</Tip>
 
 In this section, we'll be leveraging two existing custom tools that are specific to image generation:
 

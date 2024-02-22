@@ -18,7 +18,6 @@
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -36,8 +35,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
-    from transformers.models.pvt.modeling_pvt import PVT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
@@ -243,7 +242,7 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -254,9 +253,9 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Zetatech/pvt-tiny-224"
+        model = PvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

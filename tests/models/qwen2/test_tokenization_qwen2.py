@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "qwen/qwen-tokenizer"
     tokenizer_class = Qwen2Tokenizer
     rust_tokenizer_class = Qwen2TokenizerFast
     test_slow_tokenizer = True
@@ -58,6 +59,8 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ";}",
                 ";}\u010a",
                 "\u00cf\u0135",
+                "\u0120#",
+                "##",
             ]
         )
 
@@ -74,6 +77,8 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "; }",
             ";} \u010a",
             "\u00cf \u0135",
+            "\u0120 #",
+            "# #",
         ]
 
         self.special_tokens_map = {"eos_token": "<|endoftext|>"}
@@ -128,7 +133,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens
-        input_bpe_tokens = [75, 78, 86, 260, 259, 260, 220, 77, 68, 86, 260, 220, 15, 16, 15, 266, 268, 267]
+        input_bpe_tokens = [75, 78, 86, 260, 259, 260, 220, 77, 68, 86, 260, 220, 15, 16, 15, 266, 270, 267]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     @unittest.skip("We disable the test of pretokenization as it is not reversible.")
@@ -136,6 +141,11 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # the test case in parent class uses str.split to "pretokenize",
         # which eats the whitespaces, which, in turn, is not reversible.
         # the results, by nature, should be different.
+        pass
+
+    @unittest.skip("We disable the test of clean up tokenization spaces as it is not applicable.")
+    def test_clean_up_tokenization_spaces(self):
+        # it only tests bert-base-uncased and clean_up_tokenization_spaces is not applicable to this tokenizer
         pass
 
     def test_nfc_normalization(self):
@@ -157,6 +167,16 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_output_string = tokenizer.backend_tokenizer.normalizer.normalize_str(input_string)
             self.assertEqual(tokenizer_output_string, output_string)
 
+    def test_slow_tokenizer_token_with_number_sign(self):
+        if not self.test_slow_tokenizer:
+            return
+
+        sequence = " ###"
+        token_ids = [268, 269]
+
+        tokenizer = self.get_tokenizer()
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokenizer.tokenize(sequence)), token_ids)
+
     def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
         # Qwen2Tokenizer changes the default `spaces_between_special_tokens` in `decode` to False
         if not self.test_slow_tokenizer:
@@ -165,7 +185,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # tokenizer has a special token: `"<|endfotext|>"` as eos, but it is not `legacy_added_tokens`
         # special tokens in `spaces_between_special_tokens` means spaces between `legacy_added_tokens`
         # that would be `"<|im_start|>"` and `"<|im_end|>"` in Qwen/Qwen2 Models
-        token_ids = [259, 260, 268, 269, 26]
+        token_ids = [259, 260, 270, 271, 26]
         sequence = " lower<|endoftext|><|im_start|>;"
         sequence_with_space = " lower<|endoftext|> <|im_start|> ;"
 

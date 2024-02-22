@@ -25,13 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "kssteven/ibert-roberta-base": "https://huggingface.co/kssteven/ibert-roberta-base/resolve/main/config.json",
-    "kssteven/ibert-roberta-large": "https://huggingface.co/kssteven/ibert-roberta-large/resolve/main/config.json",
-    "kssteven/ibert-roberta-large-mnli": (
-        "https://huggingface.co/kssteven/ibert-roberta-large-mnli/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class IBertConfig(PretrainedConfig):

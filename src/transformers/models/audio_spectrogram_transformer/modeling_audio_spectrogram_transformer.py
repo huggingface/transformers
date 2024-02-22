@@ -45,10 +45,7 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
-AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MIT/ast-finetuned-audioset-10-10-0.4593",
-    # See all Audio Spectrogram Transformer models at https://huggingface.co/models?filter=ast
-]
+from ..deprecated._archive_maps import AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ASTEmbeddings(nn.Module):

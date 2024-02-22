@@ -57,9 +57,9 @@ class CircleCIJob:
     install_steps: List[str] = None
     marker: Optional[str] = None
     parallelism: Optional[int] = 1
-    pytest_num_workers: int = 8
+    pytest_num_workers: int = 12
     pytest_options: Dict[str, Any] = None
-    resource_class: Optional[str] = "xlarge"
+    resource_class: Optional[str] = "2xlarge"
     tests_to_run: Optional[List[str]] = None
     working_directory: str = "~/transformers"
     # This should be only used for doctest job!
@@ -103,31 +103,8 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
-            {
-                "restore_cache": {
-                    "keys": [
-                        # check the fully-matched cache first
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                        # try the partially-matched cache from `main`
-                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
-                        # try the general partially-matched cache
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
-                    ]
-                }
-            },
-            {
-                "restore_cache": {
-                    "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
-                    ]
-                }
-            },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
-        steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
-        steps.extend([{"run": "pip install pytest-subtests"}])
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
@@ -142,7 +119,7 @@ class CircleCIJob:
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command += f"python3 -m pytest -rs --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
@@ -196,7 +173,7 @@ class CircleCIJob:
             test_command = ""
             if self.timeout:
                 test_command = f"timeout {self.timeout} "
-            test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += f"python3 -m pytest -rs -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
@@ -249,24 +226,6 @@ class CircleCIJob:
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
 
-        # save cache at the end: so pytest step runs before cache saving and we can see results earlier
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.cache/pip"],
-                }
-            }
-        )
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.pyenv/versions/"],
-                }
-            }
-        )
-
         job["steps"] = steps
         return job
 
@@ -278,17 +237,9 @@ class CircleCIJob:
 # JOBS
 torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
+    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs cmake",
-        "git lfs install",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip install -U --upgrade-strategy eager tensorflow_probability",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-        # TODO: remove this one after fixing the dependency issue(s) above
-        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
-    ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
 )
@@ -297,49 +248,33 @@ torch_and_tf_job = CircleCIJob(
 torch_and_flax_job = CircleCIJob(
     "torch_and_flax",
     additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install -U --upgrade-strategy eager --upgrade pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-    ],
+    docker_image=[{"image":"huggingface/transformers-torch-jax-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
 )
 
-
 torch_job = CircleCIJob(
     "torch",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-    ],
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     parallelism=1,
-    pytest_num_workers=6,
+    pytest_num_workers=12,
 )
 
 
 tf_job = CircleCIJob(
     "tf",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
-        "pip install -U --upgrade-strategy eager tensorflow_probability",
-    ],
+    docker_image=[{"image":"huggingface/transformers-tf-light"}],
+    install_steps=["uv venv", "uv pip install -e."],
     parallelism=1,
 )
 
 
 flax_job = CircleCIJob(
     "flax",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
-    ],
+    docker_image=[{"image":"huggingface/transformers-jax-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     parallelism=1,
 )
 
@@ -347,25 +282,18 @@ flax_job = CircleCIJob(
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
     additional_env={"RUN_PIPELINE_TESTS": True},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
-    ],
+    docker_image=[{"image":"huggingface/transformers-torch-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     marker="is_pipeline_test",
-    pytest_num_workers=6,
+    pytest_num_workers=12,
 )
 
 
 pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
     additional_env={"RUN_PIPELINE_TESTS": True},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y cmake",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
-        "pip install -U --upgrade-strategy eager tensorflow_probability",
-    ],
+    docker_image=[{"image":"huggingface/transformers-tf-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     marker="is_pipeline_test",
 )
 
@@ -373,22 +301,8 @@ pipelines_tf_job = CircleCIJob(
 custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
     additional_env={"RUN_CUSTOM_TOKENIZERS": True},
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y cmake",
-        {
-            "name": "install jumanpp",
-            "command":
-                "wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz\n"
-                "tar xvf jumanpp-2.0.0-rc3.tar.xz\n"
-                "mkdir jumanpp-2.0.0-rc3/bld\n"
-                "cd jumanpp-2.0.0-rc3/bld\n"
-                "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local\n"
-                "sudo make install\n",
-        },
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
-        "python -m unidic download",
-    ],
+    docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
+    install_steps=["uv venv","uv pip install -e ."],
     parallelism=None,
     resource_class=None,
     tests_to_run=[
@@ -403,13 +317,8 @@ examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
-        "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-    ],
+    docker_image=[{"image":"huggingface/transformers-torch-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
     pytest_num_workers=1,
 )
 
@@ -417,35 +326,19 @@ examples_torch_job = CircleCIJob(
 examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y cmake",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[sklearn,tensorflow,sentencepiece,testing]",
-        "pip install -U --upgrade-strategy eager -r examples/tensorflow/_tests_requirements.txt",
-    ],
-)
-
-
-examples_flax_job = CircleCIJob(
-    "examples_flax",
-    cache_name="flax_examples",
-    install_steps=[
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
-        "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
-    ],
+    docker_image=[{"image":"huggingface/transformers-tf-light"}],
+    install_steps=["uv venv", "uv pip install -e ."],
 )
 
 
 hub_job = CircleCIJob(
     "hub",
     additional_env={"HUGGINGFACE_CO_STAGING": True},
+    docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install git-lfs",
+        "uv venv", "uv pip install -e .",
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -454,10 +347,11 @@ hub_job = CircleCIJob(
 
 onnx_job = CircleCIJob(
     "onnx",
+    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}], # TODO do we really need torch for that job? torch-light?  
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y cmake",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "uv venv", "uv pip install -e .",
+        "uv pip install --upgrade eager pip",
+        "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -466,25 +360,13 @@ onnx_job = CircleCIJob(
 
 exotic_models_job = CircleCIJob(
     "exotic_models",
-    install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,testing,vision]",
-        "pip install -U --upgrade-strategy eager torchvision",
-        "pip install -U --upgrade-strategy eager scipy",
-        "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
-        "sudo apt install tesseract-ocr",
-        "pip install -U --upgrade-strategy eager pytesseract",
-        "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
-        "pip install -U --upgrade-strategy eager python-Levenshtein",
-        "pip install -U --upgrade-strategy eager opencv-python",
-        "pip install -U --upgrade-strategy eager nltk",
-        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0' 'torchvision<0.17' 'torchaudio<2.2.0'"
-    ],
+    install_steps=["uv venv", "uv pip install -e ."],
+    docker_image=[{"image":"huggingface/transformers-exotic-models"}],
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
         "tests/models/deta",
+        "tests/models/udop",
         "tests/models/nougat",
     ],
     pytest_num_workers=1,
@@ -494,10 +376,8 @@ exotic_models_job = CircleCIJob(
 
 repo_utils_job = CircleCIJob(
     "repo_utils",
-    install_steps=[
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[quality,testing,torch]",
-    ],
+    docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
+    install_steps=["uv venv", "uv pip install -e ."],
     parallelism=None,
     pytest_num_workers=1,
     resource_class="large",
@@ -513,19 +393,9 @@ py_command = f"$(python3 -c '{py_command}')"
 command = f'echo "{py_command}" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
+    docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager -e .[dev]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-        "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
-        "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
-        "pip install -U --upgrade-strategy eager g2p-en",
-        # TODO: remove this one after fixing the dependency issue(s) above
-        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu",
-        "find -name __pycache__ -delete",
-        "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
         {
@@ -563,7 +433,6 @@ REGULAR_TESTS = [
 EXAMPLES_TESTS = [
     examples_torch_job,
     examples_tensorflow_job,
-    examples_flax_job,
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,

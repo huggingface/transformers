@@ -42,18 +42,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "mosaicml/mpt-7b"
 _CONFIG_FOR_DOC = "MptConfig"
 
-MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mosaicml/mpt-7b",
-    "mosaicml/mpt-7b-storywriter",
-    "mosaicml/mpt-7b-instruct",
-    "mosaicml/mpt-7b-8k",
-    "mosaicml/mpt-7b-8k-instruct",
-    "mosaicml/mpt-7b-8k-chat",
-    "mosaicml/mpt-30b",
-    "mosaicml/mpt-30b-instruct",
-    "mosaicml/mpt-30b-chat",
-    # See all MPT models at https://huggingface.co/models?filter=mpt
-]
+
+from ..deprecated._archive_maps import MPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=None):

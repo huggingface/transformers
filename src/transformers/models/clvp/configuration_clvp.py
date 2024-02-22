@@ -28,9 +28,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/clvp_dev": "https://huggingface.co/susnato/clvp_dev/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ClvpEncoderConfig(PretrainedConfig):

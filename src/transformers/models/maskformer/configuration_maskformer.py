@@ -18,16 +18,10 @@ from typing import Dict, Optional
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
+from ..deprecated._archive_maps import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 
-
-MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/maskformer-swin-base-ade": (
-        "https://huggingface.co/facebook/maskformer-swin-base-ade/blob/main/config.json"
-    )
-    # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
-}
 
 logger = logging.get_logger(__name__)
 

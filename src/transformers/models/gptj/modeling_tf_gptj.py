@@ -55,11 +55,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
 
-GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-j-6B",
-    # See all GPT-J models at https://huggingface.co/models?filter=gptj
-]
-
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
     inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)

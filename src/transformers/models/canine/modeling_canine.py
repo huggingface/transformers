@@ -52,11 +52,9 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/canine-s"
 _CONFIG_FOR_DOC = "CanineConfig"
 
-CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/canine-s",
-    "google/canine-r",
-    # See all CANINE models at https://huggingface.co/models?filter=canine
-]
+
+from ..deprecated._archive_maps import CANINE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # Support up to 16 hash functions.
 _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223]
@@ -610,7 +608,7 @@ class CanineAttention(nn.Module):
                 chunk_end = min(from_seq_length, chunk_start + self.attend_from_chunk_width)
                 from_chunks.append((chunk_start, chunk_end))
 
-            # Determine the chunks (windows) that will will attend *to*.
+            # Determine the chunks (windows) that will attend *to*.
             to_chunks = []
             if self.first_position_attends_to_all:
                 to_chunks.append((0, to_seq_length))

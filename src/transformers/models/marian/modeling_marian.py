@@ -51,12 +51,6 @@ _CONFIG_FOR_DOC = "MarianConfig"
 _CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 
 
-MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Helsinki-NLP/opus-mt-en-de",
-    # See all Marian models at https://huggingface.co/models?filter=marian
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -1349,7 +1343,13 @@ class MarianMTModel(MarianPreTrainedModel):
         if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+            tied_weights = self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder, self.base_model_prefix, "encoder"
+            )
+            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
+            # attributed not an instance member, therefore modifying it will modify the entire class
+            # Leading to issues on subsequent calls by different tests or subsequent calls.
+            self._dynamic_tied_weights_keys = tied_weights
 
         for module in self.modules():
             if hasattr(module, "_tie_weights"):

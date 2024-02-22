@@ -37,12 +37,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SamConfig"
 _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
-SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/sam-vit-huge",
-    "facebook/sam-vit-large",
-    "facebook/sam-vit-base",
-    # See all SAM models at https://huggingface.co/models?filter=sam
-]
+
+from ..deprecated._archive_maps import SAM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1078,6 +1074,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    _no_split_modules = ["SamVisionAttention"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
