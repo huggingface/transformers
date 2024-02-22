@@ -969,10 +969,18 @@ class GemmaModel(GemmaPreTrainedModel):
                 padding_mask, torch.finfo(dtype).min
             )
 
-        if self.config._attn_implementation == "sdpa":
-            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-            if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
+        if self.config._attn_implementation == "sdpa" and attention_mask is not None:
+            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+            )
+            if not is_tracing and torch.any(attention_mask != 1):
+                # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+                # Details: https://github.com/pytorch/pytorch/issues/110213
+                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1, keepdim=True)).to(
                     dtype
                 )
 
