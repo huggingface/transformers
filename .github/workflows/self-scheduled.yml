@@ -45,19 +45,19 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Cleanup
-        working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
           rm -rf tests/models/__pycache__
           rm -rf reports
 
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+      - name: Install locally and show env
+        run: |
+          pip install -e .
+          python3 utils/print_env.py
+          pip freeze
 
       - id: set-matrix
         name: Identify models to test
-        working-directory: /transformers/tests
         run: |
           echo "folder_slices=$(python3 ./utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
@@ -98,14 +98,11 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: Environment
-        working-directory: /transformers
+      - name: Install locally and show env
         run: |
+          pip install -e .
           python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+          pip freeze
 
       - name: Run examples tests on GPU
         working-directory: /transformers
@@ -142,17 +139,13 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: Environment
-        working-directory: /transformers
+      - name: Install locally and show env
         run: |
+          pip install -e .
           python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+          pip freeze
 
       - name: Run all pipeline tests on GPU
-        working-directory: /transformers
         run: |
           python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
 
@@ -185,17 +178,13 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: Environment
-        working-directory: /transformers
+      - name: Install locally and show env
         run: |
+          pip install -e .
           python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+          pip freeze
 
       - name: Run all pipeline tests on GPU
-        working-directory: /transformers
         run: |
           python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests/pipelines
 

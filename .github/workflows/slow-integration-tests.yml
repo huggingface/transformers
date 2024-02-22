@@ -34,9 +34,10 @@ jobs:
           rm -rf tests/models/__pycache__
           rm -rf reports
 
-      - name: Show installed libraries and their versions
-        run: |
-          pip freeze 
+      - name: Install locally & show installed libraries and their versions
+        run: 
+          pip install -e .
+          pip freeze
           python utils/print_env.py
 
       # To avoid unknown test failures
