@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, a10, daily-ci]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci] # TODO: move to A10
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "40gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -46,9 +46,10 @@ jobs:
           python3 -m pip uninstall -y deepspeed
           python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
-      - name: Install Flash Attention
-        run: |
-          pip install flash-attn --no-build-isolation
+      # TODO: uncomment that after A10
+      # - name: Install Flash Attention
+      #   run: |
+      #     pip install flash-attn --no-build-isolation
 
       - name: Run integration tests
         run: |
