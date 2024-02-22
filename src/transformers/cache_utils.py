@@ -441,16 +441,6 @@ class PagedAttentionCache(Cache):
         )  # mapping batch index to {seq_id0, seq_id1, ...} to enable prompt sharing.
         self.slots_mapping = []  # mapping logical slots to physical slots.
 
-    @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[List[torch.FloatTensor]]
-    ) -> "PagedAttentionCache":
-        if past_key_values is None:
-            return cls()
-        cache = cls()
-        for layer_idx, (key_states, value_states) in enumerate(zip(*past_key_values)):
-            cache.update(key_states, value_states, layer_idx)
-        return cache
 
     def copy_on_write(self, src_block_idx: int, dst_block_idx: int):
         """
@@ -768,3 +758,7 @@ class PagedAttentionCache(Cache):
         for seq_idx in freed_seqs:
             self.free(seq_idx)
         self.block_tables = new_block_tables
+    
+    def to_legacy_cache(self):
+        """Dummy function for BC. We have to keep it because otherwise the call in the forward of models will break it"""
+        return None
