@@ -71,47 +71,6 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
 
-  run_examples_gpu:
-    name: Examples directory
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - uses: actions/checkout@v3
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Install locally and show env
-        run: |
-          pip install -e .
-          python3 utils/print_env.py
-          pip freeze
-
-      - name: Run examples tests on GPU
-        working-directory: /transformers
-        run: |
-          pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_examples_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
-
   run_extract_warnings:
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
@@ -119,7 +78,6 @@ jobs:
     needs: [
       setup,
       run_model_tests_gpu,
-      run_examples_gpu,
     ]
     steps:
       - name: Checkout transformers
@@ -163,7 +121,6 @@ jobs:
     needs: [
       setup,
       run_model_tests_gpu,
-      run_examples_gpu,
       run_extract_warnings
     ]
     steps:
@@ -182,7 +139,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ env.CI_SLACK_CHANNEL_ID_DAILY }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: scheduled
+          CI_EVENT: scheduled-models
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           SETUP_STATUS: ${{ needs.setup.result }}

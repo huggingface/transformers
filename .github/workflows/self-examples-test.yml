@@ -1,4 +1,4 @@
-name: Self-hosted runner - SLOW Generation tests (scheduled)
+name: Self-hosted runner - SLOW Example tests (scheduled)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
@@ -28,23 +28,19 @@ env:
   RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
   NUM_SLICES: 2  
-  CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-generation
+  CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-examples
 
-jobs:
-  run_generation_tests:
-    name: PyTorch Generation tests
+  run_examples_gpu:
+    name: Examples directory
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-        docker_image: ["huggingface/transformers-all-latest-gpu"] # TODO: add also PT nightly here
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+        machine_type: [single-gpu]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci]
     container:
-      image: ${{ matrix.docker_image }}
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    env:
-      MACHINE_TYPE: ${{ matrix.machine_type }}
-      RUN_SLOW: 1
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
     steps:
       - uses: actions/checkout@v3
       - name: NVIDIA-SMI
@@ -57,27 +53,31 @@ jobs:
           python3 utils/print_env.py
           pip freeze
 
-      - name: Run all Generation tests on GPU
+      - name: Run examples tests on GPU
         run: |
-          make run_generation_tests
+          pip install -r examples/pytorch/_tests_requirements.txt
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_generation_gpu/failures_short.txt
+        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_generation_gpu"
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_tests_generation_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_generation_gpu
+          name: ${{ matrix.machine_type }}_run_examples_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
 
   run_extract_warnings:
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
     if: always()
-    needs: run_generation_tests
+    needs: [
+      setup,
+      run_model_tests_gpu,
+    ]
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v3
@@ -117,12 +117,17 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-22.04
     if: always()
-    needs: run_generation_tests
+    needs: [
+      setup,
+      run_examples_gpu,
+      run_extract_warnings
+    ]
     steps:
       - name: Preliminary job status
         shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
         run: |
-          echo "Test status: ${{ needs.run_generation_tests.result }}"
+          echo "Setup status: ${{ needs.setup.result }}"
 
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
@@ -133,15 +138,17 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ env.CI_SLACK_CHANNEL_ID_DAILY }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: scheduled-generation
+          CI_EVENT: scheduled-examples
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-          SETUP_STATUS: ${{ needs.run_generation_tests.result }}
+          SETUP_STATUS: ${{ needs.setup.result }}
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py 
+          python utils/notification_service.py
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
