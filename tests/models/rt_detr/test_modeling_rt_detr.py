@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, require_vision, torch_devi
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -44,100 +44,104 @@ class RTDetrModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
-        input_image_size=160,
-        num_channels=3,
+        batch_size=8,
         is_training=True,
+        use_labels=True,
+        num_labels=80,
         initializer_range=0.02,
+        layer_norm_eps=1e-5,
+        batch_norm_eps=1e-5,
+        # backbone
+        use_timm_backbone=True,
         backbone_config=None,
-        feat_strides=[1, 2, 4],
-        feat_channels=[4, 4, 4],
-        num_levels=3,
-        hidden_dim=4,
-        num_attention_heads=1,
-        dim_feedforward=16,
+        num_channels=3,
+        backbone="resnet50d",
+        use_pretrained_backbone=True,
+        dilation=False,
+        # encoder HybridEncoder
+        d_model=256,
+        encoder_in_channels=[512, 1024, 2048],
+        feat_strides=[8, 16, 32],
+        encoder_layers=1,
+        encoder_ffn_dim=1024,
+        encoder_attention_heads=8,
         dropout=0.0,
-        enc_act="gelu",
+        activation_dropout=0.0,
         encode_proj_layers=[2],
-        num_encoder_layers=1,
         pe_temperature=10000,
-        expansion=1.0,
-        act_encoder="silu",
+        encoder_activation_function="gelu",
+        activation_function="silu",
         eval_size=None,
-        num_classes=1,
-        num_queries=1,
-        num_decoder_points=1,
-        num_decoder_layers=1,
-        num_denoising=1,
+        normalize_before=False,
+        # decoder RTDetrTransformer
+        num_queries=300,
+        decoder_in_channels=[256, 256, 256],
+        decoder_ffn_dim=1024,
+        num_feature_levels=3,
+        decoder_n_points=4,
+        decoder_layers=6,
+        decoder_attention_heads=8,
+        decoder_activation_function="relu",
+        attention_dropout=0.0,
+        num_denoising=100,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
+        image_size=[640, 640],
         eval_idx=-1,
-        eps=1e-2,
-        matcher_alpha=0.25,
-        matcher_gamma=2.0,
-        matcher_class_cost=2.0,
-        matcher_bbox_cost=5.0,
-        matcher_giou_cost=2.0,
-        use_focal_loss=True,
-        use_aux_loss=True,
-        focal_loss_alpha=0.75,
-        focal_loss_gamma=2.0,
-        weight_loss_vfl=1.0,
-        weight_loss_bbox=5.0,
-        weight_loss_giou=2.0,
-        eos_coefficient=0.1,
+        disable_custom_kernels=True,
+        with_box_refine=True,
     ):
-        self.batch_size = batch_size
-        self.input_image_size = input_image_size
-        self.num_channels = num_channels
-        self.is_training = is_training
         self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.num_labels = num_labels
         self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.batch_norm_eps = batch_norm_eps
+        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
+        self.num_channels = num_channels
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.dilation = dilation
+        self.d_model = d_model
+        self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
-        self.hidden_dim = hidden_dim
-        self.num_attention_heads = num_attention_heads
-        self.dim_feedforward = dim_feedforward
+        self.encoder_layers = encoder_layers
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_attention_heads = encoder_attention_heads
         self.dropout = dropout
-        self.enc_act = enc_act
+        self.activation_dropout = activation_dropout
         self.encode_proj_layers = encode_proj_layers
-        self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
-        self.expansion = expansion
-        self.act_encoder = act_encoder
+        self.encoder_activation_function = encoder_activation_function
+        self.activation_function = activation_function
         self.eval_size = eval_size
-        self.num_classes = num_classes
+        self.normalize_before = normalize_before
         self.num_queries = num_queries
-        self.feat_channels = feat_channels
-        self.num_levels = num_levels
-        self.num_decoder_points = num_decoder_points
-        self.num_decoder_layers = num_decoder_layers
+        self.decoder_in_channels = decoder_in_channels
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.num_feature_levels = num_feature_levels
+        self.decoder_n_points = decoder_n_points
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_activation_function = decoder_activation_function
+        self.attention_dropout = attention_dropout
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
         self.learnt_init_query = learnt_init_query
+        self.image_size = image_size
         self.eval_idx = eval_idx
-        self.eps = eps
-        self.matcher_alpha = matcher_alpha
-        self.matcher_gamma = matcher_gamma
-        self.matcher_class_cost = matcher_class_cost
-        self.matcher_bbox_cost = matcher_bbox_cost
-        self.matcher_giou_cost = matcher_giou_cost
-        self.use_focal_loss = use_focal_loss
-        self.use_aux_loss = use_aux_loss
-        self.focal_loss_alpha = focal_loss_alpha
-        self.focal_loss_gamma = focal_loss_gamma
-        self.weight_loss_vfl = weight_loss_vfl
-        self.weight_loss_bbox = weight_loss_bbox
-        self.weight_loss_giou = weight_loss_giou
-        self.eos_coefficient = eos_coefficient
-        self.image_size = None  # As this is test runs in inference, let the model get from the input
+        self.disable_custom_kernels = disable_custom_kernels
+        self.with_box_refine = with_box_refine
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, *self.image_size])
 
-        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
+        pixel_mask = torch.ones([self.batch_size, *self.image_size], device=torch_device)
 
         labels = None
         if self.use_labels:
@@ -157,44 +161,45 @@ class RTDetrModelTester:
     def get_config(self):
         return RTDetrConfig(
             initializer_range=self.initializer_range,
+            layer_norm_eps=self.layer_norm_eps,
+            batch_norm_eps=self.batch_norm_eps,
+            use_timm_backbone=self.use_timm_backbone,
             backbone_config=self.backbone_config,
+            num_channels=self.num_channels,
+            backbone=self.backbone,
+            use_pretrained_backbone=self.use_pretrained_backbone,
+            dilation=self.dilation,
+            d_model=self.d_model,
+            encoder_in_channels=self.encoder_in_channels,
             feat_strides=self.feat_strides,
-            hidden_dim=self.hidden_dim,
-            num_attention_heads=self.num_attention_heads,
-            dim_feedforward=self.dim_feedforward,
+            encoder_layers=self.encoder_layers,
+            encoder_ffn_dim=self.encoder_ffn_dim,
+            encoder_attention_heads=self.encoder_attention_heads,
             dropout=self.dropout,
-            enc_act=self.enc_act,
+            activation_dropout=self.activation_dropout,
             encode_proj_layers=self.encode_proj_layers,
-            num_encoder_layers=self.num_encoder_layers,
             pe_temperature=self.pe_temperature,
-            expansion=self.expansion,
-            act_encoder=self.act_encoder,
+            encoder_activation_function=self.encoder_activation_function,
+            activation_function=self.activation_function,
             eval_size=self.eval_size,
+            normalize_before=self.normalize_before,
             num_queries=self.num_queries,
-            feat_channels=self.feat_channels,
-            num_levels=self.num_levels,
-            num_decoder_points=self.num_decoder_points,
-            num_decoder_layers=self.num_decoder_layers,
+            decoder_in_channels=self.decoder_in_channels,
+            decoder_ffn_dim=self.decoder_ffn_dim,
+            num_feature_levels=self.num_feature_levels,
+            decoder_n_points=self.decoder_n_points,
+            decoder_layers=self.decoder_layers,
+            decoder_attention_heads=self.decoder_attention_heads,
+            decoder_activation_function=self.decoder_activation_function,
+            attention_dropout=self.attention_dropout,
             num_denoising=self.num_denoising,
             label_noise_ratio=self.label_noise_ratio,
             box_noise_scale=self.box_noise_scale,
             learnt_init_query=self.learnt_init_query,
             image_size=self.image_size,
             eval_idx=self.eval_idx,
-            eps=self.eps,
-            matcher_alpha=self.matcher_alpha,
-            matcher_gamma=self.matcher_gamma,
-            matcher_class_cost=self.matcher_class_cost,
-            matcher_bbox_cost=self.matcher_bbox_cost,
-            matcher_giou_cost=self.matcher_giou_cost,
-            use_focal_loss=self.use_focal_loss,
-            use_aux_loss=self.use_aux_loss,
-            focal_loss_alpha=self.focal_loss_alpha,
-            focal_loss_gamma=self.focal_loss_gamma,
-            weight_loss_vfl=self.weight_loss_vfl,
-            weight_loss_bbox=self.weight_loss_bbox,
-            weight_loss_giou=self.weight_loss_giou,
-            eos_coefficient=self.eos_coefficient,
+            disable_custom_kernels=self.disable_custom_kernels,
+            with_box_refine=self.with_box_refine,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -318,7 +323,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(encoder_hidden_states.grad)
 
     def test_forward_signature(self):
-        config = self.model_tester.get_config()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -326,6 +331,39 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    @unittest.skip(reason="Model doesn't use tied weights")
+    def test_tied_model_weights_key_ignore(self):
+        pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            # Skip the check for the backbone
+            for name, module in model.named_modules():
+                if module.__class__.__name__ == "DetaBackboneWithPositionalEncodings":
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    break
+
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                        or name in backbone_params
+                    ):
+                        continue
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_model_from_pretrained(self):
         for model_name in RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST:
@@ -356,71 +394,52 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        batch_size = len(inputs.pixel_values)
-
-        # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 300, 80))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor(
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
             [
-                [
-                    [-4.64763879776001, -5.001153945922852, -4.978509902954102],
-                    [-4.159348487854004, -4.703853607177734, -5.946484565734863],
-                    [-4.437461853027344, -4.65836238861084, -6.235235691070557],
-                ]
+                [-4.64763879776001, -5.001153945922852, -4.978509902954102],
+                [-4.159348487854004, -4.703853607177734, -5.946484565734863],
+                [-4.437461853027344, -4.65836238861084, -6.235235691070557],
             ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
-
-        # verify the boxes
-        expected_shape = torch.Size((1, 300, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [
-                [
-                    [0.1688060760498047, 0.19992263615131378, 0.21225441992282867],
-                    [0.768376350402832, 0.41226309537887573, 0.4636859893798828],
-                    [0.25953856110572815, 0.5483334064483643, 0.4777486026287079],
-                ]
-            ]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice, atol=1e-4))
-
-        # verify post processor
-        target_sizes = torch.tensor([image.size[::-1]])
-        results = image_processor.post_process_object_detection(
-            outputs, threshold=0.0, target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss
-        )
-        # expecting 1 result per image in the batch
-        self.assertEqual(len(results), batch_size)
-        # result of the first image
-        result = results[0]
-        # shapes
-        expected_shape = torch.Size([300])
-        self.assertEqual(result["scores"].shape, expected_shape)
-        self.assertEqual(result["labels"].shape, expected_shape)
-        expected_box_shape = torch.Size([300, 4])
-        self.assertEqual(result["boxes"].shape, expected_box_shape)
-        # labels
-        expected_labels = torch.tensor([57, 15, 15, 65]).to(model.device)
-        self.assertTrue(torch.equal(result["labels"][:4], expected_labels))
-        # scores
-        expected_scores = torch.tensor(
-            [0.9703017473220825, 0.9599503874778748, 0.9575679302215576, 0.9506784677505493]
-        ).to(model.device)
-        self.assertTrue(torch.allclose(result["scores"][:4], expected_scores, atol=1e-4))
-        # boxes
         expected_boxes = torch.tensor(
+            [
+                [0.1688060760498047, 0.19992263615131378, 0.21225441992282867],
+                [0.768376350402832, 0.41226309537887573, 0.4636859893798828],
+                [0.25953856110572815, 0.5483334064483643, 0.4777486026287079],
+            ]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+
+        # verify postprocessing
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor(
+            [0.9703017473220825, 0.9599503874778748, 0.9575679302215576, 0.9506784677505493], device=torch_device
+        )
+        expected_labels = [57, 15, 15, 65]
+        expected_slice_boxes = torch.tensor(
             [
                 [
                     [0.13774871826171875, 0.37818431854248047, 640.1307373046875, 476.21087646484375],
                     [343.38134765625, 24.276838302612305, 640.140380859375, 371.4957275390625],
                     [13.225126266479492, 54.17934799194336, 318.9842224121094, 472.220703125],
                 ]
-            ]
-        ).to(model.device)
-        self.assertTrue(torch.allclose(result["boxes"][:3], expected_boxes, atol=1e-4))
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-4))
+        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["boxes"][:3], expected_slice_boxes))
