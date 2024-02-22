@@ -69,7 +69,7 @@ jobs:
           pip freeze
 
       - name: Run all tests on GPU
-        run: python3 -m pytest -v --make-reports=${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -v --make-reports=${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }} tests/models/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
