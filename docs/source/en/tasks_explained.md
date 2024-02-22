@@ -45,13 +45,13 @@ Before you go further, it is good to have some basic knowledge of the original T
 
 This model has four main components:
 
-1. A **feature encoder** takes the raw audio waveform, normalizes it to zero mean and unit variance, and converts it into a sequence of feature vectors that are each 20ms long.
+1. A *feature encoder* takes the raw audio waveform, normalizes it to zero mean and unit variance, and converts it into a sequence of feature vectors that are each 20ms long.
 
-2. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. That's why the feature vectors are passed to a **quantization module**, which aims to learn discrete speech units. The speech unit is chosen from a collection of codewords, known as a **codebook** (you can think of this as the vocabulary). From the codebook, the vector or speech unit, that best represents the continuous audio input is chosen and forwarded through the model.
+2. Waveforms are continuous by nature, so they can't be divided into separate units like a sequence of text can be split into words. That's why the feature vectors are passed to a *quantization module*, which aims to learn discrete speech units. The speech unit is chosen from a collection of codewords, known as a *codebook* (you can think of this as the vocabulary). From the codebook, the vector or speech unit, that best represents the continuous audio input is chosen and forwarded through the model.
 
-3. About half of the feature vectors are randomly masked, and the masked feature vector is fed to a **context network**, which is a Transformer encoder that also adds relative positional embeddings.
+3. About half of the feature vectors are randomly masked, and the masked feature vector is fed to a *context network*, which is a Transformer encoder that also adds relative positional embeddings.
 
-4. The pretraining objective of the context network is a **contrastive task**. The model has to predict the true quantized speech representation of the masked prediction from a set of false ones, encouraging the model to find the most similar context vector and quantized speech unit (the target label).
+4. The pretraining objective of the context network is a *contrastive task*. The model has to predict the true quantized speech representation of the masked prediction from a set of false ones, encouraging the model to find the most similar context vector and quantized speech unit (the target label).
 
 Now that wav2vec2 is pretrained, you can finetune it on your data for audio classification or automatic speech recognition!
 
@@ -96,11 +96,11 @@ ViT and ConvNeXT can both be used for image classification; the main difference 
 
 The main change ViT introduced was in how images are fed to a Transformer:
 
-1. An image is split into square non-overlapping patches, each of which gets turned into a vector or **patch embedding**. The patch embeddings are generated from a convolutional 2D layer which creates the proper input dimensions (which for a base Transformer is 768 values for each patch embedding). If you had a 224x224 pixel image, you could split it into 196 16x16 image patches. Just like how text is tokenized into words, an image is "tokenized" into a sequence of patches.
+1. An image is split into square non-overlapping patches, each of which gets turned into a vector or *patch embedding*. The patch embeddings are generated from a convolutional 2D layer which creates the proper input dimensions (which for a base Transformer is 768 values for each patch embedding). If you had a 224x224 pixel image, you could split it into 196 16x16 image patches. Just like how text is tokenized into words, an image is "tokenized" into a sequence of patches.
 
-2. A **learnable embedding** - a special `[CLS]` token - is added to the beginning of the patch embeddings just like BERT. The final hidden state of the `[CLS]` token is used as the input to the attached classification head; other outputs are ignored. This token helps the model learn how to encode a representation of the image.
+2. A *learnable embedding* - a special `[CLS]` token - is added to the beginning of the patch embeddings just like BERT. The final hidden state of the `[CLS]` token is used as the input to the attached classification head; other outputs are ignored. This token helps the model learn how to encode a representation of the image.
 
-3. The last thing to add to the patch and learnable embeddings are the **position embeddings** because the model doesn't know how the image patches are ordered. The position embeddings are also learnable and have the same size as the patch embeddings. Finally, all of the embeddings are passed to the Transformer encoder.
+3. The last thing to add to the patch and learnable embeddings are the *position embeddings* because the model doesn't know how the image patches are ordered. The position embeddings are also learnable and have the same size as the patch embeddings. Finally, all of the embeddings are passed to the Transformer encoder.
 
 4. The output, specifically only the output with the `[CLS]` token, is passed to a multilayer perceptron head (MLP). ViT's pretraining objective is simply classification. Like other classification heads, the MLP head converts the output into logits over the class labels and calculates the cross-entropy loss to find the most likely class.
 
@@ -114,7 +114,7 @@ This section briefly explains convolutions, but it'd be helpful to have a prior 
 
 </Tip>
 
-[ConvNeXT](model_doc/convnext) is a CNN architecture that adopts new and modern network designs to improve performance. However, convolutions are still at the core of the model. From a high-level perspective, a [convolution](glossary#convolution) is an operation where a smaller matrix (**kernel**) is multiplied by a small window of the image pixels. It computes some features from it, such as a particular texture or curvature of a line. Then it slides over to the next window of pixels; the distance the convolution travels is known as the **stride**. 
+[ConvNeXT](model_doc/convnext) is a CNN architecture that adopts new and modern network designs to improve performance. However, convolutions are still at the core of the model. From a high-level perspective, a [convolution](glossary#convolution) is an operation where a smaller matrix (*kernel*) is multiplied by a small window of the image pixels. It computes some features from it, such as a particular texture or curvature of a line. Then it slides over to the next window of pixels; the distance the convolution travels is known as the *stride*. 
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
