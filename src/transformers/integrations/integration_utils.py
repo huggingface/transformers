@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
 
 import numpy as np
+import packaging.version
 
 from .. import __version__ as version
 from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
@@ -940,6 +941,7 @@ class MLflowCallback(TrainerCallback):
         if not is_mlflow_available():
             raise RuntimeError("MLflowCallback requires mlflow to be installed. Run `pip install mlflow`.")
         import mlflow
+        self._ml_flow_version = importlib.metadata.version('mlflow')
 
         self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
         self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
@@ -1047,7 +1049,13 @@ class MLflowCallback(TrainerCallback):
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
-            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
+
+                    # "synchronous" only available with mlflow version >= 2.8.0
+                    # https://github.com/mlflow/mlflow/releases/tag/v2.8.0
+                    if packaging.version.parse(self._ml_flow_version) < packaging.version.parse('2.8.0'):
+                        self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+                    else:
+                        self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
