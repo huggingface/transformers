@@ -105,28 +105,28 @@ class LlamaRotaryEmbedding(nn.Module):
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     @property
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead."
+            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._sin_cached
 
     @property
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead."
+            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._cos_cached
 
     def forward(self, x, position_ids, seq_len=None):
         if seq_len is not None:
-            logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.40.")
+            logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.39.")
 
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
@@ -156,8 +156,8 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     def forward(self, x, position_ids, seq_len=None):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -184,8 +184,8 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     def forward(self, x, position_ids, seq_len=None):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
