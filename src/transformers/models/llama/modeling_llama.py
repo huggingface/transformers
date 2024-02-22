@@ -99,30 +99,18 @@ class LlamaRotaryEmbedding(nn.Module):
         self.base = base
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        # For BC we register cos and sin cached
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     @property
     def sin_cached(self):
-        logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
+        raise ValueError(
+            "Starting v4.38.0, the cached sin and cos are no longer representative and should not be used"
         )
-        return self._sin_cached
 
     @property
     def cos_cached(self):
-        logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
+        raise ValueError(
+            "Starting v4.38.0, the cached sin and cos are no longer representative and should not be used"
         )
-        return self._cos_cached
 
     def forward(self, x, position_ids, seq_len=None):
         if seq_len is not None:
@@ -141,21 +129,7 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        # For BC we register cos and sin cached
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-        t = t / self.scaling_factor
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
+        super().__init__(dim, max_position_embeddings, base, device)
 
     def forward(self, x, position_ids, seq_len=None):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -169,21 +143,7 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        # For BC we register cos and sin cached
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-        t = t / self.scaling_factor
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
+        super().__init__(dim, max_position_embeddings, base, device)
 
     def forward(self, x, position_ids, seq_len=None):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
