@@ -17,7 +17,7 @@ jobs:
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci] # TODO: move to A10
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --shm-size "40gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
       - env:
