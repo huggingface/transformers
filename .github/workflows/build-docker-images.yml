@@ -20,7 +20,7 @@ concurrency:
 jobs:
   latest-docker:
     name: "Latest PyTorch + TensorFlow [dev]"
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
