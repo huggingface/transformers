@@ -164,6 +164,7 @@ class StopStringCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         embedding_vec = self.embedding_vec.to(input_ids.device)
+        target_lens = self.target_lens.to(input_ids.device)
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
         # *shorter* than the global max, and the code below should be ready for that
         input_ids = input_ids[:, -self.maximum_token_len :]
@@ -213,7 +214,7 @@ class StopStringCriteria(StoppingCriteria):
 
         # The string is matched if we reached a cumsum equal to or greater than the length of the string
         # before hitting the mask
-        string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
+        string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= target_lens[None, :]
 
         # Now we concatenate the match booleans across all strings and check if any are True
         # TODO After Raushan's PR, return a per-sample vector here
