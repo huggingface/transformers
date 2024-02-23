@@ -201,7 +201,7 @@ of 23 bits precision it has only 10 bits (same as fp16) and uses only 19 bits in
 you can use the normal fp32 training and/or inference code and by enabling tf32 support you can get up to 3x throughput 
 improvement. All you need to do is to add the following to your code:
 
-```
+```python
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -248,7 +248,7 @@ Let's take a closer look at two alternatives to AdamW optimizer:
 1. `adafactor` which is available in [`Trainer`]
 2. `adamw_bnb_8bit` is also available in Trainer, but a third-party integration is provided below for demonstration.
 
-For comparison, for a 3B-parameter model, like “t5-3b”: 
+For comparison, for a 3B-parameter model, like “google-t5/t5-3b”: 
 * A standard AdamW optimizer will need 24GB of GPU memory because it uses 8 bytes for each parameter (8*3 => 24GB)
 * Adafactor optimizer will need more than 12GB. It uses slightly more than 4 bytes for each parameter, so 4*3 and then some extra.
 * 8bit BNB quantized optimizer will use only (2*3) 6GB if all optimizer states are quantized.
@@ -529,24 +529,6 @@ And for Pytorch DeepSpeed has built one as well: [DeepSpeed-MoE: Advancing Mixtu
 
 ## Using PyTorch native attention and Flash Attention
 
-PyTorch 2.0 released a native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), 
-that allows using fused GPU kernels such as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
-
-After installing the [`optimum`](https://github.com/huggingface/optimum) package, the relevant internal modules can be 
-replaced to use PyTorch's native attention with:
-
-```python
-model = model.to_bettertransformer()
-```
-
-Once converted, train the model as usual.
-
-<Tip warning={true}>
-
-The PyTorch-native `scaled_dot_product_attention` operator can only dispatch to Flash Attention if no `attention_mask` is provided.
-
-By default, in training mode, the BetterTransformer integration **drops the mask support and can only be used for training that does not require a padding mask for batched training**. This is the case, for example, during masked language modeling or causal language modeling. BetterTransformer is not suited for fine-tuning models on tasks that require a padding mask. 
-
-</Tip>
+PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers and is used by default for `torch>=2.1.1` when an implementation is available. Please refer to [PyTorch scaled dot product attention](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention) for a list of supported models and more details.
 
 Check out this [blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about acceleration and memory-savings with SDPA.
