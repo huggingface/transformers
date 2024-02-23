@@ -24,10 +24,10 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
-    slow,
-    torch_device,
     require_torch_accelerator,
     require_torch_fp16,
+    slow,
+    torch_device,
 )
 
 from ...test_backbone_common import BackboneTesterMixin
