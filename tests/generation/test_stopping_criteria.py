@@ -35,6 +35,11 @@ if is_torch_available():
         validate_stopping_criteria,
     )
 
+from transformers.generation.stopping_criteria import (
+    _stop_string_create_embedding_vecs,
+    _stop_string_get_matching_positions,
+)
+
 
 @require_torch
 class StoppingCriteriaTestCase(unittest.TestCase):
@@ -178,12 +183,15 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         stop_strings = ["aaaaaaa", "assdfiugsdf", "stop"]
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
-        all_token_valid_positions, all_token_end_overlaps = criteria._get_matching_positions()
+        idx_to_token = {v: k for k, v in tokenizer.get_vocab().items()}
+        all_token_valid_positions, all_token_end_overlaps = _stop_string_get_matching_positions(
+            tok_list=criteria.tok_list, tok_indices=criteria.tok_indices, stop_strings=criteria.stop_strings
+        )
         for stop_string in stop_strings:
             token_valid_positions = all_token_valid_positions[stop_string]
             token_end_overlaps = all_token_end_overlaps[stop_string]
-            for token, valid_positions in token_valid_positions.items():
-                token = token.replace("▁", " ").replace("Ġ", " ")
+            for token_idx, valid_positions in token_valid_positions.items():
+                token = idx_to_token[token_idx].replace("▁", " ").replace("Ġ", " ")
                 for position in valid_positions:
                     trim_length = position + len(token) - len(stop_string)
                     if trim_length > 0:
@@ -191,8 +199,8 @@ class StoppingCriteriaTestCase(unittest.TestCase):
                         self.assertTrue(stop_string.startswith(token[trim_length:]))
                     else:
                         self.assertTrue(stop_string[-position - len(token) :].startswith(token))
-            for token, end_overlaps in token_end_overlaps.items():
-                token = token.replace("▁", " ").replace("Ġ", " ")
+            for token_idx, end_overlaps in token_end_overlaps.items():
+                token = idx_to_token[token_idx].replace("▁", " ").replace("Ġ", " ")
                 for overlap in end_overlaps:
                     # Either this token runs off the end of the string,
                     # or the entire stop string is a substring of the token
@@ -207,12 +215,14 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         stop_strings = ["aaaaaaa", "assdfiugsdf", "stop"]
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
-        all_embedding_vecs = criteria._create_embedding_vecs()
+        all_embedding_vecs, *_ = _stop_string_create_embedding_vecs(
+            tok_list=criteria.tok_list, tok_indices=criteria.tok_indices, stop_strings=criteria.stop_strings
+        )
         for stop_string in stop_strings:
             embedding_vecs = all_embedding_vecs[stop_string]
             max_valid_positions = criteria.max_valid_positions[stop_string]
             max_valid_end_lens = criteria.max_valid_end_lens[stop_string]
-            for token, token_idx in criteria.vocab.items():
+            for token, token_idx in zip(criteria.tok_list, criteria.tok_indices):
                 vec = embedding_vecs[token_idx].tolist()
                 # The embedding contains packed valid positions, end overlap lengths, and the total token length
                 token = token.replace("▁", " ").replace("Ġ", " ")

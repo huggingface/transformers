@@ -2,6 +2,7 @@ import time
 import warnings
 from abc import ABC
 from copy import deepcopy
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -150,90 +151,12 @@ class StopStringCriteria(StoppingCriteria):
             stop_strings = [stop_strings]
 
         self.vocab = tokenizer.get_vocab()
-        self.stop_strings: List[str] = stop_strings
-        self.token_valid_positions, self.token_end_overlaps = self._get_matching_positions()
+        self.tok_list, self.tok_indices = tuple(self.vocab.keys()), tuple(self.vocab.values())
+        self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
 
-        self.max_valid_positions = {
-            stop_string: max([len(val) for val in self.token_valid_positions[stop_string].values()])
-            for stop_string in stop_strings
-        }
-        self.max_valid_end_lens = {
-            stop_string: max([len(val) for val in self.token_end_overlaps[stop_string].values()])
-            for stop_string in stop_strings
-        }
-        self.embedding_vecs = self._create_embedding_vecs()
-
-    @staticmethod
-    def _cleanup_token(token: str) -> str:
-        if token[0] in ["▁", "Ġ"]:
-            token = " " + token[1:]
-        return token
-
-    def _get_matching_positions(self) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
-        """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
-        validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
-        valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
-        end of the stop string."""
-        tok_list = list(self.vocab.keys())
-        reversed_filtered_tok_list = [self._cleanup_token(token)[::-1] for token in tok_list]
-        token_valid_positions = {}
-        token_end_overlaps = {}
-        for stop_string in self.stop_strings:
-            reversed_stop_string = stop_string[::-1]
-            token_valid_positions[stop_string] = {}
-            token_end_overlaps[stop_string] = {}
-            for token, reversed_filtered_token in zip(tok_list, reversed_filtered_tok_list):
-                matching_positions = []
-                possible_end_lengths = []
-                for i in range(1 - len(token), len(stop_string)):
-                    if i < 0:
-                        tok = reversed_filtered_token[-i:]
-                        i = 0
-                    else:
-                        tok = reversed_filtered_token
-                    stop = reversed_stop_string[i : i + len(tok)]
-                    if tok.startswith(stop):
-                        if i == 0:
-                            possible_end_lengths.append(min(len(tok), len(stop)))
-                        else:
-                            matching_positions.append(i)
-
-                if matching_positions:
-                    token_valid_positions[stop_string][token] = matching_positions
-                if possible_end_lengths:
-                    token_end_overlaps[stop_string][token] = possible_end_lengths
-        return token_valid_positions, token_end_overlaps
-
-    def _create_embedding_vecs(self) -> Dict[str, torch.tensor]:
-        """
-        This function builds an embedding matrix for each stop string, consisting of possible valid positions
-        and possible end lengths for each token, and the total length of the token string. When tokens have
-        fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
-        """
-        # TODO Matt: Merge the embeddings across all stop strings to save space and reduce gather calls?
-        vocab = self.vocab
-        embedding_vecs = {}
-        for stop_string in self.stop_strings:
-            positions = self.token_valid_positions[stop_string]
-            end_lens = self.token_end_overlaps[stop_string]
-            max_valid_positions = self.max_valid_positions[stop_string]
-            max_valid_end_lens = self.max_valid_end_lens[stop_string]
-            vec_size = max_valid_positions + max_valid_end_lens + 1
-            # Since this is lots of very small assignments of lists, we build it with numpy rather
-            # than torch for speed + simplicity, then convert to torch at the end
-            gather_vec = np.full((len(self.vocab), vec_size), dtype=np.int32, fill_value=-1)
-            for token, valid_positions in positions.items():
-                token_idx = vocab[token]
-                gather_vec[token_idx, : len(valid_positions)] = valid_positions
-            for token, possible_end_lens in end_lens.items():
-                token_idx = vocab[token]
-                gather_vec[
-                    token_idx, max_valid_positions : max_valid_positions + len(possible_end_lens)
-                ] = possible_end_lens
-            for token, token_idx in vocab.items():
-                gather_vec[token_idx, -1] = len(token)
-            embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32).pin_memory()
-        return embedding_vecs
+        self.embedding_vecs, self.max_valid_positions, self.max_valid_end_lens = _stop_string_create_embedding_vecs(
+            self.tok_list, self.tok_indices, self.stop_strings
+        )
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
@@ -346,3 +269,90 @@ def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_leng
     elif stopping_max_length is None:
         new_stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
     return new_stopping_criteria
+
+
+def _stop_string_get_matching_positions(
+    tok_list, tok_indices, stop_strings
+) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
+    """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
+    validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
+    valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
+    end of the stop string."""
+
+    def _cleanup_token(token: str) -> str:
+        if token[0] in ["▁", "Ġ"]:
+            token = " " + token[1:]
+        return token
+
+    reversed_filtered_tok_list = [_cleanup_token(token)[::-1] for token in tok_list]
+    token_valid_positions = {}
+    token_end_overlaps = {}
+    for stop_string in stop_strings:
+        reversed_stop_string = stop_string[::-1]
+        token_valid_positions[stop_string] = {}
+        token_end_overlaps[stop_string] = {}
+        for token, reversed_filtered_token, tok_idx in zip(tok_list, reversed_filtered_tok_list, tok_indices):
+            matching_positions = []
+            possible_end_lengths = []
+            for i in range(1 - len(token), len(stop_string)):
+                if i < 0:
+                    tok = reversed_filtered_token[-i:]
+                    i = 0
+                else:
+                    tok = reversed_filtered_token
+                stop = reversed_stop_string[i : i + len(tok)]
+                if tok.startswith(stop):
+                    if i == 0:
+                        possible_end_lengths.append(min(len(tok), len(stop)))
+                    else:
+                        matching_positions.append(i)
+
+            if matching_positions:
+                token_valid_positions[stop_string][tok_idx] = matching_positions
+            if possible_end_lengths:
+                token_end_overlaps[stop_string][tok_idx] = possible_end_lengths
+    return token_valid_positions, token_end_overlaps
+
+
+@lru_cache(8)
+def _stop_string_create_embedding_vecs(tok_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
+    """
+    This function builds an embedding matrix for each stop string, consisting of possible valid positions
+    and possible end lengths for each token, and the total length of the token string. When tokens have
+    fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
+    """
+    # TODO Matt: Merge the embeddings across all stop strings to save space and reduce gather calls?
+    token_valid_positions, token_end_overlaps = _stop_string_get_matching_positions(
+        tok_list, tok_indices, stop_strings
+    )
+
+    embedding_vecs = {}
+    for stop_string in stop_strings:
+        positions = token_valid_positions[stop_string]
+        end_lens = token_end_overlaps[stop_string]
+        max_valid_positions = max([len(val) for val in positions.values()])
+        max_valid_end_lens = max([len(val) for val in end_lens.values()])
+        vec_size = max_valid_positions + max_valid_end_lens + 1
+        # Since this is lots of very small assignments of lists, we build it with numpy rather
+        # than torch for speed + simplicity, then convert to torch at the end
+        gather_vec = np.full((len(tok_list), vec_size), dtype=np.int32, fill_value=-1)
+        for token_idx, valid_positions in positions.items():
+            gather_vec[token_idx, : len(valid_positions)] = valid_positions
+        for token_idx, possible_end_lens in end_lens.items():
+            gather_vec[
+                token_idx, max_valid_positions : max_valid_positions + len(possible_end_lens)
+            ] = possible_end_lens
+        for token, token_idx in zip(tok_list, tok_indices):
+            gather_vec[token_idx, -1] = len(token)
+        embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32).pin_memory()
+
+    # TODO Remove this block and stop returning these values after the embedding vec is merged
+    max_valid_positions = {
+        stop_string: max([len(val) for val in token_valid_positions[stop_string].values()])
+        for stop_string in stop_strings
+    }
+    max_valid_end_lens = {
+        stop_string: max([len(val) for val in token_end_overlaps[stop_string].values()])
+        for stop_string in stop_strings
+    }
+    return embedding_vecs, max_valid_positions, max_valid_end_lens
