@@ -1061,9 +1061,10 @@ class LlamaModel(LlamaPreTrainedModel):
         device = input_tensor.device
 
         # support going beyond cached `max_position_embedding`
-        if seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+        causal_mask = self.causal_mask
+        while seq_length > causal_mask.shape[-1]:
+            causal_mask = torch.full((2 * causal_mask.shape[-1], 2 * causal_mask.shape[-1]), fill_value=1)
+        self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
