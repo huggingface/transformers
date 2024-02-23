@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-请记住，架构指的是模型的结构，而checkpoints是给定架构的权重。例如，[BERT](https://huggingface.co/bert-base-uncased)是一种架构，而`bert-base-uncased`是一个checkpoint。模型是一个通用术语，可以指代架构或checkpoint。
+请记住，架构指的是模型的结构，而checkpoints是给定架构的权重。例如，[BERT](https://huggingface.co/google-bert/bert-base-uncased)是一种架构，而`google-bert/bert-base-uncased`是一个checkpoint。模型是一个通用术语，可以指代架构或checkpoint。
 
 
 </Tip>
@@ -43,7 +43,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 然后按照如下方式对输入进行分词：
@@ -104,7 +104,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 轻松地重复使用相同的checkpoint来为不同任务加载模型架构：
@@ -113,7 +113,7 @@ rendered properly in your Markdown viewer.
 ```py
 >>> from transformers import AutoModelForTokenClassification
 
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip warning={true}>
@@ -133,7 +133,7 @@ TensorFlow和Flax的checkpoints不受影响，并且可以在PyTorch架构中使
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 轻松地重复使用相同的checkpoint来为不同任务加载模型架构：
@@ -141,7 +141,7 @@ TensorFlow和Flax的checkpoints不受影响，并且可以在PyTorch架构中使
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
 
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 一般来说，我们推荐使用`AutoTokenizer`类和`TFAutoModelFor`类来加载模型的预训练实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
 

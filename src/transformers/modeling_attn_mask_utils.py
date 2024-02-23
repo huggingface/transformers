@@ -132,6 +132,7 @@ class AttentionMaskConverter:
         expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
             attention_mask_2d.device
         )
+
         if causal_4d_mask is not None:
             expanded_attn_mask = causal_4d_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(dtype).min)
 
@@ -346,10 +347,14 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     key_value_length = input_shape[-1] + past_key_values_length
     batch_size, query_length = input_shape
 
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
+    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+    is_tracing = (
+        torch.jit.is_tracing()
+        or isinstance(inputs_embeds, torch.fx.Proxy)
+        or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+    )
 
     if attention_mask is not None:
         # 4d mask is passed through
@@ -367,10 +372,8 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
                 )
                 return attention_mask
 
-        elif torch.all(attention_mask == 1):
-            if is_tracing:
-                pass
-            elif query_length == 1:
+        elif not is_tracing and torch.all(attention_mask == 1):
+            if query_length == 1:
                 # For query_length == 1, causal attention and bi-directional attention are the same.
                 attention_mask = None
             elif key_value_length == query_length:
@@ -405,7 +408,11 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
         # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
         # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        if query_length > 1:
+        #
+        # This fix is not applied in case we are tracing with torch.jit.trace or symbolic_trace, as _unmask_unattended has a data-dependent
+        # controlflow that can not be captured properly.
+        # TODO: _unmask_unattended does not work either with torch.compile when using fullgraph=True. We should find a way to detect this case.
+        if query_length > 1 and not is_tracing:
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, attention_mask, unmasked_value=0.0
             )
@@ -445,10 +452,14 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     batch_size, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
+    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+    is_tracing = (
+        torch.jit.is_tracing()
+        or isinstance(mask, torch.fx.Proxy)
+        or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+    )
 
     if torch.all(mask == 1):
         if is_tracing:

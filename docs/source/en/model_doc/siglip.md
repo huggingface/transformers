@@ -28,7 +28,7 @@ The abstract from the paper is the following:
 
 - Usage of SigLIP is similar to [CLIP](clip). The main difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
 - Training is not yet supported. If you want to fine-tune SigLIP or train from scratch, refer to the loss function from [OpenCLIP](https://github.com/mlfoundations/open_clip/blob/73ad04ae7fb93ede1c02dc9040a828634cb1edf1/src/open_clip/loss.py#L307), which leverages various `torch.distributed` utilities.
-- When using the standalone [`SiglipTokenizer`], make sure to pass `padding="max_length"` as that's how the model was trained. The multimodal [`SiglipProcessor`] takes care of this behind the scenes.
+- When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` as that's how the model was trained.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
 alt="drawing" width="600"/>
@@ -82,7 +82,8 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
->>> inputs = processor(text=texts, images=image, return_tensors="pt")
+>>> # important: we pass `padding=max_length` since the model was trained with this
+>>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -92,6 +93,15 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
 31.9% that image 0 is 'a photo of 2 cats'
 ```
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP.
+
+- [Zero-shot image classification task guide](../tasks/zero_shot_image_classification_md)
+- Demo notebooks for SigLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SigLIP). 🌎
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## SiglipConfig
 
@@ -138,4 +148,10 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 ## SiglipVisionModel
 
 [[autodoc]] SiglipVisionModel
+    - forward
+
+
+## SiglipForImageClassification
+
+[[autodoc]] SiglipForImageClassification
     - forward
