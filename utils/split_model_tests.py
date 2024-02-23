@@ -47,12 +47,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    tests = os.getcwd()
-    model_tests = os.listdir(os.path.join(tests, "models"))
-    d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
-    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
-    d1.remove("models")
-    d = d2 + d1
+    tests_dir = os.path.join(os.getcwd(), "tests")
+    model_tests_dir = os.path.join(tests_dir, "models")
+
+    model_tests_subfolders = glob(os.path.join(model_tests_dir, "*"))
+
+    d = sorted(filter(os.path.isdir, model_tests_subfolders))
+    d = ["/".join(sub_directory.split("/")[-2:]) for sub_directory in d]
 
     num_jobs = len(d)
     num_jobs_per_splits = num_jobs // args.num_splits
