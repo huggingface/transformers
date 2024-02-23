@@ -36,6 +36,7 @@ if is_torch_available():
     )
 
 from transformers.generation.stopping_criteria import (
+    _stop_string_create_embedding_vec,
     _stop_string_get_matching_positions,
 )
 
@@ -210,45 +211,49 @@ class StoppingCriteriaTestCase(unittest.TestCase):
                         )
                     )
 
-    # def test_stop_string_embedding_vecs(self):
-    #     tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-    #     stop_strings = ["aaaaaaa", "assdfiugsdf", "stop"]
-    #     criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
-    #     all_embedding_vecs, *_ = _stop_string_create_embedding_vec(
-    #         tok_list=criteria.tok_list, tok_indices=criteria.tok_indices, stop_strings=criteria.stop_strings
-    #     )
-    #     for stop_string in stop_strings:
-    #         embedding_vecs = all_embedding_vecs[stop_string]
-    #         max_valid_positions = criteria.max_valid_positions[stop_string]
-    #         max_valid_end_lens = criteria.max_valid_end_lens[stop_string]
-    #         for token, token_idx in zip(criteria.tok_list, criteria.tok_indices):
-    #             vec = embedding_vecs[token_idx].tolist()
-    #             # The embedding contains packed valid positions, end overlap lengths, and the total token length
-    #             token = token.replace("▁", " ").replace("Ġ", " ")
-    #
-    #             token_valid_positions = vec[:max_valid_positions]
-    #             for position in token_valid_positions:
-    #                 if position == -1:
-    #                     continue  # Padding value
-    #                 trim_length = position + len(token) - len(stop_string)
-    #                 if trim_length > 0:
-    #                     # This token runs off the start of the string
-    #                     self.assertTrue(stop_string.startswith(token[trim_length:]))
-    #                 else:
-    #                     self.assertTrue(stop_string[-position - len(token) : -position] == token)
-    #
-    #             token_end_overlaps = vec[max_valid_positions : max_valid_positions + max_valid_end_lens]
-    #             for overlap in token_end_overlaps:
-    #                 if overlap == -1:
-    #                     continue  # Padding value
-    #                 # Either this token runs off the end of the string,
-    #                 # or the entire stop string is a substring of the token
-    #                 self.assertTrue(
-    #                     (
-    #                         stop_string.endswith(token[:overlap])
-    #                         or (stop_string in token and overlap == len(stop_string))
-    #                     )
-    #                 )
-    #
-    #             token_length = vec[-1]
-    #             self.assertTrue(len(token) == token_length)
+    def test_stop_string_embedding_vecs(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        stop_strings = ["aaaaaaa", "assdfiugsdf", "stop"]
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        embedding_vec, max_valid_positions, max_valid_end_lens = _stop_string_create_embedding_vec(
+            tok_list=criteria.tok_list, tok_indices=criteria.tok_indices, stop_strings=criteria.stop_strings
+        )
+        valid_positions_vec = embedding_vec[:, : max_valid_positions * len(stop_strings)].unflatten(
+            -1, (len(stop_strings), -1)
+        )
+        end_overlaps_vec = embedding_vec[:, max_valid_positions * len(stop_strings) : -1].unflatten(
+            -1, (len(stop_strings), -1)
+        )
+        token_lengths = embedding_vec[:, -1]
+
+        for i, stop_string in enumerate(stop_strings):
+            for token, token_idx in zip(criteria.tok_list, criteria.tok_indices):
+                # The embedding contains packed valid positions, end overlap lengths, and the total token length
+                token = token.replace("▁", " ").replace("Ġ", " ")
+
+                token_valid_positions = valid_positions_vec[token_idx, i].tolist()
+                for position in token_valid_positions:
+                    if position == -1:
+                        continue  # Padding value
+                    trim_length = position + len(token) - len(stop_string)
+                    if trim_length > 0:
+                        # This token runs off the start of the string
+                        self.assertTrue(stop_string.startswith(token[trim_length:]))
+                    else:
+                        self.assertTrue(stop_string[-position - len(token) : -position] == token)
+
+                token_end_overlaps = end_overlaps_vec[token_idx, i].tolist()
+                for overlap in token_end_overlaps:
+                    if overlap == -1:
+                        continue  # Padding value
+                    # Either this token runs off the end of the string,
+                    # or the entire stop string is a substring of the token
+                    self.assertTrue(
+                        (
+                            stop_string.endswith(token[:overlap])
+                            or (stop_string in token and overlap == len(stop_string))
+                        )
+                    )
+
+                token_length = token_lengths[token_idx].item()
+                self.assertTrue(len(token) == token_length)
