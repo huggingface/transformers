@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.1.1'
+ARG PYTORCH='2.2.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu118'
 
@@ -26,9 +26,7 @@ RUN echo torch=$VERSION
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
 RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
-
-RUN python3 -m pip uninstall -y flax jax
+RUN python3 -m pip install --no-cache-dir -e ./transformers[torch-dev]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
