@@ -660,8 +660,16 @@ class AwqConfig(QuantizationConfigMixin):
             self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
 
-        if self.version == AWQLinearVersion.EXLLAMA and exllama_config is None:
+        if exllama_config is None:
             self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
+        else:
+            if "version" not in self.exllama_config:
+                raise ValueError("`exllama_config` needs to have a `version` key.")
+            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                exllama_version = self.exllama_config["version"]
+                raise ValueError(
+                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
+                )
 
         self.post_init()
 
