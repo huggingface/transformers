@@ -232,7 +232,7 @@ class StopStringCriteria(StoppingCriteria):
                 ] = possible_end_lens
             for token, token_idx in vocab.items():
                 gather_vec[token_idx, -1] = len(token)
-            embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32)
+            embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32).pin_memory()
         return embedding_vecs
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
@@ -247,6 +247,7 @@ class StopStringCriteria(StoppingCriteria):
 
         string_matches = []
         for stop_string in self.stop_strings:
+            embedding_vec = self.embedding_vecs[stop_string].to(flipped_ids.device, non_blocking=True)
             # We need the length of the stop string to know how many characters our token sequence should have
             target_len = len(stop_string)
 
@@ -257,7 +258,7 @@ class StopStringCriteria(StoppingCriteria):
             max_valid_end_lens = self.max_valid_end_lens[stop_string]
 
             # The embedding vec contains the valid positions, end_lengths and total lengths for each token
-            embedding_vec = self.embedding_vecs[stop_string].to(flipped_ids.device)
+
             embedded = F.embedding(flipped_ids, embedding_vec)
             # Now we split the embedding vector. valid_positions is the positions in the stop string the token can fit
             valid_positions = embedded[:, 1:, :max_valid_positions]
