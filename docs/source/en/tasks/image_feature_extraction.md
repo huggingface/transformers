@@ -85,7 +85,8 @@ If you want to get the last hidden states before pooling, simply avoid passing a
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-224", device=DEVICE)
 output = pipe(image_real)
 ```
-Since the outputs are unpooled, we get last hidden states where first dimension is the batch size and the last two are embedding shape.
+
+Since the outputs are unpooled, we get last hidden states where the first dimension is the batch size and the last two are the embedding shape.
 
 ```python
 import numpy as np
