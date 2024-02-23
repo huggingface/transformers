@@ -371,6 +371,7 @@ def shard_checkpoint(
             storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
+        # unless if is a 'meta' parameter tensor
         if storage_id in storage_id_to_block and weight.device != torch.device("meta"):
             block_id = storage_id_to_block[storage_id]
             sharded_state_dicts[block_id][key] = weight
@@ -2334,6 +2335,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and module._hf_hook.offload
                 for module in model_to_save.modules()
             ):
+                warnings.warn(
+                    "Attempting to save a model with disk-offloaded modules. Ensure that unallocated CPU memory exceeds the `shard_size` (5GB default)"
+                )
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
@@ -2367,7 +2371,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors, excludijng disk offloaded tensors in the meta device
+            # These are all the pointers of shared tensors, excluding disk offloaded tensors in the meta device
             shared_ptrs = {
                 ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")
             }
