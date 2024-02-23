@@ -29,7 +29,6 @@ class Starcoder2Config(PretrainedConfig):
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [`"starcoder2-7b_16k"`](https://huggingface.co/bigcode/starcoder2-7b_16k) model.
 
-    [bigcode/starcoder2-7b_16k](https://huggingface.co/bigcode/starcoder2-7b_16k)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
