@@ -986,25 +986,18 @@ class CandidateBeamSearchScorer(BeamSearchScorer):
         self.eos_token_id = eos_token_id
         self.nested_candidate_dict = self.make_nested_candidate_dict(candidate_words_ids)
 
+
     def make_nested_candidate_dict(self, words_ids_list):
         def convert_to_dict(nested_list, next_dict):
+            if not nested_list:
+                next_dict[self.eos_token_id] = self.eos_token_id
+                return next_dict
             key = nested_list[0]
-            if len(nested_list) == 1:
-                if key not in next_dict:
-                    next_dict[key] = {self.eos_token_id: self.eos_token_id}
-                else:
-                    next_dict[key].update({self.eos_token_id: self.eos_token_id})
-            else:
-                if key not in next_dict:
-                    value = convert_to_dict(nested_list[1:], dict())
-                    next_dict[key] = value
-                else:
-                    value = convert_to_dict(nested_list[1:], next_dict[key])
-                    next_dict[key].update(value)
-
+            next_dict.setdefault(key, {})
+            next_dict[key] = convert_to_dict(nested_list[1:], next_dict[key])
             return next_dict
 
-        result = dict()
+        result = {}
         for sublist in words_ids_list:
             convert_to_dict(sublist, result)
         return result
