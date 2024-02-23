@@ -1372,10 +1372,10 @@ class Trainer:
 
     def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
         attributes_map = {
-            'logging_steps': 'logging_steps',
-            'eval_steps': 'eval_steps',
-            'save_steps': 'save_steps',
-            'per_device_train_batch_size': 'train_batch_size',
+            "logging_steps": "logging_steps",
+            "eval_steps": "eval_steps",
+            "save_steps": "save_steps",
+            "per_device_train_batch_size": "train_batch_size",
         }
 
         warnings_list = []
@@ -1384,8 +1384,10 @@ class Trainer:
             state_value = getattr(trainer_state, state_attr, None)
 
             if arg_value is not None and state_value is not None and arg_value != state_value:
-                warnings_list.append(f"Warning: The training argument '{arg_attr}' value ({arg_value}) does not match the trainer state '{state_attr}' value ({state_value}). "
-                                     f"This argument will be overridden by the one found in trainer_state.json within the checkpoint directory.")
+                warnings_list.append(
+                    f"Warning: The training argument '{arg_attr}' value ({arg_value}) does not match the trainer state '{state_attr}' value ({state_value}). "
+                    f"This argument will be overridden by the one found in trainer_state.json within the checkpoint directory."
+                )
 
         if warnings_list:
             for warning in warnings_list:
