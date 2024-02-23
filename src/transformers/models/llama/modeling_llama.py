@@ -811,7 +811,9 @@ class LlamaPreTrainedModel(PreTrainedModel):
             )
 
         if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
-            causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
+            causal_mask = torch.full(
+                (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool
+            )
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
@@ -919,8 +921,11 @@ class LlamaModel(LlamaPreTrainedModel):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
+        # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
+        # NOTE: This is not friendly with TorchScript, ONNX, ExportedProgram serialization for very large `max_position_embeddings`.
+        causal_mask = torch.full(
+            (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
+        )
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
