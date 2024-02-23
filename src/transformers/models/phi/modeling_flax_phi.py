@@ -395,7 +395,7 @@ class FlaxPhiDecoderLayer(nn.Module):
     def setup(self):
         self.self_attn = FlaxPhiAttention(self.config, dtype=self.dtype)
         self.mlp = FlaxPhiMLP(self.config, dtype=self.dtype)
-        self.input_layernorm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
+        self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.resid_dropout = nn.Dropout(self.config.resid_pdrop)
 
 
@@ -420,12 +420,18 @@ class FlaxPhiDecoderLayer(nn.Module):
         )
         attn_output = outputs[0]
         attn_output = self.resid_dropout(attn_output, deterministic=deterministic)
+        global ATTN_OUTPUT
+        ATTN_OUTPUT = attn_output
         # residual connection
         feed_forward_hidden_states = self.resid_dropout(
             self.mlp(hidden_states), deterministic=deterministic
         )
         hidden_states = attn_output + feed_forward_hidden_states + residual
+        global LAST_HIDDEN_STATES
+        LAST_HIDDEN_STATES = hidden_states
         return (hidden_states,) + outputs[1:]
+
+
 
 
 def main():
@@ -446,20 +452,35 @@ def main():
     # TODO: bring converter from gendo and test decoderlayer
 
     # debug
-    from transformers.models.phi.modeling_phi import PhiMLP
-    self = PhiMLP(config)
-    self.fc1.weight.data = jax2pt(variables["params"]["fc1"]["kernel"].T)
-    self.fc1.bias.data = jax2pt(variables["params"]["fc1"]["bias"])
-    self.fc2.weight.data = jax2pt(variables["params"]["fc2"]["kernel"].T)
-    self.fc2.bias.data = jax2pt(variables["params"]["fc2"]["bias"])
+    from transformers.models.phi.modeling_phi import PhiDecoderLayer
+    from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+    self = PhiDecoderLayer(config, 0)
+    self.self_attn.q_proj.weight.data = jax2pt(variables["params"]["self_attn"]["q_proj"]["kernel"].T)
+    self.self_attn.q_proj.bias.data = jax2pt(variables["params"]["self_attn"]["q_proj"]["bias"])
+    self.self_attn.k_proj.weight.data = jax2pt(variables["params"]["self_attn"]["k_proj"]["kernel"].T)
+    self.self_attn.k_proj.bias.data = jax2pt(variables["params"]["self_attn"]["k_proj"]["bias"])
+    self.self_attn.v_proj.weight.data = jax2pt(variables["params"]["self_attn"]["v_proj"]["kernel"].T)
+    self.self_attn.v_proj.bias.data = jax2pt(variables["params"]["self_attn"]["v_proj"]["bias"])
+    self.self_attn.dense.weight.data = jax2pt(variables["params"]["self_attn"]["dense"]["kernel"].T)
+    self.self_attn.dense.bias.data = jax2pt(variables["params"]["self_attn"]["dense"]["bias"])
+
+    self.mlp.fc1.weight.data = jax2pt(variables["params"]["mlp"]["fc1"]["kernel"].T)
+    self.mlp.fc1.bias.data = jax2pt(variables["params"]["mlp"]["fc1"]["bias"])
+    self.mlp.fc2.weight.data = jax2pt(variables["params"]["mlp"]["fc2"]["kernel"].T)
+    self.mlp.fc2.bias.data = jax2pt(variables["params"]["mlp"]["fc2"]["bias"])
+
+    self.input_layernorm.weight.data = jax2pt(variables["params"]["input_layernorm"]["scale"])
+    self.input_layernorm.bias.data = jax2pt(variables["params"]["input_layernorm"]["bias"])
 
     hidden_states, attn_mask, position_ids = map(jax2pt, (hidden_states, attn_mask, position_ids))
+    attn_mask = _prepare_4d_causal_attention_mask(
+        attn_mask, (batch_size, seq_len), hidden_states, 0
+    )
 
-    pt_out = self(hidden_states)[0]
+    pt_out = self(hidden_states, attn_mask, position_ids)[0]
 
     # TODO: test with cache
     assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
-
 
 
 
