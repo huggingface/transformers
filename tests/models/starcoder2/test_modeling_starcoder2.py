@@ -509,7 +509,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @require_flash_attn
-    def test_starcoder2_batched_generation_eager(self):
+    def test_starcoder2_batched_generation_fa2(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
             "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
