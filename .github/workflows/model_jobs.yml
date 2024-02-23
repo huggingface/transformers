@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
-    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, ci]
+    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
