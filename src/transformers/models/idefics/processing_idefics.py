@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, is_tf_available, is_torch_available
+from ...utils import is_tf_available, is_torch_available
 
 
 if is_torch_available():
