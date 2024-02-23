@@ -65,7 +65,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         image_num_channels (`int`, *optional*, defaults to 3):
             Number of image channels.
-        return_tensors (`str`, *optional*): The type of Tensor to return. Allowable values are "pt" and "tf".
     """
 
     model_input_names = ["pixel_values"]
