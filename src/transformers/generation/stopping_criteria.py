@@ -154,71 +154,69 @@ class StopStringCriteria(StoppingCriteria):
         self.tok_list, self.tok_indices = tuple(self.vocab.keys()), tuple(self.vocab.values())
         self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
 
-        self.embedding_vecs, self.max_valid_positions, self.max_valid_end_lens = _stop_string_create_embedding_vecs(
+        self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = _stop_string_create_embedding_vec(
             self.tok_list, self.tok_indices, self.stop_strings
         )
+        self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
+        self.num_stop_strings = len(self.stop_strings)
+        self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        embedding_vec = self.embedding_vec.to(input_ids.device)
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
         # *shorter* than the global max, and the code below should be ready for that
-        maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
-        input_ids = input_ids[:, -maximum_token_len:]
+        input_ids = input_ids[:, -self.maximum_token_len :]
 
         # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
 
-        string_matches = []
-        for stop_string in self.stop_strings:
-            embedding_vec = self.embedding_vecs[stop_string].to(flipped_ids.device, non_blocking=True)
-            # We need the length of the stop string to know how many characters our token sequence should have
-            target_len = len(stop_string)
+        # Size of the vector of positions a single token can match
+        max_valid_positions = self.max_valid_positions
 
-            # Size of the vector of positions a single token can match
-            max_valid_positions = self.max_valid_positions[stop_string]
+        # The embedding vec contains the valid positions, end_lengths and total lengths for each token
+        embedded = F.embedding(flipped_ids, embedding_vec)
 
-            # Size of the vector of overlap sizes a single token can have with the end of the string
-            max_valid_end_lens = self.max_valid_end_lens[stop_string]
+        # Now we split the embedding vector. valid_positions is the positions in the stop string the token can fit
+        valid_positions = embedded[:, 1:, : max_valid_positions * self.num_stop_strings].unflatten(
+            -1, (self.num_stop_strings, -1)
+        )
+        # end_lengths is the number of characters from the string, counting from the end, that the token
+        # contains. It can have multiple values if the same token can overlap different end lengths
+        end_lengths = embedded[:, :1, max_valid_positions * self.num_stop_strings : -1].unflatten(
+            -1, (self.num_stop_strings, -1)
+        )
+        # Lengths is the total length of each token. Unlike the others, it always has a single value
+        lengths = embedded[:, 1:, None, -1:]  # Insert a dummy dimension for stop_strings even though lengths are const
 
-            # The embedding vec contains the valid positions, end_lengths and total lengths for each token
+        # Concatenate lengths onto each possible end_lengths value
+        lengths = lengths.expand((-1, -1, end_lengths.shape[-2], end_lengths.shape[-1]))
+        lengths_with_ends = torch.cat([end_lengths, lengths], dim=1)
 
-            embedded = F.embedding(flipped_ids, embedding_vec)
-            # Now we split the embedding vector. valid_positions is the positions in the stop string the token can fit
-            valid_positions = embedded[:, 1:, :max_valid_positions]
-            # end_lengths is the number of characters from the string, counting from the end, that the token
-            # contains. It can have multiple values if the same token can overlap different end lengths
-            end_lengths = embedded[:, :1, max_valid_positions : max_valid_positions + max_valid_end_lens]
-            # Lengths is the total length of each token. Unlike the others, it always has a single value
-            lengths = embedded[:, 1:, -1:]
+        # cumsum() to get the number of matched characters in the stop string after each token
+        cumsum = lengths_with_ends.cumsum(dim=1)  # B x maximum_token_len x num_stop_strings x max_valid_end_lens
 
-            # Concatenate lengths onto each possible end_lengths value
-            lengths = lengths.expand((-1, -1, end_lengths.shape[-1]))
-            lengths_with_ends = torch.cat([end_lengths, lengths], dim=1)
+        # The calculation above assumes that all tokens are in valid positions. Now we mask the ones that are not.
+        # First, tokens match the start of the string if they have a positive value in the end_lengths vector
+        initial_match = end_lengths > 0
 
-            # cumsum() to get the number of matched characters in the stop string after each token
-            cumsum = lengths_with_ends.cumsum(dim=1)  # B x maximum_token_len x max_valid_end_lens
+        # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
+        # Note that we're actually tracking one cumsum() for for each possible end_length
+        later_match = torch.any(cumsum[:, :-1, :, None] == valid_positions[:, :, :, :, None], axis=-2)
 
-            # The calculation above assumes that all tokens are in valid positions. Now we mask the ones that are not.
-            # First, tokens match the start of the string if they have a positive value in the end_lengths vector
-            initial_match = end_lengths > 0
+        # The match vector is a boolean vector that indicates which positions have valid tokens
+        match = torch.cat([initial_match, later_match], dim=1)
 
-            # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
-            # Note that we're actually tracking one cumsum() for for each possible end_length
-            later_match = torch.any(cumsum[:, :-1, None] == valid_positions[:, :, :, None], axis=2)
+        # Once a single position does not match, all positions following that position are masked
+        mask = (~match).cumsum(dim=1, dtype=torch.int32)
+        mask = mask == 0
 
-            # The match vector is a boolean vector that indicates which positions have valid tokens
-            match = torch.cat([initial_match, later_match], dim=1)
-
-            # Once a single position does not match, all positions following that position are masked
-            mask = (~match).cumsum(dim=1, dtype=torch.int32)
-            mask = mask == 0
-
-            # The string is matched if we reached a cumsum equal to or greater than the length of the string
-            # before hitting the mask
-            string_matches.append(torch.amax(cumsum * mask, dim=(1, 2)) >= target_len)
+        # The string is matched if we reached a cumsum equal to or greater than the length of the string
+        # before hitting the mask
+        string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
 
         # Now we concatenate the match booleans across all strings and check if any are True
-        string_matches = torch.cat(string_matches, dim=0)
+        # TODO After Raushan's PR, return a per-sample vector here
         return torch.any(string_matches).item()
 
 
@@ -315,7 +313,7 @@ def _stop_string_get_matching_positions(
 
 
 @lru_cache(8)
-def _stop_string_create_embedding_vecs(tok_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
+def _stop_string_create_embedding_vec(tok_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
     """
     This function builds an embedding matrix for each stop string, consisting of possible valid positions
     and possible end lengths for each token, and the total length of the token string. When tokens have
@@ -326,33 +324,32 @@ def _stop_string_create_embedding_vecs(tok_list, tok_indices, stop_strings) -> D
         tok_list, tok_indices, stop_strings
     )
 
-    embedding_vecs = {}
-    for stop_string in stop_strings:
+    max_valid_positions = max([len(val) for positions in token_valid_positions.values() for val in positions.values()])
+    max_valid_end_lens = max([len(val) for positions in token_end_overlaps.values() for val in positions.values()])
+    vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
+    gather_vec = np.full((len(tok_list), vec_size), dtype=np.int32, fill_value=-1)
+
+    for i, stop_string in enumerate(stop_strings):
         positions = token_valid_positions[stop_string]
         end_lens = token_end_overlaps[stop_string]
-        max_valid_positions = max([len(val) for val in positions.values()])
-        max_valid_end_lens = max([len(val) for val in end_lens.values()])
-        vec_size = max_valid_positions + max_valid_end_lens + 1
+
         # Since this is lots of very small assignments of lists, we build it with numpy rather
         # than torch for speed + simplicity, then convert to torch at the end
-        gather_vec = np.full((len(tok_list), vec_size), dtype=np.int32, fill_value=-1)
         for token_idx, valid_positions in positions.items():
-            gather_vec[token_idx, : len(valid_positions)] = valid_positions
+            gather_vec[
+                token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)
+            ] = valid_positions
         for token_idx, possible_end_lens in end_lens.items():
             gather_vec[
-                token_idx, max_valid_positions : max_valid_positions + len(possible_end_lens)
+                token_idx,
+                max_valid_positions * len(stop_strings) + max_valid_end_lens * i : max_valid_positions
+                * len(stop_strings)
+                + max_valid_end_lens * i
+                + len(possible_end_lens),
             ] = possible_end_lens
         for token, token_idx in zip(tok_list, tok_indices):
             gather_vec[token_idx, -1] = len(token)
-        embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32)
 
-    # TODO Remove this block and stop returning these values after the embedding vec is merged
-    max_valid_positions = {
-        stop_string: max([len(val) for val in token_valid_positions[stop_string].values()])
-        for stop_string in stop_strings
-    }
-    max_valid_end_lens = {
-        stop_string: max([len(val) for val in token_end_overlaps[stop_string].values()])
-        for stop_string in stop_strings
-    }
-    return embedding_vecs, max_valid_positions, max_valid_end_lens
+    gather_vec = torch.tensor(gather_vec, dtype=torch.int32)
+
+    return gather_vec, max_valid_positions, max_valid_end_lens
