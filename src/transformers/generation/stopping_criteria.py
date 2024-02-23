@@ -186,19 +186,18 @@ class StopStringCriteria(StoppingCriteria):
                 matching_positions = []
                 possible_end_lengths = []
                 for i in range(1 - len(token), len(stop_string)):
-                    tok = reversed_filtered_token
-                    stop = reversed_stop_string
                     if i < 0:
-                        tok = tok[-i:]
+                        tok = reversed_filtered_token[-i:]
                         i = 0
-                    stop = stop[i : i + len(tok)]
-                    if len(tok) > len(stop):
-                        tok = tok[: len(stop)]
-                    if tok == stop:
+                    else:
+                        tok = reversed_filtered_token
+                    stop = reversed_stop_string[i : i + len(tok)]
+                    if tok.startswith(stop):
                         if i == 0:
-                            possible_end_lengths.append(len(tok))
+                            possible_end_lengths.append(min(len(tok), len(stop)))
                         else:
                             matching_positions.append(i)
+
                 if matching_positions:
                     token_valid_positions[stop_string][token] = matching_positions
                 if possible_end_lengths:
