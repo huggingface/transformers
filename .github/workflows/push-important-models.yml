@@ -7,6 +7,7 @@ on:
 env:
   RUN_SLOW: "yes"
   IS_GITHUB_CI: "1"
+  OUTPUT_SLACK_CHANNEL_ID: "C06L2SGMEEA"
 
 jobs:
   get_modified_models:
@@ -69,7 +70,7 @@ jobs:
         with:
           # Slack channel id, channel name, or user id to post message.
           # See also: https://api.slack.com/methods/chat.postMessage#channels
-          channel-id: 'C06L2SGMEEA'
+          channel-id: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           # For posting a rich message using Block Kit
           payload: |
             {
