@@ -549,7 +549,7 @@ class StableLmFlashAttention2(StableLmAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        dropout_rate = self.attention_dropout if self.training else 0.0
+        dropout_rate = self.attention_dropout.p if self.training else 0.0
 
         attn_output = self._flash_attention_forward(
             query_states,
