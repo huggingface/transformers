@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Image feature extraction is the task of extracting semantically meaningful features given an image. This has many use cases, including image similarity and image retrieval. Moreover, most computer vision models can be used for image feature extraction, where one can remove the task-specific head (image classification, object detection etc) and get the features. These features are very useful on a higher level: edge detection, corner detection and so on. They may also contain information about the real world (e.g. what a cat looks like) depending on how deep the model is. Therefore, these outputs can be used to train new classifiers on a specific dataset.
 
-In this notebook, we will:
+In this guide, you will:
 
 - See how to build a simple image similarity system on top of `image-feature-extraction` pipeline,
 - Accomplish the same task with bare model inference.
