@@ -432,8 +432,7 @@ class ModelTesterMixin:
                     if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
                         max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
                     else:
-                        diffs = model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]
-                        max_diff = np.abs(diffs).sum().item()
+                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_fast_init_context_manager(self):
