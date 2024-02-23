@@ -38,7 +38,7 @@ image_real = Image.open(requests.get(img_urls[0], stream=True).raw).convert("RGB
 image_gen = Image.open(requests.get(img_urls[1], stream=True).raw).convert("RGB")
 ```
 
-Let's see the pipeline in action. We will initialize the pipeline. If we do not pass any model, it will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224). If you'd like to calculate similarity, set `pool` to True.
+Let's see the pipeline in action. First, initialize the pipeline. If you don't pass any model to it, the pipeline will be automatically initialized with [google/vit-base-patch16-224](google/vit-base-patch16-224). If you'd like to calculate similarity, set `pool` to True.
 
 ```python
 import torch
