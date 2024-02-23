@@ -591,7 +591,7 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_now = self.torch.mps.current_allocated_memory()
                 # self.torch.mps.max_memory_allocated() does not exist yet
                 self.gpu_mem_used_peak = None
-                
+
             else:
                 raise ValueError("No available GPU device found!")
 
@@ -603,7 +603,7 @@ class TrainerMemoryTracker:
             if self.gpu_mem_used_peak is not None:
                 self.gpu[self.cur_stage]["peaked"] = max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now)
             else:
-                self.gpu[self.cur_stage]["peaked"] = "Not availble"
+                self.gpu[self.cur_stage]["peaked"] = "Not available"
 
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
