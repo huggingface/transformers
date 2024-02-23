@@ -1739,7 +1739,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
 
-        if return_dict is None:
+        if return_dict is None and tokenize:
             logger.warning_once(
                 "In version 4.40, `return_dict` will be set to `True` by default. "
                 "Please explicitly set `return_dict` to `False` to maintain the current behaviour, "
