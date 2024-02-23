@@ -48,7 +48,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 
-We can now infer with `pipe`, by passing in both of the images.
+To infer with `pipe` pass both images to it.
 
 ```python
 outputs = pipe([image_real, image_gen])
