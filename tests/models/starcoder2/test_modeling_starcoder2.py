@@ -22,6 +22,7 @@ import pytest
 
 from transformers import Starcoder2Config, is_torch_available
 from transformers.testing_utils import (
+    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -39,6 +40,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         Starcoder2ForCausalLM,
         Starcoder2ForSequenceClassification,
         Starcoder2Model,
@@ -461,3 +463,44 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Starcoder2 flash attention does not support right padding")
+
+
+@slow
+@require_torch_gpu
+class Starcoder2IntegrationTest(unittest.TestCase):
+    def test_starcoder2_batched_generation(self):
+        EXPECTED_TEXT = [
+            "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
+            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+        ]
+        model_id = "bigcode/starcoder2-7b_16k"
+
+        model = Starcoder2ForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        text = ["Hello my name is Younes and", "def hello_world():"]
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT, output_text)
+
+    @require_bitsandbytes
+    def test_starcoder2_batched_generation_4bit(self):
+        EXPECTED_TEXT = [
+            'Hello my name is Younes and I am a student at the University of Maryland. I am currently working on a project that is related to the topic of "How to make a game". I am currently working on a project',
+            'def hello_world():\n\treturn "Hello World"\n\n@app.route(\'/hello/<name>\')\ndef hello_name(name):\n\treturn "Hello " + name\n\n@app.route',
+        ]
+        model_id = "bigcode/starcoder2-7b_16k"
+
+        model = Starcoder2ForCausalLM.from_pretrained(model_id, load_in_4bit=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        text = ["Hello my name is Younes and", "def hello_world():"]
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT, output_text)

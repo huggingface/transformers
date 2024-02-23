@@ -20,26 +20,21 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mistralai/Mistral-7B-v0.1": "https://huggingface.co/mistralai/Mistral-7B-v0.1/resolve/main/config.json",
-}
+STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class Starcoder2Config(PretrainedConfig):
     r"""
-    # TODO: Update ckpt name
     This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Starcoder2-7B-v0.1 or Starcoder2-7B-Instruct-v0.1.
+    with the defaults will yield a similar configuration to that of the starcoder2-7b_16k model.
 
-    [mistralai/Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1)
-    [starcoder2ai/Starcoder2-7B-Instruct-v0.1](https://huggingface.co/starcoder2ai/Starcoder2-7B-Instruct-v0.1)
+    [bigcode/starcoder2-7b_16k](https://huggingface.co/bigcode/starcoder2-7b_16k)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
-    # TODO: Update
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Starcoder2 model. Defines the number of different tokens that can be represented by the
@@ -110,16 +105,11 @@ class Starcoder2Config(PretrainedConfig):
         num_hidden_layers=30,
         num_attention_heads=24,
         num_key_value_heads=2,
-        # TODO: Infer from hidden_act?
-        mlp_type="default",
         hidden_act="gelu_pytorch_tanh",
         max_position_embeddings=4096,
-        # TODO: Check init method.
         initializer_range=0.018042,
-        norm_type="layer_norm",
         norm_epsilon=1e-5,
         use_cache=True,
-        # TODO: Wrong defaults?
         bos_token_id=50256,
         eos_token_id=50256,
         rope_theta=10000.0,
@@ -127,10 +117,7 @@ class Starcoder2Config(PretrainedConfig):
         attention_dropout=0.0,
         residual_dropout=0.0,
         embedding_dropout=0.0,
-        # TODO: Implement
-        use_bias: bool = True,
-        # TODO: Other dropouts?
-        # TODO: Allow normal pos embeddings for santacoder/starcoder1?
+        use_bias=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -141,16 +128,9 @@ class Starcoder2Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
         self.use_bias = use_bias
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
-        self.mlp_type = mlp_type
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.norm_type = norm_type
         self.norm_epsilon = norm_epsilon
         self.use_cache = use_cache
         self.rope_theta = rope_theta
