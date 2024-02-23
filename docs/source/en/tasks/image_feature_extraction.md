@@ -66,7 +66,7 @@ print(outputs)
 # [[[-0.03909236937761307, 0.43381670117378235, -0.06913255900144577,
 ```
 
-To get the similarity, we need to pass them to a similarity function. 
+To get the similarity score, we need to pass them to a similarity function. 
 
 ```python
 from torch.nn.functional import cosine_similarity
