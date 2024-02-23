@@ -468,14 +468,57 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 @slow
 @require_torch_gpu
 class Starcoder2IntegrationTest(unittest.TestCase):
-    def test_starcoder2_batched_generation(self):
+    def test_starcoder2_batched_generation_sdpa(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
             "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
         ]
         model_id = "bigcode/starcoder2-7b_16k"
 
-        model = Starcoder2ForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map="auto")
+        model = Starcoder2ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        text = ["Hello my name is Younes and", "def hello_world():"]
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT, output_text)
+
+    def test_starcoder2_batched_generation_eager(self):
+        EXPECTED_TEXT = [
+            "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
+            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+        ]
+        model_id = "bigcode/starcoder2-7b_16k"
+
+        model = Starcoder2ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        text = ["Hello my name is Younes and", "def hello_world():"]
+        inputs = tokenizer(text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT, output_text)
+
+    @require_flash_attn
+    def test_starcoder2_batched_generation_eager(self):
+        EXPECTED_TEXT = [
+            "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",
+            "def hello_world():\n\treturn 'Hello World!'\n\n@app.route('/hello/<name>')\ndef hello_name(name):\n\treturn 'Hello %s!' % name\n\n@app",
+        ]
+        model_id = "bigcode/starcoder2-7b_16k"
+
+        model = Starcoder2ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
 
