@@ -54,7 +54,7 @@ jobs:
       - id: set-matrix
         name: Identify models to test
         run: |
-          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 ./utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
   run_model_tests_gpu:
