@@ -45,6 +45,7 @@ jobs:
     runs-on: [single-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
     container:
       image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --shm-size "40gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     if: ${{ needs.get_modified_models.outputs.matrix }} != ''
     strategy:
       fail-fast: false
