@@ -43,8 +43,12 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      - uses: actions/checkout@v3
+      - name: Update clone
+        working-directory: /transformers
+        run: |
+          git fetch && git checkout ${{ github.sha }}
       - name: Cleanup
+        working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
           rm -rf tests/models/__pycache__
@@ -52,8 +56,9 @@ jobs:
 
       - id: set-matrix
         name: Identify models to test
+        working-directory: /transformers/tests
         run: |
-          echo "folder_slices=$(python3 ./utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
   run_model_tests_gpu:
