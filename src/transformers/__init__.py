@@ -806,8 +806,8 @@ _import_structure = {
         "SqueezeBertConfig",
         "SqueezeBertTokenizer",
     ],
-    "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
     "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
+    "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -3253,20 +3253,20 @@ else:
             "SqueezeBertPreTrainedModel",
         ]
     )
-    _import_structure["models.starcoder2"].extend(
-        [
-            "Starcoder2ForCausalLM",
-            "Starcoder2ForSequenceClassification",
-            "Starcoder2Model",
-            "Starcoder2PreTrainedModel",
-        ]
-    )
     _import_structure["models.stablelm"].extend(
         [
             "StableLmForCausalLM",
             "StableLmForSequenceClassification",
             "StableLmModel",
             "StableLmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.starcoder2"].extend(
+        [
+            "Starcoder2ForCausalLM",
+            "Starcoder2ForSequenceClassification",
+            "Starcoder2Model",
+            "Starcoder2PreTrainedModel",
         ]
     )
     _import_structure["models.swiftformer"].extend(
@@ -5570,8 +5570,8 @@ if TYPE_CHECKING:
         SqueezeBertConfig,
         SqueezeBertTokenizer,
     )
-    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
     from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
+    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -7683,17 +7683,17 @@ if TYPE_CHECKING:
             SqueezeBertModule,
             SqueezeBertPreTrainedModel,
         )
-        from .models.starcoder2 import (
-            Starcoder2ForCausalLM,
-            Starcoder2ForSequenceClassification,
-            Starcoder2Model,
-            Starcoder2PreTrainedModel,
-        )
         from .models.stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
             StableLmModel,
             StableLmPreTrainedModel,
+        )
+        from .models.starcoder2 import (
+            Starcoder2ForCausalLM,
+            Starcoder2ForSequenceClassification,
+            Starcoder2Model,
+            Starcoder2PreTrainedModel,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
