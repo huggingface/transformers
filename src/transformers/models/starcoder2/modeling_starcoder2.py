@@ -302,6 +302,7 @@ class Starcoder2Attention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Starcoder2
 class Starcoder2FlashAttention2(Starcoder2Attention):
     """
     Starcoder2 flash attention module. This module inherits from `Starcoder2Attention` as the weights of the module stays
@@ -309,6 +310,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -317,6 +319,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -596,7 +599,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Starcoder2
+# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Starcoder2
 class Starcoder2SdpaAttention(Starcoder2Attention):
     """
     Starcoder2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -604,7 +607,7 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
     SDPA API.
     """
 
-    # Adapted from Starcoder2Attention.forward
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -680,6 +683,7 @@ class Starcoder2SdpaAttention(Starcoder2Attention):
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
+        # The difference with Mistral is that here it uses dropout
         attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
 
         return attn_output, None, past_key_value
@@ -701,12 +705,8 @@ class Starcoder2DecoderLayer(nn.Module):
 
         self.mlp = Starcoder2MLP(config)
 
-        self.input_layernorm = nn.LayerNorm(
-            config.hidden_size, eps=config.norm_epsilon
-        )
-        self.post_attention_layernorm = nn.LayerNorm(
-            config.hidden_size, eps=config.norm_epsilon
-        )
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
     # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
     def forward(
@@ -1066,7 +1066,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral->Starcoder2
+# Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1126,8 +1126,8 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, Starcoder2ForCausalLM
 
-        >>> model = Starcoder2ForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = Starcoder2ForCausalLM.from_pretrained("bigcode/starcoder2-7b_16k")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b_16k")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1167,11 +1167,11 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
+            # Ensure tensors are on the same device
             shift_labels = shift_labels.to(shift_logits.device)
+            loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:

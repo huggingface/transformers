@@ -15,25 +15,22 @@
 """ Testing suite for the PyTorch Starcoder2 model. """
 
 
-import gc
 import tempfile
 import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, Starcoder2Config, is_torch_available, set_seed
+from transformers import Starcoder2Config, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -48,6 +45,7 @@ if is_torch_available():
     )
 
 
+# Copied from transformers.tests.models.mistral.test_modeling_mistral.Starcoder2ModelTester with Mistral->Starcoder2
 class Starcoder2ModelTester:
     def __init__(
         self,
@@ -101,6 +99,7 @@ class Starcoder2ModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -124,6 +123,7 @@ class Starcoder2ModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
+    # Ignore copy
     def get_config(self):
         return Starcoder2Config(
             vocab_size=self.vocab_size,
@@ -140,8 +140,11 @@ class Starcoder2ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            eos_token_id=self.pad_token_id,
+            bos_token_id=self.pad_token_id,
         )
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Starcoder2
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -152,6 +155,7 @@ class Starcoder2ModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Starcoder2
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -182,6 +186,7 @@ class Starcoder2ModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Starcoder2
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -200,6 +205,7 @@ class Starcoder2ModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Starcoder2
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -262,6 +268,7 @@ class Starcoder2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -278,13 +285,88 @@ class Starcoder2ModelTester:
 
 
 @require_torch
+# Copied from transformers.tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Starcoder2
 class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (Starcoder2ForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Starcoder2Model,
+            "text-classification": Starcoder2ForSequenceClassification,
+            "text-generation": Starcoder2ForCausalLM,
+            "zero-shot": Starcoder2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
+
+    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
+    def setUp(self):
+        self.model_tester = Starcoder2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Starcoder2Config, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_various_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config_and_inputs[0].position_embedding_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_Starcoder2_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        print(config)
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = Starcoder2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_Starcoder2_sequence_classification_model_for_single_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "single_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = Starcoder2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_Starcoder2_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = Starcoder2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     @unittest.skip("Starcoder2 buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -379,133 +461,3 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Starcoder2 flash attention does not support right padding")
-
-
-@require_torch
-class Starcoder2IntegrationTest(unittest.TestCase):
-    @slow
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Starcoder2ForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        with torch.no_grad():
-            out = model(input_ids).logits.cpu()
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
-        print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = Starcoder2ForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @require_bitsandbytes
-    @slow
-    @require_flash_attn
-    def test_model_7b_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = Starcoder2ForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1",
-            device_map="auto",
-            load_in_4bit=True,
-            attn_implementation="flash_attention_2",
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_sdpa
-    def test_model_7b_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = Starcoder2ForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1",
-            device_map="auto",
-            attn_implementation="sdpa",
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
-        )
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = Starcoder2ForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
-        )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        set_seed(0)
-        generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
