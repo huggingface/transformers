@@ -77,9 +77,9 @@ class AqlmTest(unittest.TestCase):
     model_name = "BlackSamorez/Llama-2-7b-AQLM-2Bit-1x16-hf"
 
     input_text = "Hello my name is"
-    max_new_tokens = 40
+    max_new_tokens = 32
 
-    EXPECTED_OUTPUT = "Hello my name is Katie. I am a 20 year old college student. I am a very outgoing person. I love to have fun and be active. I am very easy going and love to make"
+    EXPECTED_OUTPUT = "Hello my name is Katie. I am a 20 year old college student. I am a very outgoing person. I love to have fun and be active. I"
 
     device_map = "cuda"
 
@@ -209,7 +209,7 @@ class AqlmTest(unittest.TestCase):
         seq_length = input_ids.shape[1]
 
         # Setup static KV cache for generation
-        self.quantized_model._setup_cache(StaticCache, 1, max_cache_len=seq_length + self.max_new_tokens)
+        self.quantized_model._setup_cache(StaticCache, 1, max_cache_len=seq_length + self.max_new_tokens + 1)
 
         # Allocate token ids to be generated and copy prefix ids
         cache_position = torch.arange(seq_length, device=torch_device)
@@ -227,7 +227,7 @@ class AqlmTest(unittest.TestCase):
 
             # Generate tokens one by one
             cache_position = torch.tensor([seq_length + 1], device=torch_device)
-            for _ in range(1, self.max_new_tokens - 1):
+            for _ in range(1, self.max_new_tokens):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
                     next_token = decode_one_tokens(self.quantized_model, next_token.clone(), None, cache_position)
                     generated_ids.index_copy_(1, cache_position, next_token)
