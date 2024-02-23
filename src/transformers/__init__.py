@@ -434,6 +434,7 @@ _import_structure = {
         "FastSpeech2ConformerTokenizer",
         "FastSpeech2ConformerWithHifiGanConfig",
     ],
+    "models.fid": ["FID_PRETRAINED_CONFIG_ARCHIVE_MAP", "FiDConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2175,6 +2176,19 @@ else:
             "FastSpeech2ConformerModel",
             "FastSpeech2ConformerPreTrainedModel",
             "FastSpeech2ConformerWithHifiGan",
+        ]
+    )
+    _import_structure["models.fid"].extend(
+        [
+            "FID_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FiDEncoderModel",
+            "FiDForConditionalGeneration",
+            "FiDForQuestionAnswering",
+            "FiDForSequenceClassification",
+            "FiDForTokenClassification",
+            "FiDModel",
+            "FiDPreTrainedModel",
+            "load_tf_weights_in_fid",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -5198,6 +5212,7 @@ if TYPE_CHECKING:
         FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerWithHifiGanConfig,
     )
+    from .models.fid import FID_PRETRAINED_CONFIG_ARCHIVE_MAP, FiDConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6798,6 +6813,17 @@ if TYPE_CHECKING:
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
             FastSpeech2ConformerWithHifiGan,
+        )
+        from .models.fid import (
+            FID_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FiDEncoderModel,
+            FiDForConditionalGeneration,
+            FiDForQuestionAnswering,
+            FiDForSequenceClassification,
+            FiDForTokenClassification,
+            FiDModel,
+            FiDPreTrainedModel,
+            load_tf_weights_in_fid,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

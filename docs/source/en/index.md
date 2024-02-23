@@ -141,6 +141,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [FNet](model_doc/fnet)                          |       ✅        |         ❌         |      ❌      |
 |                      [FocalNet](model_doc/focalnet)                      |       ✅        |         ❌         |      ❌      |
 |                  [Funnel Transformer](model_doc/funnel)                  |       ✅        |         ✅         |      ❌      |
+|                     [FusionInDecoder](model_doc/fid)                     |       ✅        |         ❌         |      ❌      |
 |                          [Fuyu](model_doc/fuyu)                          |       ✅        |         ❌         |      ❌      |
 |                         [Gemma](model_doc/gemma)                         |       ✅        |         ❌         |      ✅      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
