@@ -105,12 +105,7 @@ class MultiScaleDeformableAttentionFunction(Function):
         im2col_step,
     ):
         context.im2col_step = im2col_step
-
-        if value.dtype == torch.bfloat16:
-            forward_func = MultiScaleDeformableAttention.ms_deform_attn_forward_bf16
-        else:
-            forward_func = MultiScaleDeformableAttention.ms_deform_attn_forward
-        output = forward_func(
+        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
             value,
             value_spatial_shapes,
             value_level_start_index,
@@ -133,11 +128,7 @@ class MultiScaleDeformableAttentionFunction(Function):
             sampling_locations,
             attention_weights,
         ) = context.saved_tensors
-        if value.dtype == torch.bfloat16:
-            backward_func = MultiScaleDeformableAttention.ms_deform_attn_backward_bf16
-        else:
-            backward_func = MultiScaleDeformableAttention.ms_deform_attn_backward
-        grad_value, grad_sampling_loc, grad_attn_weight = backward_func(
+        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
             value,
             value_spatial_shapes,
             value_level_start_index,
