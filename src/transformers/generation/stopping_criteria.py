@@ -344,7 +344,7 @@ def _stop_string_create_embedding_vecs(tok_list, tok_indices, stop_strings) -> D
             ] = possible_end_lens
         for token, token_idx in zip(tok_list, tok_indices):
             gather_vec[token_idx, -1] = len(token)
-        embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32).pin_memory()
+        embedding_vecs[stop_string] = torch.tensor(gather_vec, dtype=torch.int32)
 
     # TODO Remove this block and stop returning these values after the embedding vec is merged
     max_valid_positions = {
