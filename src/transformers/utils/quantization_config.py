@@ -652,6 +652,7 @@ class AwqConfig(QuantizationConfigMixin):
         self.backend = backend
         self.fuse_max_seq_len = fuse_max_seq_len
         self.modules_to_not_convert = modules_to_not_convert
+        self.exllama_config = exllama_config
 
         self.modules_to_fuse = modules_to_fuse
         if do_fuse is None:
@@ -659,17 +660,6 @@ class AwqConfig(QuantizationConfigMixin):
         else:
             self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
-
-        if exllama_config is None:
-            self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
-        else:
-            if "version" not in self.exllama_config:
-                raise ValueError("`exllama_config` needs to have a `version` key.")
-            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                exllama_version = self.exllama_config["version"]
-                raise ValueError(
-                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                )
 
         self.post_init()
 
@@ -757,10 +747,16 @@ class AwqConfig(QuantizationConfigMixin):
                     f"please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
                 )
 
-            if self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                raise ValueError(
-                    f"Only supported exllama versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {self.exllama_config}"
-                )
+            if self.exllama_config is None:
+                self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
+            else:
+                if "version" not in self.exllama_config:
+                    raise ValueError("`exllama_config` needs to have a `version` key.")
+                elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                    exllama_version = self.exllama_config["version"]
+                    raise ValueError(
+                        f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
+                    )
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
