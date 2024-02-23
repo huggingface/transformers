@@ -877,8 +877,12 @@ class AlbertMLMHead(nn.Module):
         return prediction_scores
 
     def _tie_weights(self) -> None:
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+            self.bias = self.decoder.bias
 
 
 class AlbertSOPHead(nn.Module):
@@ -915,6 +919,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.predictions.decoder = new_embeddings
+        self.predictions.bias = new_embeddings.bias
 
     def get_input_embeddings(self) -> nn.Embedding:
         return self.albert.embeddings.word_embeddings
