@@ -737,6 +737,27 @@ class FlaxEncoderDecoderModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxGemmaForCausalLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGemmaModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxGemmaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxGPT2LMHeadModel(metaclass=DummyObject):
     _backends = ["flax"]
 

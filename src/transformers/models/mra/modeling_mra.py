@@ -58,9 +58,11 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Mra models at https://huggingface.co/models?filter=mra
 ]
 
+mra_cuda_kernel = None
+
 
 def load_cuda_kernels():
-    global cuda_kernel
+    global mra_cuda_kernel
     src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "mra"
 
     def append_root(files):
@@ -68,26 +70,7 @@ def load_cuda_kernels():
 
     src_files = append_root(["cuda_kernel.cu", "cuda_launch.cu", "torch_extension.cpp"])
 
-    cuda_kernel = load("cuda_kernel", src_files, verbose=True)
-
-    import cuda_kernel
-
-
-cuda_kernel = None
-
-
-if is_torch_cuda_available() and is_ninja_available():
-    logger.info("Loading custom CUDA kernels...")
-
-    try:
-        load_cuda_kernels()
-    except Exception as e:
-        logger.warning(
-            "Failed to load CUDA kernels. Mra requires custom CUDA kernels. Please verify that compatible versions of"
-            f" PyTorch and CUDA Toolkit are installed: {e}"
-        )
-else:
-    pass
+    mra_cuda_kernel = load("cuda_kernel", src_files, verbose=True)
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -112,7 +95,7 @@ def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
     indices = indices.int()
     indices = indices.contiguous()
 
-    max_vals, max_vals_scatter = cuda_kernel.index_max(index_vals, indices, query_num_block, key_num_block)
+    max_vals, max_vals_scatter = mra_cuda_kernel.index_max(index_vals, indices, query_num_block, key_num_block)
     max_vals_scatter = max_vals_scatter.transpose(-1, -2)[:, :, None, :]
 
     return max_vals, max_vals_scatter
@@ -178,7 +161,7 @@ def mm_to_sparse(dense_query, dense_key, indices, block_size=32):
     indices = indices.int()
     indices = indices.contiguous()
 
-    return cuda_kernel.mm_to_sparse(dense_query, dense_key, indices.int())
+    return mra_cuda_kernel.mm_to_sparse(dense_query, dense_key, indices.int())
 
 
 def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_size=32):
@@ -216,7 +199,7 @@ def sparse_dense_mm(sparse_query, indices, dense_key, query_num_block, block_siz
     indices = indices.contiguous()
     dense_key = dense_key.contiguous()
 
-    dense_qk_prod = cuda_kernel.sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
+    dense_qk_prod = mra_cuda_kernel.sparse_dense_mm(sparse_query, indices, dense_key, query_num_block)
     dense_qk_prod = dense_qk_prod.transpose(-1, -2).reshape(batch_size, query_num_block * block_size, dim)
     return dense_qk_prod
 
@@ -393,7 +376,7 @@ def mra2_attention(
     """
     Use Mra to approximate self-attention.
     """
-    if cuda_kernel is None:
+    if mra_cuda_kernel is None:
         return torch.zeros_like(query).requires_grad_()
 
     batch_size, num_head, seq_len, head_dim = query.size()
@@ -560,6 +543,13 @@ class MraSelfAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
+
+        kernel_loaded = mra_cuda_kernel is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -820,9 +810,6 @@ class MraLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
-
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -1056,7 +1043,6 @@ class MraForMaskedLM(MraPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
-        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

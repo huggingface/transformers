@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -431,3 +432,65 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-3:].tolist())
+
+    # Copied from transformers.tests.models.llama.test_modeling_llama.LlamaModelTest.test_eager_matches_sdpa_generate with Llama->StableLm,saibo/llama-1B->stabilityai/stablelm-3b-4e1t
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        max_new_tokens = 30
+
+        tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+
+        model_sdpa = StableLmForCausalLM.from_pretrained(
+            "stabilityai/stablelm-3b-4e1t",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+        ).to(torch_device)
+
+        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+
+        model_eager = StableLmForCausalLM.from_pretrained(
+            "stabilityai/stablelm-3b-4e1t",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            attn_implementation="eager",
+        ).to(torch_device)
+
+        self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+        for name, submodule in model_eager.named_modules():
+            if "SdpaAttention" in submodule.__class__.__name__:
+                raise ValueError("The eager model should not have SDPA attention layers")
+
+        has_sdpa = False
+        for name, submodule in model_sdpa.named_modules():
+            if "SdpaAttention" in submodule.__class__.__name__:
+                has_sdpa = True
+                break
+        if not has_sdpa:
+            raise ValueError("The SDPA model should have SDPA attention layers")
+
+        texts = [
+            "hi here's a longer context, getting longer and",
+            "Hello this is a very long sentence my friend, very long for real",
+            "Today I am in Paris and",
+        ]
+
+        for padding_side in ["left", "right"]:
+            tokenizer.padding_side = padding_side
+            tokenizer.pad_token = tokenizer.eos_token
+
+            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
+
+            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+
+            with self.subTest(f"{padding_side}"):
+                torch.testing.assert_close(
+                    res_eager,
+                    res_sdpa,
+                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
+                )

@@ -306,6 +306,34 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_subword_regularization_tokenizer(self):
         pass
 
+    def test_add_prefix_space(self):
+        pretrained_name = "hf-internal-testing/llama-tokenizer-non-normalized"
+        inputs = "Hey how are you doing"
+        EXPECTED_WITH_SPACE = [1, 18637, 920, 526, 366, 2599]
+        EXPECTED_WO_SPACE = [1, 29950, 1032, 920, 526, 366, 2599]
+
+        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
+        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
+        self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
+        self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
+        self.assertEqual(slow_.tokenize(inputs), ["H", "ey", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True), inputs)
+        self.assertEqual(
+            slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
+            fast_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
+        )
+
+        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
+        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
+        self.assertEqual(slow_.encode(inputs), EXPECTED_WITH_SPACE)
+        self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
+        self.assertEqual(slow_.tokenize(inputs), ["▁Hey", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True), inputs)
+        self.assertEqual(
+            slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True),
+            fast_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True),
+        )
+
 
 @require_torch
 @require_sentencepiece
