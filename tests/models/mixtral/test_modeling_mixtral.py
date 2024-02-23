@@ -495,6 +495,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @require_torch
+@pytest.mark.integration_test
 class MixtralIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
@@ -518,7 +519,7 @@ class MixtralIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
 
     @slow
-    # @require_torch_gpu
+    @require_torch_gpu
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)

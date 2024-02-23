@@ -463,6 +463,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @require_torch
+@pytest.mark.integration_test
 class MistralIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):

@@ -38,3 +38,52 @@ jobs:
             done
             matrix_string=$(printf '"%s", ' "${model_arrays[@]}" | sed 's/, $//')
             echo "matrix=[$matrix_string]" >> $GITHUB_OUTPUT
+  test_modified_files:
+    needs: get_modified_models
+    name: Run slow tests on modified models
+    # runs-on: [single-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
+    runs-on: ubuntu-latest
+    container:
+      image: huggingface/transformers-all-latest-gpu
+    if: ${{ needs.get_modified_models.outputs.matrix }} != ''
+    strategy:
+      fail-fast: false
+      matrix: 
+        model-name: ${{ needs.get_modified_models.outputs.matrix }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Install locally transformers & other libs
+        run:
+          pip install -e .
+          MAX_JOBS=4 pip install flash-attn --no-build-isolation # install FA2
+      - name: Run tests
+        id: run_tests
+        run:
+          pytest -m "flash_attn_test" tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -m "integration_test" tests/${{ matrix.model-name }}/test_modeling_*
+      - name: Post results Slack channel
+        id: post-slack
+        #uses: slackapi/slack-github-action@v1.25.0
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: 'C06L2SGMEEA'
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "text": "Slow tests on ${{ matrix.model-name }} result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "GitHub Action build result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+        
