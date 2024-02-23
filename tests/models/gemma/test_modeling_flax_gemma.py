@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import os
 import unittest
 
 import numpy as np
@@ -209,12 +208,13 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["The capital of France is", "To play the perfect cover drive"]
     model_id = "google/gemma-2b"
     revision = "flax"
+    token = os.getenv("HF_HUB_READ_TOKEN", False)
 
     def setUp(self):
         self.model, self.params = FlaxGemmaForCausalLM.from_pretrained(
-            self.model_id, revision=self.revision, _do_init=False
+            self.model_id, revision=self.revision, _do_init=False, token=self.token
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, token=self.token)
         self.tokenizer.padding_side = "left"
 
     def test_logits(self):
