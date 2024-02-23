@@ -23,7 +23,7 @@ Image feature extraction is the task of extracting semantically meaningful featu
 In this notebook, we will:
 
 - See how to build a simple image similarity system on top of `image-feature-extraction` pipeline,
-- Also accomplish the same task with bare model inference.
+- Accomplish the same task with bare model inference.
 
 ## Image Similarity using `image-feature-extraction` Pipeline
 
