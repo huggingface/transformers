@@ -858,29 +858,19 @@ class GemmaModel(GemmaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache:
+            static_cache = getattr(self.layers[0].self_attn, "past_key_value", None)
+            if static_cache is not None:
+                past_seen_tokens = static_cache.get_seq_length()
+            else:
+                if not isinstance(past_key_values, Cache):
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                past_seen_tokens = past_key_values.get_seq_length()
 
+        # `torch.compile`-friendly `torch.arange` from a shape
+        cache_position = torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
         if position_ids is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("position_ids is a required argument when using StaticCache.")
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
-
-        # One of the rows in `position_ids` contains the highest sequence of cache indexes, excluding left-padding
-        # applied on all batch members. Left-padding on all batch members can be detected from the `attention_mask`.
-        cache_position = torch.max(position_ids, dim=0).values
-        if attention_mask is None:
-            padded_offset = 0
-        else:
-            padded_offset = (1 - torch.sum(attention_mask.to(torch.int64), dim=0).clamp(max=1)).cumsum(-1)
-            padded_offset = torch.cat(
-                (torch.zeros((1,), dtype=torch.int64, device=padded_offset.device), padded_offset)
-            )[-cache_position.shape[0] - 1 : -1]
-        cache_position = cache_position + padded_offset
+            position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
@@ -1111,12 +1101,22 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        # With static cache, the `past_key_values` is None
+        has_static_cache = False
+        if past_key_values is None:
+            has_static_cache = True
+            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
                 max_cache_length = past_key_values.get_max_length()
+                # TODO joao: find a better way to track the total number of tokens seen in the static cache
+                if max_cache_length is not None:
+                    past_length = cache_length
+                else:
+                    past_length = past_key_values.seen_tokens
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -1157,6 +1157,9 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
+
+        if has_static_cache:
+            past_key_values = None
 
         model_inputs.update(
             {

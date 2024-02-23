@@ -967,16 +967,13 @@ class LlamaModel(LlamaPreTrainedModel):
 
         past_seen_tokens = 0
         if use_cache:
-            if past_key_values is not None and not isinstance(past_key_values, Cache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            # non-static cache
-            if past_key_values is not None:
+            static_cache = getattr(self.layers[0].self_attn, "past_key_value", None)
+            if static_cache is not None:
+                past_seen_tokens = static_cache.get_seq_length()
+            else:
+                if not isinstance(past_key_values, Cache):
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 past_seen_tokens = past_key_values.get_seq_length()
-            # static cache
-            elif past_key_values is None:
-                static_cache = getattr(self.layers[0].self_attn, "past_key_value", None)
-                if static_cache is not None:
-                    past_seen_tokens = static_cache.get_seq_length()
 
         # `torch.compile`-friendly `torch.arange` from a shape
         cache_position = torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
