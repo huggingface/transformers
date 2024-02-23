@@ -105,7 +105,12 @@ class MultiScaleDeformableAttentionFunction(Function):
         im2col_step,
     ):
         context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
+
+        if value.dtype == torch.bfloat16:
+            forward_func = MultiScaleDeformableAttention.ms_deform_attn_forward_bf16
+        else:
+            forward_func = MultiScaleDeformableAttention.ms_deform_attn_forward
+        output = forward_func(
             value,
             value_spatial_shapes,
             value_level_start_index,
@@ -128,7 +133,11 @@ class MultiScaleDeformableAttentionFunction(Function):
             sampling_locations,
             attention_weights,
         ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
+        if value.dtype == torch.bfloat16:
+            backward_func = MultiScaleDeformableAttention.ms_deform_attn_backward_bf16
+        else:
+            backward_func = MultiScaleDeformableAttention.ms_deform_attn_backward
+        grad_value, grad_sampling_loc, grad_attn_weight = backward_func(
             value,
             value_spatial_shapes,
             value_level_start_index,
@@ -1758,7 +1767,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
