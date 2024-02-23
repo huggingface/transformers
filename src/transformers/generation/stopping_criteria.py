@@ -163,8 +163,8 @@ class StopStringCriteria(StoppingCriteria):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        embedding_vec = self.embedding_vec.to(input_ids.device)
-        target_lens = self.target_lens.to(input_ids.device)
+        self.embedding_vec = self.embedding_vec.to(input_ids.device)
+        self.target_lens = self.target_lens.to(input_ids.device)
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
         # *shorter* than the global max, and the code below should be ready for that
         input_ids = input_ids[:, -self.maximum_token_len :]
@@ -176,7 +176,7 @@ class StopStringCriteria(StoppingCriteria):
         max_valid_positions = self.max_valid_positions
 
         # The embedding vec contains the valid positions, end_lengths and total lengths for each token
-        embedded = F.embedding(flipped_ids, embedding_vec)
+        embedded = F.embedding(flipped_ids, self.embedding_vec)
 
         # Now we split the embedding vector. valid_positions is the positions in the stop string the token can fit
         valid_positions = embedded[:, 1:, : max_valid_positions * self.num_stop_strings].unflatten(
@@ -214,7 +214,7 @@ class StopStringCriteria(StoppingCriteria):
 
         # The string is matched if we reached a cumsum equal to or greater than the length of the string
         # before hitting the mask
-        string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= target_lens[None, :]
+        string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
 
         # Now we concatenate the match booleans across all strings and check if any are True
         # TODO After Raushan's PR, return a per-sample vector here
@@ -320,7 +320,6 @@ def _stop_string_create_embedding_vec(tok_list, tok_indices, stop_strings) -> Di
     and possible end lengths for each token, and the total length of the token string. When tokens have
     fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
     """
-    # TODO Matt: Merge the embeddings across all stop strings to save space and reduce gather calls?
     token_valid_positions, token_end_overlaps = _stop_string_get_matching_positions(
         tok_list, tok_indices, stop_strings
     )

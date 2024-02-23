@@ -34,11 +34,10 @@ if is_torch_available():
         StopStringCriteria,
         validate_stopping_criteria,
     )
-
-from transformers.generation.stopping_criteria import (
-    _stop_string_create_embedding_vec,
-    _stop_string_get_matching_positions,
-)
+    from transformers.generation.stopping_criteria import (
+        _stop_string_create_embedding_vec,
+        _stop_string_get_matching_positions,
+    )
 
 
 @require_torch
