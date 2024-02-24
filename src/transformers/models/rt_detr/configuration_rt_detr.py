@@ -174,6 +174,7 @@ class RTDetrConfig(PretrainedConfig):
         activation_function="silu",
         eval_size=None,
         normalize_before=False,
+        hidden_expansion=1.0,
         # decoder RTDetrTransformer
         num_queries=300,
         decoder_in_channels=[256, 256, 256],
@@ -247,6 +248,7 @@ class RTDetrConfig(PretrainedConfig):
         self.normalize_before = normalize_before
         self.encoder_activation_function = encoder_activation_function
         self.activation_function = activation_function
+        self.hidden_expansion = hidden_expansion
         # decoder
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
@@ -280,3 +282,11 @@ class RTDetrConfig(PretrainedConfig):
         self.weight_loss_giou = weight_loss_giou
         self.eos_coefficient = eos_coefficient
         super().__init__(**kwargs)
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self.encoder_attention_heads
+
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model

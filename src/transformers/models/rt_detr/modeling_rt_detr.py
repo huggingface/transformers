@@ -623,7 +623,7 @@ class RTDetrCSPRepLayer(nn.Module):
         num_blocks = 3
         activation = config.activation_function
 
-        hidden_channels = int(out_channels)
+        hidden_channels = int(out_channels * config.hidden_expansion)
         self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
@@ -1373,7 +1373,8 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
-        intermediate_logits = torch.stack(intermediate_logits, dim=1)
+        if self.class_embed is not None:
+            intermediate_logits = torch.stack(intermediate_logits, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

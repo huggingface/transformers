@@ -268,14 +268,15 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            if target_sizes.shape[1] != 2:
-                raise ValueError(
-                    "Each element of target_sizes must contain the size (h, w) of each image of the batch"
-                )
+
+            if isinstance(target_sizes, List):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
 
             # convert from relative cxcywh to absolute xyxy
             boxes = center_to_corners_format(out_bbox)
-            img_h, img_w = target_sizes.unbind(1)
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 

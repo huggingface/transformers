@@ -45,7 +45,10 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     if model_name == "rtdetr_r18vd":
         pass
     elif model_name == "rtdetr_r34vd":
-        pass
+        config.backbone = "resnet34d"
+        config.encoder_in_channels = [128, 256, 512]
+        config.hidden_expansion = 0.5
+        config.decoder_layers = 4
     elif model_name == "rtdetr_r50vd_m":
         pass
     elif model_name == "rtdetr_r50vd":
