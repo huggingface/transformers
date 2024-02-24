@@ -1,4 +1,4 @@
-# TODO: remove
+# Temporary file with conversion utils. Will be removed in the final version of the PR
 
 import re
 import numpy as np
