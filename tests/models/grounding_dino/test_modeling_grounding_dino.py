@@ -587,10 +587,10 @@ def prepare_text():
 class GroundingDinoModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny") if is_vision_available() else None
+        return AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").to(torch_device)
+        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -649,7 +649,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         encoding = processor(images=image, text=text, return_tensors="pt")
 
         # 1. run model on CPU
-        model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny")
 
         with torch.no_grad():
             cpu_outputs = model(**encoding)

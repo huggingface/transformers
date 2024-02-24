@@ -147,10 +147,10 @@ class MultiScaleDeformableAttentionFunction(Function):
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDinoConfig"
-_CHECKPOINT_FOR_DOC = "EduardoPacheco/grounding-dino-tiny"
+_CHECKPOINT_FOR_DOC = "IDEA-Research/grounding-dino-tiny"
 
 GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EduardoPacheco/grounding-dino-tiny",
+    "IDEA-Research/grounding-dino-tiny",
     # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
 ]
 
@@ -2804,8 +2804,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "a cat."
 
-        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
-        >>> model = AutoModel.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
+        >>> model = AutoModel.from_pretrained("IDEA-Research/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -3549,8 +3549,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "a cat."
 
-        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
-        >>> model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
+        >>> model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)

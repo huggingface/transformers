@@ -231,7 +231,7 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_grounding_dino(self):
-        object_detector = pipeline("zero-shot-object-detection", model="EduardoPacheco/grounding-dino-tiny")
+        object_detector = pipeline("zero-shot-object-detection", model="IDEA-Research/grounding-dino-tiny")
 
         outputs = object_detector(
             "http://images.cocodataset.org/val2017/000000039769.jpg",

@@ -47,7 +47,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForObjectDetection, 
 
-model_id = "EduardoPacheco/grounding-dino-tiny"
+model_id = "IDEA-Research/grounding-dino-tiny"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForObjectDetection.from_pretrained(model_id).to(device)

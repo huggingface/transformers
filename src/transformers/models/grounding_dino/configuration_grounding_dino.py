@@ -24,7 +24,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EduardoPacheco/grounding-dino-tiny": "https://huggingface.co/EduardoPacheco/grounding-dino-tiny/resolve/main/config.json",
+    "IDEA-Research/grounding-dino-tiny": "https://huggingface.co/IDEA-Research/grounding-dino-tiny/resolve/main/config.json",
 }
 
 
@@ -153,7 +153,7 @@ class GroundingDinoConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GroundingDinoModel`]. It is used to instantiate a
     Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Grounding DINO
-    [EduardoPacheco/grounding-dino-tiny](https://huggingface.co/EduardoPacheco/grounding-dino-tiny) architecture.
+    [IDEA-Research/grounding-dino-tiny](https://huggingface.co/IDEA-Research/grounding-dino-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -248,10 +248,10 @@ class GroundingDinoConfig(PretrainedConfig):
     ```python
     >>> from transformers import GroundingDinoConfig, GroundingDinoModel
 
-    >>> # Initializing a Grounding DINO EduardoPacheco/grounding-dino-tiny style configuration
+    >>> # Initializing a Grounding DINO IDEA-Research/grounding-dino-tiny style configuration
     >>> configuration = GroundingDinoConfig()
 
-    >>> # Initializing a model (with random weights) from the EduardoPacheco/grounding-dino-tiny style configuration
+    >>> # Initializing a model (with random weights) from the IDEA-Research/grounding-dino-tiny style configuration
     >>> model = GroundingDinoModel(configuration)
 
     >>> # Accessing the model configuration
