@@ -108,29 +108,10 @@ class GroundingDinoProcessor(ProcessorMixin):
             raise ValueError("You have to specify either images or text.")
 
         # Get only text
-        if images is None:
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            return text_encoding
-
-        # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        if images is not None:
+            encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        else:
+            encoding_image_processor = {}
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -152,14 +133,11 @@ class GroundingDinoProcessor(ProcessorMixin):
                 **kwargs,
             )
         else:
-            text_encoding = None
+            text_encoding = {}
 
-        if text_encoding is not None:
-            # Keeping same order of model_input_names when both images and text
-            text_encoding.update(encoding_image_processor)
-            encoding_image_processor = text_encoding
+        text_encoding.update(encoding_image_processor)
 
-        return encoding_image_processor
+        return text_encoding
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
