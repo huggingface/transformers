@@ -327,6 +327,8 @@
         title: DETR
       - local: model_doc/dinat
         title: DiNAT
+      - local: model_doc/dinov2
+        title: DINOV2
       title: ビジョンモデル
     - isExpanded: false
       sections:
