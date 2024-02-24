@@ -319,10 +319,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         flat_params = flatten_dict(params)
         flat_mask, _ = jax.tree_util.tree_flatten(mask)
 
-        for masked, key in zip(flat_mask, flat_params.keys()):
+        for masked, key in zip(flat_mask, sorted(flat_params.keys())):
             if masked:
-                param = flat_params[key]
-                flat_params[key] = conditional_cast(param)
+                flat_params[key] = conditional_cast(flat_params[key])
 
         return unflatten_dict(flat_params)
 
