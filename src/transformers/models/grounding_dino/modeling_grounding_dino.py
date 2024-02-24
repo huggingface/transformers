@@ -2473,7 +2473,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
             elif num_coordinates == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
             else:
-                raise ValueError("Reference points' last dimension must be of size 2")
+                raise ValueError("Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
             query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
             query_pos = self.reference_points_head(query_pos)
 
