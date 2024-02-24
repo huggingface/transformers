@@ -1456,7 +1456,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                     new_reference_points = new_reference_points.sigmoid()
                 else:
                     raise ValueError(
-                        f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
+                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
                     )
                 reference_points = new_reference_points.detach()
 
