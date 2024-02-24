@@ -1,3 +1,6 @@
+# Temporary file with correctness checks. Will be removed in the final PR
+
+
 def check_attention():
     from transformers.models.phi.convert import jax2pt, pt2jax
     config = PhiConfig()
@@ -68,6 +71,8 @@ def check_mlp():
     # TODO: test with cache
     assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
 
+
+###
 
 def check_decoder_layer():
     from transformers.models.phi.convert import jax2pt, pt2jax

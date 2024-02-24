@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Flax LLaMA model."""
+"""Flax Phi model."""
 from functools import partial
 from typing import Optional, Tuple
 
@@ -52,88 +52,88 @@ logger = logging.get_logger(__name__)
 # _CHECKPOINT_FOR_DOC = "afmck/testing-llama-tiny"
 # _REAL_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2"
 
-# LLAMA_START_DOCSTRING = r"""
+PHI_START_DOCSTRING = r"""
 
-#     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
-#     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-#     etc.)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-#     This model is also a Flax Linen
-#     [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
-#     regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen
+    [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
+    regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
-#     Finally, this model supports inherent JAX features such as:
+    Finally, this model supports inherent JAX features such as:
 
-#     - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
-#     - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
-#     - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
-#     - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
-#     Parameters:
-#         config ([`LlamaConfig`]): Model configuration class with all the parameters of the model.
-#             Initializing with a config file does not load the weights associated with the model, only the
-#             configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
-#         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
-#             The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16`, or
-#             `jax.numpy.bfloat16`.
+    Parameters:
+        config ([`PhiConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16`, or
+            `jax.numpy.bfloat16`.
 
-#             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-#             specified all the computation will be performed with the given `dtype`.
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
 
-#             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
-#             parameters.**
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
 
-#             If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
-#             [`~FlaxPreTrainedModel.to_bf16`].
-# """
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
+"""
 
-# LLAMA_INPUTS_DOCSTRING = r"""
-#     Args:
-#         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
-#             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-#             it.
+PHI_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
 
-#             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-#             [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-#             [What are input IDs?](../glossary#input-ids)
-#         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-#             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
-#             - 1 for tokens that are **not masked**,
-#             - 0 for tokens that are **masked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
-#             [What are attention masks?](../glossary#attention-mask)
+            [What are attention masks?](../glossary#attention-mask)
 
-#             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-#             [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-#             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-#             `past_key_values`).
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
 
-#             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-#             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-#             information on the default strategy.
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
 
-#             - 1 indicates the head is **not masked**,
-#             - 0 indicates the head is **masked**.
-#         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-#             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-#             config.n_positions - 1]`.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
 
-#             [What are position IDs?](../glossary#position-ids)
-#         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
-#             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-#             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
-#         output_attentions (`bool`, *optional*):
-#             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-#             tensors for more detail.
-#         output_hidden_states (`bool`, *optional*):
-#             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-#             more detail.
-#         return_dict (`bool`, *optional*):
-#             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-# """
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 def create_sinusoidal_positions(num_pos, dim):
@@ -198,7 +198,6 @@ class FlaxPhiRotaryEmbedding(nn.Module):
         return key, query
 
 
-
 class FlaxPhiAttention(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
@@ -233,7 +232,7 @@ class FlaxPhiAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
     @nn.compact
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
+    # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamafAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
@@ -420,72 +419,17 @@ class FlaxPhiDecoderLayer(nn.Module):
         )
         attn_output = outputs[0]
         attn_output = self.resid_dropout(attn_output, deterministic=deterministic)
-        global ATTN_OUTPUT
-        ATTN_OUTPUT = attn_output
         # residual connection
         feed_forward_hidden_states = self.resid_dropout(
             self.mlp(hidden_states), deterministic=deterministic
         )
         hidden_states = attn_output + feed_forward_hidden_states + residual
-        global LAST_HIDDEN_STATES
-        LAST_HIDDEN_STATES = hidden_states
         return (hidden_states,) + outputs[1:]
 
 
 
-
-def main():
-    from transformers.models.phi.convert import jax2pt, pt2jax
-    config = PhiConfig()
-    batch_size = 1; seq_len = 10; hidden_size = config.hidden_size
-    n_heads = config.num_attention_heads; head_size = hidden_size // n_heads
-    rng = jax.random.PRNGKey(0)
-    # x = jax.random.normal(rng, (batch_size, config.num_attention_heads, seq_len, head_size))
-    hidden_states = jax.random.normal(rng, (batch_size, seq_len, hidden_size))
-    self = FlaxPhiDecoderLayer(config)
-    attn_mask = jnp.ones((batch_size, seq_len))
-    position_ids = jnp.broadcast_to(jnp.arange(seq_len), (batch_size, seq_len))
-    variables = self.init(rng, hidden_states, attn_mask, position_ids)
-    self = self.bind(variables)
-    out = self.apply(variables, hidden_states, attn_mask, position_ids)[0]
-
-    # TODO: bring converter from gendo and test decoderlayer
-
-    # debug
-    from transformers.models.phi.modeling_phi import PhiDecoderLayer
-    from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
-    self = PhiDecoderLayer(config, 0)
-    self.self_attn.q_proj.weight.data = jax2pt(variables["params"]["self_attn"]["q_proj"]["kernel"].T)
-    self.self_attn.q_proj.bias.data = jax2pt(variables["params"]["self_attn"]["q_proj"]["bias"])
-    self.self_attn.k_proj.weight.data = jax2pt(variables["params"]["self_attn"]["k_proj"]["kernel"].T)
-    self.self_attn.k_proj.bias.data = jax2pt(variables["params"]["self_attn"]["k_proj"]["bias"])
-    self.self_attn.v_proj.weight.data = jax2pt(variables["params"]["self_attn"]["v_proj"]["kernel"].T)
-    self.self_attn.v_proj.bias.data = jax2pt(variables["params"]["self_attn"]["v_proj"]["bias"])
-    self.self_attn.dense.weight.data = jax2pt(variables["params"]["self_attn"]["dense"]["kernel"].T)
-    self.self_attn.dense.bias.data = jax2pt(variables["params"]["self_attn"]["dense"]["bias"])
-
-    self.mlp.fc1.weight.data = jax2pt(variables["params"]["mlp"]["fc1"]["kernel"].T)
-    self.mlp.fc1.bias.data = jax2pt(variables["params"]["mlp"]["fc1"]["bias"])
-    self.mlp.fc2.weight.data = jax2pt(variables["params"]["mlp"]["fc2"]["kernel"].T)
-    self.mlp.fc2.bias.data = jax2pt(variables["params"]["mlp"]["fc2"]["bias"])
-
-    self.input_layernorm.weight.data = jax2pt(variables["params"]["input_layernorm"]["scale"])
-    self.input_layernorm.bias.data = jax2pt(variables["params"]["input_layernorm"]["bias"])
-
-    hidden_states, attn_mask, position_ids = map(jax2pt, (hidden_states, attn_mask, position_ids))
-    attn_mask = _prepare_4d_causal_attention_mask(
-        attn_mask, (batch_size, seq_len), hidden_states, 0
-    )
-
-    pt_out = self(hidden_states, attn_mask, position_ids)[0]
-
-    # TODO: test with cache
-    assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
-
-
-
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Llama, GPT_NEO->LLAMA, transformer->model
-class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaPreTrainedModel with Llama->Phi, LLAMA->PHI
+class FlaxPhiPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -546,7 +490,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    # @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
@@ -617,7 +561,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-class FlaxLlamaLayerCollection(nn.Module):
+class FlaxPhiLayerCollection(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -657,13 +601,13 @@ class FlaxLlamaLayerCollection(nn.Module):
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
 
-        # this contains possible `None` values - `FlaxLlamaModule` will filter them out
+        # this contains possible `None` values - `FlaxPhiModule` will filter them out
         outputs = (hidden_states, all_hidden_states, all_attentions)
 
         return outputs
 
 
-class FlaxLlamaModule(nn.Module):
+class FlaxPhiModule(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -676,7 +620,7 @@ class FlaxLlamaModule(nn.Module):
             embedding_init=embedding_init,
             dtype=self.dtype,
         )
-        self.layers = FlaxLlamaLayerCollection(self.config, dtype=self.dtype)
+        self.layers = FlaxPhiLayerCollection(self.config, dtype=self.dtype)
         self.norm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
 
     def __call__(
@@ -722,12 +666,12 @@ class FlaxLlamaModule(nn.Module):
         )
 
 
-# @add_start_docstrings(
-#     "The bare Llama Model transformer outputting raw hidden-states without any specific head on top.",
-#     LLAMA_START_DOCSTRING,
-# )
-class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
-    module_class = FlaxLlamaModule
+@add_start_docstrings(
+    "The bare Phi Model transformer outputting raw hidden-states without any specific head on top.",
+    PHI_START_DOCSTRING,
+)
+class FlaxPhiModel(FlaxPhiPreTrainedModel):
+    module_class = FlaxPhiModule
 
 
 # append_call_sample_docstring(
@@ -739,12 +683,12 @@ class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
 # )
 
 
-class FlaxLlamaForCausalLMModule(nn.Module):
+class FlaxPhiForCausalLMModule(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.model = FlaxLlamaModule(self.config, dtype=self.dtype)
+        self.model = FlaxPhiModule(self.config, dtype=self.dtype)
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
@@ -783,15 +727,15 @@ class FlaxLlamaForCausalLMModule(nn.Module):
         return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
-# @add_start_docstrings(
-#     """
-#     The Llama Model transformer with a language modeling head (linear layer) on top.
-#     """,
-#     LLAMA_START_DOCSTRING,
-# )
-# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Llama
-class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
-    module_class = FlaxLlamaForCausalLMModule
+@add_start_docstrings(
+    """
+    The Phi Model transformer with a language modeling head (linear layer) on top.
+    """,
+    PHI_START_DOCSTRING,
+)
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaForCausalLM with Llama->Phi
+class FlaxPhiForCausalLM(FlaxPhiPreTrainedModel):
+    module_class = FlaxPhiForCausalLMModule
 
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
