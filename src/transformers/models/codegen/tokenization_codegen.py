@@ -25,7 +25,6 @@ import regex as re
 
 from ...utils import is_tf_available, is_torch_available, logging, to_py_obj
 
-
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
         import tensorflow as tf
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-
 
 logger = logging.get_logger(__name__)
 
@@ -293,8 +291,8 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
+        sep = [self.sep_token_id] if self.sep_token_id is not None else []
+        cls = [self.cls_token_id] if self.sep_token_id is not None else []
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]

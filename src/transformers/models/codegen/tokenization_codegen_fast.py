@@ -23,7 +23,6 @@ import numpy as np
 
 from ...utils import is_tf_available, is_torch_available, logging
 
-
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -35,7 +34,6 @@ from tokenizers import pre_tokenizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_codegen import CodeGenTokenizer
-
 
 logger = logging.get_logger(__name__)
 
@@ -184,8 +182,8 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
+        sep = [self.sep_token_id] if self.sep_token_id is not None else []
+        cls = [self.cls_token_id] if self.sep_token_id is not None else []
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
