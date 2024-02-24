@@ -789,11 +789,9 @@ class PhiDecoderLayer(nn.Module):
             use_cache=use_cache,
         )
         attn_outputs = self.resid_dropout(attn_outputs)
-        print(f"ATTN_OUTPUTS: {attn_outputs}")
 
         feed_forward_hidden_states = self.resid_dropout(self.mlp(hidden_states))
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
-        print(f"LAST HIDDEN_STATES: {hidden_states}")
         outputs = (hidden_states,)
 
         if output_attentions:
