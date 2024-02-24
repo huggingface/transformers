@@ -140,7 +140,7 @@ user: How many helicopters can a human eat in one sitting?
 assistant: Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
 
-[`ConversationalPipeline`]将负责处理所有的`tokenized`和调用`apply_chat_template`，一旦模型有了聊天模板，你只需要初始化pipeline并传递消息列表！
+[`ConversationalPipeline`]将负责处理所有的`tokenized`并调用`apply_chat_template`，一旦模型有了聊天模板，您只需要初始化pipeline并传递消息列表！
 
 ## 什么是"generation prompts"?
 
