@@ -34,6 +34,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -46,7 +47,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import is_accelerate_available, is_ninja_available, logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_grounding_dino import GroundingDinoConfig, GroundingDinoTextConfig
 
 
@@ -55,10 +56,13 @@ logger = logging.get_logger(__name__)
 MultiScaleDeformableAttention = None
 
 
+# Copied from models.deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    global MultiScaleDeformableAttention
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
     src_files = [
         root / filename
         for filename in [
@@ -68,7 +72,7 @@ def load_cuda_kernels():
         ]
     ]
 
-    load(
+    MultiScaleDeformableAttention = load(
         "MultiScaleDeformableAttention",
         src_files,
         with_cuda=True,
@@ -82,41 +86,13 @@ def load_cuda_kernels():
         ],
     )
 
-    import MultiScaleDeformableAttention as MSDA
-
-    return MSDA
-
-
-# Move this to not compile only when importing, this needs to happen later, like in __init__.
-if is_torch_cuda_available() and is_ninja_available():
-    logger.info("Loading custom CUDA kernels...")
-    try:
-        MultiScaleDeformableAttention = load_cuda_kernels()
-    except Exception as e:
-        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-        MultiScaleDeformableAttention = None
-else:
-    MultiScaleDeformableAttention = None
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "GroundingDinoConfig"
-_CHECKPOINT_FOR_DOC = "EduardoPacheco/grounding-dino-tiny"
-
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EduardoPacheco/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
@@ -166,6 +142,23 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "GroundingDinoConfig"
+_CHECKPOINT_FOR_DOC = "EduardoPacheco/grounding-dino-tiny"
+
+GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "EduardoPacheco/grounding-dino-tiny",
+    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
+]
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+if is_timm_available():
+    pass
 
 
 @dataclass
@@ -448,16 +441,17 @@ def replace_batch_norm(model):
 
 class GroundingDinoConvEncoder(nn.Module):
     """
-    Convolutional backbone using the AutoBackbone API.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by GroundingDinoFrozenBatchNorm2d as defined above.
+
     """
 
     def __init__(self, config):
         super().__init__()
 
         self.config = config
-        backbone = AutoBackbone.from_config(config.backbone_config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
