@@ -99,6 +99,7 @@ class RTDetrConfig(PretrainedConfig):
             Id of the decoder layer used to obtain the logits and bounding boxes.
         disable_custom_kernels (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         with_box_refine (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):

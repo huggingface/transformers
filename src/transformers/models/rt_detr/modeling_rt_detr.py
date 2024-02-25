@@ -722,7 +722,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
-                "You'd better set embed_dim (d_model) in DeformableDetrMultiscaleDeformableAttention to make the"
+                "You'd better set embed_dim (d_model) in RTDetrMultiscaleDeformableAttention to make the"
                 " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
                 " implementation."
             )
@@ -1275,9 +1275,7 @@ class RTDetrHybridEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states] if v is not None)
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states, hidden_states=encoder_states
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=encoder_states)
 
 
 class RTDetrDecoder(RTDetrPreTrainedModel):
