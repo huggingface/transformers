@@ -74,6 +74,7 @@ class RTDetrConfig(PretrainedConfig):
         normalize_before (`bool`, *optional*, defaults to `False`):
             Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
             feed-forward modules.
+        hidden_expansion (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
         decoder_in_channels (`<fill_type>`, *optional*, defaults to `[256, 256, 256]`): <fill_docstring>
@@ -110,8 +111,7 @@ class RTDetrConfig(PretrainedConfig):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if focal focal should be used.
-        use_aux_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if auxiliary focal loss should be used.
+        auxiliary_loss (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
             Parameter alpha used to compute the focal loss.
         focal_loss_gamma (`float`, *optional*, defaults to 2.0):

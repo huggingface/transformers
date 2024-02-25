@@ -296,16 +296,20 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not use hidden states")
-    def test_hidden_states_output(self):
-        pass
-
     @unittest.skip(reason="RTDetr does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="RTDetr was not designed smaller.")
-    def test_model_is_small(self):
+    @unittest.skip(reason="RTDetr is not a generative model")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="RTDetr does not use token embeddings")
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -334,42 +338,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        # we take the second output since last_hidden_state is the second item
-        output = outputs[1]
-
-        encoder_hidden_states = outputs.encoder_hidden_states[0]
-        encoder_attentions = outputs.encoder_attentions[0]
-        encoder_hidden_states.retain_grad()
-        encoder_attentions.retain_grad()
-
-        decoder_attentions = outputs.decoder_attentions[0]
-        decoder_attentions.retain_grad()
-
-        cross_attentions = outputs.cross_attentions[0]
-        cross_attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(encoder_hidden_states.grad)
-        self.assertIsNotNone(encoder_attentions.grad)
-        self.assertIsNotNone(decoder_attentions.grad)
-        self.assertIsNotNone(cross_attentions.grad)
 
     @unittest.skip(reason="Model doesn't use tied weights")
     def test_tied_model_weights_key_ignore(self):
