@@ -93,7 +93,7 @@ class RTDetrConfig(PretrainedConfig):
             Scale or magnitude of noise to be added to the bounding boxes.
         learnt_init_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
+        anchor_image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             Height and width of the input image used during evaluation to generate the bounding box anchors.
         eval_idx (`int`, *optional*, defaults to -1):
             Id of the decoder layer used to obtain the logits and bounding boxes.
@@ -189,7 +189,7 @@ class RTDetrConfig(PretrainedConfig):
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
-        image_size=[640, 640],
+        anchor_image_size=[640, 640],
         eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
@@ -263,7 +263,7 @@ class RTDetrConfig(PretrainedConfig):
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
         self.learnt_init_query = learnt_init_query
-        self.image_size = image_size
+        self.anchor_image_size = anchor_image_size
         self.eval_idx = eval_idx
         self.auxiliary_loss = auxiliary_loss
         self.disable_custom_kernels = disable_custom_kernels

@@ -88,7 +88,8 @@ class RTDetrModelTester:
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
-        image_size=[640, 640],
+        anchor_image_size=[640, 640],
+        image_size=224,
         eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
@@ -135,15 +136,16 @@ class RTDetrModelTester:
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
         self.learnt_init_query = learnt_init_query
+        self.anchor_image_size = anchor_image_size
         self.image_size = image_size
         self.eval_idx = eval_idx
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, *self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        pixel_mask = torch.ones([self.batch_size, *self.image_size], device=torch_device)
+        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
         labels = None
         if self.use_labels:
@@ -351,7 +353,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             # Skip the check for the backbone
             for name, module in model.named_modules():
-                if module.__class__.__name__ == "DetaBackboneWithPositionalEncodings":
+                if module.__class__.__name__ == "RTDetrConvEncoder":
                     backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
                     break
 

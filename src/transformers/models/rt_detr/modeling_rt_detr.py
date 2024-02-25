@@ -17,8 +17,10 @@
 
 import copy
 import math
+import os
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -46,7 +48,6 @@ from ...utils import (
     requires_backends,
 )
 from .configuration_rt_detr import RTDetrConfig
-from .load_custom import load_cuda_kernels
 
 
 logger = logging.get_logger(__name__)
@@ -1268,15 +1269,20 @@ class RTDetrHybridEncoder(nn.Module):
             fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
             fpn_feature_maps.insert(0, fps_map)
 
-        outs = [fpn_feature_maps[0]]
+        encoder_states = (fpn_feature_maps[0])
+        all_attentions = () if output_attentions else None
         for idx in range(len(self.in_channels) - 1):
-            feat_low = outs[-1]
+            feat_low = encoder_states[-1]
             feat_high = fpn_feature_maps[idx + 1]
             downsample_feat = self.downsample_convs[idx](feat_low)
-            out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
-            outs.append(out)
+            hidden_states = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
+            encoder_states = encoder_states + (hidden_states,)
 
-        return outs
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 class RTDetrDecoder(RTDetrPreTrainedModel):
@@ -1486,7 +1492,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         self.enc_bbox_head = RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
-        if config.image_size:
+        if config.anchor_image_size:
             self.anchors, self.valid_mask = self.generate_anchors()
 
         # Create decoder input projection layers
@@ -1534,7 +1540,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
         if spatial_shapes is None:
             spatial_shapes = [
-                [int(self.config.image_size[0] / s), int(self.config.image_size[1] / s)]
+                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
                 for s in self.config.feat_strides
             ]
         anchors = []
@@ -1617,15 +1623,15 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Equivalent to def _get_encoder_input
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
-        for level, source in enumerate(encoder_outputs):
+        for level, source in enumerate(encoder_outputs.hidden_states):
             sources.append(self.decoder_input_proj[level](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.hidden_states)[-1])
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs[-1]))
+                sources.append(self.decoder_input_proj[i](encoder_outputs.hidden_states[-1]))
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
@@ -1658,7 +1664,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         device = source_flatten.device
 
         # prepare input for decoder
-        if self.training or self.config.image_size is None:
+        if self.training or self.config.anchor_image_size is None:
             anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device)
         else:
             anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
@@ -1727,9 +1733,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
             cross_attentions=decoder_outputs.cross_attentions,
             enc_topk_bboxes=enc_topk_bboxes,
             enc_topk_logits=enc_topk_logits,
-            # encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            # encoder_hidden_states=encoder_outputs.hidden_states,
-            # encoder_attentions=encoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             dn_meta=dn_meta,
