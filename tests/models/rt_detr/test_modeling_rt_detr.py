@@ -61,7 +61,7 @@ class RTDetrModelTester:
         dilation=False,
         # encoder HybridEncoder
         d_model=256,
-        encoder_in_channels=[16, 32, 64],
+        encoder_in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
         encoder_ffn_dim=64,
@@ -444,10 +444,10 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         expected_labels = [57, 15, 15, 65]
         expected_slice_boxes = torch.tensor(
             [
-                [  0.13774872,   0.37821293, 640.13074   , 476.21088   ],
-                [343.38132   ,  24.276838  , 640.1404    , 371.49573   ],
-                [ 13.225126  ,  54.179348  , 318.98422   , 472.2207    ],
-                [ 40.114475  ,  73.44104   , 175.9573    , 118.48469   ]
+                [0.13774872, 0.37821293, 640.13074, 476.21088],
+                [343.38132, 24.276838, 640.1404, 371.49573],
+                [13.225126, 54.179348, 318.98422, 472.2207],
+                [40.114475, 73.44104, 175.9573, 118.48469],
             ],
             device=torch_device,
         )
