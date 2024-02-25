@@ -46,6 +46,7 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
         pass
     elif model_name == "rtdetr_r34vd":
         config.backbone = "resnet34d"
+        config.backbone_config.backbone = "resnet34d"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
@@ -145,17 +146,19 @@ def create_rename_keys(config):
                     f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn2.{last}",
                     ))
 
-            rename_keys.append(
-                (
-                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
-                    f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.conv3.weight",
+            # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
+            if config.backbone not in ['resnet34d', 'resnet18d']:
+                rename_keys.append(
+                    (
+                        f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
+                        f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.conv3.weight",
+                    )
                 )
-            )
-            for last in last_key:
-                rename_keys.append((
-                    f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.norm.{last}",
-                    f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn3.{last}",
-                    ))
+                for last in last_key:
+                    rename_keys.append((
+                        f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.norm.{last}",
+                        f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn3.{last}",
+                        ))
     # fmt: on
 
     for i in range(config.encoder_layers):
@@ -228,7 +231,7 @@ def create_rename_keys(config):
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
-        for j in range(1, 3):
+        for j in range(1, 4):
             rename_keys.append(
                 (f"encoder.fpn_blocks.{i}.conv{j}.conv.weight", f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight")
             )
@@ -262,7 +265,7 @@ def create_rename_keys(config):
                         )
                     )
 
-        for j in range(1, 3):
+        for j in range(1, 4):
             rename_keys.append(
                 (f"encoder.pan_blocks.{i}.conv{j}.conv.weight", f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight")
             )

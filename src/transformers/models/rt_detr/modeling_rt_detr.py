@@ -622,8 +622,9 @@ class RTDetrRepVggBlock(nn.Module):
         super().__init__()
 
         activation = config.activation_function
-        self.conv1 = RTDetrConvNormLayer(config, config.d_model, config.d_model, 3, 1, padding=1)
-        self.conv2 = RTDetrConvNormLayer(config, config.d_model, config.d_model, 1, 1, padding=0)
+        hidden_channels = int(config.d_model * config.hidden_expansion)
+        self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
+        self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -706,7 +707,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, config: DeformableDetrConfig, num_heads: int, n_points: int):
+    def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
         kernel_loaded = MultiScaleDeformableAttention is not None
