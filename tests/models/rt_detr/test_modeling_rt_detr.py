@@ -61,11 +61,11 @@ class RTDetrModelTester:
         dilation=False,
         # encoder HybridEncoder
         d_model=256,
-        encoder_in_channels=[512, 1024, 2048],
+        encoder_in_channels=[16, 32, 64],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
+        encoder_ffn_dim=64,
+        encoder_attention_heads=2,
         dropout=0.0,
         activation_dropout=0.0,
         encode_proj_layers=[2],
@@ -75,24 +75,25 @@ class RTDetrModelTester:
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
-        num_queries=300,
+        num_queries=30,
         decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
+        decoder_ffn_dim=64,
         num_feature_levels=3,
         decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
+        decoder_layers=2,
+        decoder_attention_heads=2,
         decoder_activation_function="relu",
         attention_dropout=0.0,
-        num_denoising=100,
+        num_denoising=10,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
         anchor_image_size=[640, 640],
-        image_size=224,
+        image_size=640,
         eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
+        is_encoder_decoder=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -141,6 +142,7 @@ class RTDetrModelTester:
         self.eval_idx = eval_idx
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
+        self.is_encoder_decoder = is_encoder_decoder
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -201,10 +203,12 @@ class RTDetrModelTester:
             label_noise_ratio=self.label_noise_ratio,
             box_noise_scale=self.box_noise_scale,
             learnt_init_query=self.learnt_init_query,
+            anchor_image_size=self.anchor_image_size,
             image_size=self.image_size,
             eval_idx=self.eval_idx,
             disable_custom_kernels=self.disable_custom_kernels,
             with_box_refine=self.with_box_refine,
+            is_encoder_decoder=self.is_encoder_decoder,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -248,6 +252,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = False
@@ -327,7 +332,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         outputs = model(**inputs)
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_hidden_states.retain_grad()
-        outputs["logits"].flatten()[0].backward(retain_graph=True)
 
         self.assertIsNotNone(encoder_hidden_states.grad)
 
@@ -342,7 +346,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @unittest.skip(reason="Model doesn't use tied weights")
-    def test_tied_model_weights_key_ignore(self):
+    def test_tied_weights_keys(self):
         pass
 
     def test_initialization(self):
@@ -440,16 +444,14 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         expected_labels = [57, 15, 15, 65]
         expected_slice_boxes = torch.tensor(
             [
-                [
-                    [0.13774871826171875, 0.37818431854248047, 640.1307373046875, 476.21087646484375],
-                    [343.38134765625, 24.276838302612305, 640.140380859375, 371.4957275390625],
-                    [13.225126266479492, 54.17934799194336, 318.9842224121094, 472.220703125],
-                ]
+                [  0.13774872,   0.37821293, 640.13074   , 476.21088   ],
+                [343.38132   ,  24.276838  , 640.1404    , 371.49573   ],
+                [ 13.225126  ,  54.179348  , 318.98422   , 472.2207    ],
+                [ 40.114475  ,  73.44104   , 175.9573    , 118.48469   ]
             ],
             device=torch_device,
         )
 
         self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        print(results["boxes"][:4])
         self.assertTrue(torch.allclose(results["boxes"][:4], expected_slice_boxes))

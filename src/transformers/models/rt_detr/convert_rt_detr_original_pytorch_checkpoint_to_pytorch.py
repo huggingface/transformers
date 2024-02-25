@@ -147,7 +147,7 @@ def create_rename_keys(config):
                     ))
 
             # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
-            if config.backbone not in ['resnet34d', 'resnet18d']:
+            if config.backbone_config.backbone not in ['resnet34d', 'resnet18d']:
                 rename_keys.append(
                     (
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
@@ -231,7 +231,7 @@ def create_rename_keys(config):
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
-        for j in range(1, 4):
+        for j in range(1, 3):
             rename_keys.append(
                 (f"encoder.fpn_blocks.{i}.conv{j}.conv.weight", f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight")
             )
@@ -265,7 +265,7 @@ def create_rename_keys(config):
                         )
                     )
 
-        for j in range(1, 4):
+        for j in range(1, 3):
             rename_keys.append(
                 (f"encoder.pan_blocks.{i}.conv{j}.conv.weight", f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight")
             )

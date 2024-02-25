@@ -193,6 +193,7 @@ class RTDetrConfig(PretrainedConfig):
         eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
+        is_encoder_decoder=True,
         # Loss
         matcher_alpha=0.25,
         matcher_gamma=2.0,
@@ -268,6 +269,7 @@ class RTDetrConfig(PretrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
+        self.is_encoder_decoder = is_encoder_decoder
         # Loss
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma

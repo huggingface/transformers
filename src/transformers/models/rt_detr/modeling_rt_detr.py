@@ -34,6 +34,7 @@ from transformers import AutoBackbone
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -224,10 +225,6 @@ class RTDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
             layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
@@ -248,7 +245,6 @@ class RTDetrModelOutput(ModelOutput):
     enc_topk_logits: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     dn_meta: Optional[Dict] = None
@@ -1269,19 +1265,18 @@ class RTDetrHybridEncoder(nn.Module):
             fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
             fpn_feature_maps.insert(0, fps_map)
 
-        encoder_states = (fpn_feature_maps[0])
-        all_attentions = () if output_attentions else None
+        encoder_states = [fpn_feature_maps[0]]
         for idx in range(len(self.in_channels) - 1):
             feat_low = encoder_states[-1]
             feat_high = fpn_feature_maps[idx + 1]
             downsample_feat = self.downsample_convs[idx](feat_low)
             hidden_states = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
-            encoder_states = encoder_states + (hidden_states,)
+            encoder_states.append(hidden_states)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            return tuple(v for v in [hidden_states, encoder_states] if v is not None)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states, hidden_states=encoder_states
         )
 
 
@@ -1618,20 +1613,27 @@ class RTDetrModel(RTDetrPreTrainedModel):
         assert len(features) == len(self.config.encoder_in_channels)
         proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
 
-        encoder_outputs = self.encoder(proj_feats)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(proj_feats)
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutputWithNoAttention):
+            encoder_outputs = BaseModelOutputWithNoAttention(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+            )
 
         # Equivalent to def _get_encoder_input
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
-        for level, source in enumerate(encoder_outputs.hidden_states):
+        for level, source in enumerate(encoder_outputs[1]):
             sources.append(self.decoder_input_proj[level](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.hidden_states)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[1])[-1])
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs.hidden_states[-1]))
+                sources.append(self.decoder_input_proj[i](encoder_outputs[1][-1]))
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
@@ -1735,7 +1737,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             enc_topk_logits=enc_topk_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+            # encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             dn_meta=dn_meta,
