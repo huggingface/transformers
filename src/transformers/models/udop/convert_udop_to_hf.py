@@ -94,6 +94,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     name_to_checkpoint_path = {
         "udop-large": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-224/pytorch_model.bin",
         "udop-large-512": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-512/pytorch_model.bin",
+        "udop-large-512-300k": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-512-300k-steps/pytorch_model.bin",
     }
 
     # load original state dict
@@ -160,21 +161,22 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
     # autoregressive decoding with original input data
-    if model_name == "udop-large":
-        print("Testing generation with original inputs...")
-        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
-        input_ids = torch.load(filepath)
-        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
-        bbox = torch.load(filepath)
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-image", filename="pixel_values_udop_224.pt", repo_type="dataset"
-        )
-        pixel_values = torch.load(filepath)
+    print("Testing generation with original inputs...")
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
+    input_ids = torch.load(filepath)
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
+    bbox = torch.load(filepath)
+    pixel_values_filename = "pixel_values_udop_512.pt" if "512" in model_name else "pixel_values_udop_224.pt"
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=pixel_values_filename, repo_type="dataset")
+    pixel_values = torch.load(filepath)
 
-        model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
-        outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
+    print("Decoded input ids:", tokenizer.decode(input_ids[0], skip_special_tokens=True))
+    print("Bbox shape:", bbox.shape)
 
-        print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+    model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
+    outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
+    generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
+    print("Generated:", generated_text)
 
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)

@@ -70,6 +70,7 @@ UDOP_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 UDOP_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -97,6 +98,9 @@ UDOP_INPUTS_DOCSTRING = r"""
             Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
             config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
             config.patch_size) * (width / config.patch_size))`.
+
+        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
+            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
 
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
@@ -1545,14 +1549,14 @@ class UdopModel(UdopPreTrainedModel):
         input_ids: Tensor = None,
         bbox: Dict[str, Any] = None,
         attention_mask: Tensor = None,
-        decoder_input_ids: Optional[Tensor] = None,
-        decoder_attention_mask: Optional[Tensor] = None,
-        encoder_outputs: Optional[Tensor] = None,
-        past_key_values: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
-        head_mask: Optional[Tensor] = None,
+        decoder_input_ids: Optional[Tensor] = None,
+        decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
+        encoder_outputs: Optional[Tensor] = None,
+        past_key_values: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
         cross_attn_head_mask: Optional[Tensor] = None,
@@ -1714,15 +1718,14 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         input_ids: Tensor = None,
         bbox: Dict[str, Any] = None,
         attention_mask: Tensor = None,
-        decoder_input_ids: Optional[Tensor] = None,
-        decoder_attention_mask: Optional[Tensor] = None,
-        encoder_outputs: Optional[Tensor] = None,
-        past_key_values: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
-        labels: Optional[Tensor] = None,
-        head_mask: Optional[Tensor] = None,
+        decoder_input_ids: Optional[Tensor] = None,
+        decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
+        encoder_outputs: Optional[Tensor] = None,
+        past_key_values: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         decoder_head_mask: Optional[Tensor] = None,
         cross_attn_head_mask: Optional[Tensor] = None,
@@ -1730,6 +1733,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: Optional[Tensor] = None,
     ) -> Tuple[Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
