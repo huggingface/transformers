@@ -1372,7 +1372,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             return ((loss,) + outputs) if loss is not None else outputs
 
         return FastSpeech2ConformerModelOutput(
-            loss=hidden_states,
+            loss=loss,
             spectrogram=outputs_after_postnet,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
