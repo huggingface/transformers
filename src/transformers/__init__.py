@@ -505,6 +505,10 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
     ],
+    "models.idefics2": [
+        "IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Idefics2Config",
+    ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -561,10 +565,6 @@ _import_structure = {
         "LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaNextConfig",
         "LlavaNextProcessor",
-    ],
-    "models.idefics2": [
-        "IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Idefics2Config",
     ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2433,6 +2433,13 @@ else:
             "IdeficsProcessor",
         ]
     )
+    _import_structure["models.idefics2"].extend(
+        [
+            "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Idefics2ForConditionalGeneration",
+            "Idefics2PreTrainedModel",
+        ]
+    )
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2558,14 +2565,6 @@ else:
             "LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LlavaNextForConditionalGeneration",
             "LlavaNextPreTrainedModel",
-        ]
-    )
-    _import_structure["models.idefics2"].extend(
-        [
-            "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Idefics2ForConditionalGeneration",
-            "Idefics2PreTrainedModel",
-           
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5401,6 +5400,10 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
     )
+    from .models.idefics2 import (
+        IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Idefics2Config,
+    )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -5457,10 +5460,6 @@ if TYPE_CHECKING:
         LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaNextConfig,
         LlavaNextProcessor,
-    )
-    from .models.idefics2 import (
-        IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Idefics2Config,
     )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7150,6 +7149,11 @@ if TYPE_CHECKING:
             IdeficsPreTrainedModel,
             IdeficsProcessor,
         )
+        from .models.idefics2 import (
+            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Idefics2ForConditionalGeneration,
+            Idefics2PreTrainedModel,
+        )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageGPTForCausalImageModeling,
@@ -7248,12 +7252,6 @@ if TYPE_CHECKING:
             LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
-        )
-        from .models.idefics2 import (
-            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Idefics2ForConditionalGeneration,
-            Idefics2PreTrainedModel,
-           
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
