@@ -123,7 +123,9 @@ class LlamaRotaryEmbedding(nn.Module):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+        # Force float32 since bfloat16 loses precision on long contexts
+        with torch.autocast(device_type=position_ids_expanded.device.type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos().to(dtype=x.dtype)
         sin = emb.sin().to(dtype=x.dtype)
