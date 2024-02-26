@@ -20,6 +20,7 @@ import bisect
 import itertools
 import re
 import unicodedata
+import warnings
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
@@ -359,10 +360,25 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
         self._added_tokens_encoder: Dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
 
-        # 4 init the parent class
+        # 4. init the parent class
         super().__init__(**kwargs)
 
-        # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
+        # 5. Set the behavior when encountering an OOV token id
+        # Note: this must be set before _add_tokens, because _add_tokens 
+        # relies on the behavior of the OOV token ids for some tokenizers.
+        self.oov_error = kwargs.pop("oov_error", "")
+        # TODO @ArthurZ in version 5
+        if self.oov_error == "":
+            warnings.warn(
+                "The `oov_error` argument will be required in future versions of `transformers` (v5.0+), "
+                "to better handle Out-Of-Vocabulary (OOV) tokens. By default, this argument will be set "
+                "to 'replace', which converts OOV token IDs to an empty string. The original behavior can "
+                "be maintained by setting `oov_error` to 'strict'.",
+                FutureWarning,
+            )
+            self.oov_error = "replace"
+
+        # 6. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(
             [token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder],
@@ -966,21 +982,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             `str` or `List[str]`: The decoded token(s).
         """
-        if isinstance(ids, int):
-            if ids in self._added_tokens_decoder:
-                return self._added_tokens_decoder[ids].content
-            elif ids < self.vocab_size:
-                return self._convert_id_to_token(ids)
-            else:
-                return ""
-            # Note: Although `_convert_id_to_token` is declared to return a 
-            # `str` type, specific implementations in subclasses may return 
-            # `None` for out-of-vocabulary (OOV) IDs (e.g., in the `codegen` 
-            # tokenizer) or may raise exceptions (e.g., in the `llama` 
-            # tokenizer). On the other hand, the fast tokenizer developed in 
-            # Rust uniformly returns an empty string for such cases. To 
-            # ensure consistency across different implementations, OOV IDs are 
-            # manually converted to an empty string here.
+        is_single_element = isinstance(ids, int)
+        if is_single_element:
+            ids = [ids]
 
         tokens = []
         for index in ids:
@@ -989,11 +993,22 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             if index in self._added_tokens_decoder:
                 tokens.append(self._added_tokens_decoder[index].content)
-            elif index < self.vocab_size:
-                tokens.append(self._convert_id_to_token(index))
+            elif index >= self.vocab_size and index not in self.all_special_ids:
+                if self.oov_error == "replace":
+                    tokens.append("")
+                elif self.oov_error == "strict":
+                    tokens.append(self._convert_id_to_token(index))
+                # Note: Although `_convert_id_to_token` is declared to return a 
+                # `str` type, specific implementations in subclasses may return 
+                # `None` for out-of-vocabulary (OOV) IDs (e.g., in the `codegen` 
+                # tokenizer) or may raise exceptions (e.g., in the `llama` 
+                # tokenizer). On the other hand, the fast tokenizer developed in 
+                # Rust uniformly returns an empty string for such cases. To 
+                # ensure consistency, it is recommended to set `oov_error` to
+                # "replace".
             else:
-                tokens.append("")
-        return tokens
+                tokens.append(self._convert_id_to_token(index))
+        return tokens if not is_single_element else tokens[0]
 
     def _convert_id_to_token(self, index: int) -> str:
         raise NotImplementedError
