@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     require_pyctcdecode,
     require_tf,
     require_torch,
+    require_torch_gpu,
     require_torch_accelerator,
     require_torchaudio,
     slow,
@@ -1176,7 +1177,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         assert result == EXPECTED_RESULT
 
-    @require_torch
+    @require_torch_gpu
     @slow
     def test_seamless_v2(self):
         pipe = pipeline(
