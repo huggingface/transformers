@@ -77,7 +77,7 @@ The original code can be found [here]([(https://github.com/baaivision/Painter/tr
 
 [[autodoc]] SegGptImageProcessor
     - preprocess
-    - post_process_masks
+    - post_process_semantic_segmentation
 
 ## SegGptModel
 
