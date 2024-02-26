@@ -769,10 +769,8 @@ class ModelTesterMixin:
             for key, value in batched_input_prepared.items():
                 if "head_mask" in key:
                     single_row_input[key] = value
-                elif isinstance(value, torch.Tensor) and value.shape[0] == batch_size:
-                    single_row_input[key] = value[:1]
                 elif isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks)
+                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 else:
