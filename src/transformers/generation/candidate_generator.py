@@ -99,7 +99,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
         input_ids = input_ids.to(device)
-        inputs_tensor = inputs_tensor.to(device)
+        if inputs_tensor is not None:
+            inputs_tensor = inputs_tensor.to(device)
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model

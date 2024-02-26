@@ -564,10 +564,6 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @unittest.skip("Cannot be initialized on meta device as some weights are modified during the initialization")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

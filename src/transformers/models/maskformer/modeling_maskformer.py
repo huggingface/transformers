@@ -1439,7 +1439,7 @@ class MaskFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        if hasattr(config, "backbone_config") and config.backbone_config.model_type == "swin":
+        if getattr(config, "backbone_config") is not None and config.backbone_config.model_type == "swin":
             # for backwards compatibility
             backbone_config = config.backbone_config
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
