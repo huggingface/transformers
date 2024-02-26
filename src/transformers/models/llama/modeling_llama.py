@@ -648,6 +648,10 @@ class LlamaSdpaAttention(LlamaAttention):
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            if isinstance(past_key_value, PagedAttentionCache): 
+                #The key/value cache is stored dicretely, so we need to retrieve the entire context
+                #We need an more effcient SDPA kernel to aware this chache
+                key_states, value_states = past_key_value.get_entire_context_states(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)

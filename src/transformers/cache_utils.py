@@ -475,7 +475,6 @@ class PagedAttentionCache(Cache):
         self.block_tables = (
             {}
         )  # mapping logical block to physical blocks for each sequence
-        self.context_lens = {}  # context length for each sequence
 
         # The follow two states are shared accross layer but only for the current decode step. Need to update for every decode step.
         self.batch2seq = (
@@ -622,9 +621,6 @@ class PagedAttentionCache(Cache):
                 self.key_cache[block_idx][block_offset] = key[bi][ti]
                 self.value_cache[block_idx][block_offset] = value[bi][ti]
 
-    def has_context(self, seq_id: int) -> bool:
-        return seq_id in self.context_lens and self.context_lens[seq_id] != 0
-
     def get_seq_length(self, layer_idx: int = 0) -> int:
         RuntimeError("PagedAttentionCache does not have a sequence length.")
 
@@ -697,9 +693,8 @@ class PagedAttentionCache(Cache):
             AssertionError: If the batch size is inconsistent with the existing cache.
         """
         batch_size = key_states.shape[0]  # [batch, head, seq, dim]
-        kv_head = key_states.shape[1]
-        head_size = key_states.shape[-1]
         cur_len = key_states.shape[-2]
+        past_context_len = self.seen_tokens
         self.seen_tokens += cur_len
         self.check_batch2seq(self.batch2seq, batch_size)
 
@@ -709,11 +704,7 @@ class PagedAttentionCache(Cache):
         # only allocate the slots for the first sequence in the batch to enable prompt sharing
         for batch_idx in range(batch_size):
             seq_id = self.batch2seq[batch_idx][0]
-            key_len = key_states.shape[-2]
-            past_context_len = (
-                self.context_lens[seq_id] if self.has_context(seq_id) else 0
-            )
-            slots = self.allocate(seq_id, key_len, past_context_len)
+            slots = self.allocate(seq_id, cur_len, past_context_len)
             self.slots_mapping.append(slots)
         assert len(self.slots_mapping) == batch_size
 
@@ -726,20 +717,7 @@ class PagedAttentionCache(Cache):
             # fork the blocks allocated for the first sequence to other sequences in the batch
             for seq_id in seq_ids[1:]:
                 self.fork(seq_ids[0], seq_id)
-
-        # step 4): concat the past key/value with current key/value
-        key_states, value_states = self.get_entire_context_states(
-            key_states, value_states
-        )
-
-        # update the context length for each sequence in the batch
-        for batch_idx in range(batch_size):
-            seq_ids = self.batch2seq[batch_idx]
-            # fork the blocks allocated for the first sequence to other sequences in the batch
-            for seq_id in seq_ids:
-                if seq_id not in self.context_lens:
-                    self.context_lens[seq_id] = 0
-                self.context_lens[seq_id] += cur_len
+        
         return key_states, value_states
 
     def reorder_cache(self, beam_idx: torch.Tensor) -> None:
