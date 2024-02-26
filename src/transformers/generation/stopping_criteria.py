@@ -118,7 +118,7 @@ class MaxTimeCriteria(StoppingCriteria):
     """
 
     def __init__(self, max_time: float, initial_timestamp: Optional[float] = None):
-        logger.warning(
+        logger.warning_once(
             f"{self.__class__.__name__} cannot be used with `torch.compile`"
             "To compile generation, do not add `max_time`to generation config"
         )

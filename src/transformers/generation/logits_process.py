@@ -15,12 +15,14 @@
 
 import inspect
 import math
+import warnings
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 from ..utils import add_start_docstrings
+from ..utils.import_utils import is_torchdynamo_compiling
 from ..utils.logging import get_logger
 
 
@@ -48,7 +50,9 @@ class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
@@ -58,7 +62,9 @@ class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
@@ -72,7 +78,7 @@ class LogitsProcessorList(list):
     """
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int, **kwargs
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None, **kwargs
     ) -> torch.FloatTensor:
         r"""
         Args:
@@ -152,16 +158,26 @@ class MinLengthLogitsProcessor(LogitsProcessor):
             eos_token_id = [eos_token_id]
         if not all(isinstance(i, int) for i in eos_token_id) or any(i < 0 for i in eos_token_id):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
-        logger.warning(
-            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "Do not add `min_length` in generation config for efficient compilation"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+                "Do not add `min_length` in generation config for efficient compilation"
+            )
 
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         eos_token_id = torch.tensor(self.eos_token_id, device=scores.device)
         eos_token_mask = torch.isin(vocab_tensor, eos_token_id)
@@ -217,17 +233,27 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             eos_token_id = [eos_token_id]
         if not all(isinstance(i, int) for i in eos_token_id) or any(i < 0 for i in eos_token_id):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
-        logger.warning(
-            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "do not add `min_new_tokens` in generation config for efficient compilation"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+                "Do not add `min_new_tokens` in generation config for efficient compilation"
+            )
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         eos_token_id = torch.tensor(self.eos_token_id, device=scores.device)
         eos_token_mask = torch.isin(vocab_tensor, eos_token_id)
@@ -298,7 +324,9 @@ class TemperatureLogitsWarper(LogitsWarper):
         self.temperature = temperature
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         scores = scores / self.temperature
         return scores
 
@@ -347,7 +375,9 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.penalty = penalty
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         score = torch.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
@@ -402,7 +432,9 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.encoder_input_ids = encoder_input_ids
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         score = torch.gather(scores, 1, self.encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
@@ -462,7 +494,9 @@ class TopPLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         sorted_logits, sorted_indices = torch.sort(scores, descending=False)
         cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
 
@@ -522,7 +556,9 @@ class TopKLogitsWarper(LogitsWarper):
         self.filter_value = filter_value
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         top_k = min(self.top_k, scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
@@ -595,7 +631,9 @@ class TypicalLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # calculate entropy
         normalized = torch.nn.functional.log_softmax(scores, dim=-1)
         p = torch.exp(normalized)
@@ -672,7 +710,9 @@ class EpsilonLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # Determine which indices to remove
         probabilities = scores.softmax(dim=-1)
         indices_to_remove = probabilities < self.epsilon
@@ -749,7 +789,9 @@ class EtaLogitsWarper(LogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # Calculate the adaptive cutoff
         epsilon = torch.tensor(self.epsilon, device=scores.device)
         probabilities = scores.softmax(dim=-1)
@@ -818,7 +860,7 @@ def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
 
 
 def _calc_banned_ngram_tokens(
-    ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int
+    ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int = None
 ) -> List[Iterable[int]]:
     """Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < ngram_size:
@@ -877,16 +919,25 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     def __init__(self, ngram_size: int):
         if not isinstance(ngram_size, int) or ngram_size <= 0:
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
-        logger.warning(
-            f"{self.__class__.__name__} will cannot be used with `torch.compile`"
-            "To compile generation, do not add `no_repeat_ngram_size`to generation config"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cannot be used with `torch.compile`"
+                "To compile generation, Do not add `no_repeat_ngram_size`to generation config"
+            )
         self.ngram_size = ngram_size
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         num_batch_hypotheses = scores.shape[0]
-        cur_len = input_ids.shape[-1]
         banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
         for i, banned_tokens in enumerate(banned_batch_tokens):
             scores[i, banned_tokens] = -float("inf")
@@ -937,10 +988,11 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
             raise ValueError(
                 f"`encoder_ngram_size` has to be a strictly positive integer, but is {encoder_ngram_size}"
             )
-        logger.warning(
-            f"{self.__class__.__name__} will cannot be used with `torch.compile`"
-            "To compile generation, do not add `encoder_no_repeat_ngram_size`to generation config"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cannot be used with `torch.compile`"
+                "To compile generation, Do not add `encoder_no_repeat_ngram_size`to generation config"
+            )
         self.ngram_size = encoder_ngram_size
         if len(encoder_input_ids.shape) == 1:
             encoder_input_ids = encoder_input_ids.unsqueeze(0)
@@ -948,11 +1000,20 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
         self.generated_ngrams = _get_ngrams(encoder_ngram_size, encoder_input_ids, self.batch_size)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
+
         # B x num_beams
         num_hypos = scores.shape[0]
         num_beams = num_hypos // self.batch_size
-        cur_len = input_ids.shape[-1]
         banned_batch_tokens = [
             _get_generated_ngrams(
                 self.generated_ngrams[hypo_idx // num_beams], input_ids[hypo_idx], self.ngram_size, cur_len
@@ -1038,7 +1099,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         self.prepared_bias_variables = False
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # 1 - Prepares the bias tensors. This is only needed the first time the logit processor is called.
         if not self.prepared_bias_variables:
             self._prepare_bias_variables(scores)
@@ -1249,15 +1312,18 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
-        logger.warning(
-            f"{self.__class__.__name__} cannot be used with `torch.compile`"
-            "To compile generation, do not add `prefix_allowed_tokens_fn`to generation config"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} cannot be used with `torch.compile`"
+                "To compile generation, Do not add `prefix_allowed_tokens_fn`to generation config"
+            )
         self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
         self._num_beams = num_beams
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         mask = torch.full_like(scores, -math.inf)
         for batch_id, beam_sent in enumerate(input_ids.view(-1, self._num_beams, input_ids.shape[-1])):
             for beam_id, sent in enumerate(beam_sent):
@@ -1364,9 +1430,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         self,
         input_ids: torch.LongTensor,
         scores: torch.FloatTensor,
-        cur_len: int,
-        current_tokens: torch.LongTensor,
-        beam_group_idx: int,
+        cur_len: int = None,
+        current_tokens: torch.LongTensor = None,
+        beam_group_idx: int = None,
     ) -> torch.FloatTensor:
         r"""
         Args:
@@ -1440,14 +1506,24 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, bos_token_id: int):
-        logger.warning(
-            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "do not add `forced_bos_token_id` in generation config for efficient compilation"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+                "Do not add `forced_bos_token_id` in generation config for efficient compilation"
+            )
         self.bos_token_id = bos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         if cur_len == 1:
             mask = torch.full_like(scores, -math.inf)
             mask[:, self.bos_token_id] = 0
@@ -1489,17 +1565,27 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
-        logger.warning(
-            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "do not add `forced_eos_token_id` in generation config for efficient compilation"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning(
+                f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+                "Do not add `forced_eos_token_id` in generation config for efficient compilation"
+            )
         self.max_length = max_length
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         if cur_len == self.max_length - 1:
             mask = torch.full_like(scores, -math.inf)
             mask[:, self.eos_token_id] = 0
@@ -1517,7 +1603,9 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # set all nan values to 0.0
         scores = torch.where(scores != scores, 0.0, scores)
 
@@ -1602,10 +1690,11 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         eos_token_id: Union[int, List[int]],
         input_ids_seq_length: int,
     ):
-        logger.warning(
-            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "do not add `exponential_decay_length_penalty` in generation config for efficient compilation"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+                "Do not add `exponential_decay_length_penalty` in generation config for efficient compilation"
+            )
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
         if isinstance(eos_token_id, int):
@@ -1613,7 +1702,16 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         penalties = torch.zeros_like(scores)
         if cur_len > self.regulation_start:
             for i in self.eos_token_id:
@@ -1656,7 +1754,9 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         scores = scores.log_softmax(dim=-1)
         return scores
 
@@ -1697,10 +1797,11 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, begin_suppress_tokens, begin_index):
-        logger.warning(
-            f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "do not add `begin_suppress_tokens` in generation config for efficient compilation"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
+                "Do not add `begin_suppress_tokens` in generation config for efficient compilation"
+            )
         self.begin_suppress_tokens = list(begin_suppress_tokens)
         self.begin_index = begin_index
 
@@ -1708,7 +1809,16 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         begin_suppress_tokens = torch.tensor(self.begin_suppress_tokens, device=scores.device)
         suppress_token_mask = torch.isin(vocab_tensor, begin_suppress_tokens)
@@ -1751,7 +1861,9 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
         self.suppress_tokens = list(suppress_tokens)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         suppress_tokens = torch.tensor(self.suppress_tokens, device=scores.device)
         suppress_token_mask = torch.isin(vocab_tensor, suppress_tokens)
@@ -1801,7 +1913,9 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
         self.force_token_map = dict(force_token_map)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         current_token = self.force_token_map.get(cur_len, None)
         if current_token is not None:
             mask = torch.full_like(scores, -float("inf"))
@@ -1893,7 +2007,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores[:, self.no_timestamps_token_id] = -float("inf")
 
@@ -1975,7 +2091,9 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         if input_ids.shape[1] == self.begin_index:
             if self.start_of_trans_offset > 1:
                 with torch.no_grad():
@@ -2045,7 +2163,9 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # simple check to make sure we have compatible batch sizes between our
         # logits scores (cond + uncond) and input ids (cond only)
         if scores.shape[0] != 2 * input_ids.shape[0]:
@@ -2089,8 +2209,17 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
         self.semantic_vocab_size = semantic_vocab_size
         self.codebook_size = codebook_size
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         # even -> first codebook, odd -> second codebook
+        if cur_len is None:
+            warnings.warn(
+                "Using `input_ids.shape[-1]` as generated tokens length is deprecated and will "
+                "be removed in Transformers v4.43. Pass `cur_len` when calling `LogitsProcessor` instead.",
+                FutureWarning,
+            )
+            cur_len = input_ids.shape[1]
         is_first_codebook = ((cur_len - self.input_start_len) % 2) == 0
 
         if is_first_codebook:
@@ -2171,10 +2300,11 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             "past_key_values": None,
             "first_pass": True,
         }
-        logger.warning(
-            f"{self.__class__.__name__} cannot be used with `torch.compile`"
-            "To compile generation, do not add `guidance_scale`to generation config"
-        )
+        if is_torchdynamo_compiling():
+            logger.warning_once(
+                f"{self.__class__.__name__} cannot be used with `torch.compile`"
+                "To compile generation, Do not add `guidance_scale`to generation config"
+            )
 
     def get_unconditional_logits(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
         if self.unconditional_context["first_pass"]:
@@ -2212,7 +2342,9 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
         return out.logits
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         scores = torch.nn.functional.log_softmax(scores, dim=-1)
         if self.guidance_scale == 1:
             return scores
@@ -2250,7 +2382,9 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
         self.min_eos_p = min_eos_p
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int) -> torch.FloatTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_len: int = None
+    ) -> torch.FloatTensor:
         if self.min_eos_p:
             probs = torch.nn.functional.softmax(scores.float(), dim=-1)
             # create scores full of -inf except for the eos_token_id
