@@ -1537,9 +1537,15 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         inputs_embeds = self.get_input_embeddings()(input_ids)
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
 
+        if "max_length" in generate_kwargs:
+            max_length = generate_kwargs["max_length"] + language_model_inputs.shape[1]
+        else:
+            max_length = 20 + language_model_inputs.shape[1]
+        
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            max_length=max_length,
             **generate_kwargs,
         )
 
