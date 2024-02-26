@@ -57,7 +57,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
-RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
+# RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein
