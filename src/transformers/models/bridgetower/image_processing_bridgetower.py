@@ -246,7 +246,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             "return_tensors",
             "data_format",
             "input_data_format",
-            "pad_and_return_pixel_mask"
+            "pad_and_return_pixel_mask",
         ]
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
