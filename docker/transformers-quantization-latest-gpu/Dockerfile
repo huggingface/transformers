@@ -26,7 +26,7 @@ RUN echo torch=$VERSION
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
 RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[torch-dev]
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
