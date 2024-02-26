@@ -195,6 +195,9 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    # def test_batching_support(self):
+    #    pass
+
     # override as the `logit_scale` parameter initilization is different for TVP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

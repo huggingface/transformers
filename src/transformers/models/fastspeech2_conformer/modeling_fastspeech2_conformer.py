@@ -1320,6 +1320,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             hidden_states = hidden_states + embedded_energy_curve + embedded_pitch_curve
             hidden_states = length_regulator(hidden_states, duration_labels)
 
+        print(hidden_states.shape)
+
         # forward decoder
         if not self.training:
             hidden_mask = None
@@ -1371,7 +1373,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             return ((loss,) + outputs) if loss is not None else outputs
 
         return FastSpeech2ConformerModelOutput(
-            loss=loss,
+            loss=hidden_states,
             spectrogram=outputs_after_postnet,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,

@@ -347,6 +347,13 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
+        """VilT samples image tokens from a multinomial distribution, resulting in not deterministic
+                            hidden states"""
+    )
+    def test_batching_support(self):
+        pass
+
+    @unittest.skip(
         reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
                             hidden states"""
     )

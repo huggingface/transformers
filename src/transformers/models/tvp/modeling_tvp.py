@@ -679,7 +679,7 @@ class TvpFramePadPrompter(nn.Module):
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])
-            pixel_values += prompt.to(pixel_values.dtype)
+            pixel_values = pixel_values + prompt.to(pixel_values.dtype)
         return pixel_values
 
 

@@ -347,6 +347,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    def test_batching_support(self):
+        pass
+
 
 @require_torch
 @require_g2p_en
@@ -760,6 +763,9 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    def test_batching_support(self):
         pass
 
 

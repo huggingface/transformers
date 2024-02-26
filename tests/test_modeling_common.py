@@ -693,6 +693,99 @@ class ModelTesterMixin:
                 expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_batching_support(self):
+        """
+        Tests that the model supports batching and that the output is the nearly the same for the same input in
+        different batch sizes.
+        (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
+        different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
+        """
+
+        def recursive_check(batched_object, single_row_object, model_name, key):
+            if isinstance(batched_object, (List, Tuple)):
+                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            elif isinstance(batched_object, Dict):
+                for batched_object_value, single_row_object_value in zip(
+                    batched_object.values(), single_row_object.values()
+                ):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            elif batched_object is None or isinstance(batched_object, int):
+                return
+            elif batched_object.dim() == 0:
+                return
+            else:
+                # indexing the first element does not always work
+                # e.g. models that output similarity scores pf size (N, M) would need to index [0, 0]
+                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                batched_row = batched_object[slice_ids]
+                self.assertFalse(
+                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                )
+                self.assertTrue(
+                    torch.allclose(batched_row, single_row_object, atol=atol),
+                    msg=(
+                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. Difference="
+                        f"{torch.max(torch.abs(batched_row - single_row_object))}."
+                    ),
+                )
+
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        conv_attr = ["num_channels", "conv_dim", "backbone", "conv_depthwise_kernel_size"]
+        atol = 0.1 if any([hasattr(config, attr) for attr in conv_attr]) else 1e-05
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+            config.output_attentions = True
+
+            model_name = model_class.__name__
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            model = model_class(config).to(torch_device).eval()
+
+            main_input_name = (
+                model.main_input_name[0] if isinstance(model.main_input_name, list) else model.main_input_name
+            )
+            tester_attributes = [i for i in self.model_tester.__dict__.keys() if i[:1] != "_"]
+            model_testers_parents = [attr for attr in tester_attributes if "model_tester" in attr]
+            if model_testers_parents:
+                batch_size = getattr(self.model_tester, model_testers_parents[0]).batch_size
+            elif hasattr(self.model_tester, "batch_size"):
+                batch_size = self.model_tester.batch_size
+            else:
+                batch_size = batched_input_prepared[main_input_name].shape[0]
+
+            single_row_input = {}
+            for key, value in batched_input_prepared.items():
+                if "head_mask" in key:
+                    single_row_input[key] = value
+                elif isinstance(value, torch.Tensor) and value.shape[0] == batch_size:
+                    single_row_input[key] = value[:1]
+                elif isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                    # e.g. musicgen has inputs of size (bs*codebooks)
+                    single_batch_shape = value.shape[0] // batch_size
+                    single_row_input[key] = value[:single_batch_shape]
+                else:
+                    single_row_input[key] = value
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
+
+            if not isinstance(model_batched_output, torch.Tensor):
+                for key in model_batched_output:
+                    recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             return

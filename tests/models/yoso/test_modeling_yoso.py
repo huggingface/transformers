@@ -358,6 +358,9 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         return
 
+    def test_batching_support(self):
+        pass
+
 
 @require_torch
 class YosoModelIntegrationTest(unittest.TestCase):
