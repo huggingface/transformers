@@ -2194,12 +2194,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            # stop when each sentence is finished
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2478,12 +2476,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2772,12 +2768,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -3169,7 +3163,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -3516,7 +3510,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -3912,7 +3906,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -4267,7 +4261,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if constrained_beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if constrained_beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -4657,12 +4651,10 @@ class GenerationMixin:
                     .prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
