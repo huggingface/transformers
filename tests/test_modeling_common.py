@@ -700,7 +700,10 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if (
                 model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
