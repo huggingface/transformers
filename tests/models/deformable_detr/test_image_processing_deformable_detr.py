@@ -251,7 +251,6 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         expected_size = torch.tensor([800, 1066])
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
-    @slow
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr->DeformableDetr
     def test_batched_coco_detection_annotations(self):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -370,7 +369,6 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
         self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
 
-    @slow
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->DeformableDetr
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
