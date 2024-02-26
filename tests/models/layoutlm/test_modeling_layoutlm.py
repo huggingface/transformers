@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import unittest
 
 from transformers import LayoutLMConfig, is_torch_available
@@ -316,6 +317,7 @@ def prepare_layoutlm_batch_inputs():
 class LayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_no_head(self):
+        os.rmdir("/mnt/cache/hub/models--microsoft--layoutlm-base-uncased/")
         model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased", force_download=True).to(torch_device)
 
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
