@@ -35,7 +35,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
         cur_len: (`int`): The current sequence length of generated text. For compatibility with `torch.compile`, `input_ids`
-            sequence length is the maxiumum length that can be generated, and `cur_len` indicates the length that was actually
+            sequence length is the maximum length that can be generated, and `cur_len` indicates the length that was actually
             generated.
 
     Return:
