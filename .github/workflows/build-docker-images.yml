@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - try_new_natten
+      - try_new_natten_2
   repository_dispatch:
   workflow_call:
     inputs:
