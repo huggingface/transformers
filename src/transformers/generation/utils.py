@@ -648,6 +648,7 @@ class GenerationMixin:
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
@@ -676,6 +677,8 @@ class GenerationMixin:
                     [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
                     dim=-1,
                 )
+
+        model_kwargs["cache_position"] = model_inputs.get("cache_position", None)
 
         return model_kwargs
 
@@ -1348,7 +1351,6 @@ class GenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
-        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Set generation parameters if not already defined
@@ -1453,17 +1455,19 @@ class GenerationMixin:
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
 
-        # if we don't pass `past_key_values` and a cache_implementation is specified
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
-            "past_key_values", False
-        ):
-            cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
-            if not callable(getattr(self, "_setup_cache", None)):
-                raise ValueError(
-                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                    " Make sure it has a `_setup_cache` function."
-                )
-            self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation == "static":
+                if model_kwargs.get("past_key_values", False) is not False:
+                    raise ValueError(
+                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
+                    )
+                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
+                if not callable(getattr(self, "_setup_cache", None)):
+                    raise ValueError(
+                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                        " Make sure it has a `_setup_cache` function."
+                    )
+                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -1525,7 +1529,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            return self.assisted_decoding(
+            result = self.assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
@@ -1543,7 +1547,7 @@ class GenerationMixin:
             )
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
-            return self.greedy_search(
+            result = self.greedy_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -1561,7 +1565,7 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
 
-            return self.contrastive_search(
+            result = self.contrastive_search(
                 input_ids,
                 top_k=generation_config.top_k,
                 penalty_alpha=generation_config.penalty_alpha,
@@ -1591,7 +1595,7 @@ class GenerationMixin:
             )
 
             # 13. run sample
-            return self.sample(
+            result = self.sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
@@ -1625,7 +1629,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.beam_search(
+            result = self.beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1664,7 +1668,7 @@ class GenerationMixin:
             )
 
             # 14. run beam sample
-            return self.beam_sample(
+            result = self.beam_sample(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1699,7 +1703,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.group_beam_search(
+            result = self.group_beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1773,7 +1777,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.constrained_beam_search(
+            result = self.constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1786,6 +1790,16 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
+
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if not callable(getattr(self, "_reset_cache", None)):
+                raise ValueError(
+                    "A `static_cache` was used to generate but there was a failure when trying to  release the cache. "
+                    " Make sure this model implements a `_reset_cache` function."
+                )
+            self._reset_cache()
+
+        return result
 
     @torch.no_grad()
     def contrastive_search(
@@ -1977,6 +1991,7 @@ class GenerationMixin:
                     model_kwargs,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     standardize_cache_format=True,
+                    model_inputs=model_inputs,
                 )
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -2171,7 +2186,7 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2180,12 +2195,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            # stop when each sentence is finished
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2452,7 +2465,10 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                model_inputs=model_inputs,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2461,12 +2477,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2746,7 +2760,7 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2755,12 +2769,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -3139,7 +3151,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3152,7 +3164,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -3486,7 +3498,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3499,7 +3511,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -3885,7 +3897,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3895,7 +3907,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -4237,7 +4249,7 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -4250,7 +4262,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if constrained_beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if constrained_beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -4302,7 +4314,6 @@ class GenerationMixin:
     def assisted_decoding(
         self,
         input_ids: torch.LongTensor,
-        assistant_model: Optional["PreTrainedModel"] = None,
         candidate_generator: Optional["CandidateGenerator"] = None,
         do_sample: bool = False,
         logits_processor: Optional[LogitsProcessorList] = None,
@@ -4338,12 +4349,7 @@ class GenerationMixin:
                 The sequence used as a prompt for the generation.
             candidate_generator (`CandidateGenerator`, *optional*):
                 A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
-                more information, the documentation of [`CandidateGenerator`] should be read. Only one of `assistant_model` or `candidate_generator` should be passed as input to this function.
-            assistant_model (`PreTrainedModel`, *optional*):
-                An assistant model that can be used to accelerate generation. The assistant model must have the exact
-                same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
-                is much faster than running generation with the model you're calling generate from. As such, the
-                assistant model should be much smaller.
+                more information, the documentation of [`CandidateGenerator`] should be read.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             logits_processor (`LogitsProcessorList`, *optional*):
@@ -4400,6 +4406,7 @@ class GenerationMixin:
         ...     StoppingCriteriaList,
         ...     MaxLengthCriteria,
         ... )
+        >>> from transformers.generation import AssistedCandidateGenerator
 
         >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
@@ -4415,33 +4422,22 @@ class GenerationMixin:
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
+        >>> candidate_generator = AssistedCandidateGenerator(
+        ...     input_ids=input_ids,
+        ...     assistant_model=assistant_model,
+        ...     generation_config=model.generation_config,
+        ...     logits_processor=logits_processor,
+        ...     model_kwargs={},
+        ... )
         >>> outputs = model.assisted_decoding(
         ...     input_ids,
-        ...     assistant_model=assistant_model,
+        ...     candidate_generator=candidate_generator,
         ...     logits_processor=logits_processor,
         ...     stopping_criteria=stopping_criteria,
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
-        # handling deprecated arguments
-        if (assistant_model is None) == (candidate_generator is None):
-            raise ValueError("One (and only one) of `assistant_model` and `candidate_generator` should be defined.")
-
-        if assistant_model is not None:
-            candidate_generator = AssistedCandidateGenerator(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                logits_processor=logits_processor,
-                model_kwargs=model_kwargs,
-                eos_token_id=eos_token_id,
-            )
-            warnings.warn(
-                "Passing `assistant_model` to `assisted_decoding` is deprecated and will be removed in v4.38. "
-                "Pass the `candidate_generator` argument instead.",
-                FutureWarning,
-            )
-
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
@@ -4644,7 +4640,7 @@ class GenerationMixin:
                         )
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -4656,12 +4652,10 @@ class GenerationMixin:
                     .prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
