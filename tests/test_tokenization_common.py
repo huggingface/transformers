@@ -4164,3 +4164,28 @@ class TokenizerTesterMixin:
                         replace_additional_special_tokens=False,
                     )
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+
+    def test_oov_token_ids(self):
+        # Test out-of-vocabulary token ids
+
+        if not self.test_slow_tokenizer:
+            return
+
+        vocab_size = len(self.get_tokenizer())  # == base vocab_size + len(added_vocabs)
+        oov_ids = set(range(vocab_size, vocab_size + 10))
+        non_oov_ids = list(range(vocab_size, vocab_size - 10, -1))
+
+        # Behaviors for tokenizers below should be consistent
+        tokenizer1 = self.get_tokenizer()
+        tokenizer2 = self.get_tokenizer(oov_error="replace")
+        tokenizer3 = self.get_rust_tokenizer() if self.test_rust_tokenizer else ...
+
+        with self.subTest("OOV IDs"):
+            for id in oov_ids:
+                self.assertEqual(tokenizer1.decode(id), tokenizer2.decode(id))
+                self.assertEqual(tokenizer2.decode(id), tokenizer3.decode(id), ) if self.test_rust_tokenizer else ...
+
+        with self.subTest("Non-OOV IDs"):
+            for id in non_oov_ids:
+                self.assertEqual(tokenizer1.decode(id), tokenizer2.decode(id))
+                self.assertEqual(tokenizer2.decode(id), tokenizer3.decode(id), ) if self.test_rust_tokenizer else ...
