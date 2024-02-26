@@ -1338,9 +1338,7 @@ class UdopStack(UdopPreTrainedModel):
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
             bbox = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
             input_shape = input_ids.size()
-            position_bias = torch.zeros_like(
-                self.get_extended_attention_mask(attention_mask, input_shape, attention_mask.device)
-            )
+            position_bias = torch.zeros_like(self.get_extended_attention_mask(attention_mask, input_shape))
             # encoder_attention_mask = attention_mask
             logger.warning("Empty batch")
         elif inputs_embeds is not None:
@@ -1398,7 +1396,7 @@ class UdopStack(UdopPreTrainedModel):
             past_key_values = [None] * len(self.block)
 
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         if self.is_decoder and encoder_attention_mask is not None:
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
