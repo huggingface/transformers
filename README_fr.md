@@ -57,6 +57,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
         <b>Français</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_de.md">Deutsch</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_vi.md">Tiếng Việt</a> |
     </p>
 </h4>
 
