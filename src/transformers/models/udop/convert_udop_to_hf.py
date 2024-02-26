@@ -81,19 +81,30 @@ def prepare_dummy_inputs(tokenizer, image_processor):
     bbox = [[0, 0, 0, 0]] * len(prompt_ids) + bbox_list
 
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
-    original_pixel_values = original_transform(image).unsqueeze(0)
+    original_pixel_values = original_transform(image, image_size=image_processor.size["height"]).unsqueeze(0)
     # verify pixel values
     assert torch.allclose(original_pixel_values, pixel_values)
+    print("Pixel values are ok!")
 
     return torch.tensor(input_ids).unsqueeze(0), torch.tensor(bbox).unsqueeze(0).float(), pixel_values
 
 
-def convert_udop_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+    # model_name to checkpoint_path
+    name_to_checkpoint_path = {
+        "udop-large": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-224/pytorch_model.bin",
+        "udop-large-512": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-512/pytorch_model.bin",
+    }
+
     # load original state dict
+    checkpoint_path = name_to_checkpoint_path[model_name]
     state_dict = torch.load(checkpoint_path, map_location="cpu")
 
+    print("Checkpoint path:", checkpoint_path)
+
     # create HF model
-    config = UdopConfig(decoder_start_token_id=0)
+    image_size = 512 if "512" in model_name else 224
+    config = UdopConfig(decoder_start_token_id=0, image_size=image_size)
     model = UdopForConditionalGeneration(config)
     model.eval()
 
@@ -106,7 +117,10 @@ def convert_udop_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     # prepare dummy inputs
     tokenizer = UdopTokenizer.from_pretrained("t5-base", legacy=True)
-    image_processor = LayoutLMv3ImageProcessor(image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD)
+    size = {"height": image_size, "width": image_size}
+    image_processor = LayoutLMv3ImageProcessor(
+        image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD, size=size
+    )
     processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
     input_ids, bbox, image = prepare_dummy_inputs(tokenizer, image_processor)
     prompt = "Question answering. In which year is the report made?"
@@ -119,9 +133,9 @@ def convert_udop_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
         bbox = encoding.bbox.float()
         pixel_values = encoding.pixel_values
     except Exception:
+        print("Input_ids don't match, preparing dummy inputs")
         input_ids, bbox, pixel_values = prepare_dummy_inputs(tokenizer, image_processor)
 
-    print("Input ids used for testing: ", input_ids)
     # Verify single forward pass
     print("Testing single forward pass..")
     with torch.no_grad():
@@ -146,18 +160,21 @@ def convert_udop_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
     print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
     # autoregressive decoding with original input data
-    print("Testing generation with original inputs...")
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
-    input_ids = torch.load(filepath)
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
-    bbox = torch.load(filepath)
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="pixel_values_udop_224.pt", repo_type="dataset")
-    pixel_values = torch.load(filepath)
+    if model_name == "udop-large":
+        print("Testing generation with original inputs...")
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_udop.pt", repo_type="dataset")
+        input_ids = torch.load(filepath)
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="bbox_udop.pt", repo_type="dataset")
+        bbox = torch.load(filepath)
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-image", filename="pixel_values_udop_224.pt", repo_type="dataset"
+        )
+        pixel_values = torch.load(filepath)
 
-    model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
-    outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
+        model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
+        outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
 
-    print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
@@ -177,14 +194,8 @@ if __name__ == "__main__":
         "--model_name",
         default="udop-large",
         type=str,
-        choices=["udop-large", "udop-dual-large"],
+        choices=["udop-large", "udop-large-512", "udop-large-512-300k"],
         help=("Name of the UDOP model you'd like to convert."),
-    )
-    parser.add_argument(
-        "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-224/pytorch_model.bin",
-        type=str,
-        help="Path to the original PyTorch checkpoint.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -194,4 +205,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_udop_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_udop_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -53,7 +53,8 @@ width, height = image.size
 
 - At inference time, it's recommended to use the `generate` method to autoregressively generate text given a document image.
 - One can use [`UdopProcessor`] to prepare images and text for the model. By default, this class uses the Tesseract engine to extract a list of words
-and boxes (coordinates) from a given document.
+and boxes (coordinates) from a given document. Its functionality is equivalent to that of [`LayoutLMv3Processor`], hence it supports passing either
+`apply_ocr=False` in case you prefer to use your own OCR engine or `apply_ocr=True` in case you want the default OCR engine to be used.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/microsoft/UDOP).

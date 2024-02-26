@@ -35,6 +35,9 @@ class UdopProcessor(ProcessorMixin):
     Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
     classification tasks (such as FUNSD, CORD).
 
+    Additionally, it also supports passing `text_target` and `text_pair_target` to the tokenizer, which can be used to
+    prepare labels for language modeling tasks.
+
     Args:
         image_processor (`LayoutLMv3ImageProcessor`):
             An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
