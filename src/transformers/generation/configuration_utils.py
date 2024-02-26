@@ -34,12 +34,7 @@ from ..utils import (
 
 
 logger = logging.get_logger(__name__)
-METADATA_FIELDS = (
-    "_from_model_config",
-    "_commit_hash",
-    "_original_object_hash",
-    "transformers_version",
-)
+METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 
 
 class GenerationConfig(PushToHubMixin):
@@ -261,11 +256,14 @@ class GenerationConfig(PushToHubMixin):
               reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
-        > Gneration parameters for Pagedattention
+
+         > Gneration parameters for Pagedattention
+         
         num_blocks (`int`, *optional*, defaults to 8):
             The number of blocks in the paged attention mechanism.
         block_size (`int`, *optional*, defaults to 64):
             The size of each block in the paged attention mechanism.
+            
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
@@ -313,9 +311,7 @@ class GenerationConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
-        self.exponential_decay_length_penalty = kwargs.pop(
-            "exponential_decay_length_penalty", None
-        )
+        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
@@ -337,23 +333,19 @@ class GenerationConfig(PushToHubMixin):
         self.eos_token_id = kwargs.pop("eos_token_id", None)
 
         # Generation parameters exclusive to encoder-decoder models
-        self.encoder_no_repeat_ngram_size = kwargs.pop(
-            "encoder_no_repeat_ngram_size", 0
-        )
+        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
-        self.num_assistant_tokens_schedule = kwargs.pop(
-            "num_assistant_tokens_schedule", "heuristic"
-        )
-
-        # PagedAttention
-        self.num_blocks = kwargs.pop("num_blocks", 8)
-        self.block_size = kwargs.pop("block_size", 64)
+        self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
+        
+         # PagedAttention
+        self.num_blocks = kwargs.pop("num_blocks", 8)
+        self.block_size = kwargs.pop("block_size", 64)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
@@ -388,12 +380,8 @@ class GenerationConfig(PushToHubMixin):
         if not isinstance(other, GenerationConfig):
             return False
 
-        self_without_metadata = self.to_json_string(
-            use_diff=False, ignore_metadata=True
-        )
-        other_without_metadata = other.to_json_string(
-            use_diff=False, ignore_metadata=True
-        )
+        self_without_metadata = self.to_json_string(use_diff=False, ignore_metadata=True)
+        other_without_metadata = other.to_json_string(use_diff=False, ignore_metadata=True)
         return self_without_metadata == other_without_metadata
 
     def __repr__(self):
@@ -410,13 +398,9 @@ class GenerationConfig(PushToHubMixin):
 
         # Validation of individual attributes
         if self.early_stopping not in {True, False, "never"}:
-            raise ValueError(
-                f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}."
-            )
+            raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
-            raise ValueError(
-                f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}."
-            )
+            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
 
         # Validation of attribute relations:
         fix_location = ""
@@ -435,48 +419,34 @@ class GenerationConfig(PushToHubMixin):
             )
             if self.temperature is not None and self.temperature != 1.0:
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(
-                        flag_name="temperature", flag_value=self.temperature
-                    ),
+                    greedy_wrong_parameter_msg.format(flag_name="temperature", flag_value=self.temperature),
                     UserWarning,
                 )
             if self.top_p is not None and self.top_p != 1.0:
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(
-                        flag_name="top_p", flag_value=self.top_p
-                    ),
+                    greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p),
                     UserWarning,
                 )
             if self.typical_p is not None and self.typical_p != 1.0:
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(
-                        flag_name="typical_p", flag_value=self.typical_p
-                    ),
+                    greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p),
                     UserWarning,
                 )
             if (
-                self.top_k is not None
-                and self.top_k != 50
-                and self.penalty_alpha is None
+                self.top_k is not None and self.top_k != 50 and self.penalty_alpha is None
             ):  # contrastive search uses top_k
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(
-                        flag_name="top_k", flag_value=self.top_k
-                    ),
+                    greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k),
                     UserWarning,
                 )
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(
-                        flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
-                    ),
+                    greedy_wrong_parameter_msg.format(flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff),
                     UserWarning,
                 )
             if self.eta_cutoff is not None and self.eta_cutoff != 0.0:
                 warnings.warn(
-                    greedy_wrong_parameter_msg.format(
-                        flag_name="eta_cutoff", flag_value=self.eta_cutoff
-                    ),
+                    greedy_wrong_parameter_msg.format(flag_name="eta_cutoff", flag_value=self.eta_cutoff),
                     UserWarning,
                 )
 
@@ -488,14 +458,11 @@ class GenerationConfig(PushToHubMixin):
         if self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
                 "`num_beams` is set to 1. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
-                "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
-                + fix_location
+                "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`." + fix_location
             )
             if self.early_stopping is not False:
                 warnings.warn(
-                    single_beam_wrong_parameter_msg.format(
-                        flag_name="early_stopping", flag_value=self.early_stopping
-                    ),
+                    single_beam_wrong_parameter_msg.format(flag_name="early_stopping", flag_value=self.early_stopping),
                     UserWarning,
                 )
             if self.num_beam_groups is not None and self.num_beam_groups != 1:
@@ -514,16 +481,12 @@ class GenerationConfig(PushToHubMixin):
                 )
             if self.length_penalty is not None and self.length_penalty != 1.0:
                 warnings.warn(
-                    single_beam_wrong_parameter_msg.format(
-                        flag_name="length_penalty", flag_value=self.length_penalty
-                    ),
+                    single_beam_wrong_parameter_msg.format(flag_name="length_penalty", flag_value=self.length_penalty),
                     UserWarning,
                 )
             if self.constraints is not None:
                 warnings.warn(
-                    single_beam_wrong_parameter_msg.format(
-                        flag_name="constraints", flag_value=self.constraints
-                    ),
+                    single_beam_wrong_parameter_msg.format(flag_name="constraints", flag_value=self.constraints),
                     UserWarning,
                 )
 
@@ -538,9 +501,7 @@ class GenerationConfig(PushToHubMixin):
                 )
                 if self.do_sample is True:
                     raise ValueError(
-                        constrained_wrong_parameter_msg.format(
-                            flag_name="do_sample", flag_value=self.do_sample
-                        )
+                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
                     )
                 if self.num_beam_groups is not None and self.num_beam_groups != 1:
                     raise ValueError(
@@ -555,14 +516,9 @@ class GenerationConfig(PushToHubMixin):
                     "this generation mode, "
                 )
                 if self.do_sample is True:
-                    raise ValueError(
-                        group_error_prefix + "`do_sample` must be set to `False`"
-                    )
+                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
                 if self.num_beams % self.num_beam_groups != 0:
-                    raise ValueError(
-                        group_error_prefix
-                        + "`num_beams` should be divisible by `num_beam_groups`"
-                    )
+                    raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
                 if self.diversity_penalty == 0.0:
                     raise ValueError(
                         group_error_prefix
@@ -634,8 +590,7 @@ class GenerationConfig(PushToHubMixin):
         except ValueError as exc:
             raise ValueError(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration.\n\nThrown during validation:\n"
-                + str(exc)
+                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc)
             )
 
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -651,14 +606,10 @@ class GenerationConfig(PushToHubMixin):
                 )
             kwargs["token"] = use_auth_token
 
-        config_file_name = (
-            config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
-        )
+        config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         if os.path.isfile(save_directory):
-            raise AssertionError(
-                f"Provided path ({save_directory}) should be a directory, not a file"
-            )
+            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -777,9 +728,7 @@ class GenerationConfig(PushToHubMixin):
         >>> unused_kwargs
         {'foo': False}
         ```"""
-        config_file_name = (
-            config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
-        )
+        config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -859,21 +808,15 @@ class GenerationConfig(PushToHubMixin):
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
-            logger.info(
-                f"loading configuration file {configuration_file} from cache at {resolved_config_file}"
-            )
+            logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
         if kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
-            config._original_object_hash = hash(
-                config
-            )  # Hash to detect whether the instance was modified
+            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config, unused_kwargs
         else:
             config = cls.from_dict(config_dict, **kwargs)
-            config._original_object_hash = hash(
-                config
-            )  # Hash to detect whether the instance was modified
+            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
 
     @classmethod
@@ -922,9 +865,7 @@ class GenerationConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(
-            d["torch_dtype"], str
-        ):
+        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
@@ -947,11 +888,7 @@ class GenerationConfig(PushToHubMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if (
-                key not in default_config_dict
-                or key == "transformers_version"
-                or value != default_config_dict[key]
-            ):
+            if key not in default_config_dict or key == "transformers_version" or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
@@ -978,9 +915,7 @@ class GenerationConfig(PushToHubMixin):
         self.dict_torch_dtype_to_str(output)
         return output
 
-    def to_json_string(
-        self, use_diff: bool = True, ignore_metadata: bool = False
-    ) -> str:
+    def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -1005,10 +940,7 @@ class GenerationConfig(PushToHubMixin):
 
         def convert_keys_to_string(obj):
             if isinstance(obj, dict):
-                return {
-                    str(key): convert_keys_to_string(value)
-                    for key, value in obj.items()
-                }
+                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
             elif isinstance(obj, list):
                 return [convert_keys_to_string(item) for item in obj]
             else:
@@ -1018,9 +950,7 @@ class GenerationConfig(PushToHubMixin):
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(
-        self, json_file_path: Union[str, os.PathLike], use_diff: bool = True
-    ):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
         """
         Save this instance to a JSON file.
 
@@ -1049,9 +979,7 @@ class GenerationConfig(PushToHubMixin):
         """
         config_dict = model_config.to_dict()
         config_dict.pop("_from_model_config", None)
-        config = cls.from_dict(
-            config_dict, return_unused_kwargs=False, _from_model_config=True
-        )
+        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config.
@@ -1060,14 +988,10 @@ class GenerationConfig(PushToHubMixin):
                 default_generation_config = GenerationConfig()
                 decoder_config = config_dict[decoder_name]
                 for attr in config.to_dict().keys():
-                    if attr in decoder_config and getattr(config, attr) == getattr(
-                        default_generation_config, attr
-                    ):
+                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
 
-        config._original_object_hash = hash(
-            config
-        )  # Hash to detect whether the instance was modified
+        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
         return config
 
     def update(self, **kwargs):
@@ -1092,7 +1016,5 @@ class GenerationConfig(PushToHubMixin):
         self.validate()
 
         # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {
-            key: value for key, value in kwargs.items() if key not in to_remove
-        }
+        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
