@@ -316,7 +316,7 @@ def prepare_layoutlm_batch_inputs():
 class LayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_no_head(self):
-        model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased").to(torch_device)
+        model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased", force_download=True).to(torch_device)
 
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
 
