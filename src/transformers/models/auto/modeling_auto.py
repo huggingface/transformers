@@ -193,6 +193,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TModel"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Model"),
         ("segformer", "SegformerModel"),
+        ("seggpt", "SegGptModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("siglip", "SiglipModel"),
