@@ -318,8 +318,8 @@ class LayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_no_head(self):
         # os.rmdir("/mnt/cache/hub/models--microsoft--layoutlm-base-uncased/")
-        import shutil
-        shutil.rmtree('/mnt/cache/hub/models--microsoft--layoutlm-base-uncased', ignore_errors=True)
+        # import shutil
+        # shutil.rmtree('/mnt/cache/hub/models--microsoft--layoutlm-base-uncased', ignore_errors=True)
         model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased", force_download=True).to(torch_device)
 
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
