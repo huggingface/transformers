@@ -216,7 +216,7 @@ class StopStringCriteria(StoppingCriteria):
         # before hitting the mask
         string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
 
-        # We return a per-sample vector that is True is any stop string is matched for that sample
+        # We return a per-sample vector that is True if any stop string is matched for that sample
         return torch.any(string_matches, dim=-1)
 
 
