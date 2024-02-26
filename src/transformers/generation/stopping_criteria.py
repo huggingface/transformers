@@ -162,7 +162,7 @@ class StopStringCriteria(StoppingCriteria):
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.Tensor:
         self.embedding_vec = self.embedding_vec.to(input_ids.device)
         self.target_lens = self.target_lens.to(input_ids.device)
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
@@ -217,8 +217,7 @@ class StopStringCriteria(StoppingCriteria):
         string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
 
         # Now we concatenate the match booleans across all strings and check if any are True
-        # TODO After Raushan's PR, return a per-sample vector here
-        return torch.any(string_matches).item()
+        return torch.any(string_matches, dim=-1)
 
 
 class EosTokenCriteria(StoppingCriteria):
