@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Transformer Language Model")
-    parser.add_argument("--model_name", type=str, default="transfo-xl-wt103", help="pretrained model name")
+    parser.add_argument("--model_name", type=str, default="transfo-xl/transfo-xl-wt103", help="pretrained model name")
     parser.add_argument(
         "--split", type=str, default="test", choices=["all", "valid", "test"], help="which split to evaluate"
     )

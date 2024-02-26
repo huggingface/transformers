@@ -16,7 +16,7 @@ if is_tensorflow_text_available():
     from transformers.models.bert import TFBertTokenizer
 
 
-TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
+TOKENIZER_CHECKPOINTS = ["google-bert/bert-base-uncased", "google-bert/bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():

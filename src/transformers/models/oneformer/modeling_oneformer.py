@@ -31,6 +31,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     logging,
     replace_return_docstrings,
@@ -39,6 +40,10 @@ from ...utils import (
 from ...utils.backbone_utils import load_backbone
 from .configuration_oneformer import OneFormerConfig
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
@@ -723,6 +728,12 @@ class OneFormerLoss(nn.Module):
         """
         num_masks = sum([len(classes) for classes in class_labels])
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
+        world_size = 1
+        if PartialState._shared_state != {}:
+            num_masks_pt = reduce(num_masks_pt)
+            world_size = PartialState().num_processes
+
+        num_masks_pt = torch.clamp(num_masks_pt / world_size, min=1)
         return num_masks_pt
 
 

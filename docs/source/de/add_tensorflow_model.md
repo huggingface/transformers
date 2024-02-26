@@ -42,7 +42,7 @@ Sind Sie unsicher, ob das Modell, das Sie verwenden möchten, bereits eine entsp
 &nbsp;
 
 Überprüfen Sie das Feld `model_type` in der `config.json` des Modells Ihrer Wahl
-([Beispiel](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). Wenn der entsprechende Modellordner in
+([Beispiel](https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json#L14)). Wenn der entsprechende Modellordner in
 🤗 Transformers eine Datei hat, deren Name mit "modeling_tf" beginnt, bedeutet dies, dass es eine entsprechende TensorFlow
 Architektur hat ([Beispiel](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
 
@@ -83,7 +83,7 @@ Sie sich nicht auf eine bestimmte Architektur festgelegt haben, ist es eine gute
 Wir werden Sie zu den wichtigsten Architekturen führen, die auf der TensorFlow-Seite noch fehlen.
 Seite fehlen. Wenn das spezifische Modell, das Sie mit TensorFlow verwenden möchten, bereits eine Implementierung der TensorFlow-Architektur in
 🤗 Transformers, aber es fehlen Gewichte, können Sie direkt in den
-Abschnitt [Gewichtskonvertierung](#adding-tensorflow-weights-to-hub)
+Abschnitt [Gewichtskonvertierung](#hinzufügen-von-tensorflow-gewichten-zum--hub)
 auf dieser Seite.
 
 Der Einfachheit halber wird im Rest dieser Anleitung davon ausgegangen, dass Sie sich entschieden haben, mit der TensorFlow-Version von

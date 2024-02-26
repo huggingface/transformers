@@ -666,7 +666,7 @@ class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFRobertaForMaskedLM.from_pretrained("roberta-base")
+        model = TFRobertaForMaskedLM.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -680,7 +680,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = TFRobertaModel.from_pretrained("roberta-base")
+        model = TFRobertaModel.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -692,7 +692,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_classification_head(self):
-        model = TFRobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
+        model = TFRobertaForSequenceClassification.from_pretrained("FacebookAI/roberta-large-mnli")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]

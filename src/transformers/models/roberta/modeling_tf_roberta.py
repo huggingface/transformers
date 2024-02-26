@@ -62,14 +62,14 @@ from .configuration_roberta import RobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "roberta-base",
-    "roberta-large",
-    "roberta-large-mnli",
-    "distilroberta-base",
+    "FacebookAI/roberta-base",
+    "FacebookAI/roberta-large",
+    "FacebookAI/roberta-large-mnli",
+    "distilbert/distilroberta-base",
     # See all RoBERTa models at https://huggingface.co/models?filter=roberta
 ]
 
