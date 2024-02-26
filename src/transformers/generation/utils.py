@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, ModelCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -369,6 +369,18 @@ class GenerationMixin:
     def prepare_inputs_for_generation(self, *args, **kwargs):
         raise NotImplementedError(
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
+        )
+
+    def _setup_cache(self, *args, **kwargs):
+        raise NotImplementedError(
+            "A model class needs to define a `_setup_cache` method in order to use in `.generate()` with the defined "
+            "`cache_implementation`."
+        )
+
+    def _reset_cache(self, *args, **kwargs):
+        raise NotImplementedError(
+            "A model class needs to define a `_reset_cache` method in order to use in `.generate()` with the defined "
+            "`cache_implementation`."
         )
 
     def _prepare_model_inputs(
@@ -1458,15 +1470,19 @@ class GenerationMixin:
             if generation_config.cache_implementation == "static":
                 if model_kwargs.get("past_key_values", False) is not False:
                     raise ValueError(
-                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
+                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not "
+                        "supported. Please open an issue in Transformers GitHub repository."
                     )
                 cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-                if not callable(getattr(self, "_setup_cache", None)):
-                    raise ValueError(
-                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                        " Make sure it has a `_setup_cache` function."
-                    )
-                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+                self._setup_cache(
+                    cache_cls=cache_cls,
+                    cache_kwargs={
+                        "max_batch_size": batch_size,
+                        "max_cache_len": generation_config.max_length,
+                        "config": self.config,
+                        "device": self.device,
+                    },
+                )
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -1528,7 +1544,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            result = self.assisted_decoding(
+            generate_output = self.assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
@@ -1546,7 +1562,7 @@ class GenerationMixin:
             )
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
-            result = self.greedy_search(
+            generate_output = self.greedy_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -1564,7 +1580,7 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
 
-            result = self.contrastive_search(
+            generate_output = self.contrastive_search(
                 input_ids,
                 top_k=generation_config.top_k,
                 penalty_alpha=generation_config.penalty_alpha,
@@ -1594,7 +1610,7 @@ class GenerationMixin:
             )
 
             # 13. run sample
-            result = self.sample(
+            generate_output = self.sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
@@ -1628,7 +1644,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            result = self.beam_search(
+            generate_output = self.beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1667,7 +1683,7 @@ class GenerationMixin:
             )
 
             # 14. run beam sample
-            result = self.beam_sample(
+            generate_output = self.beam_sample(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1702,7 +1718,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            result = self.group_beam_search(
+            generate_output = self.group_beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1776,7 +1792,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            result = self.constrained_beam_search(
+            generate_output = self.constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1791,14 +1807,9 @@ class GenerationMixin:
             )
 
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            if not callable(getattr(self, "_reset_cache", None)):
-                raise ValueError(
-                    "A `static_cache` was used to generate but there was a failure when trying to  release the cache. "
-                    " Make sure this model implements a `_reset_cache` function."
-                )
             self._reset_cache()
 
-        return result
+        return generate_output
 
     @torch.no_grad()
     def contrastive_search(
@@ -2822,17 +2833,17 @@ class GenerationMixin:
         # Exception 1: code path for models using the legacy cache format
         if isinstance(past_key_values, (tuple, list)):
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
-        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
+        # Exception 2: models with different cache formats. These are limited to `DynamicCache` caches until their
         # cache format is standardized, to avoid adding complexity to the codebase.
         elif "bloom" in model_class or "gptbigcode" in model_class:
-            if not isinstance(past_key_values, DynamicCache):
+            if not isinstance(past_key_values.caches[0], DynamicCache):
                 raise ValueError(
                     f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
                     "legacy tuple format or `DynamicCache`"
                 )
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-        # Standard code path: use the `Cache.reorder_cache`
+            past_key_values = ModelCache.from_legacy_cache(past_key_values)
+        # Standard code path: use the caches' `.reorder_cache`
         else:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values

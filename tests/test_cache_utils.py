@@ -36,7 +36,8 @@ if is_torch_available():
         AutoTokenizer,
         DynamicCache,
         LlamaConfig,
-        LlamaForCausalLM,
+        MistralForCausalLM,
+        ModelCache,
         SinkCache,
         StaticCache,
     )
@@ -44,22 +45,23 @@ if is_torch_available():
 
 @require_torch
 class CacheTest(unittest.TestCase):
-    def test_dynamic_cache_retrocompatibility(self):
-        """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
+    def test_model_cache_retrocompatibility(self):
+        """Tests that we can convert back and forth between the legacy cache format and ModelCache"""
+        num_layers = 10
         legacy_cache = ()
-        new_cache = DynamicCache()
+        new_cache = ModelCache([DynamicCache() for _ in range(num_layers)])
 
-        # Creates a new cache with 10 layers in both formats
-        for layer_idx in range(10):
+        # Creates a new cache with `num_layers` layers in both formats
+        for layer_idx in range(num_layers):
             new_key = torch.rand((2, 4, 8, 16))
             new_value = torch.rand((2, 4, 8, 16))
-            new_cache.update(new_key, new_value, layer_idx)
+            new_cache.caches[layer_idx].update(new_key, new_value)
             legacy_cache += ((new_key, new_value),)
 
         # Sanity check 1: they must have the same shapes
         self.assertTrue(len(legacy_cache), len(new_cache))
-        for layer_idx in range(10):
-            self.assertTrue(len(legacy_cache[layer_idx]), len(legacy_cache[layer_idx]))
+        for layer_idx in range(num_layers):
+            self.assertTrue(len(legacy_cache[layer_idx]), len(new_cache[layer_idx]))
             for key_value_idx in range(2):
                 self.assertTrue(
                     legacy_cache[layer_idx][key_value_idx].shape == new_cache[layer_idx][key_value_idx].shape
@@ -70,15 +72,15 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(legacy_cache[0][0].shape[-2] == new_cache[0][0].shape[-2] == new_cache.get_seq_length() == 8)
 
         # Sanity check 3: they must be equal, and both support indexing
-        for layer_idx in range(10):
+        for layer_idx in range(num_layers):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
                 )
 
         # Test 1: We can convert from legacy to new with no changes
-        from_legacy = DynamicCache.from_legacy_cache(legacy_cache)
-        for layer_idx in range(10):
+        from_legacy = ModelCache.from_legacy_cache(legacy_cache)
+        for layer_idx in range(num_layers):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
@@ -86,7 +88,7 @@ class CacheTest(unittest.TestCase):
 
         # Test 2: We can convert from new to legacy with no changes
         to_legacy = new_cache.to_legacy_cache()
-        for layer_idx in range(10):
+        for layer_idx in range(num_layers):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
@@ -94,16 +96,17 @@ class CacheTest(unittest.TestCase):
 
     def test_reorder_cache_retrocompatibility(self):
         """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
-        legacy_reorder_fn = LlamaForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
+        legacy_reorder_fn = MistralForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
 
+        num_layers = 10
         legacy_cache = ()
-        new_cache = DynamicCache()
+        new_cache = ModelCache([DynamicCache() for _ in range(num_layers)])
 
         # Creates a new cache with 10 layers in both formats
-        for layer_idx in range(10):
+        for layer_idx in range(num_layers):
             new_key = torch.rand((4, 4, 8, 16))
             new_value = torch.rand((4, 4, 8, 16))
-            new_cache.update(new_key, new_value, layer_idx)
+            new_cache.caches[layer_idx].update(new_key, new_value)
             legacy_cache += ((new_key, new_value),)
 
         # Let's create some dummy beam indices. From the shape above, it is equivalent to the case where num_beams=4
@@ -114,7 +117,7 @@ class CacheTest(unittest.TestCase):
         new_cache.reorder_cache(beam_idx)
 
         # Let's check that the results are the same
-        for layer_idx in range(10):
+        for layer_idx in range(num_layers):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(
@@ -143,7 +146,7 @@ class CacheTest(unittest.TestCase):
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mha_config), cache_kwargs={"cache_position": torch.arange(1)}
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
@@ -151,7 +154,7 @@ class CacheTest(unittest.TestCase):
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(gqa_config), cache_kwargs={"cache_position": torch.arange(1)}
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
@@ -159,7 +162,7 @@ class CacheTest(unittest.TestCase):
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
+            *_random_kvs(mqa_config), cache_kwargs={"cache_position": torch.arange(1)}
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
@@ -179,7 +182,8 @@ class CacheIntegrationTest(unittest.TestCase):
         set_seed(0)
         gen_out_legacy = model.generate(**inputs, do_sample=True, max_new_tokens=256)
         set_seed(0)
-        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache())
+        external_dynamic_cache = ModelCache([DynamicCache() for _ in range(model.config.num_hidden_layers)])
+        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=external_dynamic_cache)
         self.assertListEqual(gen_out_legacy.tolist(), gen_out.tolist())
 
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
@@ -195,6 +199,7 @@ class CacheIntegrationTest(unittest.TestCase):
             "also like to be scratched.\nCats are also very clean. They like to groom themselves, and they like to "
             "clean their litter box.\nCats are also very independent. They don't"
         )
+        print(decoded[0])
         self.assertEqual(decoded[0], expected_text)
 
     def test_dynamic_cache_batched(self):
@@ -207,7 +212,8 @@ class CacheIntegrationTest(unittest.TestCase):
             model.device
         )
 
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
+        external_dynamic_cache = ModelCache([DynamicCache() for _ in range(model.config.num_hidden_layers)])
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=external_dynamic_cache)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
         self.assertListEqual(decoded, expected_text)
@@ -242,8 +248,10 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
         # without a SinkCache, the last few tokens are gibberish (ends in "of the of the of a of a of")
-        cache = SinkCache(window_length=508, num_sink_tokens=4)
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=cache)
+        external_sink_cache = ModelCache(
+            [SinkCache(window_length=508, num_sink_tokens=4) for _ in range(model.config.num_hidden_layers)]
+        )
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=external_sink_cache)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertTrue(decoded[0].endswith("to perform a variety of tasks. The Transformer is a neural network"))
 
@@ -259,7 +267,9 @@ class CacheIntegrationTest(unittest.TestCase):
         )
 
         # Prepare generation settings
-        cache = SinkCache(window_length=256, num_sink_tokens=4)
+        external_sink_cache = ModelCache(
+            [SinkCache(window_length=256, num_sink_tokens=4) for _ in range(model.config.num_hidden_layers)]
+        )
         input_ids = torch.tensor([], device=model.device, dtype=torch.int)
         for _ in range(3):
             # Tokenize the prompt with the correct chat template
@@ -271,12 +281,12 @@ class CacheIntegrationTest(unittest.TestCase):
 
             # Perform the generation
             gen_out = model.generate(
-                input_ids, do_sample=False, max_new_tokens=100, past_key_values=cache, use_cache=True
+                input_ids, do_sample=False, max_new_tokens=100, past_key_values=external_sink_cache, use_cache=True
             )
             input_ids = gen_out
 
         # We went well beyond the cache length
-        self.assertTrue(input_ids.shape[1] > cache.get_max_length() * 1.5)
+        self.assertTrue(input_ids.shape[1] > external_sink_cache.get_max_length() * 1.5)
 
         # And it still produces a coherent english
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
@@ -291,9 +301,9 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
-    def test_static_cache_greedy_sampling_pad_left(self, attn_implementation):
+    def test_static_cache_greedy_decoding_pad_left(self, attn_implementation):
         EXPECTED_GENERATION = [
-            "The best color is the one that complements the skin tone of the",
+            "The best color is the one that complements the subject you are photograph",
             "We should not undermind the issues at hand.\nWe should not undermind the issues",
         ]
 
@@ -331,10 +341,10 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
-    def test_static_cache_greedy_sampling_pad_right(self, attn_implementation):
+    def test_static_cache_greedy_decoding_pad_right(self, attn_implementation):
         EXPECTED_GENERATION = [
-            "The best color isЋ the one that complements the skin tone of",
-            "We should not undermind the issues at hand.\nWe should not undermind the issues",
+            "The best color is\n\n\n\n\n\n\n\n\n\n",
+            "We should not undermind the issues at hand, but address them head on.\nI think",
         ]
 
         tokenizer = AutoTokenizer.from_pretrained(
