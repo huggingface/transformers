@@ -112,8 +112,8 @@ class LlamaRotaryEmbedding(nn.Module):
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(dtype), persistent=False)
+        self._cos_cached = emb.cos().to(dtype)
+        self._sin_cached = emb.sin().to(dtype)
 
     @property
     def sin_cached(self):
