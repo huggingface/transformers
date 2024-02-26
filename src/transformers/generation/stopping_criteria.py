@@ -281,6 +281,8 @@ def _stop_string_get_matching_positions(
     def _cleanup_token(token: str) -> str:
         if token[0] in ["▁", "Ġ"]:
             token = " " + token[1:]
+        elif token[0] == "##":
+            token = token[2:]
         return token
 
     reversed_filtered_tok_list = [_cleanup_token(token)[::-1] for token in tok_list]
