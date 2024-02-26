@@ -716,7 +716,7 @@ class ModelTesterMixin:
                 return
             else:
                 # indexing the first element does not always work
-                # e.g. models that output similarity scores pf size (N, M) would need to index [0, 0]
+                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
                 slice_ids = [slice(0, index) for index in single_row_object.shape]
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
