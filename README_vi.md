@@ -83,7 +83,7 @@ Các mô hình Transformer cũng có thể thực hiện các nhiệm vụ trên
 
 🤗 Transformers được hỗ trợ bởi ba thư viện học sâu phổ biến nhất — [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) và [TensorFlow](https://www.tensorflow.org/) — với tích hợp mượt mà giữa chúng. Việc huấn luyện mô hình của bạn với một thư viện trước khi tải chúng để sử dụng trong suy luận với thư viện khác là rất dễ dàng.
 
-## Online demos
+## Các demo trực tuyến
 
 Bạn có thể kiểm tra hầu hết các mô hình của chúng tôi trực tiếp trên trang của chúng từ [model hub](https://huggingface.co/models). Chúng tôi cũng cung cấp [dịch vụ lưu trữ mô hình riêng tư, phiên bản và API suy luận](https://huggingface.co/pricing) cho các mô hình công khai và riêng tư.
 
@@ -160,12 +160,12 @@ Nhiều nhiệm vụ có sẵn một `pipeline` được huấn luyện trước
 >>> from PIL import Image
 >>> from transformers import pipeline
 
-# Download an image with cute cats
+# Tải xuống một hình ảnh với những con mèo dễ thương
 >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
 >>> image_data = requests.get(url, stream=True).raw
 >>> image = Image.open(image_data)
 
-# Allocate a pipeline for object detection
+# Cấp phát một pipeline cho phát hiện đối tượng
 >>> object_detector = pipeline('object-detection')
 >>> object_detector(image)
 [{'score': 0.9982201457023621,
