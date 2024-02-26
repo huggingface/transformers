@@ -154,7 +154,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
         logger.warning(
             f"{self.__class__.__name__} will cause recompilations for every new token if used with `torch.compile`."
-            "do not add `min_length` in generation config for efficient compilation"
+            "Do not add `min_length` in generation config for efficient compilation"
         )
 
         self.min_length = min_length
