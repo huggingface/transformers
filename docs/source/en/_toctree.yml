@@ -734,6 +734,8 @@
         title: GroupViT
       - local: model_doc/idefics
         title: IDEFICS
+      - local: model_doc/idefics2
+        title: IDEFICS2
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/kosmos-2

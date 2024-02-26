@@ -562,6 +562,10 @@ _import_structure = {
         "LlavaNextConfig",
         "LlavaNextProcessor",
     ],
+    "models.idefics2": [
+        "IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Idefics2Config",
+    ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -2554,6 +2558,14 @@ else:
             "LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LlavaNextForConditionalGeneration",
             "LlavaNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.idefics2"].extend(
+        [
+            "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Idefics2ForConditionalGeneration",
+            "Idefics2PreTrainedModel",
+           
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5446,6 +5458,10 @@ if TYPE_CHECKING:
         LlavaNextConfig,
         LlavaNextProcessor,
     )
+    from .models.idefics2 import (
+        IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Idefics2Config,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -7232,6 +7248,12 @@ if TYPE_CHECKING:
             LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaNextForConditionalGeneration,
             LlavaNextPreTrainedModel,
+        )
+        from .models.idefics2 import (
+            IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Idefics2ForConditionalGeneration,
+            Idefics2PreTrainedModel,
+           
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

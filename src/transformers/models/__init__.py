@@ -124,7 +124,7 @@ from . import (
     lilt,
     llama,
     llava,
-    llava_next,
+    idefics2,
     longformer,
     longt5,
     luke,
