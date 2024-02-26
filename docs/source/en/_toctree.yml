@@ -354,6 +354,8 @@
         title: Funnel Transformer
       - local: model_doc/fuyu
         title: Fuyu
+      - local: model_doc/gemma
+        title: Gemma
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -581,6 +583,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin
