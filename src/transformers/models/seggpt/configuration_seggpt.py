@@ -70,7 +70,7 @@ class SegGptConfig(PretrainedConfig):
         decoder_hidden_size (`int`, *optional*, defaults to 64):
             Hidden size for decoder.
         use_relative_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to use relative position encoding in the attention layer
+            Whether to use relative position embeddings in the attention layers.
         merge_index (`int`, *optional*, defaults to 2):
             The index of the encoder layer to merge the embeddings.
         intermediate_hidden_state_indices (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
