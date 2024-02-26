@@ -862,6 +862,11 @@ class GenerationMixin:
                 EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
             )
         if generation_config.bad_words_ids is not None:
+            if generation_config.sequence_bias is not None:
+                logger.warning(
+                    "If using `torch.compile`,'NoBadWordsLogitsProcessor' cannot be used together with `SequenceBiasLogitsProcessor` "
+                    "To compile generation, add only one to generation config: `bias` or 'bad_words_ids'"
+                )
             processors.append(
                 NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
             )
@@ -1949,7 +1954,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
-        batch_size = input_ids.shape[0]
+        batch_size, cur_len = input_ids.shape
 
         while True:
             if synced_gpus:
@@ -2016,8 +2021,8 @@ class GenerationMixin:
             # contrastive_search main logic start:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by
             # degeneration penalty
-            processed_logit_for_next_step = logits_processor(input_ids, logit_for_next_step)
-            processed_logit_for_next_step = logits_warper(input_ids, processed_logit_for_next_step)
+            processed_logit_for_next_step = logits_processor(input_ids, logit_for_next_step, cur_len=cur_len)
+            processed_logit_for_next_step = logits_warper(input_ids, processed_logit_for_next_step, cur_len=cur_len)
             next_probs = nn.functional.softmax(processed_logit_for_next_step, dim=-1)
 
             top_k_probs, top_k_ids = torch.topk(next_probs, dim=-1, k=top_k)
@@ -2197,6 +2202,8 @@ class GenerationMixin:
                 # stop when each sentence is finished
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
+
+            cur_len += 1
 
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):
@@ -2400,6 +2407,7 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        _, cur_len = input_ids.shape
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -2430,7 +2438,7 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, next_token_logits)
+            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len=cur_len)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -2481,6 +2489,8 @@ class GenerationMixin:
                 # stop when each sentence is finished
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
+
+            cur_len += 1
 
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):
@@ -2694,6 +2704,7 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        _, cur_len = input_ids.shape
 
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
@@ -2725,8 +2736,8 @@ class GenerationMixin:
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
-            next_token_scores = logits_warper(input_ids, next_token_scores)
+            next_token_scores = logits_processor(input_ids, next_token_logits, cur_len=cur_len)
+            next_token_scores = logits_warper(input_ids, next_token_scores, cur_len=cur_len)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -2775,6 +2786,8 @@ class GenerationMixin:
                 # stop when each sentence is finished
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
+
+            cur_len += 1
 
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):
@@ -3100,7 +3113,7 @@ class GenerationMixin:
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores, cur_len=cur_len)
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
                 next_token_scores_processed
             )
@@ -3444,8 +3457,8 @@ class GenerationMixin:
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-            next_token_scores_processed = logits_warper(input_ids, next_token_scores_processed)
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores, cur_len=cur_len)
+            next_token_scores_processed = logits_warper(input_ids, next_token_scores_processed, cur_len=cur_len)
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
                 next_token_scores_processed
             )
@@ -3825,7 +3838,11 @@ class GenerationMixin:
                 vocab_size = next_token_scores.shape[-1]
 
                 next_token_scores_processed = logits_processor(
-                    group_input_ids, next_token_scores, current_tokens=current_tokens, beam_group_idx=beam_group_idx
+                    group_input_ids,
+                    next_token_scores,
+                    cur_len=cur_len,
+                    current_tokens=current_tokens,
+                    beam_group_idx=beam_group_idx,
                 )
                 next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(-1)
                 next_token_scores = next_token_scores.expand_as(next_token_scores_processed)
@@ -4195,7 +4212,7 @@ class GenerationMixin:
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores, cur_len=cur_len)
 
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
                 next_token_scores_processed
@@ -4542,10 +4559,14 @@ class GenerationMixin:
             next_token_logits = new_logits.clone()
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
-                    new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
+                    new_logits[:, i, :] = logits_processor(
+                        candidate_input_ids[:, : cur_len + i], new_logits[:, i, :], cur_len=cur_len + i
+                    )
             if len(logits_warper) > 0:
                 for i in range(candidate_length + 1):
-                    new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
+                    new_logits[:, i, :] = logits_warper(
+                        candidate_input_ids[:, : cur_len + i], new_logits[:, i, :], cur_len=cur_len + i
+                    )
 
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
@@ -4819,12 +4840,12 @@ def top_k_top_p_filtering(
 
     if top_k > 0:
         logits = TopKLogitsWarper(top_k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
-            None, logits
+            None, logits, None
         )
 
     if 0 <= top_p <= 1.0:
         logits = TopPLogitsWarper(top_p=top_p, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
-            None, logits
+            None, logits, None
         )
 
     return logits
