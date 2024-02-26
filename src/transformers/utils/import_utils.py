@@ -741,6 +741,7 @@ def is_tokenizers_available():
     return _tokenizers_available
 
 
+@lru_cache
 def is_vision_available():
     _pil_available = importlib.util.find_spec("PIL") is not None
     if _pil_available:
