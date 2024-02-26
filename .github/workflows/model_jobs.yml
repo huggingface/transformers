@@ -37,7 +37,7 @@ jobs:
     runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host
     steps:
       - name: Echo input and matrix info
         shell: bash
