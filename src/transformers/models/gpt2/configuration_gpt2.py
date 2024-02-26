@@ -26,11 +26,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "gpt2": "https://huggingface.co/gpt2/resolve/main/config.json",
-    "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/config.json",
-    "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/config.json",
-    "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/config.json",
-    "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/config.json",
+    "openai-community/gpt2": "https://huggingface.co/openai-community/gpt2/resolve/main/config.json",
+    "openai-community/gpt2-medium": "https://huggingface.co/openai-community/gpt2-medium/resolve/main/config.json",
+    "openai-community/gpt2-large": "https://huggingface.co/openai-community/gpt2-large/resolve/main/config.json",
+    "openai-community/gpt2-xl": "https://huggingface.co/openai-community/gpt2-xl/resolve/main/config.json",
+    "distilbert/distilgpt2": "https://huggingface.co/distilbert/distilgpt2/resolve/main/config.json",
 }
 
 
@@ -39,7 +39,7 @@ class GPT2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
     instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPT-2
-    [gpt2](https://huggingface.co/gpt2) architecture.
+    [openai-community/gpt2](https://huggingface.co/openai-community/gpt2) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

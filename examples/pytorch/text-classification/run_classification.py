@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.38.0.dev0")
+check_min_version("4.39.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -404,7 +404,7 @@ def main():
             raw_datasets.pop(split)
 
     if data_args.train_split_name is not None:
-        logger.info(f"using {data_args.validation_split_name} as validation set")
+        logger.info(f"using {data_args.train_split_name} as train set")
         raw_datasets["train"] = raw_datasets[data_args.train_split_name]
         raw_datasets.pop(data_args.train_split_name)
 

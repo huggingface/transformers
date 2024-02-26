@@ -62,16 +62,38 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
             nested_simplify(outputs[0][0]),
             [-1.417, -0.392, -1.264, -1.196, 1.648, 0.885, 0.56, -0.606, -1.175, 0.823, 1.912, 0.081, -0.053, 1.119, -0.062, -1.757, -0.571, 0.075, 0.959, 0.118, 1.201, -0.672, -0.498, 0.364, 0.937, -1.623, 0.228, 0.19, 1.697, -1.115, 0.583, -0.981])  # fmt: skip
 
+    @require_torch
+    def test_small_model_w_pooler_pt(self):
+        feature_extractor = pipeline(
+            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit-w-pooler", framework="pt"
+        )
+        img = prepare_img()
+        outputs = feature_extractor(img, pool=True)
+        self.assertEqual(
+            nested_simplify(outputs[0]),
+            [-0.056,  0.083,  0.021,  0.038,  0.242, -0.279, -0.033, -0.003, 0.200, -0.192,  0.045, -0.095, -0.077,  0.017, -0.058, -0.063, -0.029, -0.204,  0.014,  0.042,  0.305, -0.205, -0.099,  0.146, -0.287,  0.020,  0.168, -0.052,  0.046,  0.048, -0.156,  0.093])  # fmt: skip
+
     @require_tf
     def test_small_model_tf(self):
         feature_extractor = pipeline(
-            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit", framework="tf"
+            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit-w-pooler", framework="tf"
         )
         img = prepare_img()
         outputs = feature_extractor(img)
         self.assertEqual(
             nested_simplify(outputs[0][0]),
             [-1.417, -0.392, -1.264, -1.196, 1.648, 0.885, 0.56, -0.606, -1.175, 0.823, 1.912, 0.081, -0.053, 1.119, -0.062, -1.757, -0.571, 0.075, 0.959, 0.118, 1.201, -0.672, -0.498, 0.364, 0.937, -1.623, 0.228, 0.19, 1.697, -1.115, 0.583, -0.981])  # fmt: skip
+
+    @require_tf
+    def test_small_model_w_pooler_tf(self):
+        feature_extractor = pipeline(
+            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit-w-pooler", framework="tf"
+        )
+        img = prepare_img()
+        outputs = feature_extractor(img, pool=True)
+        self.assertEqual(
+            nested_simplify(outputs[0]),
+            [-0.056,  0.083,  0.021,  0.038,  0.242, -0.279, -0.033, -0.003, 0.200, -0.192,  0.045, -0.095, -0.077,  0.017, -0.058, -0.063, -0.029, -0.204,  0.014,  0.042,  0.305, -0.205, -0.099,  0.146, -0.287,  0.020,  0.168, -0.052,  0.046,  0.048, -0.156,  0.093])  # fmt: skip
 
     @require_torch
     def test_image_processing_small_model_pt(self):
@@ -91,6 +113,10 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         outputs = feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
 
+        # Test pooling option
+        outputs = feature_extractor(img, pool=True)
+        self.assertEqual(np.squeeze(outputs).shape, (32,))
+
     @require_tf
     def test_image_processing_small_model_tf(self):
         feature_extractor = pipeline(
@@ -108,6 +134,10 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         img = prepare_img()
         outputs = feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
+
+        # Test pooling option
+        outputs = feature_extractor(img, pool=True)
+        self.assertEqual(np.squeeze(outputs).shape, (32,))
 
     @require_torch
     def test_return_tensors_pt(self):

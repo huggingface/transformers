@@ -173,14 +173,14 @@ Fügen sie [🤗 Datasets](https://huggingface.co/docs/datasets/) zu Ihrem Offli
 So würden Sie beispielsweise ein Programm in einem normalen Netzwerk mit einer Firewall für externe Instanzen mit dem folgenden Befehl ausführen:
 
 ```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Führen Sie das gleiche Programm in einer Offline-Instanz mit aus:
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Das Skript sollte nun laufen, ohne sich aufzuhängen oder eine Zeitüberschreitung abzuwarten, da es weiß, dass es nur nach lokalen Dateien suchen soll.

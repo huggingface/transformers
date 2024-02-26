@@ -55,7 +55,7 @@ class TextClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
+    >>> classifier = pipeline(model="distilbert/distilbert-base-uncased-finetuned-sst-2-english")
     >>> classifier("This movie is disgustingly good !")
     [{'label': 'POSITIVE', 'score': 1.0}]
 
