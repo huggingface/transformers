@@ -43,6 +43,8 @@ pip install tensorflow
 </tf>
 </frameworkcontent>
 
+If you prefer an interactive tutorial with an accompanying video, try [this free code-along](https://www.datacamp.com/code-along/using-open-source-models-hugging-face) providing an overview of transformers and the Hugging Face ecosystem.
+
 ## Pipeline
 
 <Youtube id="tiZFewofSLM"/>
