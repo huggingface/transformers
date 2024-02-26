@@ -693,7 +693,7 @@ class ModelTesterMixin:
                 expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_batching_support(self):
+    def test_batching_equivalence(self):
         """
         Tests that the model supports batching and that the output is the nearly the same for the same input in
         different batch sizes.
