@@ -349,8 +349,12 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
     # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing() or isinstance(inputs_embeds, torch.fx.Proxy)
+    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+    is_tracing = (
+        torch.jit.is_tracing()
+        or isinstance(inputs_embeds, torch.fx.Proxy)
+        or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+    )
 
     if attention_mask is not None:
         # 4d mask is passed through
@@ -448,10 +452,14 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     batch_size, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
+    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+    is_tracing = (
+        torch.jit.is_tracing()
+        or isinstance(mask, torch.fx.Proxy)
+        or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+    )
 
     if torch.all(mask == 1):
         if is_tracing:
