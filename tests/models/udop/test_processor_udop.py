@@ -63,9 +63,7 @@ class UdopProcessorTest(unittest.TestCase):
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(image_processor_map) + "\n")
 
-        # TODO update organization
-        # TODO update tesseract tests below
-        self.tokenizer_pretrained_name = "nielsr/udop-test"
+        self.tokenizer_pretrained_name = "microsoft/udop-large"
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
@@ -167,8 +165,7 @@ class UdopProcessorTest(unittest.TestCase):
 
         # set up
         datasets = load_dataset("nielsr/funsd")
-        # TODO update organization
-        processor = UdopProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
+        processor = UdopProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
 
         def preprocess_data(examples):
             images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
@@ -214,9 +211,8 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
 
     @cached_property
     def get_tokenizers(self):
-        # TODO update organization
-        slow_tokenizer = UdopTokenizer.from_pretrained("nielsr/udop-test")
-        fast_tokenizer = UdopTokenizerFast.from_pretrained("nielsr/udop-test")
+        slow_tokenizer = UdopTokenizer.from_pretrained("microsoft/udop-large")
+        fast_tokenizer = UdopTokenizerFast.from_pretrained("microsoft/udop-large")
         return [slow_tokenizer, fast_tokenizer]
 
     @slow

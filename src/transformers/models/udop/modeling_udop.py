@@ -47,8 +47,7 @@ from ...utils import (
 logger = logging.getLogger(__name__)
 
 UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update organization
-    "nielsr/udop-large",
+    "microsoft/udop-large",
     # See all UDOP models at https://huggingface.co/models?filter=udop
 ]
 
@@ -78,11 +77,27 @@ UDOP_INPUTS_DOCSTRING = r"""
             you should be able to pad the inputs on both the right and the left. Indices can be obtained using
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
             [What are input IDs?](../glossary#input-ids)
+
+        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
+            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
+            config.patch_size) * (width / config.patch_size))`.
+
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary. Indices can be obtained using
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
@@ -431,13 +446,14 @@ class UdopPreTrainedModel(PreTrainedModel):
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
+    # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
         assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Udop it is usually set to the pad_token_id."
-            " See Udop docs for more information"
+            "self.model.config.decoder_start_token_id has to be defined. In Udop it is usually set to the"
+            " pad_token_id. See Udop docs for more information"
         )
 
         # shift inputs to the right
@@ -448,6 +464,8 @@ class UdopPreTrainedModel(PreTrainedModel):
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
 
         return shifted_input_ids
 
@@ -982,16 +1000,12 @@ class UdopBlock(nn.Module):
 
 
 class UdopCellEmbeddings(nn.Module):
-    def __init__(self, max_2d_position_embeddings=501, hidden_size=1024, ccat=False):
+    def __init__(self, max_2d_position_embeddings=501, hidden_size=1024):
         super(UdopCellEmbeddings, self).__init__()
-        self.ccat = ccat
         self.max_2d_position_embeddings = max_2d_position_embeddings
-        if ccat:
-            self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size // 4)
-            self.y_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size // 4)
-        else:
-            self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
-            self.y_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
+
+        self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
+        self.y_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
 
     def forward(self, bbox):
         bbox = torch.clip(bbox, 0.0, 1.0)
@@ -1000,23 +1014,13 @@ class UdopCellEmbeddings(nn.Module):
         upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
         right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
         lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
-        if self.ccat:
-            embeddings = torch.cat(
-                [
-                    left_position_embeddings,
-                    upper_position_embeddings,
-                    right_position_embeddings,
-                    lower_position_embeddings,
-                ],
-                dim=-1,
-            )
-        else:
-            embeddings = (
-                left_position_embeddings
-                + upper_position_embeddings
-                + right_position_embeddings
-                + lower_position_embeddings
-            )
+
+        embeddings = (
+            left_position_embeddings
+            + upper_position_embeddings
+            + right_position_embeddings
+            + lower_position_embeddings
+        )
 
         return embeddings
 
@@ -1297,18 +1301,16 @@ class UdopStack(UdopPreTrainedModel):
         pixel_values=None,
         head_mask=None,
         past_key_values=None,
-        ids_keep=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         cross_attn_head_mask=None,
-        position_bias=None,  # modified line,
-        image_embeddings=None,  # modified line,
-        bbox=None,  # modified line,
-        visual_bbox=None,  # modified line,
-        num_patches=None,  # modified line,
-        special_vis_token=None,
+        position_bias=None,
+        image_embeddings=None,
+        bbox=None,
+        visual_bbox=None,
+        num_patches=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1377,9 +1379,7 @@ class UdopStack(UdopPreTrainedModel):
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
         if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
-                self
-            )
+            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
@@ -1571,8 +1571,8 @@ class UdopModel(UdopPreTrainedModel):
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
-        >>> model = AutoModel.from_pretrained("nielsr/udop-test")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
+        >>> model = AutoModel.from_pretrained("microsoft/udop-large")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
@@ -1746,8 +1746,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         >>> from datasets import load_dataset
 
         >>> # load model and processor
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
-        >>> model = UdopForConditionalGeneration.from_pretrained("nielsr/udop-test")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
+        >>> model = UdopForConditionalGeneration.from_pretrained("microsoft/udop-large")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
@@ -1966,8 +1966,8 @@ class UdopEncoderModel(UdopPreTrainedModel):
         >>> from huggingface_hub import hf_hub_download
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-test", apply_ocr=False)
-        >>> model = UdopEncoderModel.from_pretrained("nielsr/udop-test")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
+        >>> model = UdopEncoderModel.from_pretrained("microsoft/udop-large")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
