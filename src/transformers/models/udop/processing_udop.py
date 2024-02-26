@@ -18,6 +18,7 @@ Processor class for UDOP.
 
 from typing import List, Optional, Union
 
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
@@ -54,7 +55,7 @@ class UdopProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
@@ -87,6 +88,8 @@ class UdopProcessor(ProcessorMixin):
         to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the
         additional arguments to [`~UdopTokenizer.__call__`] and returns the output, together with the prepared
         `pixel_values`.
+
+        Alternatively, one can pass `text_target` and `text_pair_target` to prepare the targets of UDOP.
 
         Please refer to the docstring of the above two methods for more information.
         """

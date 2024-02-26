@@ -157,6 +157,23 @@ class UdopProcessorTest(unittest.TestCase):
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
+    def test_text_target(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = UdopProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        text = "hello world"
+        expected_decoding = "hello world</s>"
+
+        encoding_processor = processor(text_target=text)
+        encoding_tokenizer = tokenizer(text_target=text)
+
+        self.assertListEqual(encoding_processor["input_ids"], [21820, 296, 1])
+        self.assertListEqual(encoding_processor["attention_mask"], [1, 1, 1])
+        self.assertDictEqual(dict(encoding_processor), dict(encoding_tokenizer))
+        self.assertEqual(tokenizer.decode(encoding_processor["input_ids"]), expected_decoding)
+
     @slow
     def test_overflowing_tokens(self):
         # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
