@@ -37,6 +37,8 @@
     title: 使用特定于模型的 API
   - local: custom_models
     title: 共享自定义模型
+  - local: chat_templating
+    title: 聊天模型的模板
   - local: serialization
     title: 导出为 ONNX
   - local: tflite
