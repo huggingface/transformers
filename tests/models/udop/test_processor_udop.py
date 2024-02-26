@@ -40,7 +40,7 @@ if is_torch_available():
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import UdopImageProcessor, UdopProcessor
+    from transformers import LayoutLMv3ImageProcessor, UdopProcessor
 
 
 @require_pytesseract
@@ -77,7 +77,7 @@ class UdopProcessorTest(unittest.TestCase):
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
 
     def get_image_processor(self, **kwargs):
-        return UdopImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -106,7 +106,7 @@ class UdopProcessorTest(unittest.TestCase):
             self.assertIsInstance(processor.tokenizer, (UdopTokenizer, UdopTokenizerFast))
 
             self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-            self.assertIsInstance(processor.image_processor, UdopImageProcessor)
+            self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
@@ -129,7 +129,7 @@ class UdopProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, UdopTokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, UdopImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
         # fast tokenizer
         tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
@@ -143,7 +143,7 @@ class UdopProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, UdopTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, UdopImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
@@ -223,7 +223,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_1(self):
         # case 1: document image classification (training, inference) + token classification (inference), apply_ocr = True
 
-        image_processor = UdopImageProcessor()
+        image_processor = LayoutLMv3ImageProcessor()
         tokenizers = self.get_tokenizers
         images = self.get_images
 
@@ -278,7 +278,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_2(self):
         # case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False
 
-        image_processor = UdopImageProcessor(apply_ocr=False)
+        image_processor = LayoutLMv3ImageProcessor(apply_ocr=False)
         tokenizers = self.get_tokenizers
         images = self.get_images
 
@@ -332,7 +332,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_3(self):
         # case 3: token classification (training), apply_ocr=False
 
-        image_processor = UdopImageProcessor(apply_ocr=False)
+        image_processor = LayoutLMv3ImageProcessor(apply_ocr=False)
         tokenizers = self.get_tokenizers
         images = self.get_images
 
@@ -397,7 +397,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_4(self):
         # case 4: visual question answering (inference), apply_ocr=True
 
-        image_processor = UdopImageProcessor()
+        image_processor = LayoutLMv3ImageProcessor()
         tokenizers = self.get_tokenizers
         images = self.get_images
 
@@ -448,7 +448,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_5(self):
         # case 5: visual question answering (inference), apply_ocr=False
 
-        image_processor = UdopImageProcessor(apply_ocr=False)
+        image_processor = LayoutLMv3ImageProcessor(apply_ocr=False)
         tokenizers = self.get_tokenizers
         images = self.get_images
 

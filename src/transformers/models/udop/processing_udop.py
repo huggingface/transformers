@@ -25,33 +25,28 @@ from ...utils import TensorType
 
 class UdopProcessor(ProcessorMixin):
     r"""
-    Constructs a UDOP processor which combines a UDOP image processor and a UDOP tokenizer into a single processor.
+    Constructs a UDOP processor which combines a LayoutLMv3 image processor and a UDOP tokenizer into a single processor.
 
     [`UdopProcessor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`UdopImageProcessor`] to resize, rescale and normalize document images, and optionally applies OCR
+    It first uses [`LayoutLMv3ImageProcessor`] to resize, rescale and normalize document images, and optionally applies OCR
     to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`] or [`UdopTokenizerFast`],
     which turns the words and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
     Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
     classification tasks (such as FUNSD, CORD).
 
     Args:
-        image_processor (`UdopImageProcessor`, *optional*):
-            An instance of [`UdopImageProcessor`]. The image processor is a required input.
-        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`, *optional*):
+        image_processor (`LayoutLMv3ImageProcessor`):
+            An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
+        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "UdopImageProcessor"
+    image_processor_class = "LayoutLMv3ImageProcessor"
     tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
+    def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -169,7 +164,7 @@ class UdopProcessor(ProcessorMixin):
 
             return encoded_inputs
 
-    # Copied from transformers.models.layoutxlm.processing_layoutxlm.LayoutXLMProcessor.get_overflowing_images
+    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.get_overflowing_images
     def get_overflowing_images(self, images, overflow_to_sample_mapping):
         # in case there's an overflow, ensure each `input_ids` sample is mapped to its corresponding image
         images_with_overflow = []
@@ -184,7 +179,7 @@ class UdopProcessor(ProcessorMixin):
 
         return images_with_overflow
 
-    # Copied from transformers.models.layoutxlm.processing_layoutxlm.LayoutXLMProcessor.batch_decode
+    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.batch_decode
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -192,7 +187,7 @@ class UdopProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.layoutxlm.processing_layoutxlm.LayoutXLMProcessor.decode
+    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.decode
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
@@ -201,5 +196,6 @@ class UdopProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.model_input_names
     def model_input_names(self):
         return ["input_ids", "bbox", "attention_mask", "pixel_values"]

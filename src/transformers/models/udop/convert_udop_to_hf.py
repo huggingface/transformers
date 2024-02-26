@@ -22,19 +22,26 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import UdopConfig, UdopForConditionalGeneration, UdopImageProcessor, UdopProcessor, UdopTokenizer
+from transformers import (
+    LayoutLMv3ImageProcessor,
+    UdopConfig,
+    UdopForConditionalGeneration,
+    UdopProcessor,
+    UdopTokenizer,
+)
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
-def transform(image, image_size=224):
-    trans = T.Compose(
+def original_transform(image, image_size=224):
+    transform = T.Compose(
         [
             T.Resize([image_size, image_size]),
             T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            T.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
         ]
     )
 
-    image = trans(image)  # copy to make it writeable
+    image = transform(image)
     return image
 
 
@@ -74,22 +81,15 @@ def prepare_dummy_inputs(tokenizer, image_processor):
     bbox = [[0, 0, 0, 0]] * len(prompt_ids) + bbox_list
 
     pixel_values = image_processor(image, return_tensors="pt").pixel_values
-    original_image = transform(image).unsqueeze(0)
+    original_pixel_values = original_transform(image).unsqueeze(0)
     # verify pixel values
-    assert torch.allclose(original_image, pixel_values)
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     return torch.tensor(input_ids).unsqueeze(0), torch.tensor(bbox).unsqueeze(0).float(), pixel_values
 
 
-def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
-    model_name_to_checkpoint_path = {
-        # "udop-large": "/home/arthur/transformers/udop-unimodel-large-224/pytorch_model.bin",
-        "udop-large": "/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-224/pytorch_model.bin",
-        "udop-dual-large": "",
-    }
-
+def convert_udop_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path=None, push_to_hub=False):
     # load original state dict
-    checkpoint_path = model_name_to_checkpoint_path[model_name]
     state_dict = torch.load(checkpoint_path, map_location="cpu")
 
     # create HF model
@@ -106,7 +106,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
 
     # prepare dummy inputs
     tokenizer = UdopTokenizer.from_pretrained("t5-base", legacy=True)
-    image_processor = UdopImageProcessor()
+    image_processor = LayoutLMv3ImageProcessor(image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD)
     processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
     input_ids, bbox, image = prepare_dummy_inputs(tokenizer, image_processor)
     prompt = "Question answering. In which year is the report made?"
@@ -122,7 +122,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         input_ids, bbox, pixel_values = prepare_dummy_inputs(tokenizer, image_processor)
 
     print("Input ids used for testing: ", input_ids)
-    # single forward pass
+    # Verify single forward pass
     print("Testing single forward pass..")
     with torch.no_grad():
         decoder_input_ids = torch.tensor([[101]])
@@ -138,7 +138,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     except Exception:
         print("logits don't match let's try to generate")
 
-    # autoregressive decoding
+    # Verify autoregressive decoding
     print("Testing generation...")
     model_kwargs = {"bbox": bbox, "pixel_values": pixel_values}
     outputs = model.generate(input_ids=input_ids, **model_kwargs, max_new_tokens=20)
@@ -164,8 +164,8 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub("nielsr/udop-test")
-        processor.push_to_hub("nielsr/udop-test")
+        model.push_to_hub(f"microsoft/{model_name}")
+        processor.push_to_hub(f"microsoft/{model_name}")
         # BIG note here: to save the fast tokenizer files in the repo on the hub, you need to do the following:
         # see https://discuss.huggingface.co/t/convert-slow-xlmrobertatokenizer-to-fast-one/20876
 
@@ -181,6 +181,12 @@ if __name__ == "__main__":
         help=("Name of the UDOP model you'd like to convert."),
     )
     parser.add_argument(
+        "--checkpoint_path",
+        default="/Users/nielsrogge/Documents/UDOP/udop-unimodel-large-224/pytorch_model.bin",
+        type=str,
+        help="Path to the original PyTorch checkpoint.",
+    )
+    parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
@@ -188,4 +194,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_udop_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_udop_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -20,7 +20,6 @@ from ...utils import (
     is_sentencepiece_available,
     is_tokenizers_available,
     is_torch_available,
-    is_vision_available,
 )
 
 
@@ -44,14 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["tokenization_udop_fast"] = ["UdopTokenizerFast"]
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_udop"] = ["UdopImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -86,14 +77,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_udop_fast import UdopTokenizerFast
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_udop import UdopImageProcessor
 
     try:
         if not is_torch_available():
