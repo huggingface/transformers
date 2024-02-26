@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import unittest
-
+import pytest
 from parameterized import parameterized
 
 from transformers import set_seed
@@ -36,9 +36,11 @@ if is_torch_available():
         AutoTokenizer,
         DynamicCache,
         LlamaConfig,
+        GenerationConfig,
         LlamaForCausalLM,
         SinkCache,
         StaticCache,
+        PagedAttentionCache,
     )
 
 
@@ -163,6 +165,57 @@ class CacheTest(unittest.TestCase):
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    def test_pagedAttention_cache_mha_mqa_gqa(self):
+        """
+        Tests that PagedAttentionCache works with multi-head attention (MHA), grouped query attention (GQA), and multi-query
+        attention (MQA)
+        """
+
+        def _random_kvs(config, seq_len):
+            # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
+            random_keys = torch.rand(
+                (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
+                device=torch_device,
+            )
+            random_values = torch.rand(
+                (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
+                device=torch_device,
+            )
+            return random_keys, random_values
+        
+        def _test_paged_attention_cache(config):
+            num_blocks = 8
+            block_size = 8        
+            legacy_cache = ()
+            generation_config = GenerationConfig(num_blocks=num_blocks, block_size=block_size)
+            self.assertEqual(generation_config.num_blocks, num_blocks)
+            self.assertEqual(generation_config.block_size, block_size)  
+            pagedAttention_cache = PagedAttentionCache(config=config, num_blocks=generation_config.num_blocks, block_size=generation_config.block_size, device=torch_device)
+            #prompt check 
+            prompt_len = 10 #store in 2 blocks
+            key_states, value_states = _random_kvs(config, prompt_len)
+            legacy_cache += ((key_states, value_states),)
+            key_states_1, value_states_1 = pagedAttention_cache.update(key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len)})
+            self.assertTrue(torch.allclose(key_states, key_states_1))
+            self.assertTrue(torch.allclose(value_states, value_states_1))
+            cached_key, cached_value = pagedAttention_cache.get_entire_context_states(key_states, value_states)
+            self.assertTrue(torch.allclose(cached_key, legacy_cache[0][0]))
+            self.assertTrue(torch.allclose(cached_value, legacy_cache[0][1]))
+            #next token check 
+            key_states, value_states = _random_kvs(config, 1)
+            pagedAttention_cache.update(key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len, prompt_len+1)})
+            cached_key, cached_value = pagedAttention_cache.get_entire_context_states(key_states, value_states)
+            cached_key_legacy = torch.cat([legacy_cache[0][0], key_states], dim=2)
+            cached_value_legacy = torch.cat([legacy_cache[0][1], value_states], dim=2)
+            self.assertTrue(torch.allclose(cached_key, cached_key_legacy))
+            self.assertTrue(torch.allclose(cached_value, cached_value_legacy))
+            self.assertTrue(pagedAttention_cache.key_cache.shape == (num_blocks, block_size, config.num_key_value_heads, config.hidden_size // config.num_attention_heads))
+            self.assertTrue(pagedAttention_cache.value_cache.shape == (num_blocks, block_size, config.num_key_value_heads, config.hidden_size // config.num_attention_heads))
+        
+        configs = [LlamaConfig(num_attention_heads=32), LlamaConfig(num_attention_heads=32, num_key_value_heads=4), LlamaConfig(num_attention_heads=32, num_key_value_heads=1)]
+        for config in configs:
+            _test_paged_attention_cache(config)
 
 
 @require_torch_gpu
