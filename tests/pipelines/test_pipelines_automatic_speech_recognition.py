@@ -1149,7 +1149,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "<s> <s")
 
-    @require_torch
+    @require_torch_gpu
     @slow
     def test_whisper_longform(self):
         # fmt: off
