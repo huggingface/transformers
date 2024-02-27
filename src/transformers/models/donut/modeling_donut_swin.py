@@ -750,7 +750,12 @@ class DonutSwinEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
+                    layer_module.__call__,
+                    hidden_states,
+                    input_dimensions,
+                    layer_head_mask,
+                    output_attentions,
+                    always_partition,
                 )
             else:
                 layer_outputs = layer_module(

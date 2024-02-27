@@ -41,7 +41,7 @@ You can run FastSpeech2Conformer locally with the 🤗 Transformers library.
 
 1. First install the 🤗 [Transformers library](https://github.com/huggingface/transformers), g2p-en:
 
-```
+```bash
 pip install --upgrade pip
 pip install --upgrade transformers g2p-en
 ```

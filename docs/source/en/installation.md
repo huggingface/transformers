@@ -72,7 +72,7 @@ pip install 'transformers[tf-cpu]'
 M1 / ARM Users
 
 You will need to install the following before installing TensorFLow 2.0
-```
+```bash
 brew install cmake
 brew install pkg-config
 ```
@@ -179,7 +179,7 @@ Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline train
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 This script should run without hanging or waiting to timeout because it won't attempt to download the model from the Hub.
