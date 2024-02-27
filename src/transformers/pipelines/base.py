@@ -896,7 +896,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: str,
+        save_directory: Union[str, os.PathLike],
         safe_serialization: bool = True,
         **kwargs,
     ):
@@ -904,7 +904,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         Save the pipeline's model and tokenizer.
 
         Args:
-            save_directory (`str`):
+            save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
                 Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
@@ -937,16 +937,17 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        self.model.save_pretrained(save_directory, safe_serialization=safe_serialization)
+        kwargs["safe_serialization"] = safe_serialization
+        self.model.save_pretrained(save_directory, **kwargs)
 
         if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(save_directory)
+            self.tokenizer.save_pretrained(save_directory,**kwargs)
 
         if self.feature_extractor is not None:
-            self.feature_extractor.save_pretrained(save_directory)
+            self.feature_extractor.save_pretrained(save_directory,**kwargs)
 
         if self.image_processor is not None:
-            self.image_processor.save_pretrained(save_directory)
+            self.image_processor.save_pretrained(save_directory,**kwargs)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
