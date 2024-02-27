@@ -1274,7 +1274,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
-        cache_position = torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
+        cache_position = (
+            torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
+            if position_ids is not None
+            else None
+        )
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1287,7 +1291,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         model_inputs.update(
             {
-                "position_ids": position_ids.contiguous(),
+                "position_ids": position_ids.contiguous() if position_ids is not None else None,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
