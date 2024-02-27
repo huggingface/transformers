@@ -493,11 +493,10 @@ class PagedAttentionCache(Cache):
         slots = []
         if seq_idx not in self.block_tables:
             # allocate blocks for this sequence
-            assert past_context_len == 0
             needed_blocks = (key_len + self.block_size - 1) // self.block_size
-            assert (
-                needed_blocks <= len(self.free_blocks)
-            ), f"No space in KV cache to store new token state. needed_blocks: {needed_blocks}, free_blocks: {self.free_blocks}"
+            if needed_blocks <= len(self.free_blocks):
+                raise
+            f"No space in KV cache to store new token state. needed_blocks: {needed_blocks}, free_blocks: {self.free_blocks}"
             blocks = self.free_blocks[:needed_blocks]
             self.free_blocks = self.free_blocks[needed_blocks:]
             self.block_tables[seq_idx] = blocks
@@ -508,7 +507,10 @@ class PagedAttentionCache(Cache):
             seq_len = key_len + past_context_len
             target_blocks = (seq_len + self.block_size - 1) // self.block_size
             new_blocks = target_blocks - len(self.block_tables[seq_idx])
-            assert new_blocks <= len(self.free_blocks)
+
+            if new_blocks < len(self.free_blocks):
+                raise AssertionError(f"PagedAttentionCache: No enough free blocks to allocate for sequence {seq_idx}.")
+
             if new_blocks > 0:  # allocate new blocks
                 candidate_blocks = self.free_blocks[:new_blocks]
                 self.block_tables[seq_idx].extend(self.free_blocks[:new_blocks])
@@ -519,7 +521,11 @@ class PagedAttentionCache(Cache):
                 last_block = self.block_tables[seq_idx][-1]
                 # sharing the last block with other sequences, need to allocate a new block and copy the last block
                 if self.block_ref_count[last_block] > 1:
-                    assert len(self.free_blocks) > 0
+                    if len(self.free_blocks) == 0:
+                        raise AssertionError(
+                            f"PagedAttentionCache: No enough free blocks to allocate for sequence {seq_idx}."
+                        )
+
                     new_block = self.free_blocks.pop()
                     self.block_tables[seq_idx][-1] = new_block
                     self.block_ref_count[new_block] += 1
@@ -543,6 +549,10 @@ class PagedAttentionCache(Cache):
         Raises:
             AssertionError: If the given sequence index is not present in the block tables.
         """
+
+        if seq_idx not in self.block_tables:
+            raise AssertionError(f"PagedAttentionCache: Sequence index {seq_idx} is not present in the block tables.")
+
         for block_idx in self.block_tables[seq_idx]:
             self.block_ref_count[block_idx] -= 1
             if self.block_ref_count[block_idx] == 0:
@@ -559,6 +569,9 @@ class PagedAttentionCache(Cache):
         Raises:
             AssertionError: If seq_idx is not in block_tables or if new_seq_idx is already in block_tables.
         """
+        if seq_idx not in self.block_tables:
+            raise AssertionError(f"PagedAttentionCache: Sequence index {seq_idx} is not present in the block tables.")
+
         self.block_tables[new_seq_idx] = self.block_tables[seq_idx]
         for block_idx in self.block_tables[seq_idx]:
             self.block_ref_count[block_idx] += 1
