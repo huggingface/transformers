@@ -344,14 +344,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     This class also contain the added tokens in a unified way on top of all tokenizers so we don't have to handle the
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
-
-    Args:
-        oov_error (`str`): Defines the behavior when converting out-of-vocabulary (OOV) IDs to tokens, aiming to
-        unify the behavior between slow and fast tokenizers. The parameter can be set to either "replace" to replace
-        OOV IDs with an empty string, or "strict" to keep the original behavior. Note: Although `_convert_id_to_token`
-        is declared to return a `str` type, specific implementations in subclasses may return `None` for OOV IDs
-        (e.g., in the `codegen` tokenizer) or may raise exceptions (e.g., in the `llama` tokenizer). While the fast
-        tokenizer developed in Rust uniformly returns an empty string for such cases.
     """
 
     def __init__(self, **kwargs):
@@ -371,13 +363,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
 
         # 5. Set the behavior when encountering an OOV token id
-        # Note: this must be set before _add_tokens, because _add_tokens 
+        # Note: this must be set before _add_tokens, because _add_tokens
         # relies on the behavior of the OOV token ids for some tokenizers.
         self.oov_error = kwargs.pop("oov_error", "")
         # TODO @ArthurZ in version 4.42
         if self.oov_error == "":
             logger.warning_once(
-                "The `oov_error` argument is set to the default `'replace'`. It will default to `'strict'` in `transformers` (v4.42) "
+                "The `oov_error` argument is set to the default `'replace'`. It will default to `'strict'` in transformers v4.42."
             )
             self.oov_error = "replace"
 
