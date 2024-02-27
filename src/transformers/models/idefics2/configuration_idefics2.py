@@ -18,7 +18,6 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -147,6 +146,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         qk_layer_norms_perceiver (`bool`, *optional*, defaults to `False`):
             Whether or not to use qk layer norms in perceiver
     """
+
     model_type = "idefics2"
 
     def __init__(
@@ -427,16 +427,86 @@ class Idefics2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "idefics2"
     is_composition = False
 
     def __init__(
         self,
+        additional_vocab_size=0,
+        vocab_size=32000,
+        hidden_size=4096,
+        intermediate_size=14336,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=8,
+        hidden_act="silu",
+        # max_position_embeddings=4096 * 32,
+        max_position_embeddings=4096 * 8,
+        initializer_range=0.02,
+        alpha_initializer="zeros",
+        alphas_initializer_range=0.0,
+        alpha_type="float",
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=0,  # None in the original configuration_mistral, we set it to the unk_token_id
+        bos_token_id=1,
+        eos_token_id=2,
+        image_token_id=32_001,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        sliding_window=4096,
+        cross_layer_interval=1,
+        qk_layer_norms=False,
+        freeze_text_layers=True,
+        freeze_text_module_exceptions=[],
+        freeze_lm_head=False,
+        freeze_vision_layers=True,
+        freeze_vision_module_exceptions=[],
+        attention_dropout=0.0,
+        _flash_attn_2_enabled=True,
+        use_resampler=True,
         vision_config=None,
         perceiver_config=None,
-        text_config=None,
+        # text_config=None,
         **kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.additional_vocab_size = additional_vocab_size
+        self.image_token_id = image_token_id
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.sliding_window = sliding_window
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.alpha_initializer = alpha_initializer
+        self.alphas_initializer_range = alphas_initializer_range
+        self.alpha_type = alpha_type
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+
+        self.cross_layer_interval = cross_layer_interval
+        self.qk_layer_norms = qk_layer_norms
+        self.freeze_vision_layers = freeze_vision_layers
+
+        self.freeze_text_layers = freeze_text_layers
+        self.freeze_text_module_exceptions = freeze_text_module_exceptions
+        self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
+        self.freeze_lm_head = freeze_lm_head
+
+        self.use_resampler = use_resampler
+        self._flash_attn_2_enabled = _flash_attn_2_enabled
+        self.attention_dropout = attention_dropout
 
         if perceiver_config is None:
             self.perceiver_config = Idefics2PerceiverConfig()
@@ -452,11 +522,17 @@ class Idefics2Config(PretrainedConfig):
         elif isinstance(vision_config, Idefics2VisionConfig):
             self.vision_config = vision_config
 
-        if text_config is None:
-            self.text_config = Idefics2TextConfig(**kwargs)
-        elif isinstance(text_config, dict):
-            self.text_config = Idefics2TextConfig(**text_config)
-        elif isinstance(text_config, Idefics2TextConfig):
-            self.text_config = text_config
+        # if text_config is None:
+        #     self.text_config = Idefics2TextConfig(**kwargs)
+        # elif isinstance(text_config, dict):
+        #     self.text_config = Idefics2TextConfig(**text_config)
+        # elif isinstance(text_config, Idefics2TextConfig):
+        #     self.text_config = text_config
 
-        super().__init__(**kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )

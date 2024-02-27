@@ -30,7 +30,7 @@ from ... import AutoModel, AutoModelForCausalLM, PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -59,7 +59,6 @@ IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipVisionEmbeddings with Siglip->Idefics2
 class Idefics2VisionEmbeddings(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
@@ -76,16 +75,44 @@ class Idefics2VisionEmbeddings(nn.Module):
             padding="valid",
         )
 
-        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_patches_per_side = self.image_size // self.patch_size
+        self.num_patches = self.num_patches_per_side**2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+    def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
+        batch_size = pixel_values.size(0)
+
+        patch_embeds = self.patch_embedding(pixel_values)
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        max_im_h, max_im_w = pixel_values.size(2), pixel_values.size(3)
+        max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
+        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
+        position_ids = torch.full(
+            size=(
+                batch_size,
+                max_nb_patches_h * max_nb_patches_w,
+            ),
+            fill_value=0,
+        )
+
+        for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
+            nb_patches_h = p_attn_mask[:, 0].sum()
+            nb_patches_w = p_attn_mask[0].sum()
+
+            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
+            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
+
+            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
+            position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
+
+        position_ids = position_ids.to(self.position_embedding.weight.device)
+
+        embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
 
 
@@ -166,6 +193,7 @@ class Idefics2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# FIXME - remap the weights and use the standard MLP implementation
 # Copied from transformers.models.siglip.modeling_siglip.SiglipMLP with Siglip->Idefics2Vision
 class Idefics2VisionMLP(nn.Module):
     def __init__(self, config):
@@ -257,14 +285,14 @@ class Idefics2VisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipEncoderLayer with SiglipAttention->Idefics2VisionAttention,Siglip->Idefics2
+# FIXME - add back in copied from statement
 class Idefics2EncoderLayer(nn.Module):
     def __init__(self, config: Idefics2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = Idefics2VisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = Idefics2MLP(config)
+        self.mlp = Idefics2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     # Ignore copy
@@ -439,14 +467,13 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->Idefics2
 class Idefics2MultiModalProjector(nn.Module):
     def __init__(self, config: Idefics2Config):
         super().__init__()
 
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.hidden_size, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
 
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
@@ -471,7 +498,6 @@ IDEFICS2_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipVisionTransformer with Siglip->Idefics2, SIGLIP->IDEFICS2
 class Idefics2VisionTransformer(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
@@ -481,20 +507,17 @@ class Idefics2VisionTransformer(nn.Module):
         self.embeddings = Idefics2VisionEmbeddings(config)
         self.encoder = Idefics2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.head = Idefics2MultiheadAttentionPoolingHead(config)
 
-    @add_start_docstrings_to_model_forward(IDEFICS2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Idefics2VisionConfig)
     def forward(
         self,
         pixel_values,
+        patch_attention_mask: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Returns:
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -502,10 +525,29 @@ class Idefics2VisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values)
+        batch_size = pixel_values.size(0)
+        if patch_attention_mask is None:
+            patch_attention_mask = torch.ones(
+                size=(
+                    batch_size,
+                    pixel_values.size(2) // self.config.patch_size,
+                    pixel_values.size(3) // self.config.patch_size,
+                ),
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+
+        hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
+
+        patch_attention_mask = patch_attention_mask.view(batch_size, -1)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
+            attention_mask=(
+                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+                if not self.config._flash_attn_2_enabled
+                else patch_attention_mask
+            ),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -514,14 +556,11 @@ class Idefics2VisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooled_output = self.head(last_hidden_state)
-
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return (last_hidden_state,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -615,15 +654,17 @@ class Idefics2DecoupledEmbedding(nn.Embedding):
         return full_vector
 
 
+# FIXME - just take the config
 class Idefics2MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, input_size=None, intermediate_size=None, output_size=None, act=None):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.input_size = config.hidden_size if input_size is None else input_size
+        self.output_size = config.hidden_size if output_size is None else output_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.output_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act] if act is None else act
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -650,7 +691,6 @@ IDEFICS2_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     IDEFICS2_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->Idefics2,llava->idefics2
 class Idefics2PreTrainedModel(PreTrainedModel):
     config_class = Idefics2Config
     base_model_prefix = "model"
@@ -666,7 +706,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            else self.config.initializer_range
         )
 
         if hasattr(module, "class_embedding"):
@@ -1475,7 +1515,7 @@ class PerceiverAttention(nn.Module):
         self.config = config
 
         # FIXME - perceiver layers should be fully defined by the perceiver config
-        self.hidden_size = config.text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.num_heads = config.perceiver_config.resampler_n_heads
         self.head_dim = config.perceiver_config.resampler_head_dim
         self.num_key_value_heads = config.perceiver_config.num_key_value_heads
@@ -1835,11 +1875,11 @@ class PerceiverLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.hidden_size = config.text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.hidden_act = config.perceiver_config.hidden_act
         self.n_latents = config.perceiver_config.resampler_n_latents
         self.depth = config.perceiver_config.resampler_depth
-        self.rms_norm_eps = config.text_config.rms_norm_eps
+        self.rms_norm_eps = config.rms_norm_eps
         self.intermediate_size = self.hidden_size * 4
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
@@ -1850,7 +1890,8 @@ class PerceiverLayer(nn.Module):
             else PerceiverFlashAttention2(config)
         )
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.mlp = Idefics2MLP(config.text_config)
+        # FIXME - make a perceiver MLP and put this information in its config
+        self.mlp = Idefics2MLP(config, intermediate_size=self.intermediate_size, act=self.hidden_act)
 
     def forward(
         self,
@@ -1927,10 +1968,7 @@ class PerceiverLayer(nn.Module):
 
 
 class PerceiverResampler(nn.Module):
-    def __init__(
-        self,
-        config,
-    ) -> None:
+    def __init__(self, config) -> None:
         """
         Instantiates a Perceiver Resampler that operates over a sequence of embeddings (say from a ResNet or ViT or
         MAE) of a given dimension, performs `depth` blocks of cross-attention with a fixed `n_latents` inputs, then
@@ -1945,11 +1983,11 @@ class PerceiverResampler(nn.Module):
         """
         super().__init__()
         self.config = config
-        self.hidden_size = config.text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.hidden_act = config.perceiver_config.hidden_act
         self.n_latents = config.perceiver_config.resampler_n_latents
         self.depth = config.perceiver_config.resampler_depth
-        self.rms_norm_eps = config.text_config.rms_norm_eps
+        self.rms_norm_eps = config.rms_norm_eps
 
         # Create Latents for Perceiver
         self.latents = nn.Parameter(torch.ones(self.n_latents, self.hidden_size))
@@ -1988,7 +2026,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         super().__init__(config)
 
         # FIXME - check the config settings here
-        self.config = config.text_config
+        self.config = config
         self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
 
@@ -2002,7 +2040,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             padding_idx=self.padding_idx,
         )
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
-        self.modality_projection = Idefics2MLP(config.text_config)
+        self.modality_projection = Idefics2MLP(config, input_size=config.vision_config.hidden_size)
 
         self.perceiver_resampler = PerceiverResampler(config)
 
@@ -2013,7 +2051,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         self.image_token_id = self.config.image_token_id
 
-        self.layers = nn.ModuleList([Idefics2DecoderLayer(self.config, i) for i in range(self.config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [Idefics2DecoderLayer(self.config, i) for i in range(self.config.num_hidden_layers)]
+        )
 
         self.gradient_checkpointing = False
 
@@ -2034,9 +2074,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
         self.multi_modal_projector = Idefics2MultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config, attn_implementation=config._attn_implementation)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -2064,7 +2102,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
