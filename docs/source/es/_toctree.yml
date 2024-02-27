@@ -55,6 +55,8 @@
   - local: custom_models
     title: Compartir modelos personalizados
   - local: run_scripts
+  - local: trainer
+    title: Entrenador
     title: Entrenamiento con scripts
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
@@ -62,6 +64,8 @@
     title: Convertir checkpoints de TensorFlow
   - local: serialization
     title: Exportar a ONNX
+  - local: torchscript
+    title: Exportar a TorchScript
   - local: community
     title: Los recursos de la comunidad
   title: Guías para desarrolladores
