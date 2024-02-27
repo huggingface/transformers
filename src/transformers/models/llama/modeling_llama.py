@@ -1432,20 +1432,22 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     LLAMA_START_DOCSTRING,
 )
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
-    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama, self.transformer->self.model
+    base_model_prefix = "transformer"
+
+    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
+        self.transformer = LlamaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.transformer.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.transformer.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
@@ -1473,7 +1475,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
