@@ -369,12 +369,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.oov_error = kwargs.pop("oov_error", "")
         # TODO @ArthurZ in version 5
         if self.oov_error == "":
-            warnings.warn(
-                "The `oov_error` argument will be required in future versions of `transformers` (v5.0+), "
-                "to better handle Out-Of-Vocabulary (OOV) tokens. By default, this argument will be set "
-                "to 'replace', which converts OOV token IDs to an empty string. The original behavior can "
-                "be maintained by setting `oov_error` to 'strict'.",
-                FutureWarning,
+            logger.warning_once(
+                "The `oov_error` argument is set to the default `'replace'`. It will default to `'strict'` in `transformers` (v4.42) "
             )
             self.oov_error = "replace"
 
