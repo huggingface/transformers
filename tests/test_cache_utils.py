@@ -545,4 +545,58 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, paged, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            
+    
+    @parameterized.expand(["eager", "sdpa"])
+    def test_paged_attention_cache_beam_search(self, attn_implementation):
+        tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left")
+        model = AutoModelForCausalLM.from_pretrained(
+            "NousResearch/Llama-2-7b-chat-hf",
+            device_map="auto", 
+            torch_dtype=torch.bfloat16,
+            attn_implementation=attn_implementation,
+        )
+
+        inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
+        gen_out_ref = model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+        decoded_ref = tokenizer.batch_decode(gen_out_ref, skip_special_tokens=True)
+        set_seed(0)
+        model.generation_config.cache_implementation = "paged"           
+        gen_out = model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, decoded_ref)  
+        
+        set_seed(0)
+        model._forward = model.forward
+        compiled_forward = torch.compile(model.forward)
+
+        def compiled(func, input_ids, **kwargs):
+            return func(input_ids, **kwargs)
+
+        def call(input_ids, **kwargs):
+            if input_ids.shape[-1] == 1:
+                return compiled(compiled_forward, input_ids, **kwargs)
+
+            return model._forward(input_ids, **kwargs)
+
+        model.forward = call
+        gen_out_compile = model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+        decoded_compile = tokenizer.batch_decode(gen_out_compile, skip_special_tokens=True)
+        self.assertListEqual(decoded_compile, decoded_ref)

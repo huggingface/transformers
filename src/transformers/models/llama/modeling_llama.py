@@ -820,7 +820,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-
+        max_cache_len = generation_config.max_length
         if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
             causal_mask = torch.full(
                 (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool

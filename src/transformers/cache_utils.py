@@ -665,9 +665,7 @@ class PagedAttentionCache(Cache):
     def check_batch2seq(self, batch2seq: Dict[int, int], batch_size: int):
         # self.batch2seq is only for the current decode step, need to clear in the last layer and init in the first layer or setup externally
         if self.batch2seq == {}:
-            assert len(self.block_tables) == 0
             self.batch2seq = {i: [i] for i in range(batch_size)}
-            self.slots_mapping = []
         elif self.batch2seq != {}:
             assert len(self.batch2seq) == batch_size
 
@@ -697,7 +695,7 @@ class PagedAttentionCache(Cache):
         past_context_len = self.seen_tokens
         self.seen_tokens += cur_len
         self.check_batch2seq(self.batch2seq, batch_size)
-
+        
         # step 1): allocate slots to store token states for each sequence in the batch.
         # The kv_cache strutures are same for all layers, only need run in the first layer
         self.slots_mapping = []
@@ -716,7 +714,6 @@ class PagedAttentionCache(Cache):
             # fork the blocks allocated for the first sequence to other sequences in the batch
             for seq_id in seq_ids[1:]:
                 self.fork(seq_ids[0], seq_id)
-        
         return key_states, value_states
 
     def reorder_cache(self, beam_idx: torch.Tensor) -> None:
@@ -727,8 +724,8 @@ class PagedAttentionCache(Cache):
         freed_seqs = []
         new_block_tables = self.block_tables.copy()
         for batch_idx, target_batch_idx in enumerate(beam_idx.tolist()):
-            target_seq_id = self.batch2seq[target_batch_idx]
-            seq_id = self.batch2seq[batch_idx]
+            target_seq_id = self.batch2seq[target_batch_idx][0]
+            seq_id = self.batch2seq[batch_idx][0]
             freed_seqs.append(seq_id)
             new_block_tables[seq_id] = []
             for block in self.block_tables[target_seq_id]:
