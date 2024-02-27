@@ -828,22 +828,26 @@ class LlamaPreTrainedModel(PreTrainedModel):
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
+            device = layer.input_layernorm.weight.device
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                dtype = self.config._pre_quantization_dtype
+            else:
+                dtype = layer.self_attn.o_proj.weight.dtype
             if cache_cls == StaticCache:
                 layer.self_attn.past_key_value = cache_cls(
                     self.config,
                     max_batch_size,
                     generation_config.max_length,
-                    device=weights.device,
-                    dtype=weights.dtype,
+                    device=device,
+                    dtype=dtype,
                 )
             elif cache_cls == PagedAttentionCache:
                 layer.self_attn.past_key_value = cache_cls(
                     self.config,
                     generation_config.num_blocks,
                     generation_config.block_size,
-                    device=weights.device,
-                    dtype=weights.dtype,
+                    device=device,
+                    dtype=dtype,
                 )
 
     def _prompt_sharing_with_paged_attention_cache(self, batch_size, beam_size):
