@@ -4669,3 +4669,12 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+@torch.jit.script_if_tracing
+def move_device_like(src: torch.Tensor, dst1: Optional[torch.Tensor], dst2: Optional[torch.Tensor] = None):
+    """
+    Move a tensor to the device of another tensor.
+    """
+    device = dst1.device if dst1 is not None else dst2.device
+    return src.to(device)
