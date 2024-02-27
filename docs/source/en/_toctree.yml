@@ -73,6 +73,8 @@
       title: Depth estimation
     - local: tasks/image_to_image
       title: Image-to-Image
+    - local: tasks/image_feature_extraction
+      title: Image Feature Extraction
     - local: tasks/mask_generation
       title: Mask Generation
     - local: tasks/knowledge_distillation_for_image_classification
@@ -583,6 +585,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin

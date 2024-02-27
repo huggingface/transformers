@@ -120,7 +120,6 @@ from .import_utils import (
     is_essentia_available,
     is_faiss_available,
     is_flash_attn_2_available,
-    is_flash_attn_available,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_fsdp_available,

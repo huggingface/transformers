@@ -57,6 +57,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
         <b>Français</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_de.md">Deutsch</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_vi.md">Tiếng Việt</a> |
     </p>
 </h4>
 
@@ -475,6 +476,7 @@ Nombre actuel de points de contrôle : ![](https://img.shields.io/endpoint?url=h
 1. **[SeamlessM4T](https://huggingface.co/docs/transformers/model_doc/seamless_m4t)** (de Meta AI) a été publié dans l'article [SeamlessM4T — Traduction multimodale et massivement multilingue](https://dl.fbaipublicfiles.com/seamless/seamless_m4t_paper.pdf) par l'équipe de communication transparente.
 1. **[SeamlessM4Tv2](https://huggingface.co/docs/transformers/model_doc/seamless_m4t_v2)** (de Meta AI) a été publié dans l'article [Seamless: Traduction de la parole multilingue, expressive et en continu](https://ai.meta.com/research/publications/seamless-multilingual-expressive-and-streaming-speech-translation/) par l'équipe de communication transparente.
 1. **[SegFormer](https://huggingface.co/docs/transformers/model_doc/segformer)** (de NVIDIA) a été publié dans l'article [SegFormer : Conception simple et efficace pour la segmentation sémantique avec des transformateurs](https://arxiv.org/abs/2105.15203) par Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo.
+1. **[SegGPT](https://huggingface.co/docs/transformers/main/model_doc/seggpt)** (de Beijing Academy of Artificial Intelligence (BAAI) publié dans l'article [SegGPT: Segmenting Everything In Context](https://arxiv.org/abs/2304.03284) parXinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang, Chunhua Shen, Tiejun Huang.
 1. **[Segment Anything](https://huggingface.co/docs/transformers/model_doc/sam)** (de Meta AI) a été publié dans l'article [Segment Anything](https://arxiv.org/pdf/2304.02643v1.pdf) par Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
 1. **[SEW](https://huggingface.co/docs/transformers/model_doc/sew)** (de ASAPP) a été publié dans l'article [Compromis entre performances et efficacité dans l'entraînement non supervisé pour la reconnaissance vocale](https://arxiv.org/abs/2109.06870) par Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav Artzi.
 1. **[SEW-D](https://huggingface.co/docs/transformers/model_doc/sew_d)** (de ASAPP) a été publié dans l'article [Compromis entre performances et efficacité dans l'entraînement non supervisé pour la reconnaissance vocale](https://arxiv.org/abs/2109.06870) par Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger, Yoav Artzi.

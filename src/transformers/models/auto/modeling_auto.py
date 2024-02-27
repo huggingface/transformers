@@ -29,7 +29,6 @@ from .configuration_auto import CONFIG_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
-
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
@@ -194,6 +193,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TModel"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Model"),
         ("segformer", "SegformerModel"),
+        ("seggpt", "SegGptModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("siglip", "SiglipModel"),
@@ -475,6 +475,58 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
         ("xlnet", "XLNetLMHeadModel"),
         ("xmod", "XmodForCausalLM"),
+    ]
+)
+
+MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Image mapping
+        ("beit", "BeitModel"),
+        ("bit", "BitModel"),
+        ("conditional_detr", "ConditionalDetrModel"),
+        ("convnext", "ConvNextModel"),
+        ("convnextv2", "ConvNextV2Model"),
+        ("data2vec-vision", "Data2VecVisionModel"),
+        ("deformable_detr", "DeformableDetrModel"),
+        ("deit", "DeiTModel"),
+        ("deta", "DetaModel"),
+        ("detr", "DetrModel"),
+        ("dinat", "DinatModel"),
+        ("dinov2", "Dinov2Model"),
+        ("dpt", "DPTModel"),
+        ("efficientformer", "EfficientFormerModel"),
+        ("efficientnet", "EfficientNetModel"),
+        ("focalnet", "FocalNetModel"),
+        ("glpn", "GLPNModel"),
+        ("imagegpt", "ImageGPTModel"),
+        ("levit", "LevitModel"),
+        ("mobilenet_v1", "MobileNetV1Model"),
+        ("mobilenet_v2", "MobileNetV2Model"),
+        ("mobilevit", "MobileViTModel"),
+        ("mobilevitv2", "MobileViTV2Model"),
+        ("nat", "NatModel"),
+        ("poolformer", "PoolFormerModel"),
+        ("pvt", "PvtModel"),
+        ("regnet", "RegNetModel"),
+        ("resnet", "ResNetModel"),
+        ("segformer", "SegformerModel"),
+        ("siglip_vision_model", "SiglipVisionModel"),
+        ("swiftformer", "SwiftFormerModel"),
+        ("swin", "SwinModel"),
+        ("swin2sr", "Swin2SRModel"),
+        ("swinv2", "Swinv2Model"),
+        ("table-transformer", "TableTransformerModel"),
+        ("timesformer", "TimesformerModel"),
+        ("timm_backbone", "TimmBackbone"),
+        ("van", "VanModel"),
+        ("videomae", "VideoMAEModel"),
+        ("vit", "ViTModel"),
+        ("vit_hybrid", "ViTHybridModel"),
+        ("vit_mae", "ViTMAEModel"),
+        ("vit_msn", "ViTMSNModel"),
+        ("vitdet", "VitDetModel"),
+        ("vivit", "VivitModel"),
+        ("yolos", "YolosModel"),
     ]
 )
 
@@ -1243,6 +1295,7 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 )
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+MODEL_FOR_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_MAPPING_NAMES)
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
 )
