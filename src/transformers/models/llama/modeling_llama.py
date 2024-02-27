@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache, PagedAttentionCache
+from ...cache_utils import Cache, DynamicCache, PagedAttentionCache, StaticCache
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -358,11 +358,11 @@ class LlamaAttention(nn.Module):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}            
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            if isinstance(past_key_value, PagedAttentionCache): 
-                #The key/value cache is stored dicretely, so we need to retrieve the entire context
-                #We need an more effcient SDPA kernel to aware this chache
+            if isinstance(past_key_value, PagedAttentionCache):
+                # The key/value cache is stored dicretely, so we need to retrieve the entire context
+                # We need an more effcient SDPA kernel to aware this chache
                 key_states, value_states = past_key_value.get_entire_context_states(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -652,9 +652,9 @@ class LlamaSdpaAttention(LlamaAttention):
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            if isinstance(past_key_value, PagedAttentionCache): 
-                #The key/value cache is stored dicretely, so we need to retrieve the entire context
-                #We need an more effcient SDPA kernel to aware this chache
+            if isinstance(past_key_value, PagedAttentionCache):
+                # The key/value cache is stored dicretely, so we need to retrieve the entire context
+                # We need an more effcient SDPA kernel to aware this chache
                 key_states, value_states = past_key_value.get_entire_context_states(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -840,7 +840,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
             elif cache_cls == PagedAttentionCache:
                 layer.self_attn.past_key_value = cache_cls(
                     self.config,
-                    generation_config.num_blocks, 
+                    generation_config.num_blocks,
                     generation_config.block_size,
                     device=weights.device,
                     dtype=weights.dtype,
@@ -997,9 +997,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         past_seen_tokens = 0
         if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache) or isinstance(
-                past_key_values, PagedAttentionCache
-            ):
+            if not isinstance(past_key_values, StaticCache) or isinstance(past_key_values, PagedAttentionCache):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 past_seen_tokens = past_key_values.get_seq_length()
 

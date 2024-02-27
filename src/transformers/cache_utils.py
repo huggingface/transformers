@@ -424,6 +424,7 @@ class StaticCache(Cache):
         """Dummy function for BC. We have to keep it because otherwise the call in the forward of models will break it"""
         return None
 
+
 class PagedAttentionCache(Cache):
     def __init__(
         self,
@@ -439,16 +440,12 @@ class PagedAttentionCache(Cache):
         self.block_size = block_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
-            config.head_dim
-            if hasattr(config, "head_dim")
-            else config.hidden_size // config.num_attention_heads
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
         )
 
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = (
-            config.num_attention_heads
-            if config.num_key_value_heads is None
-            else config.num_key_value_heads
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
         cache_shape = (
             self.num_blocks,
@@ -456,30 +453,18 @@ class PagedAttentionCache(Cache):
             self.num_key_value_heads,
             self.head_dim,
         )
-        self.key_cache: torch.Tensor = torch.zeros(
-            cache_shape, dtype=self.dtype, device=device
-        )
-        self.value_cache: torch.Tensor = torch.zeros(
-            cache_shape, dtype=self.dtype, device=device
-        )
+        self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
 
-        self.seen_tokens = (
-            0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        )
+        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
         # cache runtime management information
         self.free_blocks = list(range(num_blocks))  # free blocks
-        self.block_ref_count = [
-            0
-        ] * self.num_blocks  # init the reference count for each physical block
-        self.block_tables = (
-            {}
-        )  # mapping logical block to physical blocks for each sequence
+        self.block_ref_count = [0] * self.num_blocks  # init the reference count for each physical block
+        self.block_tables = {}  # mapping logical block to physical blocks for each sequence
 
         # The follow two states are shared accross layer but only for the current decode step. Need to update for every decode step.
-        self.batch2seq = (
-            {}
-        )  # mapping batch index to {seq_id0, seq_id1, ...} to enable prompt sharing.
+        self.batch2seq = {}  # mapping batch index to {seq_id0, seq_id1, ...} to enable prompt sharing.
         self.slots_mapping = []  # mapping logical slots to physical slots.
 
     def copy_on_write(self, src_block_idx: int, dst_block_idx: int):
@@ -510,8 +495,8 @@ class PagedAttentionCache(Cache):
             # allocate blocks for this sequence
             assert past_context_len == 0
             needed_blocks = (key_len + self.block_size - 1) // self.block_size
-            assert needed_blocks <= len(
-                self.free_blocks
+            assert (
+                needed_blocks <= len(self.free_blocks)
             ), f"No space in KV cache to store new token state. needed_blocks: {needed_blocks}, free_blocks: {self.free_blocks}"
             blocks = self.free_blocks[:needed_blocks]
             self.free_blocks = self.free_blocks[needed_blocks:]
@@ -545,9 +530,7 @@ class PagedAttentionCache(Cache):
             token_id = i + past_context_len
             block_idx = token_id // self.block_size
             block_offset = token_id % self.block_size
-            slots.append(
-                self.block_tables[seq_idx][block_idx] * self.block_size + block_offset
-            )
+            slots.append(self.block_tables[seq_idx][block_idx] * self.block_size + block_offset)
         return slots
 
     def free(self, seq_idx: int):
@@ -695,7 +678,7 @@ class PagedAttentionCache(Cache):
         past_context_len = self.seen_tokens
         self.seen_tokens += cur_len
         self.check_batch2seq(self.batch2seq, batch_size)
-        
+
         # step 1): allocate slots to store token states for each sequence in the batch.
         # The kv_cache strutures are same for all layers, only need run in the first layer
         self.slots_mapping = []

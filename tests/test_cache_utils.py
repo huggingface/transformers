@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import unittest
-import pytest
+
 from parameterized import parameterized
 
 from transformers import set_seed
@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_auto_gptq,
     require_torch,
     require_torch_gpu,
-    slow,
     torch_device,
 )
 
@@ -35,12 +34,12 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         DynamicCache,
-        LlamaConfig,
         GenerationConfig,
+        LlamaConfig,
         LlamaForCausalLM,
+        PagedAttentionCache,
         SinkCache,
         StaticCache,
-        PagedAttentionCache,
     )
 
 
@@ -174,7 +173,7 @@ class CacheTest(unittest.TestCase):
 
         def _random_kvs(config, seq_len, beam):
             # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
-            #next token
+            # next token
             if seq_len == 1:
                 random_keys = torch.rand(
                     (beam, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
@@ -184,8 +183,8 @@ class CacheTest(unittest.TestCase):
                     (beam, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
                     device=torch_device,
                 )
-            #prompt
-            else:                
+            # prompt
+            else:
                 random_keys = torch.rand(
                     (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
                     device=torch_device,
@@ -195,48 +194,76 @@ class CacheTest(unittest.TestCase):
                     device=torch_device,
                 )
             return random_keys, random_values
-        
+
         def _test_paged_attention_cache(config, beam):
             num_blocks = 100
-            block_size = 8        
+            block_size = 8
             legacy_cache = ()
             generation_config = GenerationConfig(num_blocks=num_blocks, block_size=block_size)
             self.assertEqual(generation_config.num_blocks, num_blocks)
-            self.assertEqual(generation_config.block_size, block_size)  
-            paged_atention_cache = PagedAttentionCache(config=config, num_blocks=generation_config.num_blocks, block_size=generation_config.block_size, device=torch_device)
-            #prompt check 
-            prompt_len = 10 #store in 2 blocks
+            self.assertEqual(generation_config.block_size, block_size)
+            paged_atention_cache = PagedAttentionCache(
+                config=config,
+                num_blocks=generation_config.num_blocks,
+                block_size=generation_config.block_size,
+                device=torch_device,
+            )
+            # prompt check
+            prompt_len = 10  # store in 2 blocks
             key_states, value_states = _random_kvs(config, prompt_len, beam)
             if beam > 1:
                 key_states = key_states.repeat_interleave(beam, 0)
                 value_states = value_states.repeat_interleave(beam, 0)
-            
+
             legacy_cache += ((key_states, value_states),)
-            key_states_1, value_states_1 = paged_atention_cache.update(key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len)})
+            key_states_1, value_states_1 = paged_atention_cache.update(
+                key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len)}
+            )
             self.assertTrue(torch.allclose(key_states, key_states_1))
             self.assertTrue(torch.allclose(value_states, value_states_1))
             cached_key, cached_value = paged_atention_cache.get_entire_context_states(key_states, value_states)
             self.assertTrue(torch.allclose(cached_key, legacy_cache[0][0]))
             self.assertTrue(torch.allclose(cached_value, legacy_cache[0][1]))
-            #next token check 
+            # next token check
             key_states, value_states = _random_kvs(config, 1, beam)
-            paged_atention_cache.update(key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len, prompt_len+1)})
+            paged_atention_cache.update(
+                key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len, prompt_len + 1)}
+            )
             cached_key, cached_value = paged_atention_cache.get_entire_context_states(key_states, value_states)
             cached_key_legacy = torch.cat([legacy_cache[0][0], key_states], dim=2)
             cached_value_legacy = torch.cat([legacy_cache[0][1], value_states], dim=2)
             self.assertTrue(torch.allclose(cached_key, cached_key_legacy))
             self.assertTrue(torch.allclose(cached_value, cached_value_legacy))
-            self.assertTrue(paged_atention_cache.key_cache.shape == (num_blocks, block_size, config.num_key_value_heads, config.hidden_size // config.num_attention_heads))
-            self.assertTrue(paged_atention_cache.value_cache.shape == (num_blocks, block_size, config.num_key_value_heads, config.hidden_size // config.num_attention_heads))
-        
-        configs = [LlamaConfig(num_attention_heads=32), LlamaConfig(num_attention_heads=32, num_key_value_heads=4), LlamaConfig(num_attention_heads=32, num_key_value_heads=1)]
+            self.assertTrue(
+                paged_atention_cache.key_cache.shape
+                == (
+                    num_blocks,
+                    block_size,
+                    config.num_key_value_heads,
+                    config.hidden_size // config.num_attention_heads,
+                )
+            )
+            self.assertTrue(
+                paged_atention_cache.value_cache.shape
+                == (
+                    num_blocks,
+                    block_size,
+                    config.num_key_value_heads,
+                    config.hidden_size // config.num_attention_heads,
+                )
+            )
+
+        configs = [
+            LlamaConfig(num_attention_heads=32),
+            LlamaConfig(num_attention_heads=32, num_key_value_heads=4),
+            LlamaConfig(num_attention_heads=32, num_key_value_heads=1),
+        ]
         beams = [1, 2, 4, 8]
         for config in configs:
             for beam in beams:
                 _test_paged_attention_cache(config, beam)
 
-@require_torch_gpu
-@slow
+
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
@@ -451,10 +478,11 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
+
     @unittest.skip("TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):
         pass
-    
+
     @parameterized.expand(["eager", "sdpa"])
     def test_paged_attention_cache_greedy_sampling_pad_left(self, attn_implementation):
         EXPECTED_GENERATION = [
@@ -493,7 +521,7 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, paged, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-    
+
     @parameterized.expand(["eager", "sdpa"])
     def test_paged_attention_cache_greedy_sampling_pad_right(self, attn_implementation):
         EXPECTED_GENERATION = [
@@ -545,13 +573,13 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, paged, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-    
+
     @parameterized.expand(["eager", "sdpa"])
     def test_paged_attention_cache_beam_search(self, attn_implementation):
         tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained(
             "NousResearch/Llama-2-7b-chat-hf",
-            device_map="auto", 
+            device_map="auto",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
         )
@@ -566,7 +594,7 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         decoded_ref = tokenizer.batch_decode(gen_out_ref, skip_special_tokens=True)
         set_seed(0)
-        model.generation_config.cache_implementation = "paged"           
+        model.generation_config.cache_implementation = "paged"
         gen_out = model.generate(
             **inputs,
             do_sample=False,
@@ -575,8 +603,8 @@ class CacheIntegrationTest(unittest.TestCase):
             num_return_sequences=2,
         )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        self.assertListEqual(decoded, decoded_ref)  
-        
+        self.assertListEqual(decoded, decoded_ref)
+
         set_seed(0)
         model._forward = model.forward
         compiled_forward = torch.compile(model.forward)

@@ -258,12 +258,12 @@ class GenerationConfig(PushToHubMixin):
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
 
          > Gneration parameters for Pagedattention
-         
+
         num_blocks (`int`, *optional*, defaults to 8):
             The number of blocks in the paged attention mechanism.
         block_size (`int`, *optional*, defaults to 64):
             The size of each block in the paged attention mechanism.
-            
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
@@ -342,8 +342,8 @@ class GenerationConfig(PushToHubMixin):
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
-        
-         # PagedAttention
+
+        # PagedAttention
         self.num_blocks = kwargs.pop("num_blocks", 8)
         self.block_size = kwargs.pop("block_size", 64)
 

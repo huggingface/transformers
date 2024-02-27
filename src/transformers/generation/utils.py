@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache, PagedAttentionCache
+from ..cache_utils import Cache, DynamicCache, PagedAttentionCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -3159,6 +3159,7 @@ class GenerationMixin:
                     model_kwargs["past_key_values"], beam_idx
                 )
             elif self.generation_config.cache_implementation == "paged":
+
                 def reorder_paged_kv_cache(model, beam_idx):
                     if model is None:
                         return
@@ -3166,6 +3167,7 @@ class GenerationMixin:
                         past_key_value = getattr(sub_mod, "past_key_value", None)
                         if isinstance(past_key_value, PagedAttentionCache):
                             self._temporary_reorder_cache(past_key_value, beam_idx)
+
                 reorder_paged_kv_cache(self, beam_idx)
 
             if return_dict_in_generate and output_scores:
@@ -3510,10 +3512,22 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
+
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], beam_idx
                 )
+            elif self.generation_config.cache_implementation == "paged":
+
+                def reorder_paged_kv_cache(model, beam_idx):
+                    if model is None:
+                        return
+                    for _, sub_mod in model.named_modules():
+                        past_key_value = getattr(sub_mod, "past_key_value", None)
+                        if isinstance(past_key_value, PagedAttentionCache):
+                            self._temporary_reorder_cache(past_key_value, beam_idx)
+
+                reorder_paged_kv_cache(self, beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3913,6 +3927,17 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], reordering_indices
                 )
+            elif self.generation_config.cache_implementation == "paged":
+
+                def reorder_paged_kv_cache(model, reordering_indices):
+                    if model is None:
+                        return
+                    for _, sub_mod in model.named_modules():
+                        past_key_value = getattr(sub_mod, "past_key_value", None)
+                        if isinstance(past_key_value, PagedAttentionCache):
+                            self._temporary_reorder_cache(past_key_value, reordering_indices)
+
+                reorder_paged_kv_cache(self, reordering_indices)
 
             # increase cur_len
             cur_len = cur_len + 1
