@@ -52,6 +52,8 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
+    is_deepspeed_zero3_enabled,
+    is_torch_tpu_available,
 )
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
@@ -484,14 +486,57 @@ def main():
     if args.truncate_or_pad:
         special_tokens.append(args.fim_pad_token)
 
-    tokenizer.add_tokens(special_tokens)
-    model.resize_token_embeddings(len(tokenizer))
+    # Get the factor by which the embedding layer should be padded based on the device
+    pad_factor = 1
+    if torch.cuda.is_availble():
+        pad_factor = 8
 
-    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
-    # on a small vocab and want a smaller embedding size, remove this test.
-    embedding_size = model.get_input_embeddings().weight.shape[0]
-    if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
+    elif is_torch_tpu_available():
+        pad_factor = 128
+
+    # Add the new tokens to the tokenizer
+    tokenizer.add_tokens(special_tokens)
+    original_embeddings = model.get_input_embeddings()
+    # Get the pre-expansion embeddings of the model and resize the embedding layer
+    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
+    embeddings = model.get_input_embeddings()
+
+    # Sample the embeddings for the new tokens from a multivariate normal distribution
+    # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
+    # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+    mean = original_embeddings.mean(dim=0)
+    n = original_embeddings.size()[0]
+    sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mean,
+        covariance_matrix=1e-5 * sigma,
+    )
+    new_token_embeddings = torch.stack(
+        tuple((dist.sample() for _ in range(len(special_tokens)))),
+        dim=0,
+    )
+
+    if is_deepspeed_zero3_enabled():
+        import deepspeed
+
+        with deepspeed.zero.GatheredParameters(embeddings.weight, modifier_rank=None):
+            # Set the new tokens' embeddings to the newly sampled embeddings
+            new_embeddings = embeddings.weight.clone()
+            new_embeddings[-len(special_tokens) :] = new_token_embeddings
+
+            # Update the model's embeddings with the new embeddings
+            embeddings.weight = torch.nn.Parameter(new_embeddings)
+            model.set_input_embeddings(embeddings)
+    else:
+        # Set the new tokens' embeddings to the newly sampled embeddings
+        new_embeddings = embeddings.weight.clone()
+        new_embeddings[-len(special_tokens) :] = new_token_embeddings
+
+        # Update the model's embeddings with the new embeddings
+        embeddings.weight = torch.nn.Parameter(new_embeddings)
+        model.set_input_embeddings(embeddings)
+
+    logger.info("Added special tokens to the tokenizer and resized model's embedding layer")
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -594,8 +639,8 @@ def main():
         fim_transform_ids = [fim_transform(ids) for ids in examples["input_ids"]]
         examples["input_ids"] = fim_transform_ids
         examples["labels"] = fim_transform_ids
-        # If your application requires custom attention mask, please adjust this function's below line
-        # since FIM transformation increases the number of tokens in input_ids and labels
+        # If your application requires custom attention mask, please adjust this function's below line.
+        # Since FIM transformation increases the number of tokens in input_ids and labels
         # but leaves the number of tokens unchanged in attention_masks which would cause problems
         examples["attention_mask"] = [[1] * len(mask) for mask in examples["input_ids"]]
         return examples

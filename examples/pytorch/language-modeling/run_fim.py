@@ -47,6 +47,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
+    is_deepspeed_zero3_enabled,
     is_torch_tpu_available,
     set_seed,
 )
@@ -527,9 +528,10 @@ def main():
 
     # Add the new tokens to the tokenizer
     tokenizer.add_tokens(special_tokens)
+    original_embeddings = model.get_input_embeddings()
     # Get the pre-expansion embeddings of the model and resize the embedding layer
-    original_embeddings = model.get_input_embeddings().weight
     model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
+    embeddings = model.get_input_embeddings()
 
     # Sample the embeddings for the new tokens from a multivariate normal distribution
     # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
@@ -546,16 +548,26 @@ def main():
         dim=0,
     )
 
-    # Get the updated embedding layer and make a copy of it's weights
-    embeddings = model.get_input_embeddings()
-    new_embeddings = embeddings.weight.clone()
+    if is_deepspeed_zero3_enabled():
+        import deepspeed
 
-    # Set the new tokens' embeddings to the newly sampled embeddings
-    new_embeddings[-len(special_tokens) :] = new_token_embeddings
+        with deepspeed.zero.GatheredParameters(embeddings.weight, modifier_rank=None):
+            # Set the new tokens' embeddings to the newly sampled embeddings
+            new_embeddings = embeddings.weight.clone()
+            new_embeddings[-len(special_tokens) :] = new_token_embeddings
 
-    # Update the model's embeddings with the new embeddings
-    embeddings.weight = torch.nn.Parameter(new_embeddings)
-    model.set_input_embeddings(embeddings)
+            # Update the model's embeddings with the new embeddings
+            embeddings.weight = torch.nn.Parameter(new_embeddings)
+            model.set_input_embeddings(embeddings)
+    else:
+        # Set the new tokens' embeddings to the newly sampled embeddings
+        new_embeddings = embeddings.weight.clone()
+        new_embeddings[-len(special_tokens) :] = new_token_embeddings
+
+        # Update the model's embeddings with the new embeddings
+        embeddings.weight = torch.nn.Parameter(new_embeddings)
+        model.set_input_embeddings(embeddings)
+
     logger.info("Added special tokens to the tokenizer and resized model's embedding layer")
 
     # Preprocessing the datasets.
@@ -680,8 +692,8 @@ def main():
         fim_transform_ids = [fim_transform(ids) for ids in examples["input_ids"]]
         examples["input_ids"] = fim_transform_ids
         examples["labels"] = fim_transform_ids
-        # If your application requires custom attention mask, please adjust this function's below line
-        # since FIM transformation increases the number of tokens in input_ids and labels
+        # If your application requires custom attention mask, please adjust this function's below line.
+        # Since FIM transformation increases the number of tokens in input_ids and labels
         # but leaves the number of tokens unchanged in attention_masks which would cause problems
         examples["attention_mask"] = [[1] * len(mask) for mask in examples["input_ids"]]
         return examples
