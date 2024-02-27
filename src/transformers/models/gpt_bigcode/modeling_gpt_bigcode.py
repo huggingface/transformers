@@ -1030,8 +1030,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                 if query_length > 1 and attention_mask is not None and attention_mask.device.type == "cuda":
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+                    # `self.bias` is a bool tensor, hence using 0. for the min.
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
-                        self_attention_mask, min_dtype=torch.finfo(self.bias.dtype).min
+                        self_attention_mask, min_dtype=0.
                     )
 
                 # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
