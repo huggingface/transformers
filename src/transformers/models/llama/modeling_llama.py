@@ -1085,7 +1085,11 @@ class LlamaModel(LlamaPreTrainedModel):
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if self.config._attn_implementation == "sdpa" and attention_mask is not None and attention_mask.device.type == "cuda":
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+        ):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
             is_tracing = (
                 torch.jit.is_tracing()

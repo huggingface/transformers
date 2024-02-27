@@ -15,7 +15,6 @@
 import math
 from typing import List, Optional, Tuple, Union
 
-from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -31,6 +30,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -1022,9 +1022,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                 self_attention_mask = torch.where(
                     self_attention_mask,
                     torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
-                    torch.full(
-                        [], min_dtype, dtype=dtype, device=self_attention_mask.device
-                    ),
+                    torch.full([], min_dtype, dtype=dtype, device=self_attention_mask.device),
                 )
 
                 # output_attentions=True can not be supported when using SDPA, and we fall back on
