@@ -18,19 +18,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Starcoder2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+Starcoder2 has been released with the paper [Stacoder-2](https://drive.google.com/file/d/17iGn3c-sYNiLyRSY-A85QOzgzGnGiVI3/view) by BigCode team.
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+Documentation page about the model is coming soon
 
 
 ## Starcoder2Config
