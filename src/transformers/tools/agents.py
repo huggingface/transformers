@@ -124,7 +124,7 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def resolve_tools(code, toolbox, remote=False, cached_tools=None):
+def parse_tools(code, toolbox, remote=False, cached_tools=None):
     if cached_tools is None:
         resolved_tools = BASE_PYTHON_TOOLS.copy()
     else:
@@ -158,40 +158,14 @@ def get_tool_creation_code(code, toolbox, remote=False):
 
     return "\n".join(code_lines) + "\n"
 
+class FinalAnswerTool(Tool):
+    name = "final_answer"
+    description = "Provides a final answer to the given problem"
+    inputs = {"answer": str}
+    outputs = {"answer": str}
 
-def clean_code_for_chat(result):
-    lines = result.split("\n")
-    idx = 0
-    while idx < len(lines) and not lines[idx].lstrip().startswith("```"):
-        idx += 1
-    explanation = "\n".join(lines[:idx]).strip()
-    if idx == len(lines):
-        return explanation, None
-
-    idx += 1
-    start_idx = idx
-    while not lines[idx].lstrip().startswith("```"):
-        idx += 1
-    code = "\n".join(lines[start_idx:idx]).strip()
-
-    return explanation, code
-
-
-def clean_code_for_run(result):
-    result = f"I will use the following {result}"
-    explanation, code = result.split("Answer:")
-    explanation = explanation.strip()
-    code = code.strip()
-
-    code_lines = code.split("\n")
-    if code_lines[0] in ["```", "```py", "```python"]:
-        code_lines = code_lines[1:]
-    if code_lines[-1] == "```":
-        code_lines = code_lines[:-1]
-    code = "\n".join(code_lines)
-
-    return explanation, code
-
+    def __call__(self):
+        pass
 
 class Agent:
     """
@@ -206,35 +180,32 @@ class Agent:
             Pass along your own prompt if you want to override the default template for the `run` method. Can be the
             actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
             `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
+        toolbox ([`Tool`], list of tools or dictionary with tool values, *optional*):
+            
     """
 
-    def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
+    def __init__(self, llm_engine, chat_prompt_template=None, run_prompt_template=None, toolbox=None):
         _setup_default_tools()
 
         agent_name = self.__class__.__name__
+
+        self.llm_engine = llm_engine
         self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
         self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
-        self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
-        self.log = print
-        if additional_tools is not None:
-            if isinstance(additional_tools, (list, tuple)):
-                additional_tools = {t.name: t for t in additional_tools}
-            elif not isinstance(additional_tools, dict):
-                additional_tools = {additional_tools.name: additional_tools}
 
-            replacements = {name: tool for name, tool in additional_tools.items() if name in HUGGINGFACE_DEFAULT_TOOLS}
-            self._toolbox.update(additional_tools)
-            if len(replacements) > 1:
-                names = "\n".join([f"- {n}: {t}" for n, t in replacements.items()])
-                logger.warning(
-                    f"The following tools have been replaced by the ones provided in `additional_tools`:\n{names}."
-                )
-            elif len(replacements) == 1:
-                name = list(replacements.keys())[0]
-                logger.warning(f"{name} has been replaced by {replacements[name]} as provided in `additional_tools`.")
+        if toolbox is None:
+            self.toolbox = _setup_default_tools()
+        else:
+            self.toolbox = toolbox
+
+        final_answer_tool = FinalAnswerTool()
+        self.toolbox.append(final_answer_tool) 
+
+        self.log = print
+
+        self.system_prompt = "" #TODO: fill this
+        tool_description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
+        self.system_prompt.format(tool_description=tool_description)
 
         self.prepare_for_new_chat()
 
@@ -243,121 +214,51 @@ class Agent:
         """Get all tool currently available to the agent"""
         return self._toolbox
 
-    def format_prompt(self, task, chat_mode=False):
-        description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
-        if chat_mode:
-            if self.chat_history is None:
-                prompt = self.chat_prompt_template.replace("<<all_tools>>", description)
-            else:
-                prompt = self.chat_history
-            prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
-        else:
-            prompt = self.run_prompt_template.replace("<<all_tools>>", description)
-            prompt = prompt.replace("<<prompt>>", task)
-        return prompt
-
-    def set_stream(self, streamer):
-        """
-        Set the function use to stream results (which is `print` by default).
-
-        Args:
-            streamer (`callable`): The function to call when streaming results from the LLM.
-        """
-        self.log = streamer
-
-    def chat(self, task, *, return_code=False, remote=False, **kwargs):
+    def chat(self, *, return_code=False, remote=False, **kwargs):
         """
         Sends a new request to the agent in a chat. Will use the previous ones in its history.
-
-        Args:
-            task (`str`): The task to perform
-            return_code (`bool`, *optional*, defaults to `False`):
-                Whether to just return code and not evaluate it.
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs (additional keyword arguments, *optional*):
-                Any keyword argument to send to the agent when evaluating the code.
-
-        Example:
-
-        ```py
-        from transformers import HfAgent
-
-        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-        agent.chat("Draw me a picture of rivers and lakes")
-
-        agent.chat("Transform the picture so that there is a rock in there")
-        ```
         """
-        prompt = self.format_prompt(task, chat_mode=True)
-        result = self.generate_one(prompt, stop=["Human:", "====="])
-        self.chat_history = prompt + result.strip() + "\n"
-        explanation, code = clean_code_for_chat(result)
+        #TODO: fill this
+        while True:
+            self.run()
 
-        self.log(f"==Explanation from the agent==\n{explanation}")
 
-        if code is not None:
-            self.log(f"\n\n==Code generated by the agent==\n{code}")
-            if not return_code:
-                self.log("\n\n==Result==")
-                self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
-                self.chat_state.update(kwargs)
-                return evaluate(code, self.cached_tools, self.chat_state, chat_mode=True)
-            else:
-                tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
-                return f"{tool_code}\n{code}"
+    def run(self, task, *, return_code=False, remote=False, **kwargs):
+        """
+        Sends a request to the agent.
+        """
+        final_answer = None
+        while not final_answer:
+            final_answer = self.step()
+
+
+    def step(self):
+        current_prompt = self.system_prompt.format(memory = ', '.join(self.memory))
+        result = self.generate_one(current_prompt, stop=["Observation:", "====="])
+        self.memory.append(result.strip() + "\n")
+        thought, tool_call = result.split("Action:")
+
+        self.log(f"==Thought from the agent==\n{thought}")
+
+        tool, arguments = parse_tools(tool_call)
+
+        if tool_call == "final_answer":
+            return arguments
+
+        else:
+            self.log("\n\n==Result==")
+            observation = tool(**arguments)
+            self.memory.append("Observation: " + observation.strip() + "\n")
+            return None
+        
 
     def prepare_for_new_chat(self):
         """
         Clears the history of prior calls to [`~Agent.chat`].
         """
-        self.chat_history = None
-        self.chat_state = {}
-        self.cached_tools = None
+        self.memory = []
+        self.cached_tools = None #TODO: chekc if this attribute is useful to keep
 
-    def clean_code_for_run(self, result):
-        """
-        Override this method if you want to change the way the code is
-        cleaned for the `run` method.
-        """
-        return clean_code_for_run(result)
-
-    def run(self, task, *, return_code=False, remote=False, **kwargs):
-        """
-        Sends a request to the agent.
-
-        Args:
-            task (`str`): The task to perform
-            return_code (`bool`, *optional*, defaults to `False`):
-                Whether to just return code and not evaluate it.
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs (additional keyword arguments, *optional*):
-                Any keyword argument to send to the agent when evaluating the code.
-
-        Example:
-
-        ```py
-        from transformers import HfAgent
-
-        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-        agent.run("Draw me a picture of rivers and lakes")
-        ```
-        """
-        prompt = self.format_prompt(task)
-        result = self.generate_one(prompt, stop=["Task:"])
-        explanation, code = self.clean_code_for_run(result)
-
-        self.log(f"==Explanation from the agent==\n{explanation}")
-
-        self.log(f"\n\n==Code generated by the agent==\n{code}")
-        if not return_code:
-            self.log("\n\n==Result==")
-            self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
-            return evaluate(code, self.cached_tools, state=kwargs.copy())
-        else:
-            tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
-            return f"{tool_code}\n{code}"
 
     def generate_one(self, prompt, stop):
         # This is the method to implement in your custom agent.

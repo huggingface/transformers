@@ -104,7 +104,8 @@ class Tool:
     description: str = "This is a tool that ..."
     name: str = ""
 
-    inputs: List[str]
+    # TODO: Replace the below str with enum
+    inputs: Dict[str, str]
     outputs: List[str]
 
     def __init__(self, *args, **kwargs):
