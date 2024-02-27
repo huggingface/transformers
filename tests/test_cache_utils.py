@@ -172,20 +172,32 @@ class CacheTest(unittest.TestCase):
         attention (MQA)
         """
 
-        def _random_kvs(config, seq_len):
+        def _random_kvs(config, seq_len, beam):
             # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
-            random_keys = torch.rand(
-                (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
-                device=torch_device,
-            )
-            random_values = torch.rand(
-                (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
-                device=torch_device,
-            )
+            #next token
+            if seq_len == 1:
+                random_keys = torch.rand(
+                    (beam, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                    device=torch_device,
+                )
+                random_values = torch.rand(
+                    (beam, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                    device=torch_device,
+                )
+            #prompt
+            else:                
+                random_keys = torch.rand(
+                    (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
+                    device=torch_device,
+                )
+                random_values = torch.rand(
+                    (1, config.num_key_value_heads, seq_len, config.hidden_size // config.num_attention_heads),
+                    device=torch_device,
+                )
             return random_keys, random_values
         
-        def _test_paged_attention_cache(config):
-            num_blocks = 8
+        def _test_paged_attention_cache(config, beam):
+            num_blocks = 100
             block_size = 8        
             legacy_cache = ()
             generation_config = GenerationConfig(num_blocks=num_blocks, block_size=block_size)
@@ -194,7 +206,11 @@ class CacheTest(unittest.TestCase):
             paged_atention_cache = PagedAttentionCache(config=config, num_blocks=generation_config.num_blocks, block_size=generation_config.block_size, device=torch_device)
             #prompt check 
             prompt_len = 10 #store in 2 blocks
-            key_states, value_states = _random_kvs(config, prompt_len)
+            key_states, value_states = _random_kvs(config, prompt_len, beam)
+            if beam > 1:
+                key_states = key_states.repeat_interleave(beam, 0)
+                value_states = value_states.repeat_interleave(beam, 0)
+            
             legacy_cache += ((key_states, value_states),)
             key_states_1, value_states_1 = paged_atention_cache.update(key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len)})
             self.assertTrue(torch.allclose(key_states, key_states_1))
@@ -203,7 +219,7 @@ class CacheTest(unittest.TestCase):
             self.assertTrue(torch.allclose(cached_key, legacy_cache[0][0]))
             self.assertTrue(torch.allclose(cached_value, legacy_cache[0][1]))
             #next token check 
-            key_states, value_states = _random_kvs(config, 1)
+            key_states, value_states = _random_kvs(config, 1, beam)
             paged_atention_cache.update(key_states, value_states, 0, cache_kwargs={"cache_position": torch.arange(prompt_len, prompt_len+1)})
             cached_key, cached_value = paged_atention_cache.get_entire_context_states(key_states, value_states)
             cached_key_legacy = torch.cat([legacy_cache[0][0], key_states], dim=2)
@@ -214,8 +230,10 @@ class CacheTest(unittest.TestCase):
             self.assertTrue(paged_atention_cache.value_cache.shape == (num_blocks, block_size, config.num_key_value_heads, config.hidden_size // config.num_attention_heads))
         
         configs = [LlamaConfig(num_attention_heads=32), LlamaConfig(num_attention_heads=32, num_key_value_heads=4), LlamaConfig(num_attention_heads=32, num_key_value_heads=1)]
+        beams = [1, 2, 4, 8]
         for config in configs:
-            _test_paged_attention_cache(config)
+            for beam in beams:
+                _test_paged_attention_cache(config, beam)
 
 
 @require_torch_gpu
