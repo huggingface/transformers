@@ -326,6 +326,7 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["generate"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
@@ -372,7 +373,6 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
-    + extras["generate"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
@@ -386,7 +386,6 @@ extras["dev-tensorflow"] = (
     + extras["modelcreation"]
     + extras["onnx"]
     + extras["tf-speech"]
-    + extras["generate"]
 )
 extras["dev"] = (
     extras["all"]
