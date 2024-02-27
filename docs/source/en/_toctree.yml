@@ -583,6 +583,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin
