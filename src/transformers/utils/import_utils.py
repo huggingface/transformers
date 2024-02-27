@@ -527,6 +527,7 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
         return False
 
     import torch_xla
+
     if check_is_gpu:
         return torch_xla.runtime.device_type() in ["GPU", "CUDA"]
     elif check_is_tpu:
