@@ -675,10 +675,10 @@ class PagedAttentionCache(Cache):
         cur_len = key_states.shape[-2]
         past_context_len = self.seen_tokens
         self.seen_tokens += cur_len
-        
+
         if self.batch2seq is None:
             self.set_batch2seq_for_prompt_sharing(batch_size, 1)
-            
+
         # step 1): allocate slots to store token states for each sequence in the batch.
         self.slots_mapping = []
         for batch_idx in range(batch_size):
@@ -699,7 +699,7 @@ class PagedAttentionCache(Cache):
 
         # step 4): setup batch2seq for next decode step
         self.batch2seq = {i: [i] for i in range(len(self.block_tables))}
-        
+
         return key_states, value_states
 
     def reorder_cache(self, beam_idx: torch.Tensor) -> None:
