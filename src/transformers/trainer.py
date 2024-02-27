@@ -1678,6 +1678,7 @@ class Trainer:
     def train(
         self,
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
+        without_checkpoint_model: bool = False,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
         ignore_keys_for_eval: Optional[List[str]] = None,
         **kwargs,
@@ -1690,6 +1691,8 @@ class Trainer:
                 If a `str`, local path to a saved checkpoint as saved by a previous instance of [`Trainer`]. If a
                 `bool` and equals `True`, load the last checkpoint in *args.output_dir* as saved by a previous instance
                 of [`Trainer`]. If present, training will resume from the model/optimizer/scheduler states loaded here.
+            without_checkpoint_model (`bool`, *optional*, defaults to `False`):
+                Skips trying to load the model from the checkpoint if a model has already been supplied to the Trainer constructor.  Can be used to pre-load a model for resumption when the model loading code of this class does not support loading your particular model from a checkpoint.  E.g. QLoRA, LoftQ, etc.
             trial (`optuna.Trial` or `Dict[str, Any]`, *optional*):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             ignore_keys_for_eval (`List[str]`, *optional*)
@@ -1747,10 +1750,17 @@ class Trainer:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         if resume_from_checkpoint is not None:
-            if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                self._load_from_checkpoint(resume_from_checkpoint)
+            if without_checkpoint_model:
+                if not self.model:
+                    raise ValueError(
+                        "The model to be trained must be provided to the constructor if resuming from checkpoint and suppressing loading of the model during resumption"
+                    )
+
+            else:
+                if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
+                    self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
-            state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            state = TrainerState.load_from_json(os.path.join(str(resume_from_checkpoint), TRAINER_STATE_NAME))
             if state.train_batch_size is not None:
                 self._train_batch_size = state.train_batch_size
 
