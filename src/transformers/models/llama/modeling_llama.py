@@ -116,6 +116,7 @@ class LlamaRotaryEmbedding(nn.Module):
         )
         return self._cos_cached
 
+    @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         if seq_len is not None:
             logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.40.")
