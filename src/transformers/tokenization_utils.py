@@ -20,7 +20,6 @@ import bisect
 import itertools
 import re
 import unicodedata
-import warnings
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
@@ -345,6 +344,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     This class also contain the added tokens in a unified way on top of all tokenizers so we don't have to handle the
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
+
+    Args:
+        oov_error (`str`): Defines the behavior when converting out-of-vocabulary (OOV) IDs to tokens, aiming to
+        unify the behavior between slow and fast tokenizers. The parameter can be set to either "replace" to replace
+        OOV IDs with an empty string, or "strict" to keep the original behavior. Note: Although `_convert_id_to_token`
+        is declared to return a `str` type, specific implementations in subclasses may return `None` for OOV IDs
+        (e.g., in the `codegen` tokenizer) or may raise exceptions (e.g., in the `llama` tokenizer). While the fast
+        tokenizer developed in Rust uniformly returns an empty string for such cases.
     """
 
     def __init__(self, **kwargs):
@@ -367,7 +374,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Note: this must be set before _add_tokens, because _add_tokens 
         # relies on the behavior of the OOV token ids for some tokenizers.
         self.oov_error = kwargs.pop("oov_error", "")
-        # TODO @ArthurZ in version 5
+        # TODO @ArthurZ in version 4.42
         if self.oov_error == "":
             logger.warning_once(
                 "The `oov_error` argument is set to the default `'replace'`. It will default to `'strict'` in `transformers` (v4.42) "
@@ -994,14 +1001,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     tokens.append("")
                 elif self.oov_error == "strict":
                     tokens.append(self._convert_id_to_token(index))
-                # Note: Although `_convert_id_to_token` is declared to return a 
-                # `str` type, specific implementations in subclasses may return 
-                # `None` for out-of-vocabulary (OOV) IDs (e.g., in the `codegen` 
-                # tokenizer) or may raise exceptions (e.g., in the `llama` 
-                # tokenizer). On the other hand, the fast tokenizer developed in 
-                # Rust uniformly returns an empty string for such cases. To 
-                # ensure consistency, it is recommended to set `oov_error` to
-                # "replace".
             else:
                 tokens.append(self._convert_id_to_token(index))
         return tokens if not is_single_element else tokens[0]
