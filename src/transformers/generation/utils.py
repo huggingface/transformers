@@ -143,7 +143,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     Outputs of encoder-decoder generation models, when using non-beam methods.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
