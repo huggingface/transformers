@@ -61,7 +61,7 @@ DPT を始めるのに役立つ公式 Hugging Face およびコミュニティ (
 
 - DINOv2 のデモ ノートブックは [こちら](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DINOv2) にあります。 🌎
 
-<PipelineTag パイプライン="image-classification"/>
+<PipelineTag pipeline="image-classification"/>
 
 - [`Dinov2ForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
