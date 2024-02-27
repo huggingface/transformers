@@ -1320,6 +1320,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         device = feature_map.device
         num_patches = feature_map.shape[1]
 
+        # TODO: Remove numpy usage.
         box_coordinates = np.stack(
             np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
         ).astype(np.float32)
@@ -1432,8 +1433,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1442,8 +1442,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1466,8 +1466,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1476,8 +1475,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
