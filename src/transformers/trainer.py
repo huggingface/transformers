@@ -2016,7 +2016,7 @@ class Trainer:
                             if hasattr(grad_norm, "item"):
                                 grad_norm = grad_norm.item()
                         else:
-                            grad_norm = _grad_norm.item() if _grad_norm is not None else None
+                            grad_norm = _grad_norm
 
                     # Optimizer step
                     self.optimizer.step()
@@ -2039,7 +2039,7 @@ class Trainer:
                     # PyTorch/XLA relies on the data loader to insert the mark_step for
                     # each step. Since we are breaking the loop early, we need to manually
                     # insert the mark_step here.
-                    if is_torch_tpu_available():
+                    if is_torch_xla_available():
                         xm.mark_step()
                     break
             if step < 0:
@@ -2404,7 +2404,7 @@ class Trainer:
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if grad_norm is not None:
-                logs["grad_norm"] = grad_norm
+                logs["grad_norm"] = grad_norm.item() if torch.is_tensor(grad_norm) else grad_norm
             logs["learning_rate"] = self._get_learning_rate()
 
             self._total_loss_scalar += tr_loss_scalar

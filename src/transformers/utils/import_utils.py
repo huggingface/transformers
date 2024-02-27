@@ -252,6 +252,13 @@ if _torch_available:
     )
 
 
+_torch_xla_available = False
+if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
+    _torch_xla_available, _torch_xla_version = _is_package_available("torch_xla", return_version=True)
+    if _torch_xla_available:
+        logger.info(f"Torch XLA version {_torch_xla_version} available.")
+
+
 def is_kenlm_available():
     return _kenlm_available
 
@@ -516,20 +523,16 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     """
     assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
 
-    try:
-        import torch_xla.core.xla_model as xm
-
-        xla_device = xm.xla_device()
-        hardware_type = xm.xla_device_hw(xla_device)
-        return any(
-            [
-                check_is_tpu and hardware_type == "TPU",
-                check_is_gpu and hardware_type == "GPU",
-                not (check_is_tpu or check_is_gpu),
-            ]
-        )
-    except (ImportError, RuntimeError):
+    if not _torch_xla_available:
         return False
+
+    import torch_xla
+    if check_is_gpu:
+        return torch_xla.runtime.device_type() in ["GPU", "CUDA"]
+    elif check_is_tpu:
+        return torch_xla.runtime.device_type() == "TPU"
+
+    return True
 
 
 @lru_cache()
