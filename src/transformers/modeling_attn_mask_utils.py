@@ -189,6 +189,18 @@ class AttentionMaskConverter:
     def _unmask_unattended(
         expanded_mask: torch.Tensor, min_dtype: float,
     ):
+        # fmt: off
+        """
+        Attend to all tokens in masked rows from the expanded attention mask, for example the relevant first rows when
+        using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+        Details: https://github.com/pytorch/pytorch/issues/110213
+
+        `expanded_mask` is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
+        `attention_mask` is [bsz, src_seq_len].
+
+        The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
+        """
+        # fmt: on
         expanded_mask = expanded_mask.mul(~torch.all(expanded_mask == min_dtype, dim=-1, keepdim=True))
 
         return expanded_mask
