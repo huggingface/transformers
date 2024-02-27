@@ -1311,6 +1311,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
+        self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
+
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
         # Computes normalized xy corner coordinates from feature_map.
