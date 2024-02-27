@@ -628,6 +628,23 @@ class GenerationMixin:
 
         return input_ids, model_kwargs
 
+    @staticmethod
+    def _expand_outputs_for_generation(
+        expand_size: int = 1,
+        outputs: ModelOutput = None,
+    ) -> ModelOutput:
+        """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
+        outputs = _expand_dict_for_generation(outputs)
+
+        return outputs
+
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past_key_values = None
         if "past_key_values" in outputs:
@@ -1622,13 +1639,18 @@ class GenerationMixin:
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 max_length=generation_config.max_length,
             )
-            # 12. interleave input_ids with `num_beams` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
+
+            if self.generation_config.cache_implementation == "paged":
+                # enable prompt sharing
+                self._prompt_sharing_with_paged_attention_cache(batch_size, generation_config.num_beams)
+            else:
+                # 12. interleave input_ids with `num_beams` additional sequences per batch
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids=input_ids,
+                    expand_size=generation_config.num_beams,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
             # 13. run beam search
             result = self.beam_search(
                 input_ids,
@@ -3000,6 +3022,10 @@ class GenerationMixin:
 
         batch_beam_size, cur_len = input_ids.shape
 
+        if self.generation_config.cache_implementation == "paged":
+            # enabled prompt sharing with paged attention, no expand for inputs
+            batch_beam_size = batch_size * num_beams
+
         if num_beams * batch_size != batch_beam_size:
             raise ValueError(
                 f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
@@ -3031,6 +3057,8 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
+        is_prompt = True
+
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -3090,6 +3118,16 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
+
+            # paged attention enable prompt sharing, need to expand inputs and outputs for generation
+            if self.generation_config.cache_implementation == "paged" and is_prompt:
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids=input_ids,
+                    expand_size=num_beams,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
+                outputs = self._expand_outputs_for_generation(expand_size=num_beams, outputs=outputs)
 
             next_token_logits = outputs.logits[:, -1, :]
             next_token_scores = nn.functional.log_softmax(
@@ -3181,6 +3219,7 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
+            is_prompt = False
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,

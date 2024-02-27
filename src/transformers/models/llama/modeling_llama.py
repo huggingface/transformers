@@ -846,6 +846,11 @@ class LlamaPreTrainedModel(PreTrainedModel):
                     dtype=weights.dtype,
                 )
 
+    def _prompt_sharing_with_paged_attention_cache(self, batch_size, beam_size):
+        for layer in self.model.layers:
+            if isinstance(layer.self_attn.past_key_value, PagedAttentionCache):
+                layer.self_attn.past_key_value.set_batch2seq_for_prompt_sharing(batch_size, beam_size)
+
     def _reset_cache(self):
         for layer in self.model.layers:
             layer.self_attn.past_key_value = None

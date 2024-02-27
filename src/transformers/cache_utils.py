@@ -467,7 +467,7 @@ class PagedAttentionCache(Cache):
         self.batch2seq = {}  # mapping batch index to {seq_id0, seq_id1, ...} to enable prompt sharing.
         self.slots_mapping = []  # mapping logical slots to physical slots.
 
-    def copy_on_write(self, src_block_idx: int, dst_block_idx: int):
+    def _copy_on_write(self, src_block_idx: int, dst_block_idx: int):
         """
         Copy the content of src_block_idx to dst_block_idx.
 
@@ -478,7 +478,7 @@ class PagedAttentionCache(Cache):
         self.key_cache[dst_block_idx] = self.key_cache[src_block_idx].clone()
         self.value_cache[dst_block_idx] = self.value_cache[src_block_idx].clone()
 
-    def allocate(self, seq_idx: int, key_len: int, past_context_len: int) -> List[int]:
+    def _allocate(self, seq_idx: int, key_len: int, past_context_len: int) -> List[int]:
         """
         Allocate physical slots for a given sequence index, key length and context length.
 
@@ -524,7 +524,7 @@ class PagedAttentionCache(Cache):
                     self.block_tables[seq_idx][-1] = new_block
                     self.block_ref_count[new_block] += 1
                     self.block_ref_count[last_block] -= 1
-                    self.copy_on_write(last_block, new_block)
+                    self._copy_on_write(last_block, new_block)
         # return the slots for this sequence
         for i in range(key_len):
             token_id = i + past_context_len
@@ -533,7 +533,7 @@ class PagedAttentionCache(Cache):
             slots.append(self.block_tables[seq_idx][block_idx] * self.block_size + block_offset)
         return slots
 
-    def free(self, seq_idx: int):
+    def _free(self, seq_idx: int):
         """
         Frees the blocks allocated for the given sequence index.
 
@@ -543,13 +543,12 @@ class PagedAttentionCache(Cache):
         Raises:
             AssertionError: If the given sequence index is not present in the block tables.
         """
-        assert seq_idx in self.block_tables
         for block_idx in self.block_tables[seq_idx]:
             self.block_ref_count[block_idx] -= 1
             if self.block_ref_count[block_idx] == 0:
                 self.free_blocks.append(block_idx)
 
-    def fork(self, seq_idx: int, new_seq_idx: int):
+    def _fork(self, seq_idx: int, new_seq_idx: int):
         """
         Forks the blocks allocated for seq_idx to new_seq_idx.
 
@@ -560,14 +559,21 @@ class PagedAttentionCache(Cache):
         Raises:
             AssertionError: If seq_idx is not in block_tables or if new_seq_idx is already in block_tables.
         """
-        assert seq_idx in self.block_tables
-        assert new_seq_idx not in self.block_tables
         self.block_tables[new_seq_idx] = self.block_tables[seq_idx]
         for block_idx in self.block_tables[seq_idx]:
             self.block_ref_count[block_idx] += 1
 
-    def set_batch2seq(self, batch2seq: Dict[int, int]):
-        self.batch2seq = batch2seq
+    def set_batch2seq_for_prompt_sharing(self, batch_size: int, beam_size: int):
+        """
+        Set the batch2seq mapping for prompt sharing.
+
+        Args:
+            batch_size (int): The batch size.
+            beam_size (int): The beam size.
+        """
+        self.batch2seq = {}
+        for i in range(batch_size):
+            self.batch2seq[i] = [i * beam_size + j for j in range(beam_size)]
 
     def reshape_and_cache(
         self,
@@ -593,7 +599,6 @@ class PagedAttentionCache(Cache):
         block_offsets = slot_mapping % self.block_size
         block_offsets = block_offsets.cpu().tolist()
         batch = len(slot_mapping)
-        assert batch == key_states.shape[0]
         seq_len = key_states.shape[-2]
         key = key_states.transpose(1, 2)
         value = value_states.transpose(1, 2)
@@ -645,13 +650,6 @@ class PagedAttentionCache(Cache):
             value_states = value.transpose(1, 2).contiguous()
         return key_states, value_states
 
-    def check_batch2seq(self, batch2seq: Dict[int, int], batch_size: int):
-        # self.batch2seq is only for the current decode step, need to clear in the last layer and init in the first layer or setup externally
-        if self.batch2seq == {}:
-            self.batch2seq = {i: [i] for i in range(batch_size)}
-        elif self.batch2seq != {}:
-            assert len(self.batch2seq) == batch_size
-
     def update(
         self,
         key_states: torch.Tensor,
@@ -677,26 +675,31 @@ class PagedAttentionCache(Cache):
         cur_len = key_states.shape[-2]
         past_context_len = self.seen_tokens
         self.seen_tokens += cur_len
-        self.check_batch2seq(self.batch2seq, batch_size)
-
+        
+        if self.batch2seq is None:
+            self.set_batch2seq_for_prompt_sharing(batch_size, 1)
+            
         # step 1): allocate slots to store token states for each sequence in the batch.
-        # The kv_cache strutures are same for all layers, only need run in the first layer
         self.slots_mapping = []
-        # only allocate the slots for the first sequence in the batch to enable prompt sharing
         for batch_idx in range(batch_size):
+            # only allocate the slots for the first sequence in the batch to enable prompt sharing
             seq_id = self.batch2seq[batch_idx][0]
-            slots = self.allocate(seq_id, cur_len, past_context_len)
+            slots = self._allocate(seq_id, cur_len, past_context_len)
             self.slots_mapping.append(slots)
-        assert len(self.slots_mapping) == batch_size
 
-        # step 2): cache key_states & value states
+        # step 2): cache key_states & value_states
         self.reshape_and_cache(self.slots_mapping, key_states, value_states)
+
         # step 3): fork new sequences to enable prompt sharing
         for batch_idx in range(batch_size):
             seq_ids = self.batch2seq[batch_idx]
             # fork the blocks allocated for the first sequence to other sequences in the batch
             for seq_id in seq_ids[1:]:
-                self.fork(seq_ids[0], seq_id)
+                self._fork(seq_ids[0], seq_id)
+
+        # step 4): setup batch2seq for next decode step
+        self.batch2seq = {i: [i] for i in range(len(self.block_tables))}
+        
         return key_states, value_states
 
     def reorder_cache(self, beam_idx: torch.Tensor) -> None:
@@ -715,7 +718,7 @@ class PagedAttentionCache(Cache):
                 self.block_ref_count[block] += 1
                 new_block_tables[seq_id].append(block)
         for seq_idx in freed_seqs:
-            self.free(seq_idx)
+            self._free(seq_idx)
         self.block_tables = new_block_tables
 
     def to_legacy_cache(self):
