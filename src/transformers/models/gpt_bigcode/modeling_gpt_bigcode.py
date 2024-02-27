@@ -1027,11 +1027,11 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     # [batch_size, target_length, 1, source_length], not compatible with SDPA, hence this transpose.
                     self_attention_mask = self_attention_mask.transpose(1, 2)
 
-                if query_length > 1 and attention_mask is not None:
+                if query_length > 1 and attention_mask is not None and attention_mask.device.type == "cuda":
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
-                        self_attention_mask, attention_mask, unmasked_value=True
+                        self_attention_mask, min_dtype=torch.finfo(self.bias.dtype).min
                     )
 
                 # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.

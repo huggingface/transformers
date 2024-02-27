@@ -187,90 +187,9 @@ class AttentionMaskConverter:
 
     @staticmethod
     def _unmask_unattended(
-        expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]
+        expanded_mask: torch.Tensor, min_dtype: float,
     ):
-        # fmt: off
-        """
-        Attend to all tokens in masked rows from the expanded attention mask, for example the relevant first rows when
-        using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-        Details: https://github.com/pytorch/pytorch/issues/110213
-
-        `expanded_mask` is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
-        `attention_mask` is [bsz, src_seq_len].
-
-        The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
-
-        For example, if `attention_mask` is
-        ```
-        [[0, 0, 1],
-         [1, 1, 1],
-         [0, 1, 1]]
-        ```
-        and `expanded_mask` is (e.g. here left-padding case)
-        ```
-        [[[[0, 0, 0],
-           [0, 0, 0],
-           [0, 0, 1]]],
-         [[[1, 0, 0],
-           [1, 1, 0],
-           [1, 1, 1]]],
-         [[[0, 0, 0],
-           [0, 1, 0],
-           [0, 1, 1]]]]
-        ```
-        then the modified `expanded_mask` will be
-        ```
-        [[[[1, 1, 1],   <-- modified
-           [1, 1, 1],   <-- modified
-           [0, 0, 1]]],
-         [[[1, 0, 0],
-           [1, 1, 0],
-           [1, 1, 1]]],
-         [[[1, 1, 1],   <-- modified
-           [0, 1, 0],
-           [0, 1, 1]]]]
-        ```
-        """
-        # fmt: on
-
-        # Get the index of the first non-zero value for every sample in the batch.
-        # In the above example, indices = [[2], [0], [1]]]
-        tmp = torch.arange(attention_mask.shape[1], 0, -1)
-        indices = torch.argmax(attention_mask.cpu() * tmp, 1, keepdim=True)
-
-        # Find the batch indexes that have unattended tokens on the leftmost side (e.g. [0, 0, 1, 1, 1]), for which the first rows of the
-        # expanded mask will be completely unattended.
-        left_masked_rows = torch.where(indices > 0)[0]
-
-        if left_masked_rows.shape[0] == 0:
-            return expanded_mask
-        indices = indices[left_masked_rows]
-
-        max_len = torch.max(indices)
-        range_tensor = torch.arange(max_len).unsqueeze(0)
-        range_tensor = range_tensor.repeat(indices.size(0), 1)
-
-        # Avoid unmasking tokens at relevant target positions (on the row axis), by rather unmasking possibly several times the first row that should always be unmasked as we filtered out the batch above.
-        range_tensor[range_tensor >= indices] = 0
-
-        # TODO: we may drop support for 3D attention mask as the refactor from Patrick maybe dropped this case
-        if expanded_mask.dim() == 4:
-            num_masks = expanded_mask.shape[1]
-            if num_masks == 1:
-                # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
-                mask_slice = (left_masked_rows[:, None], 0, range_tensor)
-            else:
-                # Broadcast [left_masked_rows, 1, 1], [1, num_masks, 1], [left_masked_rows, 1, max_len]
-                mask_slice = (
-                    left_masked_rows[:, None, None],
-                    torch.arange(num_masks)[None, :, None],
-                    range_tensor[:, None, :],
-                )
-        else:
-            # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
-            mask_slice = (left_masked_rows[:, None], range_tensor)
-
-        expanded_mask[mask_slice] = unmasked_value
+        expanded_mask = expanded_mask.mul(~torch.all(expanded_mask == min_dtype, dim=-1, keepdim=True))
 
         return expanded_mask
 
@@ -406,16 +325,12 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
             key_value_length=key_value_length,
         )
 
-        # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-        # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        #
-        # This fix is not applied in case we are tracing with torch.jit.trace or symbolic_trace, as _unmask_unattended has a data-dependent
-        # controlflow that can not be captured properly.
-        # TODO: _unmask_unattended does not work either with torch.compile when using fullgraph=True. We should find a way to detect this case.
-        if query_length > 1 and not is_tracing:
-            expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
-                expanded_4d_mask, attention_mask, unmasked_value=0.0
-            )
+        # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+        # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+        # Details: https://github.com/pytorch/pytorch/issues/110213
+        if not is_tracing and expanded_4d_mask.device.type == "cuda":
+            min_dtype = torch.finfo(inputs_embeds.dtype).min
+            expanded_4d_mask = AttentionMaskConverter._unmask_unattended(expanded_4d_mask, min_dtype)
 
     return expanded_4d_mask
 
