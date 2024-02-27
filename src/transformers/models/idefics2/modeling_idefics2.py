@@ -59,6 +59,81 @@ IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+@dataclass
+class Idefics2BaseModelOutputWithPast(ModelOutput):
+    """
+    Base class for Idefics2 model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class Idefics2CausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for Idefics2 causal language model (or autoregressive) outputs.
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
 class Idefics2VisionEmbeddings(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
@@ -192,6 +267,194 @@ class Idefics2VisionAttention(nn.Module):
 
         return attn_output, attn_weights
 
+class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
+    """
+    Llama flash attention module. This module inherits from `LlamaAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.is_causal = False  # Hack to make sure we don't use a causal mask
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        # if past_key_value is not None:
+        #     cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+        #     key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                "The input hidden states seems to be silently casted in float32, this might be related to the fact"
+                " you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = self._flash_attention_forward(
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`int`, *optional*):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        """
+
+        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+        causal = self.is_causal and query_length != 1
+
+        # Contains at least one padding token in the sequence
+        if attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+            )
+
+        return attn_output
+
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+
+
+
 
 # FIXME - remap the weights and use the standard MLP implementation
 # Copied from transformers.models.siglip.modeling_siglip.SiglipMLP with Siglip->Idefics2Vision
@@ -235,12 +498,15 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
         return hidden_state[:, 0]
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipEncoderLayer with Siglip->Idefics2Vision
 class Idefics2VisionEncoderLayer(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = Idefics2VisionAttention(config)
+        self.self_attn = (
+            Idefics2VisionAttention(config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else Idefics2VisionFlashAttention2(config)
+        )
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Idefics2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -290,7 +556,12 @@ class Idefics2EncoderLayer(nn.Module):
     def __init__(self, config: Idefics2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = Idefics2VisionAttention(config)
+        # FIXME - should work with eager attention too
+        self.self_attn = (
+            Idefics2VisionAttention(config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else Idefics2VisionFlashAttention2(config)
+        )
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Idefics2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -664,7 +935,8 @@ class Idefics2MLP(nn.Module):
         self.gate_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.output_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act] if act is None else act
+        # FIXME should be robust to act being an activation or string
+        self.act_fn = ACT2FN[config.hidden_act if act is None else act]
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -2061,133 +2333,466 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         self.post_init()
 
+    def enable_input_require_grads(self):
+        """
+        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
+        the model weights fixed.
+        """
 
-@add_start_docstrings(
-    """The IDEFICS2 model which consists of a vision backbone and a language model.""",
-    IDEFICS2_START_DOCSTRING,
-)
-# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->IDEFICS2,Llava->Idefics2,llava-hf/llava-1.5-7b-hf->HuggingFaceM4
-class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
-    def __init__(self, config: Idefics2Config):
-        super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        def get_lowest_module(module):
+            if len(list(module.children())) == 0:
+                # If the module has no children, it is a leaf module (e.g., Linear, Conv2d, etc.)
+                return module
+            else:
+                # Recursively call the function on each child module
+                return get_lowest_module(list(module.children())[0])
 
-        self.multi_modal_projector = Idefics2MultiModalProjector(config)
-        self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config, attn_implementation=config._attn_implementation)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.post_init()
+        def make_inputs_require_grads(module, input, output):
+            output.requires_grad_(True)
+
+        self._text_require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        self._vision_require_grads_hook = get_lowest_module(self.vision_model).register_forward_hook(
+            make_inputs_require_grads
+        )
+
+    def freeze_relevant_params(self, config=None):
+        if config is None:
+            config = self.config
+
+        if config.freeze_text_layers:
+            self.freeze_text_layers(config.freeze_text_module_exceptions)
+
+        if config.freeze_vision_layers:
+            freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
+
+    def freeze_text_layers(self, module_exceptions):
+        for module in [self.layers, self.norm]:
+            freeze_model(module, module_exceptions=module_exceptions)
 
     def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+        return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        self.embed_tokens = value
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+    def inputs_merger(
+        self,
+        input_ids: torch.LongTensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        image_hidden_states: Optional[torch.Tensor] = None,
+    ):
+        """
+        This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
+        The merging happens as follows:
+        - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
+        - We get the image hidden states for the image through the vision encoder (and potentially the perceiver), and that hidden state is then projected into the text embedding space.
+        We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
+        - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
+        - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
+        """
+        batch_size = input_ids.size(0)
 
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
+        if inputs_embeds is not None:
+            if image_hidden_states is not None:
+                vision_pipeline_output_seq_len = image_hidden_states.shape[1]
+                vision_hidden_size = image_hidden_states.shape[2]
+                new_inputs_embeds = inputs_embeds.clone()
+                # Get the number of images for each example
+                num_images = (input_ids == self.image_token_id).sum(dim=-1) // self.image_seq_len
+                cum_num_images = num_images.cumsum(dim=-1)
+                for batch_idx in range(batch_size):
+                    # Get the number of images for this particular example
+                    example_num_images = num_images[batch_idx]
+                    # Get the image_hidden_states corresponding to True images for the example, so get rid of the padding images.
+                    start = 0 if batch_idx == 0 else cum_num_images[batch_idx - 1]
+                    end = cum_num_images[batch_idx]
+                    example_true_image_hidden_states = image_hidden_states[start:end]
+                    if (
+                        new_inputs_embeds[batch_idx][input_ids[batch_idx] == self.image_token_id].shape[0]
+                        != example_num_images * vision_pipeline_output_seq_len
+                    ):
+                        raise ValueError(
+                            "new_inputs_embeds to replace has shape[0]:"
+                            f" {new_inputs_embeds[batch_idx][input_ids[batch_idx] == self.image_token_id].shape[0]} but"
+                            " should have shape[0]:"
+                            f" {example_num_images}*{vision_pipeline_output_seq_len}={example_num_images * vision_pipeline_output_seq_len} "
+                        )
+                    # Insert the image_hidden_states
+                    new_inputs_embeds[batch_idx][input_ids[batch_idx] == self.image_token_id] = (
+                        example_true_image_hidden_states.view(
+                            example_num_images * vision_pipeline_output_seq_len,
+                            vision_hidden_size,
+                        )
+                    )
+            else:
+                new_inputs_embeds = inputs_embeds
 
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
+        return_dict = {}
+        if inputs_embeds is not None:
+            return_dict["inputs_embeds"] = new_inputs_embeds
 
-    def get_decoder(self):
-        return self.language_model.get_decoder()
+        return return_dict
 
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
-        self.config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
-
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        num_images, num_image_patches, embed_dim = image_features.shape
-        batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where special image tokens are
-        special_image_token_mask = input_ids == self.config.image_token_index
-        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged image-text sequence.
-        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
-        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
-        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        if left_padding:
-            new_token_positions += nb_image_pad[:, None]  # offset for left padding
-        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-        final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
-        )
-        if labels is not None:
-            final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
-            )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
-
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        if labels is not None:
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
-
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
-            )
-
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        if labels is None:
-            final_labels = None
-
-        return final_embedding, final_attention_mask, final_labels, position_ids
-
-    @add_start_docstrings_to_model_forward(IDEFICS2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
+        image_hidden_states: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Idefics2BaseModelOutputWithPast]:
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+        elif input_ids is not None:
+            batch_size, seq_length = input_ids.shape
+        elif inputs_embeds is not None:
+            batch_size, seq_length, _ = inputs_embeds.shape
+        else:
+            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+
+        seq_length_with_past = seq_length
+        past_key_values_length = 0
+
+        if past_key_values is not None:
+            past_key_values_length = past_key_values[0][0].shape[2]
+            seq_length_with_past = seq_length_with_past + past_key_values_length
+
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = torch.arange(
+                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+            )
+            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
+        else:
+            position_ids = position_ids.view(-1, seq_length).long()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        # START VISUAL INPUTS INTEGRATION
+        if pixel_values is not None and image_hidden_states is not None:
+            raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
+        elif pixel_values is not None:
+            pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
+            batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
+            pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
+
+            # Remove padding images - padding images are full 0.
+            nb_values_per_image = pixel_values.shape[1:].numel()
+            real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
+            pixel_values = pixel_values[real_images_inds].contiguous()
+
+            # Handle the vision attention mask
+            if pixel_attention_mask is None:
+                pixel_attention_mask = torch.ones(
+                    size=(pixel_values.size(0), pixel_values.size(2), pixel_values.size(3)),
+                    dtype=torch.bool,
+                    device=pixel_values.device,
+                )
+            else:
+                # Remove padding images from the mask
+                pixel_attention_mask = pixel_attention_mask.view(
+                    batch_size * num_images, *pixel_attention_mask.shape[2:]
+                )
+                pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
+
+            patches_subgrid = pixel_attention_mask.unfold(
+                dimension=1, size=self.config.vision_config.patch_size, step=self.config.vision_config.patch_size
+            ).unfold(dimension=2, size=self.config.vision_config.patch_size, step=self.config.vision_config.patch_size)
+            patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
+            # Get sequence from the vision encoder
+            image_hidden_states = self.vision_model(
+                pixel_values=pixel_values,
+                patch_attention_mask=patch_attention_mask,
+            ).last_hidden_state
+
+            # Modality projection
+            image_hidden_states = self.modality_projection(image_hidden_states)
+
+            if self.config.use_resampler:
+                image_hidden_states = self.perceiver_resampler(
+                    context=image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
+                )
+        elif image_hidden_states is not None:
+            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
+
+        if past_key_values is None:
+            # When we generate, we don't want to replace the potential image_token_id that we generated by images
+            # that simply don't exist
+            new_inp = self.inputs_merger(
+                input_ids=input_ids,
+                inputs_embeds=inputs_embeds,
+                image_hidden_states=image_hidden_states,
+            )
+            inputs_embeds = new_inp["inputs_embeds"]
+
+        # Can do add some token types embeddings here (image token vs text token)
+        # something like inputs_embeds += self.token_types(token_types)
+
+        # embed positions
+        if (
+            attention_mask is not None
+            and hasattr(self.config, "_flash_attn_2_enabled")
+            and self.config._flash_attn_2_enabled
+            and past_key_values is not None
+        ):
+            is_padding_right = attention_mask[:, -1].sum().item() != batch_size
+            if is_padding_right:
+                raise ValueError(
+                    "You are attempting to perform batched generation with padding_side='right'"
+                    " this may lead to unexpected behaviour for Flash Attention version of Mistral. Make sure to "
+                    " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                )
+
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            # 4d mask is passed through the layers
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask,
+                (batch_size, seq_length),
+                inputs_embeds,
+                past_key_values_length,
+                sliding_window=self.config.sliding_window,
+            )
+            attention_mask[attention_mask == -float("inf")] = torch.finfo(self.dtype).min
+
+        hidden_states = inputs_embeds
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        next_decoder_cache = () if use_cache else None
+
+        for idx, decoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
+                    past_key_value,
+                    output_attentions,
+                    use_cache,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        next_cache = next_decoder_cache if use_cache else None
+        if not return_dict:
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, image_hidden_states]
+                if v is not None
+            )
+        return Idefics2BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            image_hidden_states=image_hidden_states,
+        )
+
+
+class Idefics2DecoupledLinear(nn.Linear):
+    # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
+    """
+    Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters.
+    In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `out_additional_features` > 0, then it will create `out_additional_features * in_features` additional parameters that are always trained.
+    If `out_additional_features=0`, then the module defaults back to the regular behavior of `nn.Linear`.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        out_additional_features: int = 0,
+        bias: bool = True,
+        partially_freeze: bool = True,
+        device=None,
+        dtype=None,
+    ) -> None:
+        """
+        out_additional_features: int. Number of additional trainable dimensions. Only makes sense when `partially_freeze=True`.
+        partially_freeze: bool. If True, the regular `weight` will be frozen and extra parameters (if any) will be trainable. If False, default to the regular behavior of nn.Linear.
+        """
+        super().__init__(in_features, out_features, bias, device, dtype)
+        self.out_additional_features = out_additional_features
+        self.partially_freeze = partially_freeze
+
+        self.in_features = in_features
+        self.out_features = out_features
+
+        if partially_freeze:
+            self.weight.requires_grad_(False)
+            if bias:
+                self.bias.requires_grad_(False)
+
+        if out_additional_features > 0:
+            self.additional_fc = nn.Linear(
+                in_features=in_features,
+                out_features=out_additional_features,
+                bias=bias,
+                device=device,
+                dtype=dtype,
+            )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        output = F.linear(input, self.weight, self.bias)
+
+        if self.out_additional_features > 0:
+            additional_features = self.additional_fc(input)
+            output = torch.cat((output, additional_features), -1)
+
+        return output
+
+
+
+# class Idefics2ForVisionText2Text(Idefics2PreTrainedModel):
+class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Idefics2Model(config)
+        self.image_token_id = self.config.image_token_id
+        self.lm_head = Idefics2DecoupledLinear(
+            in_features=config.hidden_size,
+            out_features=config.vocab_size,
+            out_additional_features=config.additional_vocab_size,
+            bias=False,
+            partially_freeze=config.freeze_lm_head,
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def enable_input_require_grads(self):
+        """
+        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
+        the model weights fixed.
+        """
+
+        def get_lowest_module(module):
+            if len(list(module.children())) == 0:
+                # If the module has no children, it is a leaf module (e.g., Linear, Conv2d, etc.)
+                return module
+            else:
+                # Recursively call the function on each child module
+                return get_lowest_module(list(module.children())[0])
+
+        def make_inputs_require_grads(module, input, output):
+            output.requires_grad_(True)
+
+        self._text_require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        self._vision_require_grads_hook = get_lowest_module(self.model.vision_model).register_forward_hook(
+            make_inputs_require_grads
+        )
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def tie_weights(self):
+        """
+        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and DecoupledEmbedding.
+        """
+        output_embeddings = self.get_output_embeddings()
+        input_embeddings = self.get_input_embeddings()
+
+        if getattr(self.config, "tie_word_embeddings", True):
+            output_embeddings.weight = input_embeddings.weight
+            if input_embeddings.num_additional_embeddings > 0:
+                assert output_embeddings.out_additional_features == input_embeddings.num_additional_embeddings
+                output_embeddings.additional_fc.weight = input_embeddings.additional_embedding.weight
+
+        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
+            output_embeddings.out_features = input_embeddings.num_embeddings
+            if hasattr(output_embeddings, "out_additional_features") and hasattr(
+                input_embeddings, "num_additional_embeddings"
+            ):
+                output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
+
+    # @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
+        image_hidden_states: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2200,131 +2805,49 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Returns:
-
-        Example:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Idefics2ForConditionalGeneration
-
-        >>> model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4")
-        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4")
-
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
-        ```"""
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
 
-        if inputs_embeds is None:
-            # 1. Extra the input embeddings
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-            # 2. Merge text and images
-            if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-
-                if vision_feature_select_strategy == "default":
-                    selected_image_feature = selected_image_feature[:, 1:]
-                elif vision_feature_select_strategy == "full":
-                    selected_image_feature = selected_image_feature
-                else:
-                    raise ValueError(
-                        f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                    )
-
-                image_features = self.multi_modal_projector(selected_image_feature)
-                inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
-                )
-                if labels is None:
-                    labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
-            else:
-                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
-                # generation with cache
-                if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
-                    # Retrieve the first layer to inspect the logits and mask out the hidden states
-                    # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
-
-                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
-
-                    # Get the target length
-                    target_seqlen = first_layer_past_key_value.shape[-1] + 1
-
-                    extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
-                        dtype=attention_mask.dtype,
-                        device=attention_mask.device,
-                    )
-
-                    # Filter out only the tokens that can be un-attended, this can happen
-                    # if one uses Idefics2 + Fused modules where the cache on the
-                    # first iteration is already big enough, or if one passes custom cache
-                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
-                    new_batch_index = batch_index[valid_indices]
-                    new_non_attended_tokens = non_attended_tokens[valid_indices]
-
-                    # Zero-out the places where we don't need to attend
-                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
-
-                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
-                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-
-        outputs = self.language_model(
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
+            image_hidden_states=image_hidden_states,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
+        logits = logits.float()
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
+            loss_fct = CrossEntropyLoss(ignore_index=self.image_token_id)
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -2336,60 +2859,366 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        image_hidden_states = kwargs.pop("image_hidden_states", None)
+        if image_hidden_states is not None:
+            kwargs["pixel_values"] = None
+        inputs = prepare_inputs_for_generation(input_ids, past=past, **kwargs)
+        unwanted_kwargs = ["token_type_ids"]
+        for kwarg in unwanted_kwargs:
+            inputs.pop(kwarg, None)
+        return inputs
+
+    @staticmethod
+    def _expand_inputs_for_generation(
+        *args,
+        **model_kwargs,
     ):
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
+        return expand_inputs_for_generation(*args, **model_kwargs)
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-            elif self.config.image_token_index in input_ids:
-                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
-            # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
-            # older attention values, as their corresponding values are not part of the input.
-            if cache_length < past_length and attention_mask is not None:
-                attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
+    @staticmethod
+    def _update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder):
+        return update_model_kwargs_for_generation(outputs, model_kwargs)
 
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+    @staticmethod
+    def _reorder_cache(past, beam_idx):
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        return reordered_past
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
-            }
-        )
-        return model_inputs
+# @add_start_docstrings(
+#     """The IDEFICS2 model which consists of a vision backbone and a language model.""",
+#     IDEFICS2_START_DOCSTRING,
+# )
+# # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->IDEFICS2,Llava->Idefics2,llava-hf/llava-1.5-7b-hf->HuggingFaceM4
+# class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
+#     def __init__(self, config: Idefics2Config):
+#         super().__init__(config)
+#         self.vision_tower = AutoModel.from_config(config.vision_config)
 
-    def _reorder_cache(self, *args, **kwargs):
-        return self.language_model._reorder_cache(*args, **kwargs)
+#         self.multi_modal_projector = Idefics2MultiModalProjector(config)
+#         self.vocab_size = config.vocab_size
+#         self.language_model = AutoModelForCausalLM.from_config(config, attn_implementation=config._attn_implementation)
+#         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+#         self.post_init()
+
+#     def get_input_embeddings(self):
+#         return self.language_model.get_input_embeddings()
+
+#     def set_input_embeddings(self, value):
+#         self.language_model.set_input_embeddings(value)
+
+#     def get_output_embeddings(self):
+#         return self.language_model.get_output_embeddings()
+
+#     def set_output_embeddings(self, new_embeddings):
+#         self.language_model.set_output_embeddings(new_embeddings)
+
+#     def set_decoder(self, decoder):
+#         self.language_model.set_decoder(decoder)
+
+#     def get_decoder(self):
+#         return self.language_model.get_decoder()
+
+#     def tie_weights(self):
+#         return self.language_model.tie_weights()
+
+#     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+#         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+#         # update vocab size
+#         self.config.vocab_size = model_embeds.num_embeddings
+#         self.config.vocab_size = model_embeds.num_embeddings
+#         self.vocab_size = model_embeds.num_embeddings
+#         return model_embeds
+
+#     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+#         num_images, num_image_patches, embed_dim = image_features.shape
+#         batch_size, sequence_length = input_ids.shape
+#         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
+#         # 1. Create a mask to know where special image tokens are
+#         special_image_token_mask = input_ids == self.config.image_token_index
+#         num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
+#         # Compute the maximum embed dimension
+#         max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
+#         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
+
+#         # 2. Compute the positions where text should be written
+#         # Calculate new positions for text tokens in merged image-text sequence.
+#         # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
+#         # `torch.cumsum` computes how each image token shifts subsequent text token positions.
+#         # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
+#         new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
+#         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
+#         if left_padding:
+#             new_token_positions += nb_image_pad[:, None]  # offset for left padding
+#         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
+
+#         # 3. Create the full embedding, already padded to the maximum position
+#         final_embedding = torch.zeros(
+#             batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+#         )
+#         final_attention_mask = torch.zeros(
+#             batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
+#         )
+#         if labels is not None:
+#             final_labels = torch.full(
+#                 (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+#             )
+#         # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
+#         # set the corresponding tensors into their correct target device.
+#         target_device = inputs_embeds.device
+#         batch_indices, non_image_indices, text_to_overwrite = (
+#             batch_indices.to(target_device),
+#             non_image_indices.to(target_device),
+#             text_to_overwrite.to(target_device),
+#         )
+#         attention_mask = attention_mask.to(target_device)
+
+#         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
+#         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
+#         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
+#         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
+#         if labels is not None:
+#             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
+
+#         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
+#         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+#         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
+
+#         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
+#             raise ValueError(
+#                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
+#                 f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
+#             )
+
+#         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
+#         final_attention_mask |= image_to_overwrite
+#         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+#         if labels is None:
+#             final_labels = None
+
+#         return final_embedding, final_attention_mask, final_labels, position_ids
+
+#     @add_start_docstrings_to_model_forward(IDEFICS2_INPUTS_DOCSTRING)
+#     @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+#     def forward(
+#         self,
+#         input_ids: torch.LongTensor = None,
+#         pixel_values: torch.FloatTensor = None,
+#         attention_mask: Optional[torch.Tensor] = None,
+#         position_ids: Optional[torch.LongTensor] = None,
+#         past_key_values: Optional[List[torch.FloatTensor]] = None,
+#         inputs_embeds: Optional[torch.FloatTensor] = None,
+#         vision_feature_layer: Optional[int] = None,
+#         vision_feature_select_strategy: Optional[str] = None,
+#         labels: Optional[torch.LongTensor] = None,
+#         use_cache: Optional[bool] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#     ) -> Union[Tuple, Idefics2CausalLMOutputWithPast]:
+#         r"""
+#         Args:
+#             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+#                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+#                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+#                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+#         Returns:
+
+#         Example:
+
+#         ```python
+#         >>> from PIL import Image
+#         >>> import requests
+#         >>> from transformers import AutoProcessor, Idefics2ForConditionalGeneration
+
+#         >>> model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4")
+#         >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4")
+
+#         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
+#         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+#         >>> image = Image.open(requests.get(url, stream=True).raw)
+
+#         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+
+#         >>> # Generate
+#         >>> generate_ids = model.generate(**inputs, max_length=30)
+#         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+#         "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
+#         ```"""
+
+#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+#         output_hidden_states = (
+#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+#         )
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#         vision_feature_layer = (
+#             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+#         )
+#         vision_feature_select_strategy = (
+#             vision_feature_select_strategy
+#             if vision_feature_select_strategy is not None
+#             else self.config.vision_feature_select_strategy
+#         )
+
+#         if inputs_embeds is None:
+#             # 1. Extra the input embeddings
+#             inputs_embeds = self.get_input_embeddings()(input_ids)
+
+#             # 2. Merge text and images
+#             if pixel_values is not None and input_ids.shape[1] != 1:
+#                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+#                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+#                 selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+
+#                 if vision_feature_select_strategy == "default":
+#                     selected_image_feature = selected_image_feature[:, 1:]
+#                 elif vision_feature_select_strategy == "full":
+#                     selected_image_feature = selected_image_feature
+#                 else:
+#                     raise ValueError(
+#                         f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
+#                     )
+
+#                 image_features = self.multi_modal_projector(selected_image_feature)
+#                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
+#                     image_features, inputs_embeds, input_ids, attention_mask, labels
+#                 )
+#                 if labels is None:
+#                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
+#             else:
+#                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
+#                 # generation with cache
+#                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
+#                     # Retrieve the first layer to inspect the logits and mask out the hidden states
+#                     # that are set to 0
+#                     first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+
+#                     # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+#                     batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+
+#                     # Get the target length
+#                     target_seqlen = first_layer_past_key_value.shape[-1] + 1
+
+#                     extended_attention_mask = torch.ones(
+#                         (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+#                         dtype=attention_mask.dtype,
+#                         device=attention_mask.device,
+#                     )
+
+#                     # Filter out only the tokens that can be un-attended, this can happen
+#                     # if one uses Idefics2 + Fused modules where the cache on the
+#                     # first iteration is already big enough, or if one passes custom cache
+#                     valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+#                     new_batch_index = batch_index[valid_indices]
+#                     new_non_attended_tokens = non_attended_tokens[valid_indices]
+
+#                     # Zero-out the places where we don't need to attend
+#                     extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+
+#                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+#                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
+#         outputs = self.language_model(
+#             attention_mask=attention_mask,
+#             position_ids=position_ids,
+#             past_key_values=past_key_values,
+#             inputs_embeds=inputs_embeds,
+#             use_cache=use_cache,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#         )
+
+#         logits = outputs[0]
+
+#         loss = None
+#         if labels is not None:
+#             # Shift so that tokens < n predict n
+#             if attention_mask is not None:
+#                 shift_attention_mask = attention_mask[..., 1:]
+#                 shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+#                 shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+#             else:
+#                 shift_logits = logits[..., :-1, :].contiguous()
+#                 shift_labels = labels[..., 1:].contiguous()
+#             # Flatten the tokens
+#             loss_fct = nn.CrossEntropyLoss()
+#             loss = loss_fct(
+#                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+#             )
+
+#         if not return_dict:
+#             output = (logits,) + outputs[1:]
+#             return (loss,) + output if loss is not None else output
+
+#         return Idefics2CausalLMOutputWithPast(
+#             loss=loss,
+#             logits=logits,
+#             past_key_values=outputs.past_key_values,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
+
+#     def prepare_inputs_for_generation(
+#         self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+#     ):
+#         if past_key_values is not None:
+#             if isinstance(past_key_values, Cache):
+#                 cache_length = past_key_values.get_seq_length()
+#                 past_length = past_key_values.seen_tokens
+#             else:
+#                 cache_length = past_length = past_key_values[0][0].shape[2]
+
+#             # Keep only the unprocessed tokens:
+#             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+#             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+#             # input)
+#             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+#                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+#             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+#             # input_ids based on the past_length.
+#             elif past_length < input_ids.shape[1]:
+#                 input_ids = input_ids[:, past_length:]
+#             # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+#             elif self.config.image_token_index in input_ids:
+#                 input_ids = input_ids[:, input_ids.shape[1] - 1 :]
+#             # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
+#             # older attention values, as their corresponding values are not part of the input.
+#             if cache_length < past_length and attention_mask is not None:
+#                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
+
+#         position_ids = kwargs.get("position_ids", None)
+#         if attention_mask is not None and position_ids is None:
+#             # create position_ids on the fly for batch generation
+#             position_ids = attention_mask.long().cumsum(-1) - 1
+#             position_ids.masked_fill_(attention_mask == 0, 1)
+#             if past_key_values:
+#                 position_ids = position_ids[:, -input_ids.shape[1] :]
+
+#         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+#         if inputs_embeds is not None and past_key_values is None:
+#             model_inputs = {"inputs_embeds": inputs_embeds}
+#         else:
+#             model_inputs = {"input_ids": input_ids}
+
+#         model_inputs.update(
+#             {
+#                 "position_ids": position_ids,
+#                 "past_key_values": past_key_values,
+#                 "use_cache": kwargs.get("use_cache"),
+#                 "attention_mask": attention_mask,
+#                 "pixel_values": pixel_values,
+#             }
+#         )
+#         return model_inputs
+
+#     def _reorder_cache(self, *args, **kwargs):
+#         return self.language_model._reorder_cache(*args, **kwargs)

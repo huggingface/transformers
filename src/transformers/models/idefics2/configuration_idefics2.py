@@ -91,7 +91,7 @@ class Idefics2VisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        # _flash_attn_2_enabled=True,
+        _flash_attn_2_enabled=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -108,6 +108,8 @@ class Idefics2VisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        # FIXME - remove this
+        self._flash_attn_2_enabled = _flash_attn_2_enabled
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
