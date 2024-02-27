@@ -155,7 +155,7 @@ FSDP 在大规模模型训练方面是一个强大的工具，您可以使用多
 通过分片模型参数、优化器和梯度状态，甚至在它们不活动时将其卸载到 CPU 上，
 FSDP 可以减少大规模训练的高成本。如果您希望了解更多信息，下面的内容可能会有所帮助：
 
-- 参考更深入的 Accelerate 指南，了解有关
+- 深入参考 Accelerate 指南，了解有关
   [FSDP](https://huggingface.co/docs/accelerate/usage_guides/fsdp)的更多信息。
 - 阅读[介绍 PyTorch 完全分片数据并行（FSDP）API](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) 博文。
 - 阅读[使用 FSDP 在云 TPU 上扩展 PyTorch 模型](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/)博文。
