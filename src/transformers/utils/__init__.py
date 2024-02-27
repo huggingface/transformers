@@ -188,6 +188,7 @@ from .import_utils import (
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_version_greater_or_equal_than_2_2_0,
     is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdistx_available,

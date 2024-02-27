@@ -665,6 +665,10 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
+def is_torch_version_greater_or_equal_than_2_2_0():
+    return version.parse(get_torch_version()) >= version.parse("2.2.0")
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
