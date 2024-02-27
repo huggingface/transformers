@@ -256,3 +256,52 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
                 token_length = token_lengths[token_idx].item()
                 self.assertTrue(len(token) == token_length)
+
+    def test_criterias_per_row(self):
+        text = "They completed the challenging puzzle, revealing the hidden image at the end"
+        stop_strings = ["end"]
+
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        inputs = tokenizer(text, return_tensors="pt", add_special_tokens=False)
+
+        scores = None
+        criteria = StoppingCriteriaList(
+            [
+                MaxLengthCriteria(max_length=20),
+                StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings),
+            ]
+        )
+
+        # trigger stopping when at leat one criteria is satisfied, one value per batch
+        self.assertTrue(criteria(inputs["input_ids"], scores))
+
+        # return False when neither is satisfied
+        self.assertFalse(criteria(inputs["input_ids"][:, :-1], scores))
+
+    def test_criterias_per_row_batched(self):
+        text = [
+            "They completed the challenging puzzle, revealing the hidden image at the end",
+            "Today a dragon flew over France",
+            "The aroma of freshly baked pizza filled the kitchen",
+        ]
+        stop_strings = ["end"]
+
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "left"
+        inputs = tokenizer(text, return_tensors="pt", padding="longest", add_special_tokens=False)
+
+        scores = None
+        criteria = StoppingCriteriaList(
+            [
+                MaxLengthCriteria(max_length=20),
+                StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings),
+            ]
+        )
+
+        # trigger stopping when at leat one criteria is satisfied
+        self.assertListEqual(criteria(inputs["input_ids"], scores).tolist(), [True, False, False])
+
+        # False when neither is satisfied
+        self.assertListEqual(criteria(inputs["input_ids"][:, :-1], scores).tolist(), [False, False, False])
