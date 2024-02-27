@@ -18,6 +18,7 @@ import math
 import warnings
 from typing import TYPE_CHECKING, Optional, Tuple, Union
 
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -110,6 +111,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    print("cos", cos.shape)
+    print("position_ids", position_ids)
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -417,6 +420,7 @@ class FalconAttention(nn.Module):
         key_layer = key_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
         value_layer = value_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
 
+        print("position_ids here", position_ids)
         kv_seq_len = key_layer.shape[-2]
         if layer_past is not None:
             kv_seq_len += layer_past[0].shape[-2]
@@ -438,15 +442,47 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_layer.device.type == "cuda" and attention_mask is not None:
-            query_layer = query_layer.contiguous()
-            key_layer = key_layer.contiguous()
-            value_layer = value_layer.contiguous()
+        torch.save(key_layer, "key_layer.pt")
+        torch.save(value_layer, "value_layer.pt")
+
+        if self._use_sdpa:
+            if is_torch_greater_or_equal_than_2_2:
+                # Although these expand are not numerically useful, PyTorch can not dispatch to memory-efficient backend
+                # and flash attention backend (No available kernel.  Aborting execution.) from the shapes
+                # query = [batch_size, num_heads, query_length, head_dim]
+                # key = [batch_size, 1, past_length, head_dim]
+                # value = [batch_size, 1, past_length, head_dim]
+                key_layer = key_layer.expand(-1, self.num_heads, -1, -1)
+                value_layer = value_layer.expand(-1, self.num_heads, -1, -1)
+            elif query_layer.device.type == "cuda" and attention_mask is not None:
+                # For torch<=2.1.2, SDPA with memory-efficient backend is bugged with non-contiguous inputs with custom attn_mask,
+                # Reference: https://github.com/pytorch/pytorch/issues/112577.
+                query_layer = query_layer.contiguous()
+                key_layer = key_layer.contiguous()
+                value_layer = value_layer.contiguous()
 
         if alibi is None:
             if self._use_sdpa and not output_attentions:
+                print("query_layer", query_layer.shape)
+                print("key_layer", key_layer.shape)
+                print("attention_mask", attention_mask.shape)
+                print("attention_mask contig", attention_mask.is_contiguous())
+                print("--- position_ids before sdpa call", position_ids)
+
+                # torch.save(query_layer, "query_layer.pt")
+                # torch.save(attention_mask, "attention_mask.pt")
+                # torch.save(position_ids, "position_ids.pt")
+
+                print("query_layer data ptr", query_layer.data_ptr())
+                print("key_layer data ptr", key_layer.data_ptr())
+                print("value_layer data ptr", value_layer.data_ptr())
+                print("attention_mask data ptr", attention_mask.data_ptr())
+                print("position_ids data_ptr", position_ids.data_ptr())
+                print("query_layer contiguous", query_layer.is_contiguous())
+                print("key_layer contiguous", key_layer.is_contiguous())
+                print("value_layer contiguous", value_layer.is_contiguous())
+                print("attention_mask contiguous", attention_mask.is_contiguous())
+                print("position_ids contiguous", position_ids.is_contiguous())
                 attn_output = F.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
@@ -456,6 +492,9 @@ class FalconAttention(nn.Module):
                     # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
                     is_causal=self.is_causal and attention_mask is None and query_length > 1,
                 )
+                print("attn_output", attn_output.shape)
+                print("--- position_ids after sdpa call", position_ids)
+
                 attention_scores = None
             else:
                 attention_scores = query_layer @ key_layer.transpose(-1, -2)
@@ -1081,6 +1120,7 @@ class FalconModel(FalconPreTrainedModel):
             alibi = None
             if position_ids is None:
                 device = input_ids.device if input_ids is not None else inputs_embeds.device
+                print("CREATE POSITION IDS HERE")
                 position_ids = torch.arange(
                     past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
                 )
@@ -1238,10 +1278,15 @@ class FalconForCausalLM(FalconPreTrainedModel):
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
         if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
+            torch.save(attention_mask, "2d_attention_mask.pt")
+            print("create in prepare_inputs_for_generation!!!!!!!")
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
+
+            print("position_ids in prepare_inputs_for_generation", position_ids)
+
 
         return {
             "input_ids": input_ids,

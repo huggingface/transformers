@@ -187,7 +187,7 @@ class AttentionMaskConverter:
 
     @staticmethod
     def _unmask_unattended(
-        expanded_mask: torch.Tensor, min_dtype: float,
+        expanded_mask: torch.FloatTensor, min_dtype: float,
     ):
         # fmt: off
         """
@@ -200,7 +200,9 @@ class AttentionMaskConverter:
 
         The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
         """
-        # fmt: on
+        if expanded_mask.dtype == torch.bool:
+            raise ValueError("AttentionMaskConverter._unmask_unattended expects a float `expanded_mask`, got a BoolTensor.")
+
         expanded_mask = expanded_mask.mul(~torch.all(expanded_mask == min_dtype, dim=-1, keepdim=True))
 
         return expanded_mask
