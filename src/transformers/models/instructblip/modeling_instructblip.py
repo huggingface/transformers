@@ -1544,7 +1544,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         else:
             max_length = generate_kwargs.get("max_length", 20)
             min_length = generate_kwargs.get("min_length", 0)
-        
+
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
