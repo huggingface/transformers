@@ -39,7 +39,6 @@ from transformers.testing_utils import (
     require_pyctcdecode,
     require_tf,
     require_torch,
-    require_torch_gpu,
     require_torch_accelerator,
     require_torchaudio,
     slow,
@@ -1149,7 +1148,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "<s> <s")
 
-    @require_torch_gpu
+    @require_torch
     @slow
     def test_whisper_longform(self):
         # fmt: off
@@ -1158,7 +1157,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         pipe = pipeline(
             "automatic-speech-recognition",
@@ -1166,7 +1165,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer=processor.tokenizer,
             feature_extractor=processor.feature_extractor,
             max_new_tokens=128,
-            device="cuda:0",
+            device=torch_device,
         )
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
@@ -1177,13 +1176,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         assert result == EXPECTED_RESULT
 
-    @require_torch_gpu
+    @require_torch
     @slow
     def test_seamless_v2(self):
         pipe = pipeline(
             "automatic-speech-recognition",
             model="facebook/seamless-m4t-v2-large",
-            device="cuda:0",
+            device=torch_device,
         )
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
