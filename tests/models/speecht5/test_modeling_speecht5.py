@@ -1443,7 +1443,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
-    def test_batching_support(self):
+    def test_batching_equivalence(self):
         pass
 
     def test_attention_outputs(self):

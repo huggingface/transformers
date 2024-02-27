@@ -271,7 +271,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ViTMAE returns a random mask + ids_restore in each forward pass")
-    def test_batching_support(self):
+    def test_batching_equivalence(self):
         pass
 
     @slow

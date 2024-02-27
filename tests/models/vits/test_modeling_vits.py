@@ -217,7 +217,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("VITS is not deterministic")
-    def test_batching_support(self):
+    def test_batching_equivalence(self):
         pass
 
     @is_flaky(

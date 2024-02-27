@@ -280,7 +280,7 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         pass
 
     @unittest.skip("randomly selects U keys while calculating attentions")
-    def test_batching_support(self):
+    def test_batching_equivalence(self):
         pass
 
     @unittest.skip(

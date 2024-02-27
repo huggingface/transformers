@@ -202,7 +202,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip("TimmBackbone doesn't support output_attentions.")
-    def test_batching_support(self):
+    def test_batching_equivalence(self):
         pass
 
     def test_forward_signature(self):

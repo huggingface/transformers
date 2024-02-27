@@ -765,7 +765,8 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    def test_batching_support(self):
+    @unittest.skip("TODO: related to length_regulator predicting different lengths in different batch sizes")
+    def test_batching_equivalence(self):
         pass
 
 
