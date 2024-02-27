@@ -360,6 +360,10 @@ class LlamaAttention(nn.Module):
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}            
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            if isinstance(past_key_value, PagedAttentionCache): 
+                #The key/value cache is stored dicretely, so we need to retrieve the entire context
+                #We need an more effcient SDPA kernel to aware this chache
+                key_states, value_states = past_key_value.get_entire_context_states(key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -832,13 +836,22 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
         for layer in self.model.layers:
             weights = layer.self_attn.o_proj.weight
-            layer.self_attn.past_key_value = cache_cls(
-                self.config,
-                max_batch_size,
-                generation_config.max_length,
-                device=weights.device,
-                dtype=weights.dtype,
-            )
+            if cache_cls == StaticCache:
+                layer.self_attn.past_key_value = cache_cls(
+                    self.config,
+                    max_batch_size,
+                    generation_config.max_length,
+                    device=weights.device,
+                    dtype=weights.dtype,
+                )
+            elif cache_cls == PagedAttentionCache:
+                layer.self_attn.past_key_value = cache_cls(
+                    self.config,
+                    generation_config.num_blocks, 
+                    generation_config.block_size,
+                    device=weights.device,
+                    dtype=weights.dtype,
+                )
 
     def _reset_cache(self):
         for layer in self.model.layers:

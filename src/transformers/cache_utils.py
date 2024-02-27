@@ -710,7 +710,6 @@ class PagedAttentionCache(Cache):
 
         # step 2): cache key_states & value states
         self.reshape_and_cache(self.slots_mapping, key_states, value_states)
-
         # step 3): fork new sequences to enable prompt sharing
         for batch_idx in range(batch_size):
             seq_ids = self.batch2seq[batch_idx]

@@ -94,7 +94,7 @@ if is_accelerate_available():
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
-    "pagedAttention": PagedAttentionCache,
+    "paged": PagedAttentionCache,
 }
 
 
