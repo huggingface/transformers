@@ -392,6 +392,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_batching_equivalence(self):
         return
 
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers

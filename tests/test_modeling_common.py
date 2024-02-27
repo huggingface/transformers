@@ -99,6 +99,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
@@ -701,6 +702,14 @@ class ModelTesterMixin:
         different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
         """
 
+        def get_tensor_equivalence_function(config):
+            # models operating on continuous spaces have higher abs difference than LMs
+            # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
+            conv_attr = ["num_channels", "conv_dim", "backbone", "conv_depthwise_kernel_size"]
+            if any(hasattr(config, attr) for attr in conv_attr):
+                return lambda tensor1, tensor2: (1.0 - F.cosine_similarity(tensor1, tensor2).mean())
+            return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
+
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (List, Tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
@@ -732,16 +741,15 @@ class ModelTesterMixin:
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 self.assertTrue(
-                    torch.allclose(batched_row, single_row_object, atol=atol),
+                    equivalence(batched_row, single_row_object) <= 1e05,
                     msg=(
-                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. Difference="
-                        f"{torch.max(torch.abs(batched_row - single_row_object))}."
+                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
+                        f"Difference={equivalence(batched_row, single_row_object)}."
                     ),
                 )
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-        conv_attr = ["num_channels", "conv_dim", "backbone", "conv_depthwise_kernel_size"]
-        atol = 0.1 if any([hasattr(config, attr) for attr in conv_attr]) else 1e-05
+        equivalence = get_tensor_equivalence_function(config)
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
@@ -753,9 +761,10 @@ class ModelTesterMixin:
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
 
-            # We can't infer batch size from input shape, inputs can have multiple vectors for each batch
-            # So we try to get it from model_tester first. Some composite models, e.g. Owlv2ModelTest,
-            # do not indicate batch size in model testers, but rather in the parent's tester
+            # We can't infer batch size from input shape, inputs can have multiple vectors for each batch,
+            # so we try to get it from model_tester first. Some composite models, e.g. Owlv2ModelTest,
+            # do not indicate batch size in model testers, but rather in the parent's tester, then we
+            # try to get parant tester's batch size
             tester_attributes = [i for i in self.model_tester.__dict__.keys() if i[:1] != "_"]
             model_testers_parents = [attr for attr in tester_attributes if "model_tester" in attr]
             if model_testers_parents:
