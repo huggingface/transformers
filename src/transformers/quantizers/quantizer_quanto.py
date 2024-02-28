@@ -178,9 +178,8 @@ class QuantoHfQuantizer(HfQuantizer):
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
         return False
 
-    @property
     def is_serializable(self, **kwargs):
-        safe_serialization = kwargs.get("kwargs", None)
+        safe_serialization = kwargs.get("safe_serialization", None)
         if safe_serialization is not None and safe_serialization:
             raise ValueError(
                 "Serialization with safetensors is not supported with models quantized with quanto. "

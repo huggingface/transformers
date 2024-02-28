@@ -293,7 +293,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         model.is_4bit_serializable = self.is_serializable()
         return model
 
-    @property
     def is_serializable(self, **kwargs):
         _is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
 
