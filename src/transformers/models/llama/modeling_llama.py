@@ -92,53 +92,54 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
+        self.scaling_factor = scaling_factor
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # For BC we register cos and sin cached
+        self.max_seq_len_cached = max_position_embeddings
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+        t = t / self.scaling_factor
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     @property
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead."
+            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._sin_cached
 
     @property
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead."
+            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._cos_cached
 
     def forward(self, x, position_ids, seq_len=None):
         if seq_len is not None:
-            logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.40.")
+            logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.39.")
 
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos().to(dtype=x.dtype)
-        sin = emb.sin().to(dtype=x.dtype)
-        # backwards compatibility
-        self._cos_cached = cos
-        self._sin_cached = sin
-        return cos, sin
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
 
     def forward(self, x, position_ids, seq_len=None):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -149,10 +150,6 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
 
     def forward(self, x, position_ids, seq_len=None):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
@@ -367,6 +364,7 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask
             if cache_position is not None:
                 causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
