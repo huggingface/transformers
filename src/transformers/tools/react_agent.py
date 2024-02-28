@@ -84,7 +84,7 @@ def parse_json_tool_call(json_blob: str):
     try:
         json_blob = json.loads(json_blob.strip())
     except:
-        raise ValueError(f"Invalid JSON blob: {json_blob}")
+        raise ValueError(f"The JSON blob you used is invalid: {json_blob}. Try to correct its formatting.")
     if "action" in json_blob and "action_input" in json_blob:
         return json_blob["action"], json_blob["action_input"]
     else:
@@ -110,7 +110,7 @@ Specifically, this json should have a `action` key (name of the tool to use) and
 
 The value in the "action" field should belong to this list: {tool_names}.
 
-The $ACTION_JSON_BLOB should only contain a SINGLE action and MUST be formatted as markdown, do NOT return a list of multiple actions. Here is an example of a valid $ACTION_JSON_BLOB:
+The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. Here is an example of a valid $ACTION_JSON_BLOB:
 
 {{
   "action": $TOOL_NAME,
@@ -142,10 +142,19 @@ Action:
         "answer": $ANSWER
     }}
 }}
-ALWAYS use the final_answer tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
+
+ALWAYS provide a 'Thought:' and an 'Action:' part.
+Use the 'final_answer' tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
 
 Now begin!
 """
+
+
+def get_tool_description_with_args(tool: Tool) -> str:
+    description = f"- {tool_name}: {tool.description}\n"
+    description += f"     Takes inputs: {str(tool.inputs)}\n"
+    return description
+
 
 class ReactAgent:
     """
@@ -167,13 +176,16 @@ class ReactAgent:
             chat_prompt_template=None,
             run_prompt_template=None,
             toolbox=None,
-            system_prompt=None
+            system_prompt=None,
+            max_iterations=5,
         ):
         agent_name = self.__class__.__name__
 
         self.llm_engine = llm_engine
         self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
         self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
+
+        self.max_iterations = max_iterations
 
         if toolbox is None:
             self._toolbox = _setup_default_tools()
@@ -190,7 +202,8 @@ class ReactAgent:
             self.system_prompt = system_prompt
         else:
             self.system_prompt = DEFAULT_REACT_SYSTEM_PROMPT
-        tool_descriptions = "\n".join([f"- {tool_name}: {tool.description}" for tool_name, tool in self._toolbox.items()])
+        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in tools])
+
         self.system_prompt = self.system_prompt.format(
             tool_descriptions=tool_descriptions,
             tool_names=", ".join([tool_name for tool_name in self._toolbox.keys()])
@@ -218,8 +231,13 @@ class ReactAgent:
         """
         self.task = task
         final_answer = None
-        while not final_answer:
+        iteration = 0
+        while not final_answer and iteration < self.max_iterations:
             final_answer = self.step()
+            iteration+=1
+        if not final_answer and iteration == self.max_iterations:
+            self.log("Failed by reaching max iterations, returning None.")
+
         return final_answer
 
 
@@ -228,35 +246,44 @@ class ReactAgent:
         current_prompt += "\n" + "\n".join(self.memory)
         self.log("=====Calling LLM with this prompt:=====")
         self.log(current_prompt)
-        result = self.llm_engine(current_prompt, stop=["Observation:", "====="])
-        self.memory.append(result.strip() + "\n")
-        thought, tool_call = result.split("Action:")
+        result = self.llm_engine(current_prompt, stop=["Observation:", "====="]).strip()
+        self.memory.append(result + "\n")
+        self.log(f"==Model output==\n{result}")
+        try:
+            thought, tool_call = result.split("Action:")
+        except Exception as e:
+            self.memory.append("Error: you did not provide 'Action:': it is mandatory to provide an Action!")
+            return None
 
-        self.log(f"==Thought from the agent==\n{thought}")
 
         try:
             tool_name, arguments = parse_json_tool_call(tool_call)
         except Exception as e:
-            self.memory.append(f"Error in tool call parsing: {e}")
+            self.memory.append(f"Error in json parsing: {e}.")
             self.log("====Error!====")
             self.log(e)
             return None
 
         if tool_name == "final_answer":
             return arguments
-
         else:
-            self.log("\n\n==Result==")
-            try:
-                observation = self.toolbox[tool_name](**arguments)
-                self.memory.append("Observation: " + observation.strip() + "\n")
-                return None
-            except Exception as e:
-                self.memory.append(f"Error in tool call execution: {e}")
-                self.log("====Error!====")
-                self.log(e)
+            if tool_name not in self.toolbox:
+                self.memory.append(f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.keys()]}.")
+            else:
+                self.log("\n\n==Result==")
+                try:
+                    observation = self.toolbox[tool_name](**arguments)
+                    self.memory.append("Observation: " + observation.strip() + "\n")
+                    return None
+                except Exception as e:
+                    self.memory.append(
+                        f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
+                        f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox[tool_name])}."
+                    )
+                    self.log("====Error!====")
+                    self.log(e)
 
-                return None
+                    return None
         
 
     def prepare_for_new_chat(self):
