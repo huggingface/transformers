@@ -2711,7 +2711,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                     # Load from a sharded safetensors checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME)
                     is_sharded = True
-                    raise NotImplementedError("Support for sharded checkpoints using safetensors is coming soon!")
                 # At this stage we don't have a weight file so we will raise an error.
                 elif use_safetensors:
                     raise EnvironmentError(
@@ -2801,9 +2800,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                         }
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True
-                            raise NotImplementedError(
-                                "Support for sharded checkpoints using safetensors is coming soon!"
-                            )
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
@@ -2841,7 +2837,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
             # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
-            resolved_archive_file, _ = get_checkpoint_shard_files(
+            resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
                 cache_dir=cache_dir,
@@ -2858,6 +2854,15 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         safetensors_from_pt = False
         if filename == SAFE_WEIGHTS_NAME:
             with safe_open(resolved_archive_file, framework="tf") as f:
+                safetensors_metadata = f.metadata()
+            if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
+                raise OSError(
+                    f"The safetensors archive passed at {resolved_archive_file} does not contain the valid metadata."
+                    " Make sure you save your model with the `save_pretrained` method."
+                )
+            safetensors_from_pt = safetensors_metadata.get("format") == "pt"
+        elif filename == SAFE_WEIGHTS_INDEX_NAME:
+            with safe_open(resolved_archive_file[0], framework="tf") as f:
                 safetensors_metadata = f.metadata()
             if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
                 raise OSError(
@@ -2902,11 +2907,11 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         else:
             model.build_in_name_scope()  # build the network with dummy inputs
 
-        if safetensors_from_pt:
+        if safetensors_from_pt and not is_sharded:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
             with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
-                # Load from a PyTorch checkpoint
+                # Load from a PyTorch safetensors checkpoint
                 # We load in TF format here because PT weights often need to be transposed, and this is much
                 # faster on GPU. Loading as numpy and transposing on CPU adds several seconds to load times.
                 return load_pytorch_state_dict_in_tf2_model(
@@ -2919,11 +2924,28 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
                     tf_to_pt_weight_rename=tf_to_pt_weight_rename,
                 )
+        elif safetensors_from_pt:
+            from .modeling_tf_pytorch_utils import load_sharded_pytorch_safetensors_in_tf2_model
+
+            # Load from sharded PyTorch safetensors checkpoint
+            return load_sharded_pytorch_safetensors_in_tf2_model(
+                model,
+                resolved_archive_file,
+                tf_inputs=False,
+                allow_missing_keys=True,
+                output_loading_info=output_loading_info,
+                _prefix=load_weight_prefix,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                tf_to_pt_weight_rename=tf_to_pt_weight_rename,
+            )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
             if is_sharded:
+                breakpoint()
+                # TODO Matt: I think this path is for sharded TF weights only. We might need an extra
+                #            conditional for TF-format safetensors here
                 for file in resolved_archive_file:
                     os.path.isfile(file), f"Error retrieving files {file}"
 
