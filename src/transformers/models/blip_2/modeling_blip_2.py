@@ -1829,17 +1829,15 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
         if not self.language_model.config.is_encoder_decoder:
-            max_length = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1]
-            min_length = min(0, generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1])
+            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1]
+            generate_kwargs["min_length"] = min(0, generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1])
         else:
-            max_length = generate_kwargs.get("max_length", 20)
-            min_length = generate_kwargs.get("min_length", 0)
+            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20)
+            generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0)
 
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            max_length=max_length,
-            min_length=min_length,
             **generate_kwargs,
         )
 
