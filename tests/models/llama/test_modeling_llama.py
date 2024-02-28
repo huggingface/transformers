@@ -20,7 +20,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed, logging
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    CaptureLogger
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -628,7 +629,9 @@ class LlamaIntegrationTest(unittest.TestCase):
             cache_position = torch.tensor([seq_length+1], device=torch_device)
             for _ in range(1, NUM_TOKENS_TO_GENERATE):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-                    next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
+                    with CaptureLogger(logging.get_logger(__name__)) as cl:
+                        next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
+                        self.assertNotIn("skipping cudagraphs due to", cl.out)
                     generated_ids[:,cache_position] = next_token.int()
                 cache_position += 1
 
