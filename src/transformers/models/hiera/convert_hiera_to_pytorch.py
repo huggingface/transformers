@@ -217,12 +217,12 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path, **kwargs)
     for x in out.intermediates:
         print(x.shape)
 
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving model to {pytorch_dump_folder_path}")
+    model.save_pretrained(pytorch_dump_folder_path, push_to_hub=True, safe_serialization=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     checkpoint_url = "https://dl.fbaipublicfiles.com/hiera/hiera_base_224.pth"
-    convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path="~/")
+    convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path="/home/ubuntu/home/hiera/hiera_base_224")
