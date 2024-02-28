@@ -20,7 +20,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import LlamaConfig, is_torch_available, set_seed, StaticCache
+from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -598,35 +598,42 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = ["""Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi""",""""""]
+        EXPECTED_TEXT_COMPLETION = [
+            """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi""",
+            """""",
+        ]
         prompts = ["Simply put, the theory of relativity states that ", "My favorit condiment has to be"]
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token_id = "</s>")
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token_id="</s>")
         model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
         input_ids = tokenizer.encode(prompts, return_tensors="pt", padding=True)
 
         def decode_one_tokens(model, cur_token, input_pos, cache_position):
-            logits = model(cur_token, position_ids=input_pos,cache_position=cache_position, return_dict=False, use_cache = True)[0]
-            new_token = torch.argmax(logits,dim=-1)[0]
+            logits = model(
+                cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
+            )[0]
+            new_token = torch.argmax(logits, dim=-1)[0]
             return new_token
 
         batch_size, seq_length = input_ids.shape
         with torch.no_grad():
             model._setup_cache(StaticCache, 2, max_cache_len=4096)
-            cache_position = torch.arange(seq_length , device=torch_device)
-            generated_ids = torch.zeros(batch_size, seq_length+NUM_TOKENS_TO_GENERATE+1, dtype = torch.int, device=torch_device)
+            cache_position = torch.arange(seq_length, device=torch_device)
+            generated_ids = torch.zeros(
+                batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
+            )
             generated_ids[:, cache_position] = input_ids.to(torch_device).to(torch.int)
-            
-            logits = model(input_ids,cache_position=cache_position, return_dict=False, use_cache = True)[0]
-            next_token = torch.argmax(logits,dim=-1)[0]
+
+            logits = model(input_ids, cache_position=cache_position, return_dict=False, use_cache=True)[0]
+            next_token = torch.argmax(logits, dim=-1)[0]
             generated_ids[:, seq_length] = next_token
-            
+
             decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-            cache_position = torch.tensor([seq_length] , device=torch_device)
+            cache_position = torch.tensor([seq_length], device=torch_device)
             for _ in range(1, NUM_TOKENS_TO_GENERATE):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
                     next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
                     generated_ids.index_copy_(1, cache_position, next_token)
-                cache_position+=1
+                cache_position += 1
 
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -712,5 +719,3 @@ end
         ]
         infilling = tokenizer.batch_decode(generated_ids)
         self.assertEqual(infilling, EXPECTED_INFILLING)
-
-
