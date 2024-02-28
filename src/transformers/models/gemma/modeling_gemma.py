@@ -108,7 +108,6 @@ class GemmaRotaryEmbedding(nn.Module):
             self.inv_freq = 1.0 / (
                 self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
             )
-        
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
@@ -1089,7 +1088,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
         logits = logits.float()
-        
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
