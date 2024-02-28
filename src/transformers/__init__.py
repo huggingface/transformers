@@ -1018,6 +1018,7 @@ _import_structure = {
     ],
     "tools": [
         "Agent",
+        "ReactAgent",
         "AzureOpenAiAgent",
         "HfAgent",
         "LocalAgent",
