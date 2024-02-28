@@ -19,7 +19,7 @@ import numpy as np
 
 from ... import is_vision_available, requires_backends
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import get_resize_output_image_size, resize, to_channel_dimension_format
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -137,10 +137,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
-                `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
-                Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,
-                after which the image is cropped to `(size["shortest_edge"], size["shortest_edge"])`.
+                Dictionary of the form `{"height": int, "width": int}`, specifying the size of the output image.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the output image. If not provided, it will be inferred from the input
                 image. Can be one of:
@@ -156,13 +153,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size, default_to_square=False)
 
-        resize_size = get_resize_output_image_size(
-            image, size=(size["height"], size["width"]), input_data_format=input_data_format
-        )
-
         return resize(
             image,
-            size=resize_size,
+            size=(size["height"], size["width"]),
             data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
