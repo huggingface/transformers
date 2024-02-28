@@ -1186,9 +1186,6 @@ class NeptuneCallback(TrainerCallback):
     trial_params_key = "trial_params"
     trainer_parameters_key = "trainer_parameters"
     flat_metrics = {"train/epoch"}
-    params_to_preserve = frozenset(
-        ["capture_stdout", "capture_stderr", "capture_hardware_metrics", "capture_traceback"]
-    )
 
     def __init__(
         self,
