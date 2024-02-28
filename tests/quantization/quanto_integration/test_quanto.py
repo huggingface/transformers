@@ -227,12 +227,16 @@ class QuantoQuantizationTest(unittest.TestCase):
         Test the serialization, the loading and the inference of the quantized weights
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, torch_dtype=torch.float32, device_map="cpu"
-            )
-            # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
-            self.check_inference_correctness(quantized_model_from_saved, device="cuda")
+            with self.assertRaises(ValueError) as e:
+                self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
+            self.assertIn("Serialization with safetensors is not supported with models quantized with quanto", str(e.exception))
+
+            # TODO: Add the following when we fix the issue with safetensors serialization
+            # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+            #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
+            # )
+            # # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
+            # self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
     def test_compare_with_quanto(self):
         from quanto import freeze, qint8, quantize

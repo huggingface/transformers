@@ -94,5 +94,5 @@ class AqlmHfQuantizer(HfQuantizer):
             return False
 
     @property
-    def is_serializable(self):
+    def is_serializable(self,**kwargs):
         return True

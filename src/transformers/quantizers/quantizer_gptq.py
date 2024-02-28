@@ -90,5 +90,5 @@ class GptqHfQuantizer(HfQuantizer):
         return True
 
     @property
-    def is_serializable(self):
+    def is_serializable(self, **kwargs):
         return True

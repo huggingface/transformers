@@ -99,7 +99,7 @@ class AwqQuantizer(HfQuantizer):
             model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
 
     @property
-    def is_serializable(self):
+    def is_serializable(self, **kwargs):
         # AWQ through auto-awq has been always serializable, except if the model is fused.
         if self.quantization_config.do_fuse:
             logger.warning("You cannot save an AWQ model that uses fused modules!")
