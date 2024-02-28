@@ -147,22 +147,10 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
 
                 # Simple input tests
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.encode,
-                    s,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
 
                 # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.encode_plus,
-                    s,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
 
                 # Simple input
                 self.assertRaises(
@@ -174,22 +162,10 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.encode,
-                    p,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
 
                 # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.encode_plus,
-                    p,
-                    max_length=max_length,
-                    padding="max_length",
-                )
+                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
 
                 # Pair input
                 self.assertRaises(
@@ -280,13 +256,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
 
         input_ids = tokenizer.encode(text)
-        truncation_pattern = [
-            "^#",
-            re.escape("<|endoftext|>"),
-            "^'''",
-            '^"""',
-            "\n\n\n",
-        ]
+        truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
         self.assertEqual(decoded_text, expected_trucated_text)
         # TODO @ArthurZ outputs of the fast tokenizer are different in this case, un-related to the PR
