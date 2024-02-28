@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 
 from transformers import AutoTokenizer, GemmaConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, require_read_token, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -204,6 +204,7 @@ class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 
 @slow
 @require_flax
+@require_read_token
 class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["The capital of France is", "To play the perfect cover drive"]
     model_id = "google/gemma-2b"
@@ -212,9 +213,9 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.model, self.params = FlaxGemmaForCausalLM.from_pretrained(
-            self.model_id, revision=self.revision, _do_init=False, token=self.token
+            self.model_id, revision=self.revision, _do_init=False
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, token=self.token)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.tokenizer.padding_side = "left"
 
     def test_logits(self):
