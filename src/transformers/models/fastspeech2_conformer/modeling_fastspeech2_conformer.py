@@ -1320,7 +1320,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             hidden_states = hidden_states + embedded_energy_curve + embedded_pitch_curve
             hidden_states = length_regulator(hidden_states, duration_labels)
 
-
         # forward decoder
         if not self.training:
             hidden_mask = None

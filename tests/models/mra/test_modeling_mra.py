@@ -382,6 +382,7 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
+
 @require_torch
 class MraModelIntegrationTest(unittest.TestCase):
     @slow

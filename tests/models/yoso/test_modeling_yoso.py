@@ -358,10 +358,6 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         return
 
-    @unittest.skip("TODO: find why it is failing")
-    def test_batching_equivalence(self):
-        pass
-
 
 @require_torch
 class YosoModelIntegrationTest(unittest.TestCase):

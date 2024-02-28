@@ -347,7 +347,11 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    def test_batching_support(self):
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
         pass
 
 
@@ -765,7 +769,10 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip("TODO: related to length_regulator predicting different lengths in different batch sizes")
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
     def test_batching_equivalence(self):
         pass
 

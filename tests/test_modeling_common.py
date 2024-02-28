@@ -764,7 +764,7 @@ class ModelTesterMixin:
             # We can't infer batch size from input shape, inputs can have multiple vectors for each batch,
             # so we try to get it from model_tester first. Some composite models, e.g. Owlv2ModelTest,
             # do not indicate batch size in model testers, but rather in the parent's tester, then we
-            # try to get parant tester's batch size
+            # try to get parent tester's batch size
             tester_attributes = [i for i in self.model_tester.__dict__.keys() if i[:1] != "_"]
             model_testers_parents = [attr for attr in tester_attributes if "model_tester" in attr]
             if model_testers_parents:
