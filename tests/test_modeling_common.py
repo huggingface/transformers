@@ -702,12 +702,11 @@ class ModelTesterMixin:
         different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
         """
 
-        def get_tensor_equivalence_function(config):
+        def get_tensor_equivalence_function(batched_input):
             # models operating on continuous spaces have higher abs difference than LMs
             # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
-            conv_attr = ["num_channels", "conv_dim", "backbone", "conv_depthwise_kernel_size"]
-            if any(hasattr(config, attr) for attr in conv_attr):
-                return lambda tensor1, tensor2: (1.0 - F.cosine_similarity(tensor1, tensor2).mean())
+            if "input_ids" not in batched_input:
+                return lambda tensor1, tensor2: (1.0 - F.cosine_similarity(tensor1.float(), tensor2.float()).max())
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
         def recursive_check(batched_object, single_row_object, model_name, key):
@@ -749,7 +748,7 @@ class ModelTesterMixin:
                 )
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-        equivalence = get_tensor_equivalence_function(config)
+        equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
