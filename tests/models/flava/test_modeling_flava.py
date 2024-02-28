@@ -15,6 +15,9 @@
 """ Testing suite for the PyTorch FLAVA model. """
 
 
+import shutil
+shutil.rmtree('/mnt/cache/hub/models--facebook--flava-full', ignore_errors=True)
+
 import inspect
 import os
 import random
