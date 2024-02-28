@@ -30,6 +30,13 @@ class DynamicCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PagedAttentionCache(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SinkCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -38,13 +45,6 @@ class SinkCache(metaclass=DummyObject):
 
 
 class StaticCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PagedAttentionCache(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
