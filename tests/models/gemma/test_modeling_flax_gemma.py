@@ -209,7 +209,6 @@ class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["The capital of France is", "To play the perfect cover drive"]
     model_id = "google/gemma-2b"
     revision = "flax"
-    token = os.getenv("HF_HUB_READ_TOKEN", False)
 
     def setUp(self):
         self.model, self.params = FlaxGemmaForCausalLM.from_pretrained(
