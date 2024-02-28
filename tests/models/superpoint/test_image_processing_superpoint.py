@@ -13,6 +13,8 @@
 # limitations under the License.
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -100,3 +102,10 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @unittest.skip(reason="SuperPointImageProcessor is always supposed to return a grayscaled image")
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_input_image_properly_converted_to_grayscale(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs()
+        pre_processed_images = image_processor.preprocess(image_inputs)
+        for image in pre_processed_images["pixel_values"]:
+            self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
