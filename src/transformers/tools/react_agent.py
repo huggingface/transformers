@@ -81,10 +81,11 @@ def _setup_default_tools():
 
 
 def parse_json_tool_call(json_blob: str):
+    json_blob = json_blob.strip().replace("```json", "").replace("```", "").replace('\\', "")
     try:
-        json_blob = json.loads(json_blob.strip())
-    except:
-        raise ValueError(f"The JSON blob you used is invalid: {json_blob}. Try to correct its formatting.")
+        json_blob = json.loads(json_blob)
+    except Exception as e:
+        raise ValueError(f"The JSON blob you used is invalid: due to the following error: {e}. Try to correct its formatting.")
     if "action" in json_blob and "action_input" in json_blob:
         return json_blob["action"], json_blob["action_input"]
     else:
@@ -110,14 +111,13 @@ Specifically, this json should have a `action` key (name of the tool to use) and
 
 The value in the "action" field should belong to this list: {tool_names}.
 
-The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. Here is an example of a valid $ACTION_JSON_BLOB:
-
+The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in markdown. Do not try to escape scpecial characters. Here is an example of a valid $ACTION_JSON_BLOB:
+```json
 {{
   "action": $TOOL_NAME,
   "action_input": $INPUT
 }}
-
-
+```
 Make sure to have the $INPUT in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
 You will be given:
@@ -132,17 +132,6 @@ $ACTION_JSON_BLOB
 Observation: the result of the action
 ... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $ACTION_JSON_BLOB must only use a SINGLE action at a time.)
 
-You must always end your output with the following format:
-
-Thought: I now have solved the task.
-Action: 
-{{
-    "action": "final_answer",
-    "action_input": {{
-        "answer": $ANSWER
-    }}
-}}
-
 ALWAYS provide a 'Thought:' and an 'Action:' part.
 Use the 'final_answer' tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
 
@@ -151,7 +140,7 @@ Now begin!
 
 
 def get_tool_description_with_args(tool: Tool) -> str:
-    description = f"- {tool_name}: {tool.description}\n"
+    description = f"- {tool.name}: {tool.description}\n"
     description += f"     Takes inputs: {str(tool.inputs)}\n"
     return description
 
@@ -202,7 +191,7 @@ class ReactAgent:
             self.system_prompt = system_prompt
         else:
             self.system_prompt = DEFAULT_REACT_SYSTEM_PROMPT
-        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in tools])
+        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
 
         self.system_prompt = self.system_prompt.format(
             tool_descriptions=tool_descriptions,
@@ -227,8 +216,9 @@ class ReactAgent:
 
     def run(self, task, *, return_code=False, remote=False, **kwargs):
         """
-        Sends a request to the agent.
+        Have the agent accomplish a task.
         """
+        self.prepare_for_new_chat()
         self.task = task
         final_answer = None
         iteration = 0
@@ -265,7 +255,7 @@ class ReactAgent:
             return None
 
         if tool_name == "final_answer":
-            return arguments
+            return arguments['answer']
         else:
             if tool_name not in self.toolbox:
                 self.memory.append(f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.keys()]}.")
