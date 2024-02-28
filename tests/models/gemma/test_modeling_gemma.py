@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch Gemma model. """
-
 import tempfile
 import unittest
 
@@ -24,6 +23,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_to
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
@@ -529,6 +529,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch_gpu
 @slow
+@require_read_token
 class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 

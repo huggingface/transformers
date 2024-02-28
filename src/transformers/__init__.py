@@ -810,6 +810,7 @@ _import_structure = {
         "SqueezeBertTokenizer",
     ],
     "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
+    "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -3283,6 +3284,14 @@ else:
             "StableLmPreTrainedModel",
         ]
     )
+    _import_structure["models.starcoder2"].extend(
+        [
+            "Starcoder2ForCausalLM",
+            "Starcoder2ForSequenceClassification",
+            "Starcoder2Model",
+            "Starcoder2PreTrainedModel",
+        ]
+    )
     _import_structure["models.swiftformer"].extend(
         [
             "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5589,6 +5598,7 @@ if TYPE_CHECKING:
         SqueezeBertTokenizer,
     )
     from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
+    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -7722,6 +7732,12 @@ if TYPE_CHECKING:
             StableLmForSequenceClassification,
             StableLmModel,
             StableLmPreTrainedModel,
+        )
+        from .models.starcoder2 import (
+            Starcoder2ForCausalLM,
+            Starcoder2ForSequenceClassification,
+            Starcoder2Model,
+            Starcoder2PreTrainedModel,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
