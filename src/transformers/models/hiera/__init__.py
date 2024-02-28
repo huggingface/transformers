@@ -43,6 +43,7 @@ else:
     ]
 
 
+
 if TYPE_CHECKING:
     from .configuration_hiera import (
         HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -55,8 +56,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .hiera_image_processor import HieraImageProcessor
-        from .modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraBlock, HieraModel, HieraPreTrainedModel
+        from .modeling_hiera import (
+            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, 
+            HieraModel, 
+            HieraPreTrainedModel,
+            HieraBlock,
+            )
 
 else:
     import sys

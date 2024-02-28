@@ -17,7 +17,7 @@
 import unittest
 from typing import Tuple
 
-from transformers import HieraConfig, HieraModel
+from transformers import HieraConfig, HieraModel, HieraPreTrainedModel
 from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraBlock
 from transformers.testing_utils import (
     require_torch,
@@ -78,7 +78,7 @@ class HieraBlockTester:
 
 
 @require_torch
-class TestHieraBlock(unittest.TestCase):
+class HieraBlockTest(unittest.TestCase):
     def setUp(self):
         self.block_tester = HieraBlockTester(self)
 
@@ -94,6 +94,9 @@ class TestHieraBlock(unittest.TestCase):
 
 
 class HieraModelTester:
+
+    all_model_classes = (HieraModel, HieraPreTrainedModel) if is_torch_available() else ()
+
     def __init__(
         self,
         parent,
@@ -219,26 +222,27 @@ class HieraModelTester:
 
     def create_and_check_model(self, config, pixel_values):
         batch_size = 1
-        model = HieraModel(config=config)
-        num_patches = (
-            int(((self.input_size[0] - self.patch_kernel[0] + 2 * self.patch_padding[0]) / self.patch_stride[0]) + 1)
-            ** 2
-        )
-        flat_q_stride = math.prod(self.q_stride)
-        embedding_dimension = self.embedding_dimension
-        indermediate_shapes = []
-        for _ in self.stages:
-            indermediate_shapes.append(
-                (batch_size, int(math.sqrt(num_patches)), int(math.sqrt(num_patches)), embedding_dimension)
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            num_patches = (
+                int(((self.input_size[0] - self.patch_kernel[0] + 2 * self.patch_padding[0]) / self.patch_stride[0]) + 1)
+                ** 2
             )
-            num_patches = num_patches / flat_q_stride
-            embedding_dimension = embedding_dimension * 2
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values=pixel_values)
+            flat_q_stride = math.prod(self.q_stride)
+            embedding_dimension = self.embedding_dimension
+            indermediate_shapes = []
+            for _ in self.stages:
+                indermediate_shapes.append(
+                    (batch_size, int(math.sqrt(num_patches)), int(math.sqrt(num_patches)), embedding_dimension)
+                )
+                num_patches = num_patches / flat_q_stride
+                embedding_dimension = embedding_dimension * 2
+            model.eval()
+            with torch.no_grad():
+                result = model(pixel_values=pixel_values)
 
-        for idx, x in enumerate(result.intermediates):
-            self.parent.assertEqual(x.shape, indermediate_shapes[idx], "Invalid Intermediate shape")
+            for idx, x in enumerate(result.intermediates):
+                self.parent.assertEqual(x.shape, indermediate_shapes[idx], "Invalid Intermediate shape")
 
 
 @require_torch
@@ -292,15 +296,3 @@ class HieraModelIntegrationTest(unittest.TestCase):
         out = model(random_tensor, return_intermediates=True)
         for idx, x in enumerate(out.intermediates):
             self.assertEqual(x.shape, indermediate_shapes[idx], "Invalid Intermediate shape")
-
-
-if __name__ == "__main__":
-    test = HieraModelIntegrationTest()
-    test.test_forward()
-    block_test = TestHieraBlock()
-    block_test.test_output_shape()
-    block_test.test_input_output_dim_equality()
-    model_test = HieraModelTest()
-    model_test.setUp()
-    model_test.test_model()
-    model_test.test_model_from_pretrained()

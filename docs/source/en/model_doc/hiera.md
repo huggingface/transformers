@@ -31,9 +31,9 @@ Modern hierarchical vision transformers have added several vision-specific compo
 <frameworkcontent>
 <pt>
 
-## HireaModel
+## HieraModel
 
-[[autodoc]] HireaModel
+[[autodoc]] HieraModel
     - forward
 
 </tf>
