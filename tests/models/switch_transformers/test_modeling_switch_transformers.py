@@ -620,6 +620,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         self.model_tester = SwitchTransformersModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SwitchTransformersConfig, d_model=37)
 
+    # Copied from test.test_modeling_t5.T5ModelTest._create_and_check_torch_fx_tracing with T5->SwitchTransformers
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:
             return
