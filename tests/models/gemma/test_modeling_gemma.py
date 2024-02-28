@@ -660,10 +660,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            low_cpu_mem_usage=True,
-            torch_dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         )
         model.to(torch_device)
 
