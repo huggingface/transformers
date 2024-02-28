@@ -501,6 +501,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("efficientnet", "EfficientNetModel"),
         ("focalnet", "FocalNetModel"),
         ("glpn", "GLPNModel"),
+        ("hiera", "HieraModel"),
         ("imagegpt", "ImageGPTModel"),
         ("levit", "LevitModel"),
         ("mobilenet_v1", "MobileNetV1Model"),

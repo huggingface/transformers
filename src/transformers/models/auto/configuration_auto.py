@@ -590,7 +590,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("graphormer", "Graphormer"),
         ("groupvit", "GroupViT"),
         ("herbert", "HerBERT"),
-        ("hiera", "HieraModel"),
+        ("hiera", "Hiera"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),

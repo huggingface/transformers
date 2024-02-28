@@ -17,7 +17,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 
-from .hiera_model import HieraBlock, HieraModel, conv_nd, undo_windowing
+from .modeling_hiera import HieraBlock, HieraModel, conv_nd, undo_windowing
 
 
 def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
