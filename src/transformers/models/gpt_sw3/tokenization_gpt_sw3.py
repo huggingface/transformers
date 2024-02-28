@@ -135,7 +135,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         # Default definitions for our 2 tokenizer versions, with None-checks to enable proper testing
         eos_token = "<|endoftext|>" if eos_token is None else eos_token
         unk_token = "<unk>" if unk_token is None else unk_token
-        if ("gpt-sw3-7b" in name_or_path) or ("gpt-sw3-6.7b" in name_or_path):
+        if ("gpt-sw3-6.7b" in name_or_path) and ("6.7b-v" not in name_or_path):
+            # this branch only applies to the original 6.7b
             pad_token = unk_token if pad_token is None else pad_token
             bos_token = eos_token if bos_token is None else bos_token
         else:
