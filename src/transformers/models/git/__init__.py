@@ -14,13 +14,26 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
-
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 _import_structure = {
     "configuration_git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitVisionConfig"],
     "processing_git": ["GitProcessor"],
+    "tokenization_git": ["GitTokenizer"],
 }
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_git_fast"] = ["GitTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -37,8 +50,21 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitVisionConfig
+    from .configuration_git import (
+        GIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GitConfig,
+        GitVisionConfig,
+    )
     from .processing_git import GitProcessor
+    from .tokenization_git import GitTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_git_fast import GitTokenizerFast
 
     try:
         if not is_torch_available():

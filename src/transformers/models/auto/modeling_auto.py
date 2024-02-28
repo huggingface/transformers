@@ -26,7 +26,6 @@ from .auto_factory import (
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
-
 logger = logging.get_logger(__name__)
 
 MODEL_MAPPING_NAMES = OrderedDict(
@@ -966,6 +965,7 @@ MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForQuestionAnswering"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("git", "GitForCausalLM"),
         ("vilt", "ViltForQuestionAnswering"),
     ]
 )
