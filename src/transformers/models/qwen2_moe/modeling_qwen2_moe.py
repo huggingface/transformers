@@ -32,7 +32,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
-from ...modeling_outputs import MoeModelOutputWithPast, MoeCausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -66,8 +66,7 @@ QWEN2MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
-        gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2,
-        attention_mask: Optional[torch.Tensor] = None
+    gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
 ) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -115,9 +114,9 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
-                .expand((num_hidden_layers, batch_size, sequence_length, 2, num_experts))
-                .reshape(-1, 2, num_experts)
-                .to(compute_device)
+            .expand((num_hidden_layers, batch_size, sequence_length, 2, num_experts))
+            .reshape(-1, 2, num_experts)
+            .to(compute_device)
         )
 
         # Compute the percentage of tokens routed to each experts
@@ -128,9 +127,9 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
             attention_mask[None, :, :, None]
-                .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-                .reshape(-1, num_experts)
-                .to(compute_device)
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
         )
 
         # Compute the average probability of routing to these experts
@@ -710,8 +709,8 @@ class Qwen2MoEFlashAttention2(Qwen2MoEAttention):
 class Qwen2MoESdpaAttention(Qwen2MoEAttention):
     """
     Qwen2MoE attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `Qwen2MoEAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt
-    to SDPA API.
+    `Qwen2MoEAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
     """
 
     # Adapted from Qwen2MoEAttention.forward
@@ -802,7 +801,6 @@ QWEN2MOE_ATTENTION_CLASSES = {
 
 
 class Qwen2MoESparseMoeBlock(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
@@ -812,7 +810,8 @@ class Qwen2MoESparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = nn.ModuleList(
-            [Qwen2MoEMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)])
+            [Qwen2MoEMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
+        )
 
         if config.shared_expert_intermediate_size is not None and config.shared_expert_intermediate_size > 0:
             self.shared_expert = Qwen2MoEMLP(config, intermediate_size=config.shared_expert_intermediate_size)
@@ -923,7 +922,7 @@ class Qwen2MoEDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss, 
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
                 and should not be returned during inference.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -1271,8 +1270,11 @@ class Qwen2MoEModel(Qwen2MoEPreTrainedModel):
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits] if
-                         v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                if v is not None
+            )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
