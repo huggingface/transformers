@@ -877,6 +877,7 @@ class GemmaModel(GemmaPreTrainedModel):
             cache_position = (
                 torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
             )
+
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
@@ -1109,24 +1110,24 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
     ):
         # With static cache, the `past_key_values` is None
+        # TODO joao: standardize interface for the different Cache classes and remove of this if
         has_static_cache = False
         if past_key_values is None:
-            has_static_cache = True
             past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            has_static_cache = past_key_values is not None
 
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
+                past_length = (
+                    cache_position[-1] + 1 if cache_position is not None else past_key_values.get_seq_length()
+                )
                 max_cache_length = past_key_values.get_max_length()
-                # TODO joao: find a better way to track the total number of tokens seen in the static cache
-                if max_cache_length is not None:
-                    past_length = cache_length
-                else:
-                    past_length = past_key_values.seen_tokens
+                cache_length = past_length if max_cache_length is None else min(max_cache_length, int(past_length))
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
