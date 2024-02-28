@@ -20,17 +20,18 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed, logging
+from transformers import LlamaConfig, StaticCache, is_torch_available, logging, set_seed
 from transformers.testing_utils import (
+    CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
-    CaptureLogger
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -597,10 +598,17 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @require_torch_gpu
+    @require_read_token
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = ['Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.', 'My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p']
-        prompts = ["Simply put, the theory of relativity states that ", "My favorite all time favorite condiment is ketchup."]
+        EXPECTED_TEXT_COMPLETION = [
+            "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+        ]
+        prompts = [
+            "Simply put, the theory of relativity states that ",
+            "My favorite all time favorite condiment is ketchup.",
+        ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
@@ -609,7 +617,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             logits = model(
                 cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
             )[0]
-            new_token = torch.argmax(logits[:,-1], dim=-1)[:,None]
+            new_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
             return new_token
 
         batch_size, seq_length = inputs["input_ids"].shape
@@ -622,17 +630,17 @@ class LlamaIntegrationTest(unittest.TestCase):
             generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
 
             logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-            next_token = torch.argmax(logits[:,-1], dim=-1)[:,None]
-            generated_ids[:, seq_length] = next_token[:,0]
+            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
+            generated_ids[:, seq_length] = next_token[:, 0]
 
             decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-            cache_position = torch.tensor([seq_length+1], device=torch_device)
+            cache_position = torch.tensor([seq_length + 1], device=torch_device)
             for _ in range(1, NUM_TOKENS_TO_GENERATE):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
                     with CaptureLogger(logging.get_logger(__name__)) as cl:
                         next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
                         self.assertNotIn("skipping cudagraphs due to", cl.out)
-                    generated_ids[:,cache_position] = next_token.int()
+                    generated_ids[:, cache_position] = next_token.int()
                 cache_position += 1
 
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
