@@ -189,7 +189,7 @@ class SuperPointInterestPointDecoder(nn.Module):
 
         return keypoints, scores
 
-    def __get_pixel_scores(self, encoded: torch.Tensor) -> torch.Tensor:
+    def _get_pixel_scores(self, encoded: torch.Tensor) -> torch.Tensor:
         """Based on the encoder output, compute the scores for each pixel of the image"""
         scores = self.relu(self.conv_score_a(encoded))
         scores = self.conv_score_b(scores)
@@ -200,7 +200,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         scores = simple_nms(scores, self.nms_radius)
         return scores
 
-    def __extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation"""
         _, height, width = scores.shape
 
@@ -265,7 +265,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
     @staticmethod
-    def __sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
+    def _sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
         """Interpolate descriptors at keypoint locations"""
         batch_size, num_channels, height, width = descriptors.shape
         keypoints = keypoints - scale / 2 + 0.5

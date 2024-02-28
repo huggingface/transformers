@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the MIT License; you may not use this file except in compliance with
 the License. 
@@ -60,7 +60,7 @@ outputs = model(**inputs)
 
 The outputs contain the list of keypoint coordinates with their respective score and description (a 256-long vector).
 
-You can also feed multiple images to the model. Due to the nature of SuperPoint to output a dynamic number of keypoint,
+You can also feed multiple images to the model. Due to the nature of SuperPoint, to output a dynamic number of keypoints,
 you will need to use the mask attribute to retrieve the respective information :
 
 ```python
