@@ -562,7 +562,7 @@ class GPTNeoXRotaryEmbedding(nn.Module):
             self.sin_cached[:seq_len],
         )
 
-    # copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding.__init__
+# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding.__init__
 # TODO @gante bring compatibility back
 class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """GPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
