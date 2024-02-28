@@ -236,18 +236,17 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return AutoImageProcessor.from_pretrained("stevenbucaille/superpoint") if is_vision_available() else None
 
-    def infer_on_model(self, model):
+    @slow
+    def test_inference(self):
+        model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
-
         with torch.no_grad():
             outputs = model(**inputs)
-
         expected_number_keypoints_image0 = 567
         expected_number_keypoints_image1 = 830
         expected_max_number_keypoints = max(expected_number_keypoints_image0, expected_number_keypoints_image1)
-
         expected_keypoints_shape = torch.Size((len(images), expected_max_number_keypoints, 2))
         expected_scores_shape = torch.Size(
             (
@@ -256,22 +255,18 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
             )
         )
         expected_descriptors_shape = torch.Size((len(images), expected_max_number_keypoints, 256))
-
         # Check output shapes
         self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
         self.assertEqual(outputs.scores.shape, expected_scores_shape)
         self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
-
         expected_keypoints_image0_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]).to(torch_device)
         expected_scores_image0_values = torch.tensor(
             [0.0064, 0.0137, 0.0589, 0.0723, 0.5166, 0.0174, 0.1515, 0.2054, 0.0334]
         ).to(torch_device)
         expected_descriptors_image0_value = torch.tensor(-0.1096).to(torch_device)
-
         predicted_keypoints_image0_values = outputs.keypoints[0, :3]
         predicted_scores_image0_values = outputs.scores[0, :9]
         predicted_descriptors_image0_value = outputs.descriptors[0, 0, 0]
-
         # Check output values
         self.assertTrue(
             torch.allclose(
@@ -288,15 +283,9 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
                 atol=1e-4,
             )
         )
-
         # Check mask values
         self.assertTrue(outputs.mask[0, expected_number_keypoints_image0 - 1].item() == 1)
         self.assertTrue(outputs.mask[0, expected_number_keypoints_image0].item() == 0)
         self.assertTrue(torch.all(outputs.mask[0, : expected_number_keypoints_image0 - 1]))
         self.assertTrue(torch.all(torch.logical_not(outputs.mask[0, expected_number_keypoints_image0:])))
         self.assertTrue(torch.all(outputs.mask[1]))
-
-    @slow
-    def test_inference(self):
-        model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
-        self.infer_on_model(model)
