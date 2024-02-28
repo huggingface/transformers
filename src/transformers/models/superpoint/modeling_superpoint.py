@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SuperPoint model."""
-
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -21,12 +21,12 @@ from torch import nn
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutputWithNoAttention,
-    ImagePointDescriptionOutput,
 )
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -39,7 +39,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SuperPointConfig"
 
 _CHECKPOINT_FOR_DOC = "stevenbucaille/superpoint"
-
 
 SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superpoint"]
 
@@ -78,6 +77,41 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
         new_max_mask = supp_scores == max_pool(supp_scores)
         max_mask = max_mask | (new_max_mask & (~supp_mask))
     return torch.where(max_mask, scores, zeros)
+
+
+@dataclass
+class ImagePointDescriptionOutput(ModelOutput):
+    """
+    Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
+    keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of images,
+    the maximum number of keypoints is set as the dimension of the keypoints, scores and descriptors tensors. The mask
+    tensor is used to indicate which values in the keypoints, scores and descriptors tensors are keypoint information
+    and which are padding.
+
+    Args:
+        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+            Relative (x, y) coordinates of predicted keypoints in a given image.
+        scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
+            Scores of predicted keypoints.
+        descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
+            Descriptors of predicted keypoints.
+        mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
+            Mask indicating which values in keypoints, scores and descriptors are keypoint information.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+        when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+            (also called feature maps) of the model at the output of each stage.
+    """
+
+    keypoints: Optional[torch.IntTensor] = None
+    scores: Optional[torch.FloatTensor] = None
+    descriptors: Optional[torch.FloatTensor] = None
+    mask: Optional[torch.BoolTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class SuperPointConvBlock(nn.Module):
