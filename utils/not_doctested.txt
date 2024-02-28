@@ -201,6 +201,7 @@ docs/source/en/model_doc/prophetnet.md
 docs/source/en/model_doc/pvt.md
 docs/source/en/model_doc/qdqbert.md
 docs/source/en/model_doc/qwen2.md
+docs/source/en/model_doc/qwen2_moe.md
 docs/source/en/model_doc/rag.md
 docs/source/en/model_doc/realm.md
 docs/source/en/model_doc/reformer.md
@@ -759,6 +760,10 @@ src/transformers/models/qwen2/configuration_qwen2.py
 src/transformers/models/qwen2/modeling_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2_fast.py
+src/transformers/models/qwen2_moe/configuration_qwen2_moe.py
+src/transformers/models/qwen2_moe/modeling_qwen2_moe.py
+src/transformers/models/qwen2_moe/tokenization_qwen2_moe.py
+src/transformers/models/qwen2_moe/tokenization_qwen2_moe_fast.py
 src/transformers/models/rag/configuration_rag.py
 src/transformers/models/rag/modeling_rag.py
 src/transformers/models/rag/modeling_tf_rag.py
