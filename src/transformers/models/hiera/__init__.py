@@ -35,7 +35,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["hiera_model"] = ["HIERA_PRETRAINED_MODEL_ARCHIVE_LIST", "HieraModel", "HieraPreTrainedModel "]
+    _import_structure["modeling_hiera"] = [
+        "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "HieraModel",
+        "HieraPreTrainedModel "
+        ]
 
 
 if TYPE_CHECKING:
@@ -51,7 +55,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .hiera_image_processor import HieraImageProcessor
-        from .hiera_model import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraModel, HieraPreTrainedModel
+        from .modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraModel, HieraPreTrainedModel
 
 else:
     import sys

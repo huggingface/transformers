@@ -6981,7 +6981,11 @@ if TYPE_CHECKING:
             GroupViTTextModel,
             GroupViTVisionModel,
         )
-        from .models.hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraModel, HieraPreTrainedModel
+        from .models.hiera import (
+            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            HieraModel,
+            HieraPreTrainedModel,
+        )
         from .models.hubert import (
             HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             HubertForCTC,
