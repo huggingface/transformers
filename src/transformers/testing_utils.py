@@ -470,7 +470,7 @@ def require_read_token(fn):
 
     @wraps(fn)
     def _inner(*args, **kwargs):
-        with patch(huggingface_hub.utils._headers, "get_token", return_value=token):
+        with patch.object(huggingface_hub.utils._headers, "get_token", return_value=token):
             return fn(*args, **kwargs)
 
     return _inner
