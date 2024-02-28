@@ -240,6 +240,17 @@ class QuantoQuantizationTest(unittest.TestCase):
             # # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
             # self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
+    def check_same_model(self, model1, model2):
+        d0 = dict(model1.named_parameters())
+        d1 = dict(model2.named_parameters())
+        self.assertTrue(d0.keys() == d1.keys())
+        for k in d0.keys():
+            self.assertTrue(d0[k].shape == d1[k].shape)
+            self.assertTrue(d0[k].device.type == d1[k].device.type)
+            self.assertTrue(d0[k].device == d1[k].device)
+            self.assertTrue(d0[k].dtype == d1[k].dtype)
+            self.assertTrue(torch.equal(d0[k], d1[k].to(d0[k].device)))
+
     def test_compare_with_quanto(self):
         from quanto import freeze, qint8, quantize
 
@@ -252,16 +263,36 @@ class QuantoQuantizationTest(unittest.TestCase):
         # we do not quantize the lm_head since we don't do that in transformers
         quantize(model.transformer, weights=w_mapping[self.weights])
         freeze(model.transformer)
+        self.check_same_model(model, self.quantized_model)
+        self.check_inference_correctness(model, device="cuda")
 
-        d0 = dict(model.named_parameters())
-        d1 = dict(self.quantized_model.named_parameters())
-        self.assertTrue(d0.keys() == d1.keys())
-        for k in d0.keys():
-            self.assertTrue(d0[k].shape == d1[k].shape)
-            self.assertTrue(d0[k].device.type == d1[k].device.type)
-            self.assertTrue(d0[k].device == d1[k].device)
-            self.assertTrue(d0[k].dtype == d1[k].dtype)
-            self.assertTrue(torch.equal(d0[k], d1[k].to(d0[k].device)))
+    def test_load_from_quanto_saved(self):
+        from quanto import freeze, qint8, quantize
+
+        from transformers import QuantoConfig
+
+        w_mapping = {"int8": qint8}
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=self.device_map,
+            torch_dtype=torch.float32,
+        )
+        # we do not quantize the lm_head since we don't do that in transformers
+        quantize(model.transformer, weights=w_mapping[self.weights])
+        freeze(model.transformer)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.config.quantization_config = QuantoConfig(
+                weights=self.weights, activations=self.activations, modules_to_not_convert=["lm_head"]
+            )
+            model.save_pretrained(tmpdirname, safe_serialization=False)
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname,
+                device_map=self.device_map,
+                torch_dtype=torch.float32,
+            )
+        self.check_same_model(model, quantized_model_from_saved)
+        self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
 
 class QuantoQuantizationTestOffload(QuantoQuantizationTest):
@@ -304,6 +335,9 @@ class QuantoQuantizationTestOffload(QuantoQuantizationTest):
         pass
 
     def test_compare_with_quanto(self):
+        pass
+
+    def test_load_from_quanto_saved(self):
         pass
 
     def test_check_offload_quantized(self):

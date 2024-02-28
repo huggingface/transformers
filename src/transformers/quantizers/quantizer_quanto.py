@@ -150,6 +150,25 @@ class QuantoHfQuantizer(HfQuantizer):
         module.freeze()
         module.weight.requires_grad = False
 
+    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
+        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.27.0"):
+            from accelerate.utils import CustomDtype
+
+            mapping = {
+                "int8": torch.int8,
+                "float8": CustomDtype.FP8,
+                "int4": CustomDtype.INT4,
+                "int2": CustomDtype.INT2,
+            }
+            target_dtype = mapping[self.quantization_config.weights]
+            return target_dtype
+        else:
+            raise ValueError(
+                "You are using `device_map='auto'` on a quanto quantized model. To automatically compute"
+                " the appropriate device map, you should upgrade your `accelerate` library,"
+                "`pip install --upgrade accelerate` or install it from source."
+            )
+
     def _process_model_before_weight_loading(
         self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs
     ):

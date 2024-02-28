@@ -132,6 +132,7 @@ class HfQuantizer(ABC):
             torch_dtype (`torch.dtype`):
                 The dtype passed in `from_pretrained` method.
         """
+
         return {
             name: torch_dtype
             for name, _ in model.named_parameters()
