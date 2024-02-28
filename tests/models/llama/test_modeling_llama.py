@@ -597,6 +597,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    @slow
     @require_torch_gpu
     @require_read_token
     def test_compile_static_cache(self):
