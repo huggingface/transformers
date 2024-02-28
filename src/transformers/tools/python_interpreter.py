@@ -162,7 +162,6 @@ def evaluate_call(call, state, tools):
         raise InterpretorError(
             f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func.id})."
         )
-
     func = tools[func_name]
     # Todo deal with args
     args = [evaluate_ast(arg, state, tools) for arg in call.args]

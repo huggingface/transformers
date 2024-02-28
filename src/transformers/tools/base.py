@@ -347,6 +347,12 @@ class Tool:
         return GradioToolWrapper(gradio_tool)
 
 
+def get_tool_description_with_args(tool: Tool) -> str:
+    description = f"- {tool.name}: {tool.description}\n"
+    description += f"     Takes inputs: {str(tool.inputs)}\n"
+    return description
+
+
 class RemoteTool(Tool):
     """
     A [`Tool`] that will make requests to an inference endpoint.

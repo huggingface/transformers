@@ -20,9 +20,9 @@ from typing import Dict, List
 
 
 from ..utils import logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote, get_tool_description_with_args
 from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
-
+from .agents import ge
 logger = logging.get_logger(__name__)
 
 
@@ -83,12 +83,6 @@ Use the 'final_answer' tool to provide the final answer to the task. It is the o
 
 Now begin!
 """
-
-
-def get_tool_description_with_args(tool: Tool) -> str:
-    description = f"- {tool.name}: {tool.description}\n"
-    description += f"     Takes inputs: {str(tool.inputs)}\n"
-    return description
 
 
 class ReactAgent:

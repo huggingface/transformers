@@ -26,7 +26,7 @@ from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from ..models.auto import AutoTokenizer
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote, get_tool_description_with_args
 from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
 from .python_interpreter import evaluate
 
@@ -133,12 +133,12 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
         if name not in code or name in resolved_tools:
             continue
 
-        if isinstance(tool, Tool):
-            resolved_tools[name] = tool
-        else:
-            task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-            _remote = remote and supports_remote(task_or_repo_id)
-            resolved_tools[name] = load_tool(task_or_repo_id, remote=_remote)
+        # if isinstance(tool, Tool):
+        resolved_tools[name] = tool
+        # else:
+        #     task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
+        #     _remote = remote and supports_remote(task_or_repo_id)
+        #     resolved_tools[name] = load_tool(task_or_repo_id, remote=_remote)
 
     return resolved_tools
 
@@ -217,10 +217,12 @@ class Agent:
         agent_name = self.__class__.__name__
         self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
         self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
-        self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         self.log = print
         self.llm_callable = llm_callable
-        self._toolbox = toolbox
+        if toolbox is None:
+            self._toolbox = []
+        else:
+            self._toolbox = {tool.name: tool for tool in toolbox}
         self.prepare_for_new_chat()
 
     @property
@@ -229,15 +231,15 @@ class Agent:
         return self._toolbox
 
     def format_prompt(self, task, chat_mode=False):
-        description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
+        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
         if chat_mode:
             if self.chat_history is None:
-                prompt = self.chat_prompt_template.replace("<<all_tools>>", description)
+                prompt = self.chat_prompt_template.replace("<<all_tools>>", tool_descriptions)
             else:
                 prompt = self.chat_history
             prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
         else:
-            prompt = self.run_prompt_template.replace("<<all_tools>>", description)
+            prompt = self.run_prompt_template.replace("<<all_tools>>", tool_descriptions)
             prompt = prompt.replace("<<prompt>>", task)
         return prompt
 
@@ -266,7 +268,7 @@ class Agent:
         ```
         """
         prompt = self.format_prompt(task, chat_mode=True)
-        result = self.generate_one(prompt, stop=["Human:", "====="])
+        result = self.llm_callable(prompt, stop=["Human:", "=====", "Answer"])
         self.chat_history = prompt + result.strip() + "\n"
         explanation, code = clean_code_for_chat(result)
 
@@ -321,6 +323,7 @@ class Agent:
         ```
         """
         prompt = self.format_prompt(task)
+        print(prompt)
         result = self.llm_callable(prompt, stop=["Task:"])
         explanation, code = self.clean_code_for_run(result)
 
@@ -331,6 +334,7 @@ class Agent:
             self.log("\n\n==Result==")
             self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
             return evaluate(code, self.cached_tools, state=kwargs.copy())
+
         else:
             tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
             return f"{tool_code}\n{code}"
