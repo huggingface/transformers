@@ -3552,6 +3552,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "device_map": device_map,
                 "offload_dir": offload_folder,
                 "offload_index": offload_index,
+                "force_hooks": True
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
