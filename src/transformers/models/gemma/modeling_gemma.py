@@ -835,6 +835,7 @@ class GemmaModel(GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -867,8 +868,11 @@ class GemmaModel(GemmaPreTrainedModel):
                     past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 past_seen_tokens = past_key_values.get_seq_length()
 
-        # `torch.compile`-friendly `torch.arange` from a shape
-        cache_position = torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
+        if cache_position is None:
+            # `torch.compile`-friendly `torch.arange` from a shape
+            cache_position = (
+                torch.ones_like(inputs_embeds[0, :, 0], dtype=torch.int64).cumsum(0) + past_seen_tokens - 1
+            )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
@@ -1025,6 +1029,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1068,6 +1073,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1149,6 +1155,12 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
+        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
+        # same goes for position ids. Could also help with continued generation.
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        position_ids = position_ids.contiguous() if position_ids is not None else None
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1164,6 +1176,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         model_inputs.update(
             {
                 "position_ids": position_ids.contiguous(),
+                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,

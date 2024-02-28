@@ -400,6 +400,8 @@ class StaticCache(Cache):
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
+        # TODO: This is error prone, a filled cache may be `0.0`. Let's use a stateless integer instead, after
+        # https://github.com/pytorch/pytorch/issues/120248 is fixed
         return (self.key_cache[0, 0].any(dim=-1)).sum()
 
     def get_max_length(self) -> Optional[int]:
