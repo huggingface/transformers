@@ -603,28 +603,28 @@ class LlamaIntegrationTest(unittest.TestCase):
             """""",
         ]
         prompts = ["Simply put, the theory of relativity states that ", "My favorit condiment has to be"]
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token_id="</s>")
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="left")
         model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
-        input_ids = tokenizer.encode(prompts, return_tensors="pt", padding=True)
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         def decode_one_tokens(model, cur_token, input_pos, cache_position):
             logits = model(
                 cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
             )[0]
-            new_token = torch.argmax(logits, dim=-1)[0]
+            new_token = torch.argmax(logits[:,-1], dim=-1, keep_dim = True)
             return new_token
 
-        batch_size, seq_length = input_ids.shape
+        batch_size, seq_length = inputs["input_ids"].shape
         with torch.no_grad():
             model._setup_cache(StaticCache, 2, max_cache_len=4096)
             cache_position = torch.arange(seq_length, device=torch_device)
             generated_ids = torch.zeros(
                 batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
             )
-            generated_ids[:, cache_position] = input_ids.to(torch_device).to(torch.int)
+            generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
 
-            logits = model(input_ids, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-            next_token = torch.argmax(logits, dim=-1)[0]
+            logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
+            next_token = torch.argmax(logits[:,-1], dim=-1, keep_dim=True)
             generated_ids[:, seq_length] = next_token
 
             decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
@@ -632,7 +632,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             for _ in range(1, NUM_TOKENS_TO_GENERATE):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
                     next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
-                    generated_ids.index_copy_(1, cache_position, next_token)
+                    generated_ids[:,cache_position] = next_token[:, None].int()
                 cache_position += 1
 
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
