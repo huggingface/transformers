@@ -80,4 +80,4 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v tests/models/auto tests/models/ctrl tests/models/flava
+        run: python3 -m pytest -v tests/models/gemma
