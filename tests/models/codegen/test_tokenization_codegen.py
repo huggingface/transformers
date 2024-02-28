@@ -147,10 +147,22 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
 
                 # Simple input tests
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode,
+                    s,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode_plus,
+                    s,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Simple input
                 self.assertRaises(
@@ -162,10 +174,22 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode,
+                    p,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode_plus,
+                    p,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Pair input
                 self.assertRaises(
@@ -256,7 +280,13 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
 
         input_ids = tokenizer.encode(text)
-        truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
+        truncation_pattern = [
+            "^#",
+            re.escape("<|endoftext|>"),
+            "^'''",
+            '^"""',
+            "\n\n\n",
+        ]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
         self.assertEqual(decoded_text, expected_trucated_text)
         # TODO @ArthurZ outputs of the fast tokenizer are different in this case, un-related to the PR
@@ -264,3 +294,10 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
         pass
+
+    @slow
+    def test_tokenizer_integration(self):
+        # fmt: off
+        expected_encoding = {'input_ids': [[41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13], [13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13], [464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]} # noqa: E501
+        # fmt: on
+        self.tokenizer_integration_test_util(expected_encoding, "Salesforce/codegen-350M-mono", padding=False)
