@@ -103,7 +103,7 @@ if is_torch_available():
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
-    from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers import MODEL_MAPPING, AdaptiveEmbedding, StaticCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -3936,6 +3936,78 @@ class ModelTesterMixin:
                         break
 
                 self.assertFalse(fa2_correctly_converted)
+
+    @require_torch_gpu
+    @slow
+    def test_implicit_cache_position(self):
+        """
+        Tests that passing the correct cache_position yields the same results as passing cache_position=None, i.e. that
+        inference with implicit cache_position is working.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not hasattr(model_class, "_setup_cache"):
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device)
+
+            input_ids = inputs_dict["input_ids"].to(torch_device)
+
+            def run_2_forward_passes_with_cache(model, input_ids, static_cache, compile):
+                # runs two generate-style forward passes, to ensure cudagraphs need two different values of implicit
+                # `cache_position` to work correctly
+                if static_cache:
+                    model._setup_cache(
+                        cache_cls=StaticCache, max_batch_size=input_ids.shape[0], max_cache_len=input_ids.shape[1] + 1
+                    )
+
+                if compile:
+                    model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
+
+                # Implicit cache_positions
+                logits_implicit = []
+                outputs = model(input_ids, cache_position=None)
+                if static_cache:
+                    self.assertTrue(outputs.past_key_values is None)  # sanity check -- it is None with static cache
+                logits_implicit.append(outputs.logits)
+                new_input_ids = torch.argmax(outputs.logits[:, -1, :], dim=-1).unsqueeze(1)
+                outputs = model(new_input_ids, cache_position=None, past_key_values=outputs.past_key_values)
+                logits_implicit.append(outputs.logits)
+
+                if static_cache:
+                    # Restart the cache
+                    model._reset_cache()
+                    model._setup_cache(
+                        cache_cls=StaticCache, max_batch_size=input_ids.shape[0], max_cache_len=input_ids.shape[1] + 1
+                    )
+
+                # Explicit cache_positions
+                logits_explicit = []
+                cache_positions = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
+                outputs = model(input_ids, cache_position=cache_positions)
+                if static_cache:
+                    self.assertTrue(outputs.past_key_values is None)  # sanity check -- it is None with static cache
+                logits_explicit.append(outputs.logits)
+                cache_positions = cache_positions[-1:] + 1
+                new_input_ids = torch.argmax(outputs.logits[:, -1, :], dim=-1).unsqueeze(1)
+                outputs = model(new_input_ids, cache_position=cache_positions, past_key_values=outputs.past_key_values)
+                logits_explicit.append(outputs.logits)
+
+                if static_cache:
+                    model._reset_cache()
+
+                # Confirm that explicit and implicity cache_positions yield the same results
+                for idx in range(len(logits_implicit)):
+                    self.assertTrue(torch.allclose(logits_implicit[idx], logits_explicit[idx]))
+
+            # dynamic cache
+            run_2_forward_passes_with_cache(model, input_ids, static_cache=False, compile=False)
+
+            # eager static cache
+            run_2_forward_passes_with_cache(model, input_ids, static_cache=True, compile=False)
+
+            # compiled static cache [to confirm that it works with cuda graphs]
+            run_2_forward_passes_with_cache(model, input_ids, static_cache=True, compile=True)
 
 
 global_rng = random.Random()
