@@ -19,7 +19,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 
 import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
@@ -124,23 +124,15 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def parse_tools(code, toolbox, remote=False, cached_tools=None):
-    if cached_tools is None:
-        resolved_tools = BASE_PYTHON_TOOLS.copy()
+def parse_json_tool_call(json_blob: str):
+    try:
+        json_blob = json.loads(json_blob.strip())
+    except:
+        raise ValueError(f"Invalid JSON blob: {json_blob}")
+    if "action" in json_blob and "action_input" in json_blob:
+        return json_blob["action"], json_blob["action_input"]
     else:
-        resolved_tools = cached_tools
-    for name, tool in toolbox.items():
-        if name not in code or name in resolved_tools:
-            continue
-
-        if isinstance(tool, Tool):
-            resolved_tools[name] = tool
-        else:
-            task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-            _remote = remote and supports_remote(task_or_repo_id)
-            resolved_tools[name] = load_tool(task_or_repo_id, remote=_remote)
-
-    return resolved_tools
+        raise ValueError(f"Missing keys: {[key for key in ['action', 'action_input'] if key not in json_blob]} in blob {json_blob}")
 
 
 def get_tool_creation_code(code, toolbox, remote=False):
@@ -167,6 +159,58 @@ class FinalAnswerTool(Tool):
     def __call__(self):
         pass
 
+
+DEFAULT_REACT_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
+
+{tool_descriptions}
+
+The way you use the tools is by specifying a json blob.
+Specifically, this json should have a `action` key (name of the tool to use) and a `action_input` key (input to the tool).
+
+The only values that should be in the "action" field are: {tool_names}
+
+The $ACTION_JSON_BLOB should only contain a SINGLE action and MUST be formatted as markdown, do NOT return a list of multiple actions. Here is an example of a valid $ACTION_JSON_BLOB:
+
+{{
+  "action": $TOOL_NAME,
+  "action_input": $INPUT
+}}
+
+
+Make sure to have the $INPUT in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
+
+You will be given:
+
+Task: the task you are given.
+
+You should ALWAYS use the following format:
+
+Thought: you should always think about one action to take. Then use the action as follows:
+Action:
+$ACTION_JSON_BLOB
+Observation: the result of the action
+... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $ACTION_JSON_BLOB must only use a SINGLE action at a time.)
+
+You must always end your output with the following format:
+
+Thought: I now have solved the task.
+Action: 
+{{
+    "action": "final_answer",
+    "action_input": {{
+        "answer": $ANSWER
+    }}
+}}
+ALWAYS use the final_answer tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
+
+Now begin!
+
+Here is the task you are given:
+
+Task: {{task}}
+{{memory}}
+"""
+
 class Agent:
     """
     Base class for all agents which contains the main API methods.
@@ -181,12 +225,16 @@ class Agent:
             actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
             `run_prompt_template.txt` in this repo in this case.
         toolbox ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            
     """
 
-    def __init__(self, llm_engine, chat_prompt_template=None, run_prompt_template=None, toolbox=None):
-        _setup_default_tools()
-
+    def __init__(
+            self,
+            llm_engine,
+            chat_prompt_template=None,
+            run_prompt_template=None,
+            toolbox=None,
+            system_prompt=None
+        ):
         agent_name = self.__class__.__name__
 
         self.llm_engine = llm_engine
@@ -194,23 +242,31 @@ class Agent:
         self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
 
         if toolbox is None:
-            self.toolbox = _setup_default_tools()
+            self._toolbox = _setup_default_tools()
         else:
-            self.toolbox = toolbox
+            self._toolbox = {tool.name: tool for tool in toolbox}
 
         final_answer_tool = FinalAnswerTool()
-        self.toolbox.append(final_answer_tool) 
+        self._toolbox["final_answer"] = final_answer_tool
 
         self.log = print
 
-        self.system_prompt = "" #TODO: fill this
-        tool_description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
-        self.system_prompt.format(tool_description=tool_description)
+        # Init system prompt
+        if system_prompt:
+            self.system_prompt = system_prompt
+        else:
+            self.system_prompt = DEFAULT_REACT_SYSTEM_PROMPT
+        tool_descriptions = "\n".join([f"- {tool_name}: {tool.description}" for tool_name, tool in self._toolbox.items()])
+        self.system_prompt.format(
+            tool_descriptions=tool_descriptions,
+            tool_names=", ".join([tool_name for tool_name in self._toolbox.keys()])
+        )
 
+        # Create empty memory
         self.prepare_for_new_chat()
 
     @property
-    def toolbox(self) -> Dict[str, Tool]:
+    def toolbox(self) -> List[Tool]:
         """Get all tool currently available to the agent"""
         return self._toolbox
 
@@ -227,27 +283,30 @@ class Agent:
         """
         Sends a request to the agent.
         """
+        self.task = task
         final_answer = None
         while not final_answer:
             final_answer = self.step()
+        return final_answer
 
 
     def step(self):
-        current_prompt = self.system_prompt.format(memory = ', '.join(self.memory))
-        result = self.generate_one(current_prompt, stop=["Observation:", "====="])
+        current_prompt = self.system_prompt + "\nTask: " + self.task
+        current_prompt += "\n" + "\n".join(self.memory)
+        result = self.llm_engine(current_prompt, stop=["Observation:", "====="])
         self.memory.append(result.strip() + "\n")
         thought, tool_call = result.split("Action:")
 
         self.log(f"==Thought from the agent==\n{thought}")
 
-        tool, arguments = parse_tools(tool_call)
+        tool_name, arguments = parse_json_tool_call(tool_call)
 
-        if tool_call == "final_answer":
+        if tool_name == "final_answer":
             return arguments
 
         else:
             self.log("\n\n==Result==")
-            observation = tool(**arguments)
+            observation = self.toolbox[tool_name](**arguments)
             self.memory.append("Observation: " + observation.strip() + "\n")
             return None
         
@@ -257,16 +316,7 @@ class Agent:
         Clears the history of prior calls to [`~Agent.chat`].
         """
         self.memory = []
-        self.cached_tools = None #TODO: chekc if this attribute is useful to keep
-
-
-    def generate_one(self, prompt, stop):
-        # This is the method to implement in your custom agent.
-        raise NotImplementedError
-
-    def generate_many(self, prompts, stop):
-        # Override if you have a way to do batch generation faster than one by one
-        return [self.generate_one(prompt, stop) for prompt in prompts]
+        self.cached_tools = None #TODO: check if this attribute is useful to keep
 
 
 class OpenAiAgent(Agent):
