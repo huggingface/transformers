@@ -26,6 +26,61 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 </Tip>
 
+## Quanto
+
+[🤗 Quanto](https://github.com/huggingface/quanto) library is a versatile pytorch quantization toolkit. The quantization method used is the linear quantization. Quanto provides several unique features such as:
+- weights quantization (`float8`,`int8`,`int4`,`int2`)
+- activation quantization (`int8`,`float8_e4m3`,`float8_e5m2`)
+- device agnostic (CUDA,MPS)
+- model agnostic 
+- supports quantization aware training
+<!-- Add link to the deeplearning ai class about linear quantization -->
+<!-- Add link to the blogpost -->
+
+
+Before you begin, make sure the following libraries are installed:
+
+```bash
+pip install quanto
+pip install git+https://github.com/huggingface/accelerate.git
+pip install git+https://github.com/huggingface/transformers.git
+```
+
+Now you can quantize a model by passing [`QuantoConfig`] object in the [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it contains `torch.nn.Linear` layers. 
+
+The integration with transformers only supports weights quantization. For the more complex use case such as activation quantization, calibration and quantization aware training, you should use quanto library instead. 
+<!-- -> add link to quanto library.  -->
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+
+model_id = "facebook/opt-125m"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+quanto_config = QuantoConfig(weights="int8")
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=quanto_config)
+```
+
+You can also save the quantized model using the [`~PreTrainedModel.save_pretrained`] method. 
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+
+quantized_model.save_pretrained(quantized_model, safe_serialization=False)
+```
+Note that, currently, we can't save the quantized model using safetensors. So, you need to set `safe_serialization=False` or you will get an error. 
+
+Lastly, you also load any quantized model, whether it was quantized using transformers or quanto. You just need to make sure that we have a `quantization_config` attribute in the model's [config.json]. If it does not exist because you quantized it using quanto, you need to add it.
+<!-- Add link to the colab so that they have an example of how it works -->
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+
+model_id = "facebook/opt-125m-quanto"
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+```
+
+<!-- Add benchmark on multi devices / models -->
+
 ## AQLM
 
 
