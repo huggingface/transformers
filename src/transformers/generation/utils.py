@@ -35,7 +35,6 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..models.auto.tokenization_auto import AutoTokenizer
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
@@ -87,6 +86,7 @@ from .stopping_criteria import (
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
@@ -1323,6 +1323,7 @@ class GenerationMixin:
                 synced_gpus = True
             else:
                 synced_gpus = False
+        tokenizer = kwargs.pop("tokenizer", None)
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
@@ -1433,7 +1434,7 @@ class GenerationMixin:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
         if generation_config.token_healing:
-            input_ids = self.heal_tokens(input_ids)
+            input_ids = self.heal_tokens(input_ids, tokenizer)
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -1805,16 +1806,22 @@ class GenerationMixin:
 
         return result
 
-    def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+    def heal_tokens(
+        self, input_ids: torch.LongTensor, tokenizer: Optional["PreTrainedTokenizerBase"] = None
+    ) -> torch.LongTensor:
         r"""
         Generates sequences of token ids for models with a language modeling head.
         Parameters:
             input_ids (`torch.LongTensor`): The sequence used as a prompt for the generation.
+            tokenizer (`PreTrainedTokenizerBase`, *optional*): The tokenizer used to decode the input ids.
         Return:
             `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
         """
-
-        tokenizer = AutoTokenizer.from_pretrained(self.name_or_path)
+        if tokenizer is None:
+            raise ValueError(
+                " When generating with token healing, you must pass the model's tokenizer to the `tokenizer` "
+                "argument of `generate`."
+            )
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
         vocab_trie = CharTrie(tokenizer.get_vocab())
         gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)

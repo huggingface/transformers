@@ -3671,7 +3671,7 @@ class TokenHealingTestCase(unittest.TestCase):
         )
         input_ids = tokenizer(input, return_tensors="pt").input_ids.to(completion_model.device)
 
-        healed_ids = completion_model.heal_tokens(input_ids)
+        healed_ids = completion_model.heal_tokens(input_ids, tokenizer)
         predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
 
         self.assertEqual(predicted, expected)
