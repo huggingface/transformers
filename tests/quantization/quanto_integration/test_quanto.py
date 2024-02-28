@@ -229,7 +229,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
-            self.assertIn("Serialization with safetensors is not supported with models quantized with quanto", str(e.exception))
+            self.assertIn(
+                "Serialization with safetensors is not supported with models quantized with quanto", str(e.exception)
+            )
 
             # TODO: Add the following when we fix the issue with safetensors serialization
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(

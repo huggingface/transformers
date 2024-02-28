@@ -825,9 +825,9 @@ class QuantoConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        if self.weights not in ["int8", "int4", "int2"]:
-            raise ValueError(f"Only support weights in ['int8','int4','int2'] but found {self.weights}")
-        if self.activations not in [None, "int8", "fp8_e4m3", "qfloat8_e5m2"]:
-            raise ValueError(
-                f"Only support weights in [[None,'int8','fp8_e4m3','qfloat8_e5m2'] but found {self.activations}"
-            )
+        accepted_weights = ["float8", "int8", "int4", "int2"]
+        accepted_activations = [None, "int8", "fp8_e4m3", "qfloat8_e5m2"]
+        if self.weights not in accepted_weights:
+            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+        if self.activations not in accepted_activations:
+            raise ValueError(f"Only support weights in {accepted_activations} but found {self.activations}")
