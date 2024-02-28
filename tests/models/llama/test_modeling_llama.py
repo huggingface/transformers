@@ -611,7 +611,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             logits = model(
                 cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
             )[0]
-            new_token = torch.argmax(logits[:,-1], dim=-1, keep_dim = True)
+            new_token = torch.argmax(logits[:,-1], dim=-1).unsqueeze(1)
             return new_token
 
         batch_size, seq_length = inputs["input_ids"].shape
@@ -624,7 +624,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
 
             logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-            next_token = torch.argmax(logits[:,-1], dim=-1, keep_dim=True)
+            next_token = torch.argmax(logits[:,-1], dim=-1).unsqueeze(1)
             generated_ids[:, seq_length] = next_token
 
             decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
@@ -632,7 +632,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             for _ in range(1, NUM_TOKENS_TO_GENERATE):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
                     next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
-                    generated_ids[:,cache_position] = next_token[:, None].int()
+                    generated_ids[:,cache_position] = next_token.int()
                 cache_position += 1
 
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
