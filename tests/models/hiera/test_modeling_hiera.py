@@ -18,8 +18,7 @@ import unittest
 from typing import Tuple
 
 from transformers import HieraConfig, HieraModel
-
-from transformers.models.hiera.modeling_hiera import HieraBlock, HIERA_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraBlock
 from transformers.testing_utils import (
     require_torch,
     slow,
