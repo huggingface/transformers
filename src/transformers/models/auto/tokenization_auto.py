@@ -413,6 +413,12 @@ else:
                     "T5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "codereviewer",
+                (
+                    "CodeReviewerTokenizer" if is_sentencepiece_available() else None,
+                    "CodeReviewerTokenizerFast" if is_tokenizers_available() else None,
+                ),
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),

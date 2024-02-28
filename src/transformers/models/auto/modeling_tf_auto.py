@@ -83,6 +83,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
+        ("codereviewer", "TFCodeReviewerModel"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
         ("vision-text-dual-encoder", "TFVisionTextDualEncoderModel"),
@@ -119,6 +120,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("roberta", "TFRobertaForMaskedLM"),
         ("roberta-prelayernorm", "TFRobertaPreLayerNormForMaskedLM"),
         ("t5", "TFT5ForConditionalGeneration"),
+        ("codereviewer", "TFCodeReviewerForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
         ("vit_mae", "TFViTMAEForPreTraining"),
@@ -158,6 +160,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("roformer", "TFRoFormerForMaskedLM"),
         ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
         ("t5", "TFT5ForConditionalGeneration"),
+        ("codereviewer", "TFCodeReviewerForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
         ("whisper", "TFWhisperForConditionalGeneration"),
@@ -285,6 +288,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "TFMT5ForConditionalGeneration"),
         ("pegasus", "TFPegasusForConditionalGeneration"),
         ("t5", "TFT5ForConditionalGeneration"),
+        ("codereviewer", "TFCodeReviewerForConditionalGeneration"),
     ]
 )
 
@@ -459,6 +463,7 @@ TF_MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "TFRobertaPreLayerNormModel"),
         ("roformer", "TFRoFormerModel"),
         ("t5", "TFT5EncoderModel"),
+        ("codereviewer", "TFCodeReviewerEncoderModel"),
         ("xlm", "TFXLMModel"),
         ("xlm-roberta", "TFXLMRobertaModel"),
     ]

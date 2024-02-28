@@ -58,6 +58,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormModel"),
         ("roformer", "FlaxRoFormerModel"),
         ("t5", "FlaxT5Model"),
+        ("codereviewer", "FlaxCodeReviewerModel"),
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("vit", "FlaxViTModel"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
@@ -82,6 +83,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForMaskedLM"),
         ("roformer", "FlaxRoFormerForMaskedLM"),
         ("t5", "FlaxT5ForConditionalGeneration"),
+        ("codereviewer", "FlaxCodeReviewerForConditionalGeneration"),
         ("wav2vec2", "FlaxWav2Vec2ForPreTraining"),
         ("whisper", "FlaxWhisperForConditionalGeneration"),
         ("xlm-roberta", "FlaxXLMRobertaForMaskedLM"),
@@ -118,6 +120,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),
+        ("codereviewer", "FlaxCodeReviewerForConditionalGeneration"),
     ]
 )
 
