@@ -563,10 +563,11 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         )
 
 
+# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding.__init__
+# TODO @gante bring compatibility back
 class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """GPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
@@ -586,7 +587,8 @@ class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
 class GPTNeoXDynamicNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """GPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding.__init__
+    # copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding.__init__
+    # TODO @gante no longer copied from
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)

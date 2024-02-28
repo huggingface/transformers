@@ -1251,7 +1251,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ```python
         from transformers import AutoModel
 
-        model = AutoModel.from_pretrained("bert-base-cased")
+        model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 
         model.add_model_tags(["custom", "custom-bert"])
 
@@ -2092,7 +2092,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
 
         if gradient_checkpointing_kwargs is None:
-            gradient_checkpointing_kwargs = {}
+            gradient_checkpointing_kwargs = {"use_reentrant": True}
 
         gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
 
@@ -2608,8 +2608,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -2698,6 +2696,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 [pull request 11471](https://github.com/huggingface/transformers/pull/11471) for more information.
 
                 </Tip>
+            attn_implementation (`str`, *optional*):
+                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
             > Parameters for big model inference
 
@@ -2788,17 +2788,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> from transformers import BertConfig, BertModel
 
         >>> # Download model and configuration from huggingface.co and cache.
-        >>> model = BertModel.from_pretrained("bert-base-uncased")
+        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
         >>> model = BertModel.from_pretrained("./test/saved_model/")
         >>> # Update configuration during loading.
-        >>> model = BertModel.from_pretrained("bert-base-uncased", output_attentions=True)
+        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", output_attentions=True)
         >>> assert model.config.output_attentions == True
         >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
         >>> config = BertConfig.from_json_file("./tf_model/my_tf_model_config.json")
         >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
         >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
-        >>> model = BertModel.from_pretrained("bert-base-uncased", from_flax=True)
+        >>> model = BertModel.from_pretrained("google-bert/bert-base-uncased", from_flax=True)
         ```
 
         * `low_cpu_mem_usage` algorithm:
@@ -4192,7 +4192,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @property
     def _is_quantized_training_enabled(self):
-        logger.warning(
+        warnings.warn(
             "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
             FutureWarning,
         )
