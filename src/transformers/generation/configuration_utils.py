@@ -482,11 +482,11 @@ class GenerationConfig(PushToHubMixin):
         # 3. detect incorrect paramaterization specific to advanced beam modes
         else:
             # constrained beam search
-            if self.constraints is not None:
+            if self.constraints is not None or self.force_words_ids is not None:
                 constrained_wrong_parameter_msg = (
-                    "`constraints` is not `None`, triggering constrained beam search. However, `{flag_name}` is set "
-                    "to `{flag_value}`, which is incompatible with this generation mode. Set `constraints=None` or "
-                    "unset `{flag_name}` to continue." + fix_location
+                    "one of `constraints`, `force_words_ids` is not `None`, triggering constrained beam search. However, "
+                    "`{flag_name}` is set to `{flag_value}`, which is incompatible with this generation mode. Set "
+                    "`constraints` and `force_words_ids` to `None` or unset `{flag_name}` to continue." + fix_location
                 )
                 if self.do_sample is True:
                     raise ValueError(
