@@ -7507,6 +7507,12 @@ if TYPE_CHECKING:
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
+        from .models.qwen2_moe import (
+            Qwen2MoEForCausalLM,
+            Qwen2MoEForSequenceClassification,
+            Qwen2MoEModel,
+            Qwen2MoEPreTrainedModel,
+        )
         from .models.rag import (
             RagModel,
             RagPreTrainedModel,
