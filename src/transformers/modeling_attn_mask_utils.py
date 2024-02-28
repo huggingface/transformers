@@ -200,9 +200,37 @@ class AttentionMaskConverter:
         `attention_mask` is [bsz, src_seq_len].
 
         The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
+
+        For example, if `expanded_mask` is (e.g. here left-padding case)
+        ```
+        [[[[0, 0, 0],
+           [0, 0, 0],
+           [0, 0, 1]]],
+         [[[1, 0, 0],
+           [1, 1, 0],
+           [1, 1, 1]]],
+         [[[0, 0, 0],
+           [0, 1, 0],
+           [0, 1, 1]]]]
+        ```
+        then the modified `expanded_mask` will be
+        ```
+        [[[[1, 1, 1],   <-- modified
+           [1, 1, 1],   <-- modified
+           [0, 0, 1]]],
+         [[[1, 0, 0],
+           [1, 1, 0],
+           [1, 1, 1]]],
+         [[[1, 1, 1],   <-- modified
+           [0, 1, 0],
+           [0, 1, 1]]]]
+        ```
         """
+        # fmt: on
         if expanded_mask.dtype == torch.bool:
-            raise ValueError("AttentionMaskConverter._unmask_unattended expects a float `expanded_mask`, got a BoolTensor.")
+            raise ValueError(
+                "AttentionMaskConverter._unmask_unattended expects a float `expanded_mask`, got a BoolTensor."
+            )
 
         return expanded_mask.mul(~torch.all(expanded_mask == min_dtype, dim=-1, keepdim=True))
 
