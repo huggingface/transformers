@@ -808,13 +808,19 @@ class LlamaPreTrainedModel(PreTrainedModel):
             )
 
         if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
-            causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
+            causal_mask = torch.full(
+                (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool
+            )
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
+            device = layer.input_layernorm.weight.device
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                dtype = self.config._pre_quantization_dtype
+            else:
+                dtype = layer.self_attn.o_proj.weight.dtype
             layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
+                self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
             )
 
     def _reset_cache(self):
@@ -916,8 +922,11 @@ class LlamaModel(LlamaPreTrainedModel):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
+        # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
+        # NOTE: This is not friendly with TorchScript, ONNX, ExportedProgram serialization for very large `max_position_embeddings`.
+        causal_mask = torch.full(
+            (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
+        )
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
@@ -1063,22 +1072,27 @@ class LlamaModel(LlamaPreTrainedModel):
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # We use the current dtype to avoid any overflows
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
+        min_dtype = torch.finfo(dtype).min
+        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
 
         causal_mask = causal_mask.to(dtype=dtype, device=device)
         if attention_mask is not None and attention_mask.dim() == 2:
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(
-                padding_mask, torch.finfo(dtype).min
-            )
+            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if self.config._attn_implementation == "sdpa":
-            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-            if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
-                    dtype
-                )
+        if self.config._attn_implementation == "sdpa" and attention_mask is not None:
+            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+            )
+            if not is_tracing and torch.any(attention_mask != 1):
+                # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+                # Details: https://github.com/pytorch/pytorch/issues/110213
+                causal_mask = causal_mask.mul(~torch.all(causal_mask == min_dtype, dim=-1, keepdim=True)).to(dtype)
 
         return causal_mask
 
