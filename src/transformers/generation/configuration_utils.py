@@ -259,9 +259,9 @@ class GenerationConfig(PushToHubMixin):
 
          > Gneration parameters for Pagedattention
 
-        num_blocks (`int`, *optional*, defaults to 8):
+        num_blocks (`int`, *optional*, defaults to 256):
             The number of blocks in the paged attention mechanism.
-        block_size (`int`, *optional*, defaults to 64):
+        block_size (`int`, *optional*, defaults to 8):
             The size of each block in the paged attention mechanism.
 
         > Parameters specific to the caching mechanism:
@@ -344,8 +344,8 @@ class GenerationConfig(PushToHubMixin):
         self.cache_implementation = kwargs.pop("cache_implementation", None)
 
         # PagedAttention
-        self.num_blocks = kwargs.pop("num_blocks", 8)
-        self.block_size = kwargs.pop("block_size", 64)
+        self.num_blocks = kwargs.pop("num_blocks", 256)
+        self.block_size = kwargs.pop("block_size", 8)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)

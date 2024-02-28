@@ -1682,13 +1682,17 @@ class GenerationMixin:
                 max_length=generation_config.max_length,
             )
 
-            # 13. interleave input_ids with `num_beams` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
+            if self.generation_config.cache_implementation == "paged":
+                # enable prompt sharing
+                self._prompt_sharing_with_paged_attention_cache(batch_size, generation_config.num_beams)
+            else:
+                # 13. interleave input_ids with `num_beams` additional sequences per batch
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids=input_ids,
+                    expand_size=generation_config.num_beams,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
 
             # 14. run beam sample
             result = self.beam_sample(
@@ -3197,16 +3201,10 @@ class GenerationMixin:
                     model_kwargs["past_key_values"], beam_idx
                 )
             elif self.generation_config.cache_implementation == "paged":
-
-                def reorder_paged_kv_cache(model, beam_idx):
-                    if model is None:
-                        return
-                    for _, sub_mod in model.named_modules():
-                        past_key_value = getattr(sub_mod, "past_key_value", None)
-                        if isinstance(past_key_value, PagedAttentionCache):
-                            self._temporary_reorder_cache(past_key_value, beam_idx)
-
-                reorder_paged_kv_cache(self, beam_idx)
+                for _, sub_mod in self.named_modules():
+                    past_key_value = getattr(sub_mod, "past_key_value", None)
+                    if isinstance(past_key_value, PagedAttentionCache):
+                        self._temporary_reorder_cache(past_key_value, beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3437,6 +3435,10 @@ class GenerationMixin:
 
         batch_beam_size, cur_len = input_ids.shape
 
+        if self.generation_config.cache_implementation == "paged":
+            # enabled prompt sharing with paged attention, no expand for inputs
+            batch_beam_size = batch_size * num_beams
+
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
@@ -3460,6 +3462,7 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
+        is_prompt = True
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -3483,6 +3486,16 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
+
+            # paged attention enable prompt sharing, need to expand inputs and outputs for generation
+            if self.generation_config.cache_implementation == "paged" and is_prompt:
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids=input_ids,
+                    expand_size=num_beams,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
+                outputs = self._expand_outputs_for_generation(expand_size=num_beams, outputs=outputs)
 
             next_token_logits = outputs.logits[:, -1, :]
 
@@ -3557,16 +3570,10 @@ class GenerationMixin:
                     model_kwargs["past_key_values"], beam_idx
                 )
             elif self.generation_config.cache_implementation == "paged":
-
-                def reorder_paged_kv_cache(model, beam_idx):
-                    if model is None:
-                        return
-                    for _, sub_mod in model.named_modules():
-                        past_key_value = getattr(sub_mod, "past_key_value", None)
-                        if isinstance(past_key_value, PagedAttentionCache):
-                            self._temporary_reorder_cache(past_key_value, beam_idx)
-
-                reorder_paged_kv_cache(self, beam_idx)
+                for _, sub_mod in self.named_modules():
+                    past_key_value = getattr(sub_mod, "past_key_value", None)
+                    if isinstance(past_key_value, PagedAttentionCache):
+                        self._temporary_reorder_cache(past_key_value, beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3579,7 +3586,7 @@ class GenerationMixin:
                     break
                 else:
                     this_peer_finished = True
-
+            is_prompt = False
         sequence_outputs = beam_scorer.finalize(
             input_ids,
             beam_scores,
@@ -3967,16 +3974,10 @@ class GenerationMixin:
                     model_kwargs["past_key_values"], reordering_indices
                 )
             elif self.generation_config.cache_implementation == "paged":
-
-                def reorder_paged_kv_cache(model, reordering_indices):
-                    if model is None:
-                        return
-                    for _, sub_mod in model.named_modules():
-                        past_key_value = getattr(sub_mod, "past_key_value", None)
-                        if isinstance(past_key_value, PagedAttentionCache):
-                            self._temporary_reorder_cache(past_key_value, reordering_indices)
-
-                reorder_paged_kv_cache(self, reordering_indices)
+                for _, sub_mod in self.named_modules():
+                    past_key_value = getattr(sub_mod, "past_key_value", None)
+                    if isinstance(past_key_value, PagedAttentionCache):
+                        self._temporary_reorder_cache(past_key_value, beam_idx)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -4329,6 +4330,11 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], beam_idx
                 )
+            elif self.generation_config.cache_implementation == "paged":
+                for _, sub_mod in self.named_modules():
+                    past_key_value = getattr(sub_mod, "past_key_value", None)
+                    if isinstance(past_key_value, PagedAttentionCache):
+                        self._temporary_reorder_cache(past_key_value, beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))

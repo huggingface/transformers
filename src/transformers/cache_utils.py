@@ -494,9 +494,10 @@ class PagedAttentionCache(Cache):
         if seq_idx not in self.block_tables:
             # allocate blocks for this sequence
             needed_blocks = (key_len + self.block_size - 1) // self.block_size
-            if needed_blocks <= len(self.free_blocks):
-                raise
-            f"No space in KV cache to store new token state. needed_blocks: {needed_blocks}, free_blocks: {self.free_blocks}"
+            if needed_blocks > len(self.free_blocks):
+                raise AssertionError(
+                    f"No space in KV cache to store new token state. needed_blocks: {needed_blocks}, free_blocks: {self.free_blocks}"
+                )
             blocks = self.free_blocks[:needed_blocks]
             self.free_blocks = self.free_blocks[needed_blocks:]
             self.block_tables[seq_idx] = blocks
@@ -508,7 +509,7 @@ class PagedAttentionCache(Cache):
             target_blocks = (seq_len + self.block_size - 1) // self.block_size
             new_blocks = target_blocks - len(self.block_tables[seq_idx])
 
-            if new_blocks < len(self.free_blocks):
+            if new_blocks > len(self.free_blocks):
                 raise AssertionError(f"PagedAttentionCache: No enough free blocks to allocate for sequence {seq_idx}.")
 
             if new_blocks > 0:  # allocate new blocks
@@ -689,7 +690,7 @@ class PagedAttentionCache(Cache):
         past_context_len = self.seen_tokens
         self.seen_tokens += cur_len
 
-        if self.batch2seq is None:
+        if self.batch2seq == {}:
             self.set_batch2seq_for_prompt_sharing(batch_size, 1)
 
         # step 1): allocate slots to store token states for each sequence in the batch.
