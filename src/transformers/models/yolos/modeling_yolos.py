@@ -409,7 +409,7 @@ class YolosLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = YolosAttention(config)
+        self.attention = VIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = YolosIntermediate(config)
         self.output = YolosOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

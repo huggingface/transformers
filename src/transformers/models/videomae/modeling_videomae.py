@@ -373,7 +373,7 @@ class VideoMAELayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = VideoMAEAttention(config)
+        self.attention = VIT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = VideoMAEIntermediate(config)
         self.output = VideoMAEOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
