@@ -257,10 +257,17 @@ class GenerationConfig(PushToHubMixin):
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
 
+        prompt_lookup_num_tokens (`int`, *optional*, default to `None`):
+            The number of tokens to be output as candidate tokens.
+
+        max_matching_ngram_size (`int`, *optional*, default to `None`):
+            The maximum ngram size to be considered for matching in the prompt
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
+
 
         > Wild card
 
