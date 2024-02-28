@@ -130,7 +130,6 @@ class ReactAgent:
         final_answer_tool = FinalAnswerTool()
         self._toolbox["final_answer"] = final_answer_tool
 
-
         self.log = print
 
         # Init system prompt
@@ -179,11 +178,10 @@ class ReactAgent:
         self.memory.append(result + "\n")
         self.log(f"==Model output==\n{result}")
         try:
-            thought, tool_call = result.split("Action:")
+            _, tool_call = result.split("Action:")
         except Exception as e:
             self.memory.append("Error: you did not provide 'Action:': it is mandatory to provide an Action!")
             return None
-
 
         try:
             tool_name, arguments = parse_json_tool_call(tool_call)

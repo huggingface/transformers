@@ -211,7 +211,7 @@ class Agent:
             one of the default tools, that default tool will be overridden.
     """
 
-    def __init__(self, chat_prompt_template=None, run_prompt_template=None, additional_tools=None):
+    def __init__(self, llm_callable, chat_prompt_template=None, run_prompt_template=None, toolbox=None):
         _setup_default_tools()
 
         agent_name = self.__class__.__name__
@@ -219,23 +219,8 @@ class Agent:
         self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
         self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         self.log = print
-        if additional_tools is not None:
-            if isinstance(additional_tools, (list, tuple)):
-                additional_tools = {t.name: t for t in additional_tools}
-            elif not isinstance(additional_tools, dict):
-                additional_tools = {additional_tools.name: additional_tools}
-
-            replacements = {name: tool for name, tool in additional_tools.items() if name in HUGGINGFACE_DEFAULT_TOOLS}
-            self._toolbox.update(additional_tools)
-            if len(replacements) > 1:
-                names = "\n".join([f"- {n}: {t}" for n, t in replacements.items()])
-                logger.warning(
-                    f"The following tools have been replaced by the ones provided in `additional_tools`:\n{names}."
-                )
-            elif len(replacements) == 1:
-                name = list(replacements.keys())[0]
-                logger.warning(f"{name} has been replaced by {replacements[name]} as provided in `additional_tools`.")
-
+        self.llm_callable = llm_callable
+        self._toolbox = toolbox
         self.prepare_for_new_chat()
 
     @property
@@ -255,15 +240,6 @@ class Agent:
             prompt = self.run_prompt_template.replace("<<all_tools>>", description)
             prompt = prompt.replace("<<prompt>>", task)
         return prompt
-
-    def set_stream(self, streamer):
-        """
-        Set the function use to stream results (which is `print` by default).
-
-        Args:
-            streamer (`callable`): The function to call when streaming results from the LLM.
-        """
-        self.log = streamer
 
     def chat(self, task, *, return_code=False, remote=False, **kwargs):
         """
@@ -345,7 +321,7 @@ class Agent:
         ```
         """
         prompt = self.format_prompt(task)
-        result = self.generate_one(prompt, stop=["Task:"])
+        result = self.llm_callable(prompt, stop=["Task:"])
         explanation, code = self.clean_code_for_run(result)
 
         self.log(f"==Explanation from the agent==\n{explanation}")
@@ -359,6 +335,3 @@ class Agent:
             tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
             return f"{tool_code}\n{code}"
 
-    def generate_one(self, prompt, stop):
-        # This is the method to implement in your custom agent.
-        raise NotImplementedError
