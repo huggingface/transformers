@@ -218,8 +218,8 @@ class SuperPointInterestPointDecoder(nn.Module):
         )
 
     def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        scores = self.__get_pixel_scores(encoded)
-        keypoints, scores = self.__extract_keypoints(scores)
+        scores = self._get_pixel_scores(encoded)
+        keypoints, scores = self._extract_keypoints(scores)
 
         return keypoints, scores
 
@@ -291,7 +291,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         descriptors = self.conv_descriptor_b(self.relu(self.conv_descriptor_a(encoded)))
         descriptors = nn.functional.normalize(descriptors, p=2, dim=1)
 
-        descriptors = self.__sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
+        descriptors = self._sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
 
         # [descriptor_dim, num_keypoints] -> [num_keypoints, descriptor_dim]
         descriptors = torch.transpose(descriptors, 0, 1)
@@ -416,6 +416,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
+        labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImagePointDescriptionOutput]:
@@ -439,6 +440,12 @@ class SuperPointModel(SuperPointPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
+
+        if labels is not None:
+            raise ValueError(
+                f"SuperPoint is not trainable, no labels should be provided.Therefore, labels should be None but were {type(labels)}"
+            )
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

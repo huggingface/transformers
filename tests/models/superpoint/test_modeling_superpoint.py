@@ -222,6 +222,22 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             model = SuperPointModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_forward_labels_should_be_none(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                # Provide an arbitrary sized Tensor as labels to model inputs
+                model_inputs["labels"] = torch.rand((128, 128))
+
+                with self.assertRaises(ValueError) as cm:
+                    model(**model_inputs)
+                self.assertEqual(ValueError, cm.exception.__class__)
+
 
 def prepare_imgs():
     image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
