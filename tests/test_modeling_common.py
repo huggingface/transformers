@@ -459,15 +459,14 @@ class ModelTesterMixin:
 
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
-    @require_safetensors
     @slow
-    def test_save_load_low_cpu_mem_usage_safetensors(self):
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 model_to_save = model_class(config)
 
-                model_to_save.save_pretrained(saved_model_path, safe_serialization=True)
+                model_to_save.save_pretrained(saved_model_path, safe_serialization=False)
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
     def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):

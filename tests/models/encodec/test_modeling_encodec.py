@@ -334,7 +334,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip("No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_safetensors(self):
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     def test_determinism(self):

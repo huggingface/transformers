@@ -1203,7 +1203,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip("No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_safetensors(self):
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     # override since changing `output_hidden_states` / `output_attentions` from the top-level model config won't work
