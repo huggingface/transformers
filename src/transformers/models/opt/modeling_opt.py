@@ -129,8 +129,8 @@ class OPTAttention(nn.Module):
             val = None
             if fn_arg_name in kwargs:
                 logging.warning(
-                    "Passing in {} to {self.__class__.__name__} is deprecated and won't be supported from v4.38."
-                    " Please set it in the config instead"
+                    "Passing in {fn_arg_name} to {self.__class__.__name__} is deprecated and won't be supported from "
+                    "v4.39. Please set it in the config instead"
                 )
                 val = kwargs.pop(fn_arg_name)
             else:
