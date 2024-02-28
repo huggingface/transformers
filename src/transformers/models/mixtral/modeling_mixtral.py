@@ -1415,7 +1415,13 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, output_router_logits=False, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        output_router_logits=False,
+        **kwargs,
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
