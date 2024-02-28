@@ -896,20 +896,26 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: str,
+        save_directory: Union[str, os.PathLike],
         safe_serialization: bool = True,
+        token: Optional[Union[str, bool]] = None,
         **kwargs,
     ):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
-            save_directory (`str`):
+            save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
                 Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            kwargs (`Dict[str, Any]`, *optional*):
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        self._set_token_in_kwargs(kwargs)
+        self._set_token_in_kwargs(kwargs, token=token)
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -937,16 +943,20 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        self.model.save_pretrained(save_directory, safe_serialization=safe_serialization)
+        # TODO:
+        # depricate the safe_serialization parameter and use kwargs instead
+        # or update the save_pretrained to get all the parameters such as max_shard_size, ...
+        kwargs["safe_serialization"] = safe_serialization
+        self.model.save_pretrained(save_directory, **kwargs)
 
         if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(save_directory)
+            self.tokenizer.save_pretrained(save_directory, **kwargs)
 
         if self.feature_extractor is not None:
-            self.feature_extractor.save_pretrained(save_directory)
+            self.feature_extractor.save_pretrained(save_directory, **kwargs)
 
         if self.image_processor is not None:
-            self.image_processor.save_pretrained(save_directory)
+            self.image_processor.save_pretrained(save_directory, **kwargs)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
