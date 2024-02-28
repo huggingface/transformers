@@ -46,6 +46,7 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
+    from accelerate import PartialState
     from accelerate.utils import send_to_device
 
 
@@ -228,6 +229,7 @@ class Tool:
             TOOL_CONFIG_FILE,
             token=token,
             **hub_kwargs,
+            _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
         )
@@ -238,6 +240,7 @@ class Tool:
                 CONFIG_NAME,
                 token=token,
                 **hub_kwargs,
+                _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
             )
@@ -529,7 +532,7 @@ class PipelineTool(Tool):
             if self.device_map is not None:
                 self.device = list(self.model.hf_device_map.values())[0]
             else:
-                self.device = get_default_device()
+                self.device = PartialState().default_device
 
         if self.device_map is None:
             self.model.to(self.device)
@@ -595,23 +598,6 @@ def launch_gradio_demo(tool_class: Tool):
         title=tool_class.__name__,
         article=tool.description,
     ).launch()
-
-
-# TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
-def get_default_device():
-    logger.warning(
-        "`get_default_device` is deprecated and will be replaced with `accelerate`'s `PartialState().default_device` "
-        "in version 4.38 of 🤗 Transformers. "
-    )
-    if not is_torch_available():
-        raise ImportError("Please install torch in order to use this tool.")
-
-    if torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
 
 
 TASK_MAPPING = {

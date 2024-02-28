@@ -77,7 +77,7 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -129,8 +129,8 @@ class OPTAttention(nn.Module):
             val = None
             if fn_arg_name in kwargs:
                 logging.warning(
-                    "Passing in {} to {self.__class__.__name__} is deprecated and won't be supported from v4.38."
-                    " Please set it in the config instead"
+                    "Passing in {fn_arg_name} to {self.__class__.__name__} is deprecated and won't be supported from "
+                    "v4.39. Please set it in the config instead"
                 )
                 val = kwargs.pop(fn_arg_name)
             else:
@@ -363,8 +363,10 @@ class OptFlashAttention2(OPTAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype

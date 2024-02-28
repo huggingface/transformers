@@ -16,14 +16,28 @@
  Processing saving/loading class for common processors.
 """
 
+import copy
+import inspect
+import json
 import os
 import warnings
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from .dynamic_module_utils import custom_object_save
 from .tokenization_utils_base import PreTrainedTokenizerBase
-from .utils import PushToHubMixin, copy_func, direct_transformers_import, logging
+from .utils import (
+    PROCESSOR_NAME,
+    PushToHubMixin,
+    add_model_info_to_auto_map,
+    cached_file,
+    copy_func,
+    direct_transformers_import,
+    download_url,
+    is_offline_mode,
+    is_remote_url,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -85,10 +99,70 @@ class ProcessorMixin(PushToHubMixin):
 
             setattr(self, attribute_name, arg)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+
+        # Get the kwargs in `__init__`.
+        sig = inspect.signature(self.__init__)
+        # Only save the attributes that are presented in the kwargs of `__init__`.
+        attrs_to_save = sig.parameters
+        # Don't save attributes like `tokenizer`, `image processor` etc.
+        attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
+        # extra attributes to be kept
+        attrs_to_save += ["auto_map"]
+
+        output = {k: v for k, v in output.items() if k in attrs_to_save}
+
+        output["processor_class"] = self.__class__.__name__
+
+        if "tokenizer" in output:
+            del output["tokenizer"]
+        if "image_processor" in output:
+            del output["image_processor"]
+        if "feature_extractor" in output:
+            del output["feature_extractor"]
+
+        # Some attributes have different names but containing objects that are not simple strings
+        output = {
+            k: v
+            for k, v in output.items()
+            if not (isinstance(v, PushToHubMixin) or v.__class__.__name__ == "BeamSearchDecoderCTC")
+        }
+
+        return output
+
+    def to_json_string(self) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
+        """
+        dictionary = self.to_dict()
+
+        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this processor instance's parameters will be saved.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            writer.write(self.to_json_string())
+
     def __repr__(self):
         attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.attributes]
         attributes_repr = "\n".join(attributes_repr)
-        return f"{self.__class__.__name__}:\n{attributes_repr}"
+        return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
     def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
         """
@@ -139,6 +213,7 @@ class ProcessorMixin(PushToHubMixin):
         if self._auto_class is not None:
             attrs = [getattr(self, attribute_name) for attribute_name in self.attributes]
             configs = [(a.init_kwargs if isinstance(a, PreTrainedTokenizerBase) else a) for a in attrs]
+            configs.append(self)
             custom_object_save(self, save_directory, config=configs)
 
         for attribute_name in self.attributes:
@@ -156,6 +231,15 @@ class ProcessorMixin(PushToHubMixin):
                 if isinstance(attribute, PreTrainedTokenizerBase):
                     del attribute.init_kwargs["auto_map"]
 
+        # If we save using the predefined names, we can load using `from_pretrained`
+        output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
+
+        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
+        # `auto_map` is not specified.
+        if set(self.to_dict().keys()) != {"processor_class"}:
+            self.to_json_file(output_processor_file)
+            logger.info(f"processor saved in {output_processor_file}")
+
         if push_to_hub:
             self._upload_modified_files(
                 save_directory,
@@ -164,6 +248,160 @@ class ProcessorMixin(PushToHubMixin):
                 commit_message=commit_message,
                 token=kwargs.get("token"),
             )
+
+        if set(self.to_dict().keys()) == {"processor_class"}:
+            return []
+        return [output_processor_file]
+
+    @classmethod
+    def get_processor_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
+        processor of type [`~processing_utils.ProcessingMixin`] using `from_args_and_dict`.
+
+        Parameters:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
+
+        Returns:
+            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
+        """
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
+
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "processor", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
+
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isdir(pretrained_model_name_or_path):
+            processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_processor_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            processor_file = pretrained_model_name_or_path
+            resolved_processor_file = download_url(pretrained_model_name_or_path)
+        else:
+            processor_file = PROCESSOR_NAME
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                    f" directory containing a {PROCESSOR_NAME} file"
+                )
+
+        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
+        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
+        # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
+        # However, for models added in the future, we won't get the expected error if this file is missing.
+        if resolved_processor_file is None:
+            return {}, kwargs
+
+        try:
+            # Load processor dict
+            with open(resolved_processor_file, "r", encoding="utf-8") as reader:
+                text = reader.read()
+            processor_dict = json.loads(text)
+
+        except json.JSONDecodeError:
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
+            )
+
+        if is_local:
+            logger.info(f"loading configuration file {resolved_processor_file}")
+        else:
+            logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
+
+        if "auto_map" in processor_dict and not is_local:
+            processor_dict["auto_map"] = add_model_info_to_auto_map(
+                processor_dict["auto_map"], pretrained_model_name_or_path
+            )
+
+        return processor_dict, kwargs
+
+    @classmethod
+    def from_args_and_dict(cls, args, processor_dict: Dict[str, Any], **kwargs):
+        """
+        Instantiates a type of [`~processing_utils.ProcessingMixin`] from a Python dictionary of parameters.
+
+        Args:
+            processor_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the processor object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                [`~processing_utils.ProcessingMixin.to_dict`] method.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the processor object.
+
+        Returns:
+            [`~processing_utils.ProcessingMixin`]: The processor object instantiated from those
+            parameters.
+        """
+        processor_dict = processor_dict.copy()
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # Unlike image processors or feature extractors whose `__init__` accept `kwargs`, processor don't have `kwargs`.
+        # We have to pop up some unused (but specific) arguments to make it work.
+        if "processor_class" in processor_dict:
+            del processor_dict["processor_class"]
+
+        if "auto_map" in processor_dict:
+            del processor_dict["auto_map"]
+
+        processor = cls(*args, **processor_dict)
+
+        # Update processor with kwargs if needed
+        for key in set(kwargs.keys()):
+            if hasattr(processor, key):
+                setattr(processor, key, kwargs.pop(key))
+
+        logger.info(f"Processor {processor}")
+        if return_unused_kwargs:
+            return processor, kwargs
+        else:
+            return processor
 
     @classmethod
     def from_pretrained(
@@ -194,8 +432,7 @@ class ProcessorMixin(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
@@ -226,7 +463,9 @@ class ProcessorMixin(PushToHubMixin):
             kwargs["token"] = token
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-        return cls(*args)
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+
+        return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoProcessor"):

@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서 학습할 내용은:
 
-1. [WNUT 17](https://huggingface.co/datasets/wnut_17) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert-base-uncased)를 파인 튜닝하여 새로운 개체를 탐지합니다.
+1. [WNUT 17](https://huggingface.co/datasets/wnut_17) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)를 파인 튜닝하여 새로운 개체를 탐지합니다.
 2. 추론을 위해 파인 튜닝 모델을 사용합니다.
 
 <Tip>
@@ -109,7 +109,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 위의 예제 `tokens` 필드를 보면 입력이 이미 토큰화된 것처럼 보입니다. 그러나 실제로 입력은 아직 토큰화되지 않았으므로 단어를 하위 단어로 토큰화하기 위해 `is_split_into_words=True`를 설정해야 합니다. 예제로 확인합니다: 
@@ -270,7 +270,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForTokenClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -341,7 +341,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 >>> from transformers import TFAutoModelForTokenClassification
 
 >>> model = TFAutoModelForTokenClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
 

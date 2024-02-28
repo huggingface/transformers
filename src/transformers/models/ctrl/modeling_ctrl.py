@@ -47,8 +47,8 @@ def angle_defn(pos, i, d_model_size):
 def positional_encoding(position, d_model_size, dtype):
     # create the sinusoidal pattern for the positional encoding
     angle_rads = angle_defn(
-        torch.arange(position, dtype=dtype).unsqueeze(1),
-        torch.arange(d_model_size, dtype=dtype).unsqueeze(0),
+        torch.arange(position, dtype=torch.int64).to(dtype).unsqueeze(1),
+        torch.arange(d_model_size, dtype=torch.int64).to(dtype).unsqueeze(0),
         d_model_size,
     )
 

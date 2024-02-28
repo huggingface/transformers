@@ -10,7 +10,7 @@ from ..utils import (
     is_torch_available,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline, PipelineException
+from .base import ArgumentHandler, Dataset, Pipeline, PipelineException, build_pipeline_init_args
 
 
 if is_torch_available():
@@ -84,7 +84,7 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
         return tqa_pipeline_inputs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TableQuestionAnsweringPipeline(Pipeline):
     """
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in

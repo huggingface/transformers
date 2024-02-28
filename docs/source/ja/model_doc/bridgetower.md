@@ -37,7 +37,7 @@ alt="drawing" width="600"/>
 
 <small> ブリッジタワー アーキテクチャ。 <a href="https://arxiv.org/abs/2206.08657">元の論文から抜粋。</a> </small>
 
-このモデルは、[Anahita Bhiwandiwalla](https://huggingface.co/anahita-b)、[Tiep Le](https://huggingface.co/Tile)、[Shaoyen Tseng](https://huggingface.co/shaoyent）。元のコードは [ここ](https://github.com/microsoft/BridgeTower) にあります。
+このモデルは、[Anahita Bhiwandiwalla](https://huggingface.co/anahita-b)、[Tiep Le](https://huggingface.co/Tile)、[Shaoyen Tseng](https://huggingface.co/shaoyent) 。元のコードは [ここ](https://github.com/microsoft/BridgeTower) にあります。
 
 ## Usage tips and examples
 
