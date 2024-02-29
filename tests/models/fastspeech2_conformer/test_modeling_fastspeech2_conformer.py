@@ -41,7 +41,7 @@ class FastSpeech2ConformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,
@@ -456,7 +456,7 @@ class FastSpeech2ConformerWithHifiGanTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,

@@ -208,8 +208,8 @@ class TvpVisualInputEmbedding(nn.Module):
         # add column-wise position embeddings
         col_position_ids = torch.arange(width, dtype=torch.long, device=grid.device)  # (width, )
         col_position_embeddings = self.col_position_embeddings(col_position_ids)  # (width, hidden_dim)
-        col_shape = (batch_size, 1, width, hidden_dim)  # (1, 1, width, hidden_dim)
-        return grid + col_position_embeddings.view(*col_shape)  # broadcast automatically
+        col_position_embeddings = col_position_embeddings.expand(batch_size, 1, -1, -1)  # broadcast to batch size
+        return grid + col_position_embeddings
 
     def forward(self, grid):
         """

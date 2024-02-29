@@ -61,7 +61,7 @@ class ChineseCLIPTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -239,7 +239,7 @@ class ChineseCLIPVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=14,
         image_size=30,
         patch_size=2,
         num_channels=3,
@@ -568,8 +568,8 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_attention_outputs = False
 
     def setUp(self):
-        text_kwargs = {"use_labels": False, "batch_size": 12}
-        vision_kwargs = {"batch_size": 12}
+        text_kwargs = {"use_labels": False, "batch_size": 14}
+        vision_kwargs = {"batch_size": 14}
         self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
 
     def test_model(self):

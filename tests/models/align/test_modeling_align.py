@@ -66,7 +66,7 @@ class AlignVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=14,
         image_size=32,
         num_channels=3,
         kernel_sizes=[3, 3, 5],
@@ -247,7 +247,7 @@ class AlignTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=14,
         seq_length=7,
         is_training=True,
         use_input_mask=True,

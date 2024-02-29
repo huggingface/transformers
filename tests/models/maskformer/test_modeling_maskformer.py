@@ -53,7 +53,7 @@ class MaskFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=14,
         is_training=True,
         use_auxiliary_loss=False,
         num_queries=10,

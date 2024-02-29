@@ -40,7 +40,7 @@ class CpmAntModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=14,
         seq_length=8,
         is_training=True,
         use_token_type_ids=False,

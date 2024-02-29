@@ -82,7 +82,7 @@ class BridgeTowerTextModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = 99
         self.seq_length = 4
-        self.batch_size = 1
+        self.batch_size = 14
         self.is_training = False
         self.output_hidden_states = output_hidden_states
 
@@ -129,7 +129,7 @@ class BridgeTowerImageModelTester:
         self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
         self.num_channels = 3
         self.num_image_features = 17
-        self.batch_size = 1
+        self.batch_size = 14
         self.image_size = image_size
         self.is_training = False
         self.output_hidden_states = output_hidden_states
@@ -190,7 +190,7 @@ class BridgeTowerModelTester:
         self.contrastive_hidden_size = contrastive_hidden_size
         self.logit_scale_init_value = logit_scale_init_value
 
-        self.batch_size = 1
+        self.batch_size = 14
         self.expected_num_hidden_layers = 8
         self.is_training = False
 

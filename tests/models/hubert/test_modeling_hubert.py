@@ -58,7 +58,7 @@ class HubertModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=1024,  # speech is longer
         is_training=False,
         hidden_size=16,
@@ -727,7 +727,7 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class HubertUtilsTest(unittest.TestCase):
     def test_compute_mask_indices(self):
-        batch_size = 4
+        batch_size = 14
         sequence_length = 60
         mask_prob = 0.5
         mask_length = 1
@@ -738,7 +738,7 @@ class HubertUtilsTest(unittest.TestCase):
         self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
 
     def test_compute_mask_indices_overlap(self):
-        batch_size = 4
+        batch_size = 14
         sequence_length = 80
         mask_prob = 0.5
         mask_length = 4

@@ -54,7 +54,7 @@ class EfficientFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size: int = 13,
+        batch_size: int = 14,
         image_size: int = 64,
         patch_size: int = 2,
         embed_dim: int = 3,

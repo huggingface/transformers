@@ -103,7 +103,7 @@ class MusicgenDecoderTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=14,
         seq_length=7,
         is_training=False,
         use_labels=False,
@@ -441,7 +441,7 @@ class MusicgenTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=14,
         seq_length=7,
         is_training=False,
         use_labels=False,

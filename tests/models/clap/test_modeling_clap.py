@@ -56,7 +56,7 @@ class ClapAudioModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=14,
         image_size=60,
         num_mel_bins=16,
         window_size=4,
@@ -291,7 +291,7 @@ class ClapTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=14,
         seq_length=7,
         is_training=True,
         use_input_mask=True,

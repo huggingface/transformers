@@ -50,7 +50,7 @@ class SwiftFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         num_channels=3,
         is_training=True,
         use_labels=True,

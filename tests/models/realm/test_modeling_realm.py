@@ -45,7 +45,7 @@ class RealmModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         retriever_proj_size=128,
         seq_length=7,
         is_training=True,

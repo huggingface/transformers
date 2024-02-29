@@ -40,7 +40,7 @@ class Speech2Text2StandaloneDecoderModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=14,
         d_model=16,
         decoder_seq_length=7,
         is_training=True,

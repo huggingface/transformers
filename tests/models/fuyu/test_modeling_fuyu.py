@@ -45,7 +45,7 @@ class FuyuModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         image_size=30,
         patch_size=15,

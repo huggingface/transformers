@@ -49,7 +49,7 @@ class VitMatteModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         image_size=32,
         patch_size=16,
         num_channels=4,

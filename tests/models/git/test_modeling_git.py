@@ -44,7 +44,7 @@ class GitVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=14,
         image_size=32,
         patch_size=16,
         num_channels=3,
@@ -208,7 +208,7 @@ class GitModelTester:
         num_channels=3,
         image_size=32,
         patch_size=16,
-        batch_size=13,
+        batch_size=14,
         text_seq_length=7,
         is_training=True,
         use_input_mask=True,

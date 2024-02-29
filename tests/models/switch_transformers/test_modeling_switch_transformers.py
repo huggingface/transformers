@@ -56,7 +56,7 @@ class SwitchTransformersModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=14,
         encoder_seq_length=7,
         decoder_seq_length=9,
         # For common tests
@@ -732,7 +732,7 @@ class SwitchTransformersEncoderOnlyModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
+        batch_size=14,
         encoder_seq_length=7,
         # For common tests
         use_attention_mask=True,

@@ -53,7 +53,7 @@ class DeformableDetrModelTester:
     def __init__(
         self,
         parent,
-        batch_size=8,
+        batch_size=14,
         is_training=True,
         use_labels=True,
         hidden_size=32,

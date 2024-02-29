@@ -99,7 +99,7 @@ class PatchTSMixerModelTester:
         output_range: list = None,
         head_aggregation: str = None,
         # Trainer related
-        batch_size=13,
+        batch_size=14,
         is_training=True,
         seed_number=42,
         post_init=True,

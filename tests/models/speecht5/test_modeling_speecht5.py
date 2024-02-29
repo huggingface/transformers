@@ -100,7 +100,7 @@ class SpeechT5ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         is_training=False,
         vocab_size=81,
@@ -244,7 +244,7 @@ class SpeechT5ForSpeechToTextTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         encoder_seq_length=1024,  # speech is longer
         decoder_seq_length=7,
         is_training=False,
@@ -794,7 +794,7 @@ class SpeechT5ForTextToSpeechTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         encoder_seq_length=7,
         decoder_seq_length=1024,  # speech is longer
         is_training=False,
@@ -1301,7 +1301,7 @@ class SpeechT5ForSpeechToSpeechTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         encoder_seq_length=1024,  # speech is longer
         decoder_seq_length=1024,
         is_training=False,
@@ -1753,7 +1753,7 @@ class SpeechT5HifiGanTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         is_training=False,
         num_mel_bins=20,
@@ -1765,7 +1765,7 @@ class SpeechT5HifiGanTester:
         self.num_mel_bins = num_mel_bins
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.seq_length, self.num_mel_bins], scale=1.0)
+        input_values = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins], scale=1.0)
         config = self.get_config()
         return config, input_values
 
@@ -1778,7 +1778,13 @@ class SpeechT5HifiGanTester:
     def create_and_check_model(self, config, input_values):
         model = SpeechT5HifiGan(config=config).to(torch_device).eval()
         result = model(input_values)
-        self.parent.assertEqual(result.shape, (self.seq_length * 256,))
+        self.parent.assertEqual(
+            result.shape,
+            (
+                self.batch_size,
+                self.seq_length * 256,
+            ),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values = self.prepare_config_and_inputs()
@@ -1873,7 +1879,7 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            batched_inputs = inputs["spectrogram"].unsqueeze(0).repeat(2, 1, 1)
+            batched_inputs = inputs["spectrogram"]
             with torch.no_grad():
                 batched_outputs = model(batched_inputs.to(torch_device))
 
@@ -1890,5 +1896,5 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             with torch.no_grad():
-                outputs = model(inputs["spectrogram"].to(torch_device))
+                outputs = model(inputs["spectrogram"][0].to(torch_device))
             self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")

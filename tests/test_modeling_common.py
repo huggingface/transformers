@@ -749,10 +749,10 @@ class ModelTesterMixin:
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         equivalence = get_tensor_equivalence_function(batched_input)
+        batch_size = 14  # has to 14 for all model testers
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
-            config.output_attentions = True
 
             model_name = model_class.__name__
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
@@ -760,40 +760,31 @@ class ModelTesterMixin:
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
 
-            # We can't infer batch size from input shape, inputs can have multiple vectors for each batch,
-            # so we try to get it from model_tester first. Some composite models, e.g. Owlv2ModelTest,
-            # do not indicate batch size in model testers, but rather in the parent's tester, then we
-            # try to get parent tester's batch size
-            tester_attributes = [i for i in self.model_tester.__dict__.keys() if i[:1] != "_"]
-            model_testers_parents = [attr for attr in tester_attributes if "model_tester" in attr]
-            if model_testers_parents:
-                batch_size = getattr(self.model_tester, model_testers_parents[0]).batch_size
-            elif hasattr(self.model_tester, "batch_size"):
-                batch_size = self.model_tester.batch_size
-            else:
-                main_input_name = (
-                    model.main_input_name[0] if isinstance(model.main_input_name, list) else model.main_input_name
-                )
-                batch_size = batched_input_prepared[main_input_name].shape[0]
-
             single_row_input = {}
             for key, value in batched_input_prepared.items():
-                if "head_mask" in key:
+                if "head_mask" in key or not isinstance(value, torch.Tensor):
                     single_row_input[key] = value
                 elif isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
+                    # e.g. musicgen has inputs of size (bs*codebooks), in most cases value.shape[0] == batch_size
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 else:
-                    single_row_input[key] = value
+                    raise ValueError(
+                        f"Batching tests require batch_size=14, found batch_size={value.shape[0]}. "
+                        "If you are adding tests for a new models, make sure to change the batch size. "
+                        "If the error rises in existing tests, feel free to open a PR."
+                    )
 
             with torch.no_grad():
                 model_batched_output = model(**batched_input_prepared)
                 model_row_output = model(**single_row_input)
 
-            if not isinstance(model_batched_output, torch.Tensor):
-                for key in model_batched_output:
-                    recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+            if isinstance(model_batched_output, torch.Tensor):
+                model_batched_output = {"model_output": model_batched_output}
+                model_row_output = {"model_output": model_row_output}
+
+            for key in model_batched_output:
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:

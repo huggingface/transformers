@@ -54,7 +54,7 @@ class ClvpEncoderTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=14,
         seq_length=7,
         is_training=False,
         use_input_mask=True,
@@ -199,7 +199,7 @@ class ClvpDecoderTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=14,
         seq_length=3,
         is_training=False,
         vocab_size=300,
@@ -375,9 +375,10 @@ class ClvpModelForConditionalGenerationTester:
         ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        audio_batch = [audio] * self.clvp_encoder_tester.batch_size
 
         feature_extractor = ClvpFeatureExtractor()
-        input_features = feature_extractor(raw_speech=audio, sampling_rate=sr, return_tensors="pt")[
+        input_features = feature_extractor(raw_speech=audio_batch, sampling_rate=sr, return_tensors="pt")[
             "input_features"
         ].to(torch_device)
 
@@ -390,8 +391,12 @@ class ClvpModelForConditionalGenerationTester:
         with torch.no_grad():
             result = model(input_ids=input_ids, input_features=input_features, attention_mask=attention_mask)
 
-        self.parent.assertEqual(result.logits_per_speech.shape, (2, self.clvp_encoder_tester.batch_size))
-        self.parent.assertEqual(result.logits_per_text.shape, (self.clvp_encoder_tester.batch_size, 2))
+        self.parent.assertEqual(
+            result.logits_per_speech.shape, (self.clvp_encoder_tester.batch_size, self.clvp_encoder_tester.batch_size)
+        )
+        self.parent.assertEqual(
+            result.logits_per_text.shape, (self.clvp_encoder_tester.batch_size, self.clvp_encoder_tester.batch_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
