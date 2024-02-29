@@ -526,6 +526,7 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # gemma flash attention 2 needs a high tolerance
                 assert torch.allclose(logits_fa, logits, atol=3e-3)
 
+
 @slow
 @require_torch_gpu
 class GemmaIntegrationTest(unittest.TestCase):
