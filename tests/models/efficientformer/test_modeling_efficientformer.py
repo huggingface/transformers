@@ -32,12 +32,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         EfficientFormerForImageClassification,
         EfficientFormerForImageClassificationWithTeacher,
         EfficientFormerModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
     from transformers.models.efficientformer.modeling_efficientformer import (
         EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -329,9 +328,9 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
             ):

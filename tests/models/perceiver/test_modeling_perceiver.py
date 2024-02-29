@@ -39,10 +39,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         PerceiverForImageClassificationConvProcessing,
         PerceiverForImageClassificationFourier,
         PerceiverForImageClassificationLearned,
@@ -53,7 +49,7 @@ if is_torch_available():
         PerceiverModel,
         PerceiverTokenizer,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -316,16 +312,16 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["subsampled_output_points"] = self.model_tester.subsampling
 
         if return_labels:
-            if model_class in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            if model_class.__name__ in [
+                *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in [
-                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
+            elif model_class.__name__ in [
+                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_MASKED_LM_MAPPING_NAMES.values(),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
@@ -726,11 +722,11 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
         for model_class in self.all_model_classes:
             # most Perceiver models don't have a typical head like is the case with BERT
-            if model_class in [
-                PerceiverForOpticalFlow,
-                PerceiverForMultimodalAutoencoding,
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            if model_class.__name__ in [
+                "PerceiverForOpticalFlow",
+                "PerceiverForMultimodalAutoencoding",
+                *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
             ]:
                 continue
 
@@ -752,7 +748,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         ]
 
         for model_class in self.all_model_classes:
-            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            if model_class.__name__ not in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values():
                 continue
 
             config, inputs, input_mask, _, _ = self.model_tester.prepare_config_and_inputs(model_class=model_class)

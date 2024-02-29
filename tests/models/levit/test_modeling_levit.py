@@ -32,12 +32,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         LevitForImageClassification,
         LevitForImageClassificationWithTeacher,
         LevitModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
     from transformers.models.levit.modeling_levit import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -340,9 +339,9 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):

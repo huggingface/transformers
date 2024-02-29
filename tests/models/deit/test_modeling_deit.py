@@ -40,14 +40,12 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         DeiTForImageClassification,
         DeiTForImageClassificationWithTeacher,
         DeiTForMaskedImageModeling,
         DeiTModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
     from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -324,10 +322,10 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
             ):
