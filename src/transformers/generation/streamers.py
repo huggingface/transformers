@@ -16,6 +16,7 @@
 from queue import Queue
 from typing import TYPE_CHECKING, Optional
 
+import torch
 
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
@@ -67,6 +68,7 @@ class OutputStreamer(BaseStreamer):
         """
         Called on each incoming value
         """
+        #print(type(value)) # still pushing tensors and not Output objects
         return self.filter_func(value)
 
     def is_ready(self):
@@ -79,18 +81,23 @@ class OutputStreamer(BaseStreamer):
         """
         When the buffer is ready, flush it and do something with the values it was holding
         """
-        values = self.cache[:]
+        if len(self.cache) > 1:
+            values = self.cache[:]
+        else:
+            values = self.cache[0]
         self.cache = []
-        self.process_outgoing_values(values)
+        return self.process_outgoing_values(values)
 
     def process_outgoing_values(self, values):
         """
         What to do with the values that were previously in the buffer
         """
         #self.queue.put(values)
-        print(values)
+        #print(values)
+        return values
 
     def put(self, value):
+        #print(type(value))
         value = self.process_incoming_value(value)
         if value is not None:
             if isinstance(value, list):
@@ -98,20 +105,24 @@ class OutputStreamer(BaseStreamer):
             else:
                 self.cache.append(value)
 
-            if self.is_ready():
-                self.on_ready()
+        if self.is_ready():
+            return self.on_ready()
 
+from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 class TokenStreamer(OutputStreamer):
     """
     Filters the output stream on tokens to replicate legacy behavior
     """
     def _filter_func(self, value):
-        if hasattr(value, 'sequences'):
+        #if hasattr(value, 'sequences'):
+        if isinstance(value, GenerateDecoderOnlyOutput):
             return value.sequences.cpu()
+        else:
+            return value.cpu()
 
 
-class TextStreamer(BaseStreamer):
+class TextStreamer(TokenStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
 
@@ -146,6 +157,7 @@ class TextStreamer(BaseStreamer):
     """
 
     def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+        super().__init__()
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
         self.decode_kwargs = decode_kwargs
@@ -159,6 +171,17 @@ class TextStreamer(BaseStreamer):
         """
         Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
         """
+        # uses the parent classes built-in cache to restrict the "value" object to token_ids
+        #value = super().put(value) # why doesn't this work?
+        value = self.filter_func(value)
+        if value is None:
+            return
+        #print(value)
+        if isinstance(value, list):
+            #value = value[0]
+            value = torch.tensor(value)
+        #print("unlisted")
+        #print(value)
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
         elif len(value.shape) > 1:
