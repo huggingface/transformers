@@ -191,7 +191,6 @@ _import_structure = {
         "BasicTokenizer",
         "CharacterBertConfig",
         "CharacterBertTokenizer",
-        "WordpieceTokenizer",
     ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": [
@@ -5072,7 +5071,6 @@ if TYPE_CHECKING:
         BasicTokenizer,
         CharacterBertConfig,
         CharacterBertTokenizer,
-        WordpieceTokenizer,
     )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,

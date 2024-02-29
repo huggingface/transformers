@@ -29,7 +29,7 @@ _import_structure = {
         "CharacterBertConfig",
         "CharacterBertOnnxConfig",
     ],
-    "tokenization_character_bert": ["BasicTokenizer", "CharacterBertTokenizer", "WordpieceTokenizer"],
+    "tokenization_character_bert": ["BasicTokenizer", "CharacterBertTokenizer"],
 }
 
 try:
@@ -76,7 +76,7 @@ if TYPE_CHECKING:
         CharacterBertConfig,
         CharacterBertOnnxConfig,
     )
-    from .tokenization_character_bert import BasicTokenizer, CharacterBertTokenizer, WordpieceTokenizer
+    from .tokenization_character_bert import BasicTokenizer, CharacterBertTokenizer
 
     try:
         if not is_tokenizers_available():

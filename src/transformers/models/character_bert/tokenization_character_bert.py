@@ -859,7 +859,7 @@ class BasicTokenizer(object):
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
+        Basic Tokenization of a piece of text.
 
         Args:
             never_split (`List[str]`, *optional*)
