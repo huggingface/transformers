@@ -118,6 +118,7 @@ class LlamaRotaryEmbedding(nn.Module):
         )
         return self._sin_cached
 
+
     @property
     def cos_cached(self):
         logger.warning_once(
