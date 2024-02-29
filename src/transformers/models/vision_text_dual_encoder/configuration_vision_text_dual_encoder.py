@@ -18,10 +18,18 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
+from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
 from ..clip.configuration_clip import CLIPVisionConfig
+from ..siglip.configuration_siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
+
+VISION_MODEL_CONFIGS = {
+    "clip_vision_model": CLIPVisionConfig,
+    "chinese_clip_vision_model": ChineseCLIPVisionConfig,
+    "siglip_vision_model": SiglipVisionConfig,
+}
 
 
 class VisionTextDualEncoderConfig(PretrainedConfig):
@@ -85,12 +93,13 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         vision_model_type = vision_config.pop("model_type")
         text_model_type = text_config.pop("model_type")
 
-        if vision_model_type == "clip":
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
-        elif vision_model_type == "clip_vision_model":
-            self.vision_config = CLIPVisionConfig(**vision_config)
+        vision_config_class = VISION_MODEL_CONFIGS.get(vision_model_type)
+        if vision_config_class is not None:
+            self.vision_config = vision_config_class(**vision_config)
         else:
             self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
+            if hasattr(self.vision_config, "vision_config"):
+                self.vision_config = self.vision_config.vision_config
 
         self.text_config = AutoConfig.for_model(text_model_type, **text_config)
 
