@@ -37,7 +37,7 @@ class HieraConfig(PretrainedConfig):
 
 
     Args:
-        input_size (Tuple[int, ...], optional, *optional*, defaults to `(224, 224)`): Dimensions of the input image (height, width). Defaults to (224, 224).
+        input_size (Tuple[int, ...], optional, *optional*, defaults to `(224, 224)`): Dimensions of the input image (height, width).
         in_chans (int, optional, *optional*, defaults to 3): Number of input channels. Defaults to 3.
         embedding_dimension (int, optional, *optional*, defaults to 96): Dimension of the initial embedding. Defaults to 96.
         number_of_heads (int, optional, *optional*, defaults to 1): Initial number of attention heads. Defaults to 1.
