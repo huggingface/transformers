@@ -1541,9 +1541,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         if not self.language_model.config.is_encoder_decoder:
             generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1]
             generate_kwargs["min_length"] = min(0, generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1])
-        else:
-            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20)
-            generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0)
 
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,
