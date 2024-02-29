@@ -398,6 +398,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
+    @require_read_token
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
@@ -525,7 +526,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
-@pytest.mark.integration_test
 class LlamaIntegrationTest(unittest.TestCase):
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
@@ -612,7 +612,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         def decode_one_tokens(model, cur_token, input_pos, cache_position):
@@ -650,7 +650,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-@pytest.mark.integration_test
 class CodeLlamaIntegrationTest(unittest.TestCase):
     PROMPTS = [
         '''def remove_non_ascii(s: str) -> str:
