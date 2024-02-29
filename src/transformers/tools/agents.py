@@ -213,16 +213,17 @@ class FinalAnswerTool(Tool):
 
 
 class Agent:
-    def __init__(self, llm_callable, toolbox=None):
+    def __init__(self, llm_callable,  messages=[],function_template=None,additional_args=Dict[str,any],toolbox=None):
         self.agent_name = self.__class__.__name__
         self.log = print
         self.llm_callable = llm_callable
+        self.messages=messages
+        self.function_template=function_template
         if toolbox is None:
             _setup_default_tools()
             self._toolbox = HUGGINGFACE_DEFAULT_TOOLS
         else:
             self._toolbox = {tool.name: tool for tool in toolbox}
-
         self.memory = []
         self.cached_tools = None
 
@@ -230,8 +231,68 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get all tools currently available to the agent"""
         return self._toolbox
+    @property
+    def default_function_template(self)-> str:
+        """
+        This template is taking can desbribe a tool as it is expected by the model
+        """
+        logger.warning_once(
+            "\nNo function template is defined for this tokenizer - using a default function template "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
+            "your model, please set `tokenizer.function_template` to an appropriate template. "
+        )
+        return (
+"""
+{
+    "type": "{{ tool.type }}",
+    "function": {
+        "name": "{{ tool.name }}",
+        "description": "{{ tool.description }}",
+        "parameters": {
+            "type": "{{ tool.inputs.type }}",
+            "properties": {
+{% for property_name, property_details in tool.inputs.items() %}
+                "{{ property_name }}": {
+                    "type": "{{ property_details.type }}",
+{% if property_details.type == 'string' and property_details.enum %}
+                    "enum": [{{ property_details.enum|map('quote')|join(', ') }}],
+{% endif %}
+                    "description": "{{ property_details.description }}"
+                }{% if not loop.last %},{% endif %}\n
+{% endfor %}
+            },
+            "required": [{{ tool.required|map('quote')|join(', ') }}]
+        }
+    }
+}
+"""
+        )
+    def parser(self,input_message):
+        pass
+        #to continue
 
-
+    def default_parse_tool_call(self,input_message):
+        """
+        Parses a JSON string that represents a tool call, extracting the tool's name
+        and its arguments.
+        
+        Args:
+        - input_message (str): A JSON string containing the tool call.
+        
+        Returns:
+        - dict: A dictionary with 'tool_name' and 'arguments' as keys.
+        """
+        try:
+            tool_call = json.loads(input_message)
+            tool_name = tool_call.get("name", "")
+            arguments = tool_call.get("arguments", {})
+            
+            return {
+                "tool_name": tool_name,
+                "arguments": arguments
+            }
+        except json.JSONDecodeError:
+            return {"error": "Invalid JSON parsed"}
 class CodeAgent(Agent):
     def __init__(self, llm_callable, toolbox=None, run_prompt_template=None, stop_sequences=None, **kwargs):
         super().__init__(llm_callable, toolbox=toolbox)

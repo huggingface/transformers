@@ -22,6 +22,8 @@ import json
 import os
 import tempfile
 from typing import Any, Dict, List, Optional, Union
+from functools import lru_cache
+from packaging import version
 
 from huggingface_hub import create_repo, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
@@ -347,11 +349,32 @@ class Tool:
         return GradioToolWrapper(gradio_tool)
 
 
-def get_tool_description_with_args(tool: Tool) -> str:
-    description = f"- {tool.name}: {tool.description}\n"
-    description += f"     Takes inputs: {str(tool.inputs)}\n"
-    return description
+def get_tool_description_with_args(tool: Tool,function_template) -> str:
+    compiled_template = compile_jinja_template(function_template)
+    rendered = compiled_template.render(
+        tool=tool, #**self.special_tokens_map
+    )
+    return rendered
+@lru_cache
+def compile_jinja_template(function_template):
+    try:
+        import jinja2
+        from jinja2.exceptions import TemplateError
+        from jinja2.sandbox import ImmutableSandboxedEnvironment
+    except ImportError:
+        raise ImportError("function_template requires jinja2 to be installed.")
 
+    if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
+        raise ImportError(
+            "function_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+        )
+
+    def raise_exception(message):
+        raise TemplateError(message)
+
+    jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+    jinja_env.globals["raise_exception"] = raise_exception
+    return jinja_env.from_string(function_template)
 
 class RemoteTool(Tool):
     """
