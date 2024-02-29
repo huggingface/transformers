@@ -484,6 +484,8 @@
         title: SqueezeBERT
       - local: model_doc/stablelm
         title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
       - local: model_doc/switch_transformers
         title: SwitchTransformers
       - local: model_doc/t5
