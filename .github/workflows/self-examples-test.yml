@@ -13,6 +13,7 @@ on:
   push:
     branches:
       - run_scheduled_ci*
+      - younes-test-workflow
 
 env:
   HF_HOME: /mnt/cache

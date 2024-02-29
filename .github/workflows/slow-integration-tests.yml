@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - run_scheduled_ci*
+      - younes-test-workflow
 
 jobs:
   run_integration_tests:
@@ -14,7 +15,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci] # TODO: move to A10
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci] # TODO: move to A10
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
