@@ -187,11 +187,12 @@ jobs:
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+          SETUP_STATUS: 1 # No need for setup status here
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py 
+          python utils/notification_service.py
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
