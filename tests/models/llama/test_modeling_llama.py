@@ -612,7 +612,9 @@ class LlamaIntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16)
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+        )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         def decode_one_tokens(model, cur_token, input_pos, cache_position):

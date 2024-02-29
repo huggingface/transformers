@@ -17,7 +17,11 @@
 
 import doctest
 import sys
+import os
 import warnings
+import inspect
+import unittest
+import re
 from os.path import abspath, dirname, join
 
 import _pytest
@@ -93,9 +97,6 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if any(test_name in item.nodeid for test_name in NOT_DEVICE_TESTS):
             item.add_marker(pytest.mark.not_device_test)
-        if "IntegrationTest" in item.nodeid:
-            item.add_marker(pytest.mark.integration_tests)
-
 
 def pytest_addoption(parser):
     from transformers.testing_utils import pytest_addoption_shared
