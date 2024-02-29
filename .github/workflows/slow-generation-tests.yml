@@ -69,6 +69,7 @@ jobs:
         run: pip freeze
 
       - name: Run all Generation tests on GPU
+        working-directory: /transformers
         run: |
           make run_generation_tests
 

@@ -109,7 +109,7 @@ run_flash_attn_tests:
 	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_flash_attention -m "flash_attn_test" tests/models/
 
 run_generation_tests:
-	pytho3n -m pytest -v --make-reports=${MACHINE_TYPE}_tests_generation $(generation_tests_dir) 
+	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_generation $(generation_tests_dir) 
 
 # Release stuff
 

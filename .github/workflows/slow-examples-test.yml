@@ -63,8 +63,9 @@ jobs:
       - name: Show installed libraries and their versions
         working-directory: /transformers
         run: pip freeze
-        
-      - name: Run examples tests on GPU
+
+      - name: Run examples tests on GPU$
+        working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
           python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch

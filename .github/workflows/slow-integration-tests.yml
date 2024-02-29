@@ -60,7 +60,7 @@ jobs:
       - name: Pre build DeepSpeed *again*
         run: |
           python3 -m pip uninstall -y deepspeed
-          python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       # TODO: uncomment that after A10
       # - name: Install Flash Attention
@@ -68,10 +68,12 @@ jobs:
       #     pip install flash-attn --no-build-isolation
 
       - name: Run integration tests
+        working-directory: /transformers
         run: |
           make run_integration_tests
 
       - name: Run Flash Attention-2 tests
+        working-directory: /transformers
         run: |
           make run_flash_attn_tests
 
