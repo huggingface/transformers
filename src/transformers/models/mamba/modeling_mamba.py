@@ -54,7 +54,9 @@ else:
     )
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = not any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is None
+is_fast_path_available = (
+    any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is not None
+)
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
@@ -175,7 +177,6 @@ class MambaMixer(nn.Module):
         selected_states = self.out_proj(y.transpose(1, 2))
         return selected_states
 
-
     def slow_forward(self, hidden_states, inference_params=None):
         """
 
@@ -207,8 +208,8 @@ class MambaMixer(nn.Module):
             hidden_states = hidden_states.unsqueeze(-1)
 
         else:
-            inference_params.conv_states[self.layer_idx] = (
-                nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
+            inference_params.conv_states[self.layer_idx] = nn.functional.pad(
+                hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
 
@@ -230,7 +231,7 @@ class MambaMixer(nn.Module):
         ssm_state = inference_params.ssm_states[self.layer_idx]
         ys = []
         for i in range(seq_len):
-            ssm_state = (ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :])
+            ssm_state = ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :]
             #    [b, d, n]   X  [b, n] -> [b, d]
             y = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1))
             ys.append(y[:, :, 0])
