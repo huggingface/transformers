@@ -47,16 +47,26 @@ jobs:
       MACHINE_TYPE: ${{ matrix.machine_type }}
       RUN_SLOW: 1
     steps:
-      - uses: actions/checkout@v3
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
-      - name: Install locally and show env
+      - name: Environment
+        working-directory: /transformers
         run: |
-          pip install -e .
           python3 utils/print_env.py
-          pip freeze
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
 
       - name: Run all Generation tests on GPU
         run: |

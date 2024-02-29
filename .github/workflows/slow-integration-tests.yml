@@ -35,11 +35,26 @@ jobs:
           rm -rf tests/models/__pycache__
           rm -rf reports
 
-      - name: Install locally & show installed libraries and their versions
-        run: 
-          pip install -e .
-          pip freeze
-          python utils/print_env.py
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
 
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*

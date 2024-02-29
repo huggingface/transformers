@@ -94,9 +94,8 @@ test:
 	python -m pytest -n auto --dist=loadfile -s -v ./tests/
 
 # Run tests for examples
-
 test-examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+	python3 -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
 
 # Run tests for SageMaker DLC release
 
@@ -104,13 +103,13 @@ test-sagemaker: # install sagemaker dependencies in advance with pip install .[s
 	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
 
 run_integration_tests:
-	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_integration $(integration_tests_dir) 
+	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_integration $(integration_tests_dir) 
 
 run_flash_attn_tests:
-	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_flash_attention -m "flash_attn_test" tests/models/
+	python3 -m pytest -v --make-reports=${MACHINE_TYPE}_tests_flash_attention -m "flash_attn_test" tests/models/
 
 run_generation_tests:
-	python -m pytest -v --make-reports=${MACHINE_TYPE}_tests_generation $(generation_tests_dir) 
+	pytho3n -m pytest -v --make-reports=${MACHINE_TYPE}_tests_generation $(generation_tests_dir) 
 
 # Release stuff
 
