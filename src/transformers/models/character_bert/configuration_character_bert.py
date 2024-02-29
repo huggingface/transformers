@@ -46,7 +46,7 @@ class CharacterBertConfig(PretrainedConfig):
         cnn_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function to apply to the cnn representations.
         cnn_filters (`list(list(int))`, *optional*):
-        The list of CNN filters to use in the CharacterCNN module. Defaults to `[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`):
+            The list of CNN filters to use in the CharacterCNN module. Defaults to `[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`):
         num_highway_layers (`int`, *optional*, defaults to 2):
             The number of Highway layers to apply to the CNNs output.
         max_word_length (`int`, *optional*, defaults to 50):
