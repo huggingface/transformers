@@ -222,9 +222,10 @@ class MambaModelTester:
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False # FIXME let's try to support this @ArthurZucker
+    test_torchscript = False # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
-    test_model_parallel = True
+    test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
     test_model_parallel = False

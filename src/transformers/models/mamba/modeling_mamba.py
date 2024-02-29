@@ -503,6 +503,7 @@ class MambaModel(MambaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs, # `attention_mask` is passed by the tokenizer and we don't want it
     ) -> Union[Tuple, MambaOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
