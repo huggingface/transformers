@@ -526,14 +526,13 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # gemma flash attention 2 needs a high tolerance
                 assert torch.allclose(logits_fa, logits, atol=3e-3)
 
-
-@require_torch_gpu
 @slow
+@require_torch_gpu
 @pytest.mark.integration_test
-@require_read_token
 class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
+    @require_read_token
     def test_model_2b_fp32(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -551,6 +550,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_2b_fp16(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -570,6 +570,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_2b_fp16_static_cache(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -591,6 +592,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_2b_bf16(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -610,6 +612,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_2b_eager(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -631,6 +634,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_torch_sdpa
+    @require_read_token
     def test_model_2b_sdpa(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -653,6 +657,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @pytest.mark.flash_attn_test
     @require_flash_attn
+    @require_read_token
     def test_model_2b_flash_attn(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -674,6 +679,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
+    @require_read_token
     def test_model_2b_4bit(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -692,6 +698,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @unittest.skip("The test will not fit our CI runners")
+    @require_read_token
     def test_model_7b_fp32(self):
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
@@ -709,6 +716,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_7b_fp16(self):
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
@@ -728,6 +736,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_7b_bf16(self):
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
@@ -747,6 +756,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @require_read_token
     def test_model_7b_fp16_static_cache(self):
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [
@@ -769,6 +779,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
+    @require_read_token
     def test_model_7b_4bit(self):
         model_id = "google/gemma-7b"
         EXPECTED_TEXTS = [

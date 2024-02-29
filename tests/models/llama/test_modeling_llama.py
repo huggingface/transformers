@@ -601,7 +601,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
-    # @require_read_token
+    @require_read_token
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
