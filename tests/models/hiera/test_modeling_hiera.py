@@ -17,8 +17,7 @@
 import unittest
 from typing import Tuple
 
-from transformers import HieraConfig, HieraModel, HieraPreTrainedModel
-from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraBlock
+from transformers import HieraConfig
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -28,6 +27,10 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     import torch
+
+    from transformers import HieraModel
+    from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraBlock
+
 import math
 
 
@@ -94,7 +97,7 @@ class HieraBlockTest(unittest.TestCase):
 
 
 class HieraModelTester:
-    all_model_classes = (HieraModel, HieraPreTrainedModel) if is_torch_available() else ()
+    all_model_classes = (HieraModel,) if is_torch_available() else ()
 
     def __init__(
         self,
