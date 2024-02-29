@@ -398,6 +398,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
+    @require_read_token
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
