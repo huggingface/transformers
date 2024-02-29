@@ -64,7 +64,7 @@ jobs:
           pytest -m "flash_attn_test" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post results Slack channel
         if: always()
-        id: post-slack
+        id: post-slack-fa2
         #uses: slackapi/slack-github-action@v1.25.0
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
@@ -94,7 +94,7 @@ jobs:
           pytest -m "integration_test" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post results Slack channel
         if: always()
-        id: post-slack
+        id: post-slack-integration-tests
         #uses: slackapi/slack-github-action@v1.25.0
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
