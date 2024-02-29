@@ -28,7 +28,7 @@ HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class HieraConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`hiera`]. It is used to instantiate an HieraModel model according to the specified arguments, defining the model architecture. Instantiating a configuration with
+    This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate a Hiera model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the HieraModel
     [facebookresearch/hiera](https://github.com/facebookresearch/hiera) architecture.
 
