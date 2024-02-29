@@ -1540,3 +1540,5 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
