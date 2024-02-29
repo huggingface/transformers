@@ -8,6 +8,7 @@ env:
   RUN_SLOW: "yes"
   IS_GITHUB_CI: "1"
   OUTPUT_SLACK_CHANNEL_ID: "C06L2SGMEEA"
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 jobs:
   get_modified_models:
@@ -75,13 +76,13 @@ jobs:
           # For posting a rich message using Block Kit
           payload: |
             {
-              "text": "Slow FA 2 tests on ${{ matrix.model-name }} result: ${{ steps.run_fa2_tests.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "text": "Slow FA 2 tests on ${{ matrix.model-name }} result: ${{ steps.run_fa2_tests.conclusion }}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "GitHub Action build result for ${{ matrix.model-name }}: ${{ steps.run_fa2_tests.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                    "text": "GitHub Action build result for ${{ matrix.model-name }}: ${{ steps.run_fa2_tests.conclusion }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
                   }
                 }
               ]
@@ -106,13 +107,13 @@ jobs:
           # For posting a rich message using Block Kit
           payload: |
             {
-              "text": "Slow integration tests on ${{ matrix.model-name }} result: ${{ steps.run_integration_tests.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "text": "Slow integration tests on ${{ matrix.model-name }} result: ${{ steps.run_integration_tests.conclusion }}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "GitHub Action build result on ${{ matrix.model-name }}: ${{ steps.run_integration_tests.status}}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                    "text": "GitHub Action build result on ${{ matrix.model-name }}: ${{ steps.run_integration_tests.conclusion}}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
                   }
                 }
               ]
