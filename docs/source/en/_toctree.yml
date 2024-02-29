@@ -134,7 +134,7 @@
   - local: custom_tools
     title: Custom Tools and Prompts
   - local: troubleshooting
-    title: Troubleshoot  
+    title: Troubleshoot
   - local: hf_quantizer
     title: Contribute new quantization method
   title: Developer guides
@@ -414,6 +414,8 @@
         title: Mistral
       - local: model_doc/mixtral
         title: Mixtral
+      - local: model_doc/mot
+        title: MixtureOfTokens
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert

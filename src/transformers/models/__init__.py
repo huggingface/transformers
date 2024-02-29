@@ -96,6 +96,7 @@ from . import (
     git,
     glpn,
     gpt2,
+    mot,
     gpt_bigcode,
     gpt_neo,
     gpt_neox,
