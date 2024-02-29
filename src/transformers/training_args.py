@@ -1748,7 +1748,10 @@ class TrainingArguments:
                     " `--accelerator_config {'dispatch_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config.dispatch_batches = self.dispatch_batches
+                if isinstance(self.accelerator_config, dict):
+                    self.accelerator_config["dispatch_batches"] = self.dispatch_batches
+                else:
+                    self.accelerator_config.dispatch_batches = self.dispatch_batches
 
             if self.split_batches is not None:
                 warnings.warn(
@@ -1756,7 +1759,10 @@ class TrainingArguments:
                     " `--accelerator_config {'split_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config.split_batches = self.split_batches
+                if isinstance(self.accelerator_config, dict):
+                    self.accelerator_config["split_batches"] = self.split_batches
+                else:
+                    self.accelerator_config.split_batches = self.split_batches
 
         if self.tpu_metrics_debug:
             warnings.warn(
