@@ -2644,7 +2644,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 config = RegressionModelConfig(a=1.5, b=2.5)
                 model = RegressionPreTrainedModel(config)
                 eval_dataset = SampleIterableDataset()
-                _ = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+                self.assertEqual(trainer.accelerator.split_batches, True)
 
 
 @require_torch
