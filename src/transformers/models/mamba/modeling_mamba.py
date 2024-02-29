@@ -168,8 +168,8 @@ class MambaMixer(nn.Module):
                 inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
-        attn_outputs = self.out_proj(y.transpose(1, 2))
-        return attn_outputs, conv_state, ssm_state
+        selected_states = self.out_proj(y.transpose(1, 2))
+        return selected_states
 
 
 class MambaCache:
@@ -254,11 +254,11 @@ class MambaMixerSlow(MambaMixer):
         y = y + (hidden_states * self.D.to(hidden_states.dtype)[None, :, None])
         y = y * self.act(gate)  # (B D)
         # 4. Final linear projection
-        attn_outputs = self.out_proj(y.transpose(1, 2))
+        selected_states = self.out_proj(y.transpose(1, 2))
 
         inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
-        return attn_outputs, None, ssm_state
+        return selected_states
 
 
 class MambaRMSNorm(nn.Module):
@@ -299,9 +299,9 @@ class MambaBlock(nn.Module):
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states, conv_states, ssm_state = self.mixer(hidden_states, inference_params=inference_params)
+        hidden_states = self.mixer(hidden_states, inference_params=inference_params)
         hidden_states = residual.to(torch.float32) + hidden_states
-        return hidden_states, conv_states, ssm_state
+        return hidden_states
 
 
 class MambaPreTrainedModel(PreTrainedModel):
