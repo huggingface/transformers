@@ -57,16 +57,14 @@ class MambaConfig(PretrainedConfig):
             The id of the end of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer as
             GPTNeoX.
         expand (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        dt_rank (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether or not to tie the word embeddings with the input token embeddings.
+        time_step_rank (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
         use_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         use_conv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         hidden_act (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
         initializer_range (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether or not residuals should be in `float32`.
-        use_cache (`bool`, *optional*, defaults to `False`):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
 
 
