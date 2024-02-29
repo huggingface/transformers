@@ -17,8 +17,6 @@ import os
 import tempfile
 import unittest
 
-from torch import nn
-
 from transformers import CharacterBertConfig, is_torch_available
 from transformers.models.auto import AutoModel, AutoModelForSequenceClassification, get_values
 from transformers.models.auto.modeling_auto import (
@@ -36,6 +34,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
