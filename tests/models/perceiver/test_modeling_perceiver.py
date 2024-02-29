@@ -26,7 +26,6 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import PerceiverConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -44,7 +43,6 @@ if is_torch_available():
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         PerceiverForImageClassificationConvProcessing,
         PerceiverForImageClassificationFourier,
         PerceiverForImageClassificationLearned,
@@ -55,6 +53,7 @@ if is_torch_available():
         PerceiverModel,
         PerceiverTokenizer,
     )
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -380,10 +379,10 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             return
 
         for model_class in self.all_model_classes:
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                PerceiverForOpticalFlow,
-                PerceiverForMultimodalAutoencoding,
+            if model_class.__name__ in [
+                *MODEL_MAPPING_NAMES.values(),
+                "PerceiverForOpticalFlow",
+                "PerceiverForMultimodalAutoencoding",
             ]:
                 continue
 
