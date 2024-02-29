@@ -997,16 +997,19 @@ class MLflowCallback(TrainerCallback):
             f" tags={self._nested_run}, tracking_uri={self._tracking_uri}"
         )
         if state.is_world_process_zero:
-            if self._tracking_uri is not None:
-                logger.debug(f"MLflow tracking URI is set to {self._tracking_uri}")
-                self._ml_flow.set_tracking_uri(self._tracking_uri)
-            else:
-                logger.debug(
-                    (
-                        "Environment variable `MLFLOW_TRACKING_URI` is not provided and"
-                        "therefore will not be explicitly set."
+            if not self._ml_flow.is_tracking_uri_set():
+                if self._tracking_uri:
+                    self._ml_flow.set_tracking_uri(self._tracking_uri)
+                    logger.debug(f"MLflow tracking URI is set to {self._tracking_uri}")
+                else:
+                    logger.debug(
+                        (
+                            "Environment variable `MLFLOW_TRACKING_URI` is not provided and therefore will not be"
+                            " explicitly set."
+                        )
                     )
-                )
+            else:
+                logger.debug(f"MLflow tracking URI is set to {self._ml_flow.get_tracking_uri()}")
 
             if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
                 if self._experiment_name:
