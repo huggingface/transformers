@@ -58,21 +58,21 @@ _CHECKPOINT_FOR_DOC = "helboukkouri/character-bert-base-uncased"
 _CONFIG_FOR_DOC = "CharacterBertConfig"
 
 # TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/character_bert-large-cased-finetuned-conll03-english"
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "helboukkouri/character-bert-base-uncased"
 _TOKEN_CLASS_EXPECTED_OUTPUT = (
     "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC'] "
 )
 _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 
 # QuestionAnswering docstring
-_CHECKPOINT_FOR_QA = "deepset/character_bert-base-cased-squad2"
+_CHECKPOINT_FOR_QA = "helboukkouri/character-bert-base-uncased"
 _QA_EXPECTED_OUTPUT = "'a nice puppet'"
 _QA_EXPECTED_LOSS = 7.41
 _QA_TARGET_START_INDEX = 14
 _QA_TARGET_END_INDEX = 15
 
 # SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/helboukkouri/character-bert-base-uncased-yelp-polarity"
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "helboukkouri/character-bert-base-uncased"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
