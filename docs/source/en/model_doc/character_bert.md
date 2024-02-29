@@ -49,10 +49,6 @@ The original code can be found [here](https://github.com/helboukkouri/character-
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## CharacterBertTokenizerFast
-
-[[autodoc]] CharacterBertTokenizerFast
-
 ## TFCharacterBertTokenizer
 
 [[autodoc]] TFCharacterBertTokenizer

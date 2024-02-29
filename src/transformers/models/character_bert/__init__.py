@@ -38,7 +38,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_character_bert_fast"] = ["CharacterBertTokenizerFast"]
+    pass
 
 try:
     if not is_torch_available():
@@ -84,7 +84,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_character_bert_fast import CharacterBertTokenizerFast
+        pass
 
     try:
         if not is_torch_available():

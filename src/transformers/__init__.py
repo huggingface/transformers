@@ -1162,7 +1162,6 @@ else:
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
-    _import_structure["models.character_bert"].append("CharacterBertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
@@ -5967,7 +5966,6 @@ if TYPE_CHECKING:
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
-        from .models.character_bert import CharacterBertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
