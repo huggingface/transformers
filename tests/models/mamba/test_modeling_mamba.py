@@ -364,7 +364,7 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     def test_simple_generate_cuda_kernels_big(self):
-        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+        expected_output = 'Hello my name is John. I am a student at the University of'
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-2.8b", torch_dtype=torch.float16).to(torch_device)
