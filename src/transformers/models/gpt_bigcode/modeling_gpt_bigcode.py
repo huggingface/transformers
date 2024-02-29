@@ -1036,7 +1036,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
-                        self_attention_mask, min_dtype=min_dtype
+                        self_attention_mask, attention_mask, hidden_states, min_dtype=min_dtype
                     )
 
             attention_mask = self_attention_mask
