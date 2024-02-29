@@ -64,7 +64,7 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
-      - name: Run examples tests on GPU$
+      - name: Run examples tests on GPU
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
@@ -151,7 +151,7 @@ jobs:
           CI_EVENT: scheduled-examples
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-          SETUP_STATUS: 1 # No need for setup status here
+          SETUP_STATUS: success # No need for setup status here
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |

@@ -28,8 +28,8 @@ jobs:
       MAX_JOBS: 4
 
     steps:
-      - uses: actions/checkout@v3
       - name: Cleanup
+        working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
           rm -rf tests/models/__pycache__
@@ -109,7 +109,7 @@ jobs:
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-          SETUP_STATUS: ${{ needs.run_integration_tests.result }}
+          SETUP_STATUS: success
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk

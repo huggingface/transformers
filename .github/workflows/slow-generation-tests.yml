@@ -148,7 +148,7 @@ jobs:
           CI_EVENT: scheduled-generation
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-          SETUP_STATUS: 1 # No need for setup status here
+          SETUP_STATUS: success # No need for setup status here
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
