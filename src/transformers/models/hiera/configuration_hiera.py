@@ -23,14 +23,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "namangarg110/hiera_base_224": "https://huggingface.co/namangarg110/hiera_base_224/blob/main/config.json",
+    # See all Hiera models at https://huggingface.co/models?filter=hiera
+}
 
 
 class HieraConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate a Hiera model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the HieraModel
-    [facebookresearch/hiera](https://github.com/facebookresearch/hiera) architecture.
+    [namangarg110/hiera_base_224](https://huggingface.co/namangarg110/hiera_base_224/) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
