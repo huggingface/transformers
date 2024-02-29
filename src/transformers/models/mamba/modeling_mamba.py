@@ -140,6 +140,7 @@ class MambaMixer(nn.Module):
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
+        time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
         if inference_params is not None and inference_params.seqlen_offset > 0:
             y = selective_state_update(
                 ssm_state,
@@ -150,7 +151,7 @@ class MambaMixer(nn.Module):
                 C[:, 0],
                 self.D,
                 gate[..., 0],
-                self.dt_proj.bias,
+                time_proj_bias,
                 dt_softplus=True,
             ).unsqueeze(-1)
         else:
@@ -162,7 +163,7 @@ class MambaMixer(nn.Module):
                 C.transpose(1, 2),
                 self.D.float(),
                 gate,
-                self.dt_proj.bias.float(),
+                time_proj_bias,
                 delta_softplus=True,
                 return_last_state=True,
             )
