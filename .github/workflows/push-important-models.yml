@@ -43,7 +43,7 @@ jobs:
   test_modified_files:
     needs: get_modified_models
     name: Run slow tests on modified models
-    runs-on: [single-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
+    runs-on: [multi-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -70,7 +70,6 @@ jobs:
       - name: Post results Slack channel
         if: always()
         id: post-slack-fa2
-        #uses: slackapi/slack-github-action@v1.25.0
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
           # Slack channel id, channel name, or user id to post message.

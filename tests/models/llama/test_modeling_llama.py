@@ -407,7 +407,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
             load_in_4bit=True,
-            device_map={"": 0},
+            device_map="auto",
         )
 
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
@@ -423,7 +423,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         output_native = tokenizer.batch_decode(output_native)
 
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map="auto", attn_implementation="flash_attention_2"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -600,7 +600,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
-    @require_read_token
+    # @require_read_token
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
