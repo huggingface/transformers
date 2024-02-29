@@ -457,6 +457,18 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
     all_generative_model_classes = (MoTLMHeadModel, MoTDoubleHeadsModel) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MoTModel,
+            "question-answering": MoTForQuestionAnswering,
+            "text-classification": MoTForSequenceClassification,
+            "text-generation": MoTLMHeadModel,
+            "token-classification": MoTForTokenClassification,
+            "zero-shot": MoTForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     all_parallelizable_model_classes = (MoTLMHeadModel, MoTDoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
