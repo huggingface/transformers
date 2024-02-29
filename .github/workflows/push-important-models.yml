@@ -59,7 +59,7 @@ jobs:
           pip install -e ".[testing]"" &&
           MAX_JOBS=4 pip install flash-attn --no-build-isolation # install FA2
       - name: Run FA2 tests
-        id: run_tests
+        id: run_fa2_tests
         run:
           pytest -m "flash_attn_test" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post results Slack channel
@@ -74,13 +74,13 @@ jobs:
           # For posting a rich message using Block Kit
           payload: |
             {
-              "text": "Slow FA 2 tests on ${{ matrix.model-name }} result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "text": "Slow FA 2 tests on ${{ matrix.model-name }} result: ${{ steps.run_fa2_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "GitHub Action build result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                    "text": "GitHub Action build result: ${{ steps.run_fa2_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
                   }
                 }
               ]
@@ -89,7 +89,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
       - name: Run integration tests
-        id: run_tests
+        id: run_integration_tests
         run:
           pytest -m "integration_test" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post results Slack channel
@@ -104,13 +104,13 @@ jobs:
           # For posting a rich message using Block Kit
           payload: |
             {
-              "text": "Slow integration tests on ${{ matrix.model-name }} result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "text": "Slow integration tests on ${{ matrix.model-name }} result: ${{ steps.run_integration_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "GitHub Action build result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                    "text": "GitHub Action build result: ${{ steps.run_integration_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
                   }
                 }
               ]
