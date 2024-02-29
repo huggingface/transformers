@@ -320,6 +320,9 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if return_labels:
             if model_class.__name__ in [
                 *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                "PerceiverForImageClassificationLearned",
+                "PerceiverForImageClassificationFourier",
+                "PerceiverForImageClassificationConvProcessing",
                 *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
             ]:
                 inputs_dict["labels"] = torch.zeros(
@@ -732,6 +735,9 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 "PerceiverForOpticalFlow",
                 "PerceiverForMultimodalAutoencoding",
                 *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values(),
+                "PerceiverForImageClassificationLearned",
+                "PerceiverForImageClassificationFourier",
+                "PerceiverForImageClassificationConvProcessing",
                 *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
             ]:
                 continue
