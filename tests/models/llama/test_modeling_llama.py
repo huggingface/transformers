@@ -407,7 +407,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
             load_in_4bit=True,
-            device_map="auto",
+            device_map={"": 0},
         )
 
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
@@ -423,7 +423,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         output_native = tokenizer.batch_decode(output_native)
 
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map="auto", attn_implementation="flash_attention_2"
+            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -526,6 +526,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
+@pytest.mark.integration_test
 class LlamaIntegrationTest(unittest.TestCase):
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
@@ -652,6 +653,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@pytest.mark.integration_test
 class CodeLlamaIntegrationTest(unittest.TestCase):
     PROMPTS = [
         '''def remove_non_ascii(s: str) -> str:
