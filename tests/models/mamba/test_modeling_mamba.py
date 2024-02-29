@@ -227,6 +227,9 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_model_parallel = True
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
+    pipeline_model_mapping = (
+        {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
+    )
 
     def setUp(self):
         self.model_tester = MambaModelTester(self)
@@ -319,9 +322,7 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/mamba-130m")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = MambaForCausalLM.from_pretrained(
-            "ArthurZ/mamba-130m", vocab_size=50277, num_hidden_layers=64, torch_dtype=torch.float16, hidden_size=2560
-        )
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16)
         model.to(torch_device)
         model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
@@ -342,7 +343,7 @@ class MambaIntegrationTests(unittest.TestCase):
         )
 
     def test_simple_generate_cuda_kernels(self):
-        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+        expected_output = "Hello my name is John of the Golden, and I am the Lord"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16).to(torch_device)
