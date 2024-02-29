@@ -28,7 +28,6 @@ Modern hierarchical vision transformers have added several vision-specific compo
 
 [[autodoc]] HieraConfig
 
-<frameworkcontent>
 <pt>
 
 ## HieraModel
