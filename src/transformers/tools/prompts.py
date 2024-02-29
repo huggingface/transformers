@@ -134,7 +134,7 @@ Specifically, this json should have a `action` key (name of the tool to use) and
 
 The value in the "action" field should belong to this list: {tool_names}.
 
-The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in markdown. Do not try to escape scpecial characters. Here is an example of a valid $ACTION_JSON_BLOB:
+The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in markdown. Do not try to escape special characters. Here is an example of a valid $ACTION_JSON_BLOB:
 ```json
 {{
   "action": $TOOL_NAME,
