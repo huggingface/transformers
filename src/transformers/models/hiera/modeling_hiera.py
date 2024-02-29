@@ -567,9 +567,9 @@ class HieraPreTrainedModel(PreTrainedModel):
 
     Example usage:
         >>> from transformers import HieraModel, HieraConfig
+        >>> import torch
         >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3))
-
-        >>> model = Hiera(config)
+        >>> model = HieraModel(config)
         >>> inputs = torch.rand((1, 3, 224, 224))
         >>> outputs = model(inputs)
     """
