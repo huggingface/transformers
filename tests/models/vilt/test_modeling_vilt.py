@@ -33,7 +33,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         ViltForImageAndTextRetrieval,
         ViltForImagesAndTextClassification,
         ViltForMaskedLM,
@@ -41,6 +40,7 @@ if is_torch_available():
         ViltForTokenClassification,
         ViltModel,
     )
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -284,7 +284,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 config.modality_type_vocab_size = 3
 
             # ViltForImageAndTextRetrieval doesn't support training for now
-            if model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]:
+            if model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]:
                 continue
 
             model = model_class(config)
@@ -307,7 +307,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # ViltForImageAndTextRetrieval doesn't support training for now
             if (
-                model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]
+                model_class.__name__ in [*MODEL_MAPPING_NAMES.values(), "ViltForImageAndTextRetrieval"]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
