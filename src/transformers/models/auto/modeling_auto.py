@@ -414,7 +414,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
-        # ("character_bert", "CharacterBertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
         ("big_bird", "BigBirdForCausalLM"),
         ("bigbird_pegasus", "BigBirdPegasusForCausalLM"),

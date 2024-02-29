@@ -46,7 +46,6 @@ if is_torch_available():
         CharacterBertForQuestionAnswering,
         CharacterBertForSequenceClassification,
         CharacterBertForTokenClassification,
-        # CharacterBertLMHeadModel,
         CharacterBertModel,
         logging,
     )
@@ -457,7 +456,6 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     all_model_classes = (
         (
             CharacterBertModel,
-            # CharacterBertLMHeadModel,
             CharacterBertForMaskedLM,
             CharacterBertForMultipleChoice,
             CharacterBertForNextSentencePrediction,
@@ -469,7 +467,6 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else ()
     )
-    # all_generative_model_classes = (CharacterBertLMHeadModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
@@ -477,7 +474,6 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             "fill-mask": CharacterBertForMaskedLM,
             "question-answering": CharacterBertForQuestionAnswering,
             "text-classification": CharacterBertForSequenceClassification,
-            # "text-generation": CharacterBertLMHeadModel,
             "token-classification": CharacterBertForTokenClassification,
             "zero-shot": CharacterBertForSequenceClassification,
         }
