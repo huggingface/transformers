@@ -62,5 +62,21 @@ if __name__ == "__main__":
         start = end
         end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
         model_splits.append(d[start:end])
-    model_splits = [["models/vilt"]]
+    model_splits = [
+        [
+            "models/vilt",
+            "models/segformer",
+            "models/pvt",
+            "models/perceiver",
+            "models/levit",
+            "models/glpn",
+            "models/efficientformer",
+            "models/dpt",
+            "models/deit",
+            "models/data2vec",
+            "models/clipseg",
+            "models/beit",
+            "models/data2vec",
+        ]
+    ]
     print(model_splits)
