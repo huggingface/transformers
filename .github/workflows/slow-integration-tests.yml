@@ -17,7 +17,7 @@ jobs:
         machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, ci] # TODO: move to A10
     container:
-      image: huggingface/transformers-all-latest-gpu
+      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     env:
@@ -28,33 +28,16 @@ jobs:
       MAX_JOBS: 4
 
     steps:
-      - name: Cleanup
-        working-directory: /transformers
-        run: |
-          rm -rf tests/__pycache__
-          rm -rf tests/models/__pycache__
-          rm -rf reports
-
       - name: Update clone
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         run: git fetch && git checkout ${{ github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+      - name: Remove cached torch extensions
+        run: rm -rf /github/home/.cache/torch_extensions/
 
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*
@@ -63,18 +46,30 @@ jobs:
           python3 -m pip uninstall -y deepspeed
           DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /workspace/transformers
+        run: |
+          python utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /workspace/transformers
+        run: pip freeze
       # TODO: uncomment that after A10
       # - name: Install Flash Attention
       #   run: |
       #     pip install flash-attn --no-build-isolation
 
       - name: Run integration tests
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         run: |
           make run_integration_tests
 
       - name: Run Flash Attention-2 tests
-        working-directory: /transformers
+        working-directory: /workspace/transformers
         run: |
           make run_flash_attn_tests
 
