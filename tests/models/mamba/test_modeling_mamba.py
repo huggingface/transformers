@@ -358,29 +358,25 @@ class MambaIntegrationTests(unittest.TestCase):
         model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
 
-        logits = model(input_ids=input_ids).logits
+        with torch.no_grad():
+            logits = model(input_ids=input_ids).logits
 
-        EXPECTED_LOGITS = torch.tensor(
+        EXPECTED_LOGITS_NO_GRAD = torch.tensor(
             [
-                -55.6875, -69.7500, -49.9062, -51.7500, -57.6250, -57.9062, -56.9375,
-                -57.9062, -54.6562, -55.9062, -55.3125, -58.0625, -60.5625, -47.0312,
-                -52.0312, -49.7812, -55.9375, -57.8750, -56.7500, -57.0938, -57.3438,
-                -58.2812, -57.7812, -58.7500, -59.5938, -59.0625, -58.6875, -52.9375,
-                -53.4688, -57.3438, -56.9062, -55.7188, -53.3125, -55.8125, -56.9688,
-                -56.9062, -56.1875, -54.7188, -56.4062, -57.4688
+                -55.6875, -69.8750, -49.9062, -51.7500, -57.6875, -57.9375, -56.9688,
+                -57.9375, -54.6875, -55.9375, -55.3125, -58.0938, -60.5625, -47.0000,
+                -52.0312, -49.7812, -55.9375, -57.9062, -56.7812, -57.1250, -57.3438,
+                -58.3125, -57.8125, -58.7812, -59.6250, -59.0938, -58.7188, -52.9375,
+                -53.4688, -57.3750, -56.9375, -55.7500, -53.3125, -55.8438, -57.0000,
+                -56.9062, -56.2188, -54.7188, -56.4375, -57.5000
             ]
         ,dtype=torch.float16)  # fmt: skip
 
-        torch.testing.assert_allclose(logits[0, 0, :40].cpu(), EXPECTED_LOGITS)
+        torch.testing.assert_allclose(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD)
 
-        out = model.generate(input_ids, max_new_tokens=10)
+        out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
-        self.assertEqual(
-            output_sentence,
-            [
-                "Hey how are you doing?\n\nI'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm so glad you're here. I'm"
-            ],
-        )
+        self.assertEqual(output_sentence,"Hey how are you doing?\n\nA:\n\nI have a similar")
 
     def test_simple_generate_cuda_kernels_tiny(self):
         expected_output = "Hello my name is John of the Golden, and I am the Lord"
