@@ -38,7 +38,6 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
-import huggingface_hub
 import urllib3
 
 from transformers import logging as transformers_logging
@@ -470,7 +469,7 @@ def require_read_token(fn):
 
     @wraps(fn)
     def _inner(*args, **kwargs):
-        with patch.object(huggingface_hub.utils._headers, "get_token", return_value=token):
+        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
             return fn(*args, **kwargs)
 
     return _inner
