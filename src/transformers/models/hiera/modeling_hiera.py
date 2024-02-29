@@ -379,7 +379,7 @@ class MaskUnitAttention(nn.Module):
         Args:
         input_dim (`int`): The input feature dimensions.
         output_dim (`int`): The output feature dimensions.
-        - number_of_heads: The number of attention number_of_heads.
+        number_of_heads (`int`): The number of attention heads.
         - q_stride: If greater than 1, pool q with this stride. The stride should be flattened (e.g., 2x2 = 4).
         - window_size: The current (flattened) size of a mask unit *after* pooling (if any).
         - use_mask_unit_attention: Use Mask Unit or Global Attention.
