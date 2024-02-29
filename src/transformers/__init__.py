@@ -1254,7 +1254,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.bert"].append("TFBertTokenizer")
-    _import_structure["models.character_bert"].append("TFCharacterBertTokenizer")
 
 # keras-nlp-specific objects
 try:
@@ -6041,7 +6040,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tensorflow_text_objects import *
     else:
         from .models.bert import TFBertTokenizer
-        from .models.character_bert import TFCharacterBertTokenizer
 
     try:
         if not is_keras_nlp_available():

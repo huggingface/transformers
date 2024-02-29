@@ -68,7 +68,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_character_bert_tf"] = ["TFCharacterBertTokenizer"]
+    pass
 
 if TYPE_CHECKING:
     from .configuration_character_bert import (
@@ -114,7 +114,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_character_bert_tf import TFCharacterBertTokenizer
+        pass
 
 else:
     import sys
