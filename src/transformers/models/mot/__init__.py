@@ -41,6 +41,7 @@ else:
         "MoTForTokenClassification",
         "MoTLMHeadModel",
         "MoTModel",
+        "MoTMLP",
         "MoTPreTrainedModel",
         "load_tf_weights_in_mot",
     ]
@@ -70,6 +71,7 @@ if TYPE_CHECKING:
             MoTForTokenClassification,
             MoTLMHeadModel,
             MoTModel,
+            MoTMLP,
             MoTPreTrainedModel,
             load_tf_weights_in_mot,
         )

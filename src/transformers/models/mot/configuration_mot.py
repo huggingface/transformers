@@ -56,6 +56,12 @@ class MoTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
+        group_size (`int`, *optional*, defaults to 32):
+            The number of tokens per expert.
+        temperature (`float`, *optional*, defaults to 1.0):
+            The temperature for the softmax over experts.
+        init_scale (`float`, *optional*, defaults to 1.0):
+            # TODO: Add description
         activation_function (`str`, *optional*, defaults to `"gelu_new"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -112,6 +118,10 @@ class MoTConfig(PretrainedConfig):
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
+        emit_softmax_over_experts (`bool`, *optional*, defaults to `False`):
+            # TODO: Add description
+        use_discrete_routing (`bool`, *optional*, defaults to `False`):
+            # TODO: Add description
 
     Example:
 
@@ -145,6 +155,9 @@ class MoTConfig(PretrainedConfig):
         n_layer=12,
         n_head=12,
         n_inner=None,
+        group_size=32,
+        expert_size=None,
+        init_scale=1.0,
         activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
@@ -162,6 +175,8 @@ class MoTConfig(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        emit_softmax_over_experts=False,
+        use_discrete_routing=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -170,6 +185,9 @@ class MoTConfig(PretrainedConfig):
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner
+        self.group_size = group_size
+        self.expert_size = expert_size
+        self.init_scale = init_scale
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
@@ -185,6 +203,8 @@ class MoTConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.emit_softmax_over_experts = emit_softmax_over_experts
+        self.use_discrete_routing = use_discrete_routing
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

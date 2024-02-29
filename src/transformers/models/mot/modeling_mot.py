@@ -21,6 +21,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
+import torch.nn.functional as F
+from torch.nn.init import trunc_normal_
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -58,6 +60,22 @@ MOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mot-base",
     # See all MixtureOfTokens models at https://huggingface.co/models?filter=mot
 ]
+
+def with_batch_size_aligment(forward_fn):
+    def _forward(self, x):
+        ''' assumed ordering (batch, seq_len, dmodel) '''
+        batch_size = x.size(0)
+        if batch_size % self.group_size != 0:
+            new_batch_size = self.group_size * ((batch_size // self.group_size) + 1)
+            logger.debug("Artificially padding batch size from %d to %d", batch_size, new_batch_size)
+            last_embed = x[-1:, :, :]
+            x = torch.cat([x, last_embed.expand(new_batch_size - batch_size, -1, -1)], dim=0)
+            x = forward_fn(self, x)
+            return x[:batch_size, :, :]
+        else:
+            return forward_fn(self, x)
+    return _forward
+
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2 with gpt2->mot
@@ -339,22 +357,213 @@ class MoTAttention(nn.Module):
         return outputs  # a, present, (attentions)
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->MoT
 class MoTMLP(nn.Module):
-    def __init__(self, intermediate_size, config):
+    def __init__(
+            self,
+            config: MoTConfig,
+            sparsity_dim: int = 0,
+            init_type: str = "kaiming_uniform"
+    ):
         super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = Conv1D(intermediate_size, embed_dim)
-        self.c_proj = Conv1D(embed_dim, intermediate_size)
+
+        self.d_model: int = config.n_embd
+        self.d_ff: int = config.n_inner
+        self.n_experts: int = config.n_head
+        self.group_size: int = config.group_size
+        self.sparsity_dim: int = sparsity_dim
+        self.expert_size: int = config.expert_size
+        self.temperature: float = config.temperature
         self.act = ACT2FN[config.activation_function]
+
+        self.init_type: str = init_type
+        self.init_scale: float = config.init_scale
+
+        self.emit_softmax_over_experts: bool = config.emit_softmax_over_experts
+        self.use_discrete_routing: bool = config.use_discrete_routing
+
+        assert self.d_ff % self.group_size == 0, f"d_ff = {self.d_ff} should be divisible by group size = {self.group_size}"
+        self.d_ff *= self.group_size
+
+        if self.expert_size is None:
+            assert self.d_ff % self.n_experts == 0, f"dff = {self.d_ff} is not divisible by n_experts = {self.n_experts}"
+            self.expert_size = self.d_ff // self.n_experts
+
+        self.lin1 = nn.Parameter(
+            self.get_init_weight(
+                (self.n_experts, self.d_model, self.expert_size),
+                fan_in=self.d_model,
+                init_type=self.init_type,
+                scale=self.init_scale,
+            )
+        )
+
+        self.lin2 = nn.Parameter(
+            self.get_init_weight(
+                (self.n_experts, self.expert_size, self.d_model),
+                fan_in=self.expert_size,
+                init_type=self.init_type,
+                scale=self.init_scale,
+            )
+        )
+
+        self.controller = nn.Parameter(
+            self.get_init_weight(
+                (self.d_model, self.n_experts),
+                fan_in=self.d_model,
+                init_type=self.init_type,
+                scale=self.init_scale,
+            )
+        )
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
+
+    def argmax_one_hot(self, x: torch.Tensor, dim: int):
+        max_values, _ = x.max(dim=dim, keepdim=True)
+        return torch.where(
+            condition=x == max_values,
+            input=torch.Tensor([1.0]).to(dtype=x.dtype, device=x.device),
+            other=torch.Tensor([0.0]).to(dtype=x.dtype, device=x.device),
+            out=x,
+        )  # potentially make it the value itself? torch.where(x == max_values, x, 0.0)
+
+    def get_init_weight(self, shape, fan_in, init_type, scale, dtype=torch.float32):
+        if init_type == "kaiming_uniform":
+            return self.init_kaiming_uniform(
+                shape=shape, fan_in=fan_in, scale=scale, dtype=dtype
+            )
+        elif init_type == "truncated_normal":
+            return self.init_truncated_normal(
+                shape=shape, fan_in=fan_in, scale=scale, dtype=dtype
+            )
+        else:
+            raise ValueError(f"Unknown init_type: {init_type}")
+
+    def init_kaiming_uniform(self, shape, fan_in, scale, dtype=torch.float32):
+        range_ = scale * (3 / fan_in) ** 0.5
+        return torch.zeros(shape, dtype=dtype).uniform_(-range_, range_)
+
+    def init_truncated_normal(self, shape, fan_in, scale, dtype=torch.float32):
+        std = (scale / fan_in) ** 0.5
+        low = -2 * scale
+        high = 2 * scale
+        t = torch.zeros(shape, dtype=dtype)
+        return trunc_normal_(t, mean=0.0, std=std, a=low, b=high)
+
+    def stable_softmax_temperature(self, x: torch.Tensor, temperature: float, dim: int = -1) -> torch.Tensor:
+        return F.softmax(x / temperature, dim=dim)
+
+    @with_batch_size_aligment
+    def forward(self, x):
+        x = self.group_tokens(x)
+        merge_weights, emit_weights = self.calculate_mixed_tokens_with_weights(x)
+        x = self.merge_map_emit(x, merge_weights, emit_weights)
+        x = self.redistribute_tokens(x)
+        x = self.dropout(x)
+        return x
+
+    def group_tokens(self, x):
+        """
+        Reshape code so the axis to split into groups is on position 1, and then group over said axis.
+        e.g.:
+         - if we group tokens from different sequences in a batch (sparsity = 0), we need to put the batch dimension to position 1.
+         - if we group tokens within one sequence, the dimension to split into groups is already on position 1, hence we leave it as is.
+
+        free_dimension is the dimension on position 0 after reshape
+        split_dimension is the dimension on position 1 - the one to split into groups
+
+        :param x: normal input tensor of shape (batch, seq_len, dmodel)
+        :return: x of shape (free_dimension, split_dimension // group_size, group_size , dmodel)
+        """
+        assert len(x.shape) == 3, "incorrect shape of a tensor, expected a 3D tensor"
+        assert x.size(-1) == self.d_model, f"expected the last dimension of input tensor to be d_model = {self.d_model}"
+
+        if self.sparsity_dim == 0:
+            x = x.transpose(0, 1)
+        elif self.sparsity_dim != 1:
+            raise NotImplementedError
+
+        free_dimension = x.size(1)
+        assert free_dimension % self.group_size == 0, f"free dimension = {free_dimension} should be divisible by group size = {self.group_size}"
+
+        x = x.view(x.size(0), -1, self.group_size, self.d_model)
+        return x
+
+    def redistribute_tokens(self, x):
+        """
+        An inverse operation to group_tokens.
+        """
+        assert len(x.shape) == 4, "incorrect shape of a tensor, expected a 4D tensor"
+
+        x = x.view(x.size(0), -1, self.d_model)
+        if self.sparsity_dim == 0:
+            x = x.transpose(0, 1)
+        elif self.sparsity_dim != 1:
+            raise NotImplementedError
+
+        return x
+
+    def calculate_mixed_tokens_with_weights(self, x):
+        """
+        This function calculates merge and emit weights based on the input tensor, using a controller matrix.
+        The merge weights determine the aggregation of tokens within a group, and emit weights govern the redistribution
+        of the aggregated token back to the original tokens. Temperature scaling is applied to the logits, and optional
+        discrete routing can be used to obtain one-hot representations of the weights.
+        """
+        # shape of x is (free_dimension, split_dimension // group_size, group_size, dmodel)
+        merge_logits = torch.matmul(x, self.controller)
+        # self.update_cache_for_logging("merge_logits", merge_logits)
+
+        # shape of merge_logits is (free_dimension, aggr_dimension // group_size, group_size, n_experts)
+        temp_merge = self.temperature
+        temp_emit = self.temperature
+
+        merge_softmax_dim = -2
+        emit_softmax_dim = -1 if self.emit_softmax_over_experts else -2
+
+        merge_weights = self.stable_softmax_temperature(
+            merge_logits, temp_merge, dim=merge_softmax_dim
+        )
+
+        # by default we use the same weights for emitting and merging, but if the temperature is learnable or we want to take softmax over experts for emitting, we will use different weights
+        if isinstance(temp_merge, torch.nn.Parameter) or self.emit_softmax_over_experts:
+            emit_weights = self.stable_softmax_temperature(
+                merge_logits, temp_emit, dim=emit_softmax_dim
+            )
+        else:
+            emit_weights = merge_weights
+
+        if self.use_discrete_routing:
+            merge_weights = self.argmax_one_hot(merge_weights, dim=merge_softmax_dim)
+            emit_weights = self.argmax_one_hot(emit_weights, dim=emit_softmax_dim)
+        return merge_weights, emit_weights
+
+    def merge_map_emit(self, x, merge_weights, emit_weights):
+        """
+        :param x: input reshaped to (free_dimension, split_dimension // group_size, group_size, dmodel)
+        :param merge_weights: weights for merging tokens within a group, shape (free_dimension, split_dimension // group_size, group_size, n_experts)
+        :param emit_weights: weights for emitting tokens within a group, shape (free_dimension, split_dimension // group_size, group_size, n_experts)
+        :return: tensor of token updates of shape (free_dimension, split_dimension // group_size, group_size, dmodel)
+        """
+        x = torch.matmul(
+            merge_weights.transpose(-1, -2),
+            x,
+        )
+        # x shape is (free_dimension, split_dimension // group_size, n_experts, dmodel) ||| lin1 shape is (n_experts, dmodel, expert_size)
+        x = torch.bmm(x.view(-1, self.n_experts, self.d_model).transpose(0, 1), self.lin1)
+        x = self.act(x)
+        # x shape is (n_experts, free_dimension * aggr_dimension // group_size, expert_size) ||| lin2 shape is (n_experts, expert_size, dmodel)
+        x = torch.bmm(x, self.lin2)
+        # x shape is (n_experts, free_dimension * aggr_dimension // group_size, dmodel)
+
+        # merge_weights shape is (free_dimension, aggr_dimension // group_size, group_size, n_experts)
+        # view x to be (n_experts, free_dimension, aggr_dimension // group_size, dmodel)
+        # permute it to be (free_dimension, aggr_dimension // group_size, n_experts, dmodel)
+        x = torch.matmul(
+            emit_weights,
+            x.view(x.size(0), emit_weights.size(0), -1, self.d_model).permute(1, 2, 0, 3),
+        )
+
+        return x
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->MoT
@@ -372,7 +581,7 @@ class MoTBlock(nn.Module):
             self.crossattention = MoTAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mlp = MoTMLP(inner_dim, config)
+        self.mlp = MoTMLP(config)
 
     def forward(
         self,

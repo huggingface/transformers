@@ -18,13 +18,20 @@ import datetime
 import gc
 import math
 import unittest
+import tempfile
+import itertools
 
 from transformers import MoTConfig, is_torch_available
 from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+from transformers import AutoModelForSequenceClassification
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import logging
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, _config_zero_init
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -40,6 +47,7 @@ if is_torch_available():
         MoTForTokenClassification,
         MoTLMHeadModel,
         MoTModel,
+        MoTMLP,
     )
 
 
@@ -56,9 +64,11 @@ class MoTModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
+        group_size=8,
+        expert_size=None,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=37,
+        intermediate_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -80,6 +90,8 @@ class MoTModelTester:
         self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.group_size = group_size
+        self.expert_size = expert_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -154,6 +166,8 @@ class MoTModelTester:
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
             n_inner=self.intermediate_size,
+            group_size = self.group_size,
+            expert_size = self.expert_size,
             activation_function=self.hidden_act,
             resid_pdrop=self.hidden_dropout_prob,
             attn_pdrop=self.attention_probs_dropout_prob,
@@ -499,13 +513,62 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def setUp(self):
         self.model_tester = MoTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MoTConfig, n_embd=37)
+        self.config_tester = ConfigTester(self, config_class=MoTConfig)
 
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         backend_empty_cache(torch_device)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertIn(
+                        param.data.mean().round(decimals=1).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
+        if not self.test_mismatched_shapes:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        configs_no_init = _config_zero_init(config)
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+                continue
+
+            with self.subTest(msg=f"Testing {model_class}"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model = model_class(configs_no_init)
+                    model.save_pretrained(tmp_dir)
+
+                    # Fails when we don't set ignore_mismatched_sizes=True
+                    with self.assertRaises(RuntimeError):
+                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+
+                    logger = logging.get_logger("transformers.modeling_utils")
+
+                    with CaptureLogger(logger) as cl:
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    for name, param in new_model.named_parameters():
+                        if param.requires_grad:
+                            self.assertIn(
+                                param.data.mean().round(decimals=1).item(),
+                                [0.0, 1.0],
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -859,3 +922,35 @@ class MoTModelLanguageGenerationTest(unittest.TestCase):
                 "but said in a statement to The Associated Press that"
             ],
         )
+
+@require_torch
+class MoTMLPTest(unittest.TestCase):
+    def setUp(self):
+        self.model_tester = MoTModelTester(self)
+
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    def test_mlp_batch_aligment(self):
+        varaints = itertools.product(range(1, 11, 3), repeat=3)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for group_size, disaligment, seq_len in varaints:
+            with self.subTest(f"group_size={group_size}, disaligment={disaligment}, seq_len={seq_len}"):
+                config.group_size = group_size
+                config.n_inner = group_size * config.n_head
+
+                model = MoTMLP(config=config)
+                model.to(torch_device)
+                model.eval()
+
+                disaligned_batch = torch.randn(group_size + disaligment, seq_len, model.d_model, device=torch_device)
+                aligned_batch = disaligned_batch[:group_size, :, :]
+
+                output_1 = model(aligned_batch)
+                output_2 = model(disaligned_batch)
+                output_2 = output_2[:group_size, :]
+
+                self.assertTrue(torch.allclose(output_1, output_2, atol=1e-3))
