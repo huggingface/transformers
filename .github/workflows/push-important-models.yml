@@ -82,7 +82,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "GitHub Action build result for ${{ matrix.model-name }}: ${{ steps.run_fa2_tests.conclusion }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                    "text": "GitHub Action build result for ${{ matrix.model-name }}: ${{ steps.run_fa2_tests.conclusion }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                   }
                 }
               ]
@@ -113,7 +113,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "GitHub Action build result on ${{ matrix.model-name }}: ${{ steps.run_integration_tests.conclusion}}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                    "text": "GitHub Action build result on ${{ matrix.model-name }}: ${{ steps.run_integration_tests.conclusion}}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                   }
                 }
               ]
