@@ -56,14 +56,14 @@ jobs:
         uses: actions/checkout@v3
       - name: Install locally transformers & other libs
         run:
-          pip install -e . &&
+          pip install -e ".[testing]"" &&
           MAX_JOBS=4 pip install flash-attn --no-build-isolation # install FA2
-      - name: Run tests
+      - name: Run FA2 tests
         id: run_tests
         run:
           pytest -m "flash_attn_test" tests/${{ matrix.model-name }}/test_modeling_*
-          pytest -m "integration_test" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post results Slack channel
+        if: always()
         id: post-slack
         #uses: slackapi/slack-github-action@v1.25.0
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
@@ -74,7 +74,7 @@ jobs:
           # For posting a rich message using Block Kit
           payload: |
             {
-              "text": "Slow tests on ${{ matrix.model-name }} result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "text": "Slow FA 2 tests on ${{ matrix.model-name }} result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
               "blocks": [
                 {
                   "type": "section",
@@ -87,4 +87,33 @@ jobs:
             }
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
-        
+
+      - name: Run integration tests
+        id: run_tests
+        run:
+          pytest -m "integration_test" tests/${{ matrix.model-name }}/test_modeling_*
+      - name: Post results Slack channel
+        if: always()
+        id: post-slack
+        #uses: slackapi/slack-github-action@v1.25.0
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "text": "Slow integration tests on ${{ matrix.model-name }} result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "GitHub Action build result: ${{ steps.run_tests.outputs.exit_code }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
