@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The CharacterBERT model was proposed in [CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters]() by [Hicham El Boukkouri](https://scholar.google.com/citations?user=rK_ER-YAAAAJ&hl=fr), [Olivier Ferret](https://scholar.google.com/citations?user=-mCQhtIAAAAJ&hl=fr), [Thomas Lavergne](https://scholar.google.com/citations?user=l7XLFhEAAAAJ&hl=fr), [Hiroshi Noji](https://scholar.google.com/citations?user=OODRveoAAAAJ&hl=fr), [Pierre Zweigenbaum](https://scholar.google.com/citations?user=0LjUNAsAAAAJ&hl=fr) and [Junichi Tsujii](https://scholar.google.com/citations?user=h3aNnAIAAAAJ&hl=fr).
+The CharacterBERT model was proposed in [CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters](https://aclanthology.org/2020.coling-main.609/) by [Hicham El Boukkouri](https://scholar.google.com/citations?user=rK_ER-YAAAAJ&hl=fr), [Olivier Ferret](https://scholar.google.com/citations?user=-mCQhtIAAAAJ&hl=fr), [Thomas Lavergne](https://scholar.google.com/citations?user=l7XLFhEAAAAJ&hl=fr), [Hiroshi Noji](https://scholar.google.com/citations?user=OODRveoAAAAJ&hl=fr), [Pierre Zweigenbaum](https://scholar.google.com/citations?user=0LjUNAsAAAAJ&hl=fr) and [Junichi Tsujii](https://scholar.google.com/citations?user=h3aNnAIAAAAJ&hl=fr).
 
 This model is a version of BERT that allows for token-level inputs and outputs. It does not use a subword vocabulary and instead processes each input token at the character-level, making it more flexible and easy to use as well robust to misspellings.
 
