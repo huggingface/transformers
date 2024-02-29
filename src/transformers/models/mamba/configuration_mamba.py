@@ -100,7 +100,6 @@ class MambaConfig(PretrainedConfig):
         eos_token_id=2,
         expand=2,
         time_step_rank="auto",
-        tie_word_embeddings=True,
         use_bias=False,
         use_conv_bias=True,
         hidden_act="silu",
@@ -126,7 +125,6 @@ class MambaConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.residual_in_fp32 = residual_in_fp32
-        self.tie_word_embeddings = tie_word_embeddings
         self.use_cache = use_cache
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
