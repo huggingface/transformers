@@ -566,7 +566,7 @@ class HieraPreTrainedModel(PreTrainedModel):
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 
     Example usage:
-        >>> from your_model_file import Hiera, HieraConfig
+        >>> from transformers import Hiera, HieraConfig
         >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
 
         >>> model = Hiera(config)
