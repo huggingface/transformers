@@ -84,7 +84,7 @@ def get_pairs(word):
     return pairs
 
 
-class Qwen2MoETokenizer(PreTrainedTokenizer):
+class Qwen2MoeTokenizer(PreTrainedTokenizer):
     """
     Construct a Qwen2MoE tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -92,9 +92,9 @@ class Qwen2MoETokenizer(PreTrainedTokenizer):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```python
-    >>> from transformers import Qwen2MoETokenizer
+    >>> from transformers import Qwen2MoeTokenizer
 
-    >>> tokenizer = Qwen2MoETokenizer.from_pretrained("Qwen/Qwen-tokenizer")
+    >>> tokenizer = Qwen2MoeTokenizer.from_pretrained("Qwen/Qwen-tokenizer")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
@@ -301,7 +301,7 @@ class Qwen2MoETokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> str:
         # `spaces_between_special_tokens` defaults to True for _decode in slow tokenizers
-        # and cannot be configured elsewhere, but it should default to False for Qwen2MoETokenizer
+        # and cannot be configured elsewhere, but it should default to False for Qwen2MoeTokenizer
         return super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,

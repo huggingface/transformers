@@ -25,9 +25,9 @@ QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Qwen2MoEConfig(PretrainedConfig):
+class Qwen2MoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2MoEModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Qwen2MoeModel`]. It is used to instantiate a
     Qwen2MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen1.5-MoE-A2.7B" [Qwen/Qwen1.5-MoE-A2.7B"](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B").
@@ -39,7 +39,7 @@ class Qwen2MoEConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
             Vocabulary size of the Qwen2MoE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen2MoEModel`]
+            `inputs_ids` passed when calling [`Qwen2MoeModel`]
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 5632):
@@ -99,19 +99,19 @@ class Qwen2MoEConfig(PretrainedConfig):
             The aux loss factor for the total loss.
 
     ```python
-    >>> from transformers import Qwen2MoEModel, Qwen2MoEConfig
+    >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
     >>> # Initializing a Qwen2MoE style configuration
-    >>> configuration = Qwen2MoEConfig()
+    >>> configuration = Qwen2MoeConfig()
 
     >>> # Initializing a model from the Qwen1.5-MoE-A2.7B" style configuration
-    >>> model = Qwen2MoEModel(configuration)
+    >>> model = Qwen2MoeModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "qwen2_moe"
+    model_type = "qwen2moe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

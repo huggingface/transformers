@@ -42,7 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_qwen2_moe import Qwen2MoEConfig
+from .configuration_qwen2_moe import Qwen2MoeConfig
 
 
 if is_flash_attn_2_available():
@@ -56,7 +56,7 @@ logger = logging.get_logger(__name__)
 
 
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen1.5-MoE-A2.7B"
-_CONFIG_FOR_DOC = "Qwen2MoEConfig"
+_CONFIG_FOR_DOC = "Qwen2MoeConfig"
 
 QWEN2MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Qwen/Qwen1.5-MoE-A2.7B",
@@ -154,11 +154,11 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2MoE
-class Qwen2MoERMSNorm(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2Moe
+class Qwen2MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Qwen2MoERMSNorm is equivalent to T5LayerNorm
+        Qwen2MoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -172,8 +172,8 @@ class Qwen2MoERMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Qwen2MoE
-class Qwen2MoERotaryEmbedding(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Qwen2Moe
+class Qwen2MoeRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -246,8 +246,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Modified from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Qwen2MoE
-class Qwen2MoEMLP(nn.Module):
+# Modified from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Qwen2Moe
+class Qwen2MoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -278,13 +278,14 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class Qwen2MoEAttention(nn.Module):
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2Attention with Qwen2->Qwen2Moe
+class Qwen2MoeAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: Qwen2MoEConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: Qwen2MoeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -315,7 +316,7 @@ class Qwen2MoEAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.rotary_emb = Qwen2MoERotaryEmbedding(
+        self.rotary_emb = Qwen2MoeRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
@@ -403,9 +404,10 @@ class Qwen2MoEAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class Qwen2MoEFlashAttention2(Qwen2MoEAttention):
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2FlashAttention2 with Qwen2->Qwen2Moe
+class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
     """
-    Qwen2MoE flash attention module, following Qwen2MoE attention module. This module inherits from `Qwen2MoEAttention`
+    Qwen2Moe flash attention module, following Qwen2Moe attention module. This module inherits from `Qwen2MoeAttention`
     as the weights of the module stays untouched. The only required change would be on the forward pass
     where it needs to correctly call the public API of flash attention and deal with padding tokens
     in case the input contains any of them. Additionally, for sliding window attention, we apply SWA only to the bottom
@@ -705,15 +707,15 @@ class Qwen2MoEFlashAttention2(Qwen2MoEAttention):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Qwen2MoE
-class Qwen2MoESdpaAttention(Qwen2MoEAttention):
+# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Qwen2Moe
+class Qwen2MoeSdpaAttention(Qwen2MoeAttention):
     """
-    Qwen2MoE attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `Qwen2MoEAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    Qwen2Moe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `Qwen2MoeAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from Qwen2MoEAttention.forward
+    # Adapted from Qwen2MoeAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -726,7 +728,7 @@ class Qwen2MoESdpaAttention(Qwen2MoEAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "Qwen2MoEModel is using Qwen2MoESdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "Qwen2MoeModel is using Qwen2MoeSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -794,13 +796,13 @@ class Qwen2MoESdpaAttention(Qwen2MoEAttention):
 
 
 QWEN2MOE_ATTENTION_CLASSES = {
-    "eager": Qwen2MoEAttention,
-    "flash_attention_2": Qwen2MoEFlashAttention2,
-    "sdpa": Qwen2MoESdpaAttention,
+    "eager": Qwen2MoeAttention,
+    "flash_attention_2": Qwen2MoeFlashAttention2,
+    "sdpa": Qwen2MoeSdpaAttention,
 }
 
 
-class Qwen2MoESparseMoeBlock(nn.Module):
+class Qwen2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
@@ -810,11 +812,11 @@ class Qwen2MoESparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = nn.ModuleList(
-            [Qwen2MoEMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
+            [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
         )
 
         if config.shared_expert_intermediate_size is not None and config.shared_expert_intermediate_size > 0:
-            self.shared_expert = Qwen2MoEMLP(config, intermediate_size=config.shared_expert_intermediate_size)
+            self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         else:
             self.shared_expert = None
 
@@ -877,8 +879,8 @@ class Qwen2MoESparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Qwen2MoEDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2MoEConfig, layer_idx: int):
+class Qwen2MoeDecoderLayer(nn.Module):
+    def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -890,12 +892,12 @@ class Qwen2MoEDecoderLayer(nn.Module):
         self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         if config.num_experts and config.expert_interval is not None and (layer_idx + 1) % config.expert_interval == 0:
-            self.mlp = Qwen2MoESparseMoeBlock(config)
+            self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
-            self.mlp = Qwen2MoEMLP(config)
+            self.mlp = Qwen2MoeMLP(config)
 
-        self.input_layernorm = Qwen2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -949,7 +951,7 @@ class Qwen2MoEDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        if isinstance(self.mlp, Qwen2MoESparseMoeBlock):
+        if isinstance(self.mlp, Qwen2MoeSparseMoeBlock):
             hidden_states, router_logits = self.mlp(hidden_states)
         else:
             hidden_states = self.mlp(hidden_states)
@@ -981,7 +983,7 @@ QWEN2MOE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`Qwen2MoEConfig`]):
+        config ([`Qwen2MoeConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -992,11 +994,11 @@ QWEN2MOE_START_DOCSTRING = r"""
     "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
     QWEN2MOE_START_DOCSTRING,
 )
-class Qwen2MoEPreTrainedModel(PreTrainedModel):
-    config_class = Qwen2MoEConfig
+class Qwen2MoePreTrainedModel(PreTrainedModel):
+    config_class = Qwen2MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen2MoEDecoderLayer"]
+    _no_split_modules = ["Qwen2MoeDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1091,25 +1093,25 @@ QWEN2MOE_INPUTS_DOCSTRING = r"""
     "The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.",
     QWEN2MOE_START_DOCSTRING,
 )
-class Qwen2MoEModel(Qwen2MoEPreTrainedModel):
+class Qwen2MoeModel(Qwen2MoePreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2MoEDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2MoeDecoderLayer`]
 
     Args:
-        config: Qwen2MoEConfig
+        config: Qwen2MoeConfig
     """
 
-    def __init__(self, config: Qwen2MoEConfig):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Qwen2MoEDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Qwen2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = Qwen2MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1284,12 +1286,12 @@ class Qwen2MoEModel(Qwen2MoEPreTrainedModel):
         )
 
 
-class Qwen2MoEForCausalLM(Qwen2MoEPreTrainedModel):
+class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Qwen2MoEModel(config)
+        self.model = Qwen2MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1345,9 +1347,9 @@ class Qwen2MoEForCausalLM(Qwen2MoEPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Qwen2MoEForCausalLM
+        >>> from transformers import AutoTokenizer, Qwen2MoeForCausalLM
 
-        >>> model = Qwen2MoEForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = Qwen2MoeForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -1497,7 +1499,7 @@ class Qwen2MoEForCausalLM(Qwen2MoEPreTrainedModel):
     """
     The Qwen2MoE Model transformer with a sequence classification head on top (linear layer).
 
-    [`Qwen2MoEForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`Qwen2MoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1508,11 +1510,11 @@ class Qwen2MoEForCausalLM(Qwen2MoEPreTrainedModel):
     """,
     QWEN2MOE_START_DOCSTRING,
 )
-class Qwen2MoEForSequenceClassification(Qwen2MoEPreTrainedModel):
+class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = Qwen2MoEModel(config)
+        self.model = Qwen2MoeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

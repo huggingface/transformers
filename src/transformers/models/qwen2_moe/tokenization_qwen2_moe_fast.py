@@ -19,7 +19,7 @@ from typing import Optional, Tuple
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_qwen2_moe import Qwen2MoETokenizer
+from .tokenization_qwen2_moe import Qwen2MoeTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -41,7 +41,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
 
 
-class Qwen2MoETokenizerFast(PreTrainedTokenizerFast):
+class Qwen2MoeTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Qwen2MoE tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
@@ -50,9 +50,9 @@ class Qwen2MoETokenizerFast(PreTrainedTokenizerFast):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```python
-    >>> from transformers import Qwen2MoETokenizerFast
+    >>> from transformers import Qwen2MoeTokenizerFast
 
-    >>> tokenizer = Qwen2MoETokenizerFast.from_pretrained("Qwen/Qwen-tokenizer")
+    >>> tokenizer = Qwen2MoeTokenizerFast.from_pretrained("Qwen/Qwen-tokenizer")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
@@ -87,7 +87,7 @@ class Qwen2MoETokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = Qwen2MoETokenizer
+    slow_tokenizer_class = Qwen2MoeTokenizer
 
     def __init__(
         self,
