@@ -29,7 +29,7 @@ from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
 
-# client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
 NON_MODEL_TEST_MODULES = [
     "benchmark",
@@ -868,8 +868,7 @@ if __name__ == "__main__":
     repository_full_name = f"{org}/{repo}"
 
     # This env. variable is set in workflow file (under the job `send_results`).
-    # ci_event = os.environ["CI_EVENT"]
-    ci_event = "xx"
+    ci_event = os.environ["CI_EVENT"]
 
     # To find the PR number in a commit title, for example, `Add AwesomeFormer model (#99999)`
     pr_number_re = re.compile(r"\(#(\d+)\)$")
