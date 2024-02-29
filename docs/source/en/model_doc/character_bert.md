@@ -18,19 +18,22 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The CharacterBERT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The CharacterBERT model was proposed in [CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters]() by [Hicham El Boukkouri](https://scholar.google.com/citations?user=rK_ER-YAAAAJ&hl=fr), [Olivier Ferret](https://scholar.google.com/citations?user=-mCQhtIAAAAJ&hl=fr), [Thomas Lavergne](https://scholar.google.com/citations?user=l7XLFhEAAAAJ&hl=fr), [Hiroshi Noji](https://scholar.google.com/citations?user=OODRveoAAAAJ&hl=fr), [Pierre Zweigenbaum](https://scholar.google.com/citations?user=0LjUNAsAAAAJ&hl=fr) and [Junichi Tsujii](https://scholar.google.com/citations?user=h3aNnAIAAAAJ&hl=fr).
+
+This model is a version of BERT that allows for token-level inputs and outputs. It does not use a subword vocabulary and instead processes each input token at the character-level, making it more flexible and easy to use as well robust to misspellings.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Due to the compelling improvements brought by **BERT**, many recent representation models adopted the **Transformer architecture** as their main building block, consequently inheriting the **wordpiece tokenization system** despite it not being intrinsically linked to the notion of Transformers. While this system is thought to achieve a **good balance between the flexibility of characters and the efficiency of full words**, using predefined wordpiece vocabularies from the general domain is not always suitable, especially when building models for **specialized domains** (e.g., the medical domain). Moreover, adopting a wordpiece tokenization **shifts the focus from the word level to the subword level**, making the models **conceptually more complex** and arguably **less convenient in practice**. For these reasons, we propose CharacterBERT, a new variant of BERT that **drops the wordpiece system altogether and uses a Character-CNN module instead** to represent entire words by consulting their characters. We show that this new model **improves the performance of BERT** on a variety of medical domain tasks while at the same time producing **robust**, **word-level** and **open-vocabulary** representations.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- The model is **token-level** but relies on **characters** internally. This means the tokenization can be a simple **split on whitespace**.
+- The WordPiece vocabulary is replaced with a much smaller character (byte) vocabulary. By encoding all texts in **UTF-8**, any characters from any langage can fit in a byte vocabulary of size **28=256 + special tokens**.
+- Instead of **token ids**, the model requires **tokens** to be represented as **lists of character ids**. Therefore, the input shape changes from `(batch_size, sequence_length)` to `(batch_size, sequence_length, token_length)`.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [helboukkouri](https://huggingface.co/helboukkouri).
+The original code can be found [here](https://github.com/helboukkouri/character-bert).
 
 
 ## CharacterBertConfig
