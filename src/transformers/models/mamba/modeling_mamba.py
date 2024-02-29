@@ -293,7 +293,7 @@ class MambaBlock(nn.Module):
 
         self.mixer = MIXER_CLS(config, layer_idx=layer_idx)
 
-    def forward(self, hidden_states, output_ssm_states=False, inference_params=None):
+    def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -378,21 +378,18 @@ class MambaOutput(ModelOutput):
         inference_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
+
+            Includes both the State space model states weights after the selective scan, and the Convolutional states
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        ssm_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_ssm_statess=True` is passed or when `config.output_ssm_states=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,sequence_length)`.
-
-            State space model states weights after the selective scan.
     """
 
     last_hidden_state: torch.FloatTensor = None
     inference_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    ssm_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -413,17 +410,12 @@ class MambaCausalLMOutput(ModelOutput):
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        ssm_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_ssm_statess=True` is passed or when `config.output_ssm_states=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,sequence_length)`.
-
-            State space model states weights after the selective scan.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     inference_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    ssm_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 MAMBA_START_DOCSTRING = r"""
@@ -465,8 +457,6 @@ MAMBA_INPUTS_DOCSTRING = r"""
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
             If set to `True`, the last state is returned and can be used to quickly generate the next logits.
-        output_ssm_states (`bool`, *optional*):
-            Whether or not to return the ssm_states of all `MambaMixer` layers.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -509,7 +499,6 @@ class MambaModel(MambaPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         inference_params: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_ssm_states: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MambaOutput]:
@@ -552,7 +541,6 @@ class MambaModel(MambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # TODO this is not curcial as long as you know you are decoding vs not decoding
         inference_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.norm_f(hidden_states)
@@ -561,11 +549,7 @@ class MambaModel(MambaPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                hidden_states
-                for hidden_states in [hidden_states, inference_params if use_cache else None, all_hidden_states]
-                if hidden_states is not None
-            )
+            return tuple(v for v in [hidden_states, inference_params, all_hidden_states] if v is not None)
 
         return MambaOutput(
             last_hidden_state=hidden_states,
@@ -609,6 +593,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        **kwargs
     ) -> Dict[str, Any]:
         model_kwargs["inference_params"] = outputs["inference_params"]
         return model_kwargs
@@ -640,7 +625,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         inference_params: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_ssm_states: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # for now we need this for generation
@@ -657,7 +641,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
             input_ids,
             inference_params=inference_params,
             inputs_embeds=inputs_embeds,
-            output_ssm_states=output_ssm_states,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -685,5 +668,4 @@ class MambaForCausalLM(MambaPreTrainedModel):
             logits=logits,
             inference_params=mamba_outputs.inference_params,
             hidden_states=mamba_outputs.hidden_states,
-            ssm_states=mamba_outputs.ssm_states,
         )
