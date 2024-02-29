@@ -466,7 +466,7 @@ def require_read_token(fn):
     """
     A decorator that loads the HF token for tests that require to load gated models.
     """
-    token = os.getenv("HF_HUB_READ_TOKEN", None)
+    token = os.getenv("HF_HUB_READ_TOKEN")
 
     @wraps(fn)
     def _inner(*args, **kwargs):
