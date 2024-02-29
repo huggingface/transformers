@@ -130,7 +130,7 @@ class MambaModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
-            tie_word_embeddings=self.tie_word_embeddings
+            tie_word_embeddings=self.tie_word_embeddings,
         )
 
     def get_pipeline_config(self):
@@ -270,23 +270,23 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    
+
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
         blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
-    
+
         # move input tensors to cuda:O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):
                 inputs_dict[k] = v.to(0)
-    
+
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             model.to(0)
             model.eval()
-    
+
             # Wrap model in nn.DataParallel
             model = torch.nn.DataParallel(model)
             with torch.no_grad():
@@ -361,7 +361,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_LOGITS = torch.tensor([ -6.7070, -24.7656,  -6.4766,  -6.0078,  -9.7812, -13.0703, -11.4688, -10.6562,  -9.3359,  -9.4766,  -9.1719,  -7.9102, -13.0469,  -8.7266, -8.4297,  -8.4766,  -9.1094, -11.5234, -11.1250, -11.7812, -12.1562,  -12.8359, -12.1797, -13.4062, -13.6406, -13.4141, -13.6562,  -9.2344,   -7.9805,  -7.2188,  -9.9219,  -9.1719,  -7.8438,  -9.1250, -10.1094,  -10.2344, -10.2266,  -9.7578, -11.0000, -10.6406], device='cuda:0',dtype=torch.float16)  # fmt: skip
 
-        torch.testing.assert_allclose(logits[0,0,:40], EXPECTED_LOGITS)
+        torch.testing.assert_allclose(logits[0, 0, :40], EXPECTED_LOGITS)
 
         out = model.generate(input_ids, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
@@ -372,7 +372,7 @@ class MambaIntegrationTests(unittest.TestCase):
             ],
         )
 
-    def test_simple_generate_cuda_kernels(self):
+    def test_simple_generate_cuda_kernels_tiny(self):
         expected_output = "Hello my name is John of the Golden, and I am the Lord"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
@@ -383,7 +383,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-    def test_simple_generate_cuda_kernels_mid(self):
+    def test_simple_generate_cuda_kernels_small(self):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)

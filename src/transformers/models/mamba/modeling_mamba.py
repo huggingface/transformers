@@ -100,7 +100,9 @@ class MambaMixer(nn.Module):
 
         # S4D real initialization. These are not discretized!
         # THe core is to load them, compute the discrete states, then write the updates state. Keeps the memory bounded
-        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :].expand(self.intermediate_size, -1).contiguous()
+        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
+        A = A.expand(self.intermediate_size, -1).contiguous()
+
         self.A_log = nn.Parameter(
             torch.log(A)
         )  # TODO this parameter should be kept in float32. We don't have support for that I think
