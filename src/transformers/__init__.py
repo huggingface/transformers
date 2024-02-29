@@ -3089,7 +3089,7 @@ else:
     )
     _import_structure["models.qwen2_moe"].extend(
         [
-            "Qwen2MoeForCausalLM",
+            "Qwen2MoEForCausalLM",
             "Qwen2MoEForSequenceClassification",
             "Qwen2MoEModel",
             "Qwen2MoEPreTrainedModel",

@@ -55,11 +55,11 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen2MoE-14B-beta"
+_CHECKPOINT_FOR_DOC = "Qwen/Qwen1.5-MoE-A2.7B"
 _CONFIG_FOR_DOC = "Qwen2MoEConfig"
 
 QWEN2MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Qwen/Qwen2MoE-14B-beta",
+    "Qwen/Qwen1.5-MoE-A2.7B",
     # See all Qwen2 models at https://huggingface.co/models?filter=qwen2
 ]
 

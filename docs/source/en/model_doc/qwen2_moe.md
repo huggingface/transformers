@@ -27,16 +27,16 @@ Qwen2MoE is a language model series including decoder language models of differe
 
 ## Usage tips
 
-`Qwen2MoE-14B-beta` and `Qwen2MoE-14B-Chat-beta` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+`Qwen1.5-MoE-2.7B` and `Qwen1.5-MoE-2.7B-Chat` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen2MoE-14B-Chat-beta` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen1.5-MoE-2.7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/QwenMoE-14B-Chat", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/QwenMoE-14B-Chat")
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-2.7B-Chat", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-2.7B-Chat")
 
 >>> prompt = "Give me a short introduction to large language model."
 
