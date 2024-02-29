@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
 
@@ -130,6 +130,10 @@ class QuantoHfQuantizer(HfQuantizer):
                 return True
         else:
             return False
+
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+        max_memory = {key: val * 0.90 for key, val in max_memory.items()}
+        return max_memory
 
     def create_quantized_param(
         self,
