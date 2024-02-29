@@ -980,7 +980,9 @@ class GemmaModel(GemmaPreTrainedModel):
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
         if self.config._attn_implementation == "sdpa":
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, attention_mask, input_tensor, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, attention_mask, input_tensor, min_dtype
+            )
 
         return causal_mask
 

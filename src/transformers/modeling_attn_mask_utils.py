@@ -230,8 +230,7 @@ class AttentionMaskConverter:
         """
         # fmt: on
 
-        if attention_mask is not None  and attention_mask.device.type == "cuda":
-
+        if attention_mask is not None and attention_mask.device.type == "cuda":
             if expanded_mask.dtype == torch.bool:
                 raise ValueError(
                     "AttentionMaskConverter._unmask_unattended expects a float `expanded_mask`, got a BoolTensor."
@@ -240,7 +239,7 @@ class AttentionMaskConverter:
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
             is_tracing = torch.jit.is_tracing() or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             is_tracing |= isinstance(input_tensor, torch.fx.Proxy)
-            
+
             if not is_tracing and torch.any(attention_mask != 1):
                 # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -248,6 +247,7 @@ class AttentionMaskConverter:
                 return expanded_mask.mul(~torch.all(expanded_mask == min_dtype, dim=-1, keepdim=True))
 
         return expanded_mask
+
 
 def _prepare_4d_causal_attention_mask(
     attention_mask: Optional[torch.Tensor],

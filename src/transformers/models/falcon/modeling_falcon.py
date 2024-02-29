@@ -1123,7 +1123,9 @@ class FalconModel(FalconPreTrainedModel):
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     if seq_length > 1 and attention_mask.device.type == "cuda":
-                        attention_mask = AttentionMaskConverter._unmask_unattended(attention_mask, attention_mask_2d, hidden_states, min_dtype=min_dtype)
+                        attention_mask = AttentionMaskConverter._unmask_unattended(
+                            attention_mask, attention_mask_2d, hidden_states, min_dtype=min_dtype
+                        )
             else:
                 # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
                 attention_mask = _prepare_4d_causal_attention_mask(
