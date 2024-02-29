@@ -35,6 +35,82 @@ class BaseStreamer:
         raise NotImplementedError()
 
 
+class OutputStreamer(BaseStreamer):
+    """
+    Streams Output objects
+    """
+    def __init__(self,
+                 filter_func=None,
+                 cache = None,
+                 #queue=None,
+    ):
+        if filter_func is None:
+            filter_func = self._filter_func
+        self.filter_func = filter_func
+        if cache is None:
+            cache = []
+        self.cache = cache # incoming unprocessed outputs
+        #if queue is None:
+        #    queue = Queue()
+        #self.queue = queue # outgoing finalized outputs
+
+    def _filter_func(self, value):
+        """
+        Class-default behavior for self.filter_func.
+
+        self.filter_func will be called on each incoming value. Can be used to filter the stream to a particular
+        attribute on the value object, or to limit the stream to values meeting certain criteria.
+        """
+        return value
+
+    def process_incoming_value(self, value):
+        """
+        Called on each incoming value
+        """
+        return self.filter_func(value)
+
+    def is_ready(self):
+        """
+        Test whether the buffer is ready
+        """
+        return len(self.cache) > 1
+
+    def on_ready(self):
+        """
+        When the buffer is ready, flush it and do something with the values it was holding
+        """
+        values = self.cache[:]
+        self.cache = []
+        self.process_outgoing_values(values)
+
+    def process_outgoing_values(self, values):
+        """
+        What to do with the values that were previously in the buffer
+        """
+        #self.queue.put(values)
+        print(values)
+
+    def put(self, value):
+        value = self.process_incoming_value(value)
+        if value is not None:
+            if isinstance(value, list):
+                self.cache.extend(value)
+            else:
+                self.cache.append(value)
+
+            if self.is_ready():
+                self.on_ready()
+
+
+class TokenStreamer(OutputStreamer):
+    """
+    Filters the output stream on tokens to replicate legacy behavior
+    """
+    def _filter_func(self, value):
+        if hasattr(value, 'sequences'):
+            return value.sequences.cpu()
+
+
 class TextStreamer(BaseStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
