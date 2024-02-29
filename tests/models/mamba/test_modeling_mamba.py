@@ -376,7 +376,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence,"Hey how are you doing?\n\nA:\n\nI have a similar")
+        self.assertEqual(output_sentence, "Hey how are you doing?\n\nA:\n\nI have a similar")
 
     def test_simple_generate_cuda_kernels_tiny(self):
         expected_output = "Hello my name is John of the Golden, and I am the Lord"
