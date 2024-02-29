@@ -1084,11 +1084,9 @@ class LlamaModel(LlamaPreTrainedModel):
             )
 
         if self.config._attn_implementation == "sdpa":
-            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-            if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
-                    dtype
-                )
+            # is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
+            # if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
+            causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
 
         return causal_mask
 
@@ -1231,35 +1229,43 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                past_length = (
-                    cache_position[-1] + 1 if cache_position is not None else past_key_values.get_seq_length()
-                )
-                max_cache_length = past_key_values.get_max_length()
-                cache_length = past_length if max_cache_length is None else min(max_cache_length, int(past_length))
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
             # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+            attention_based_slicing = attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]
+            past_based_slicing = past_length < input_ids.shape[1]
+            # no_slicing = not attention_based_slicing and not past_based_slicing
+            input_ids_slice_index = (-(attention_mask.shape[1] - past_length) * attention_based_slicing) + (
+                past_length * past_based_slicing
+            )
+            # input_ids_slice_index = (-(attention_mask.shape[1] - past_length) * attention_based_slicing) + (past_length * past_based_slicing) + (0 * no_slicing)
+            # input_ids = input_ids[:, input_ids_slice_index:]
+            input_ids = input_ids[:, cache_position]
 
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+            # # Keep only the unprocessed tokens:
+            # # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # # input)
+            # if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+            #     input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # # input_ids based on the past_length.
+            # elif past_length < input_ids.shape[1]:
+            #     input_ids = input_ids[:, past_length:]
+            # # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+            # # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            # if (
+            #     max_cache_length is not None
+            #     and attention_mask is not None
+            #     and cache_length + input_ids.shape[1] > max_cache_length
+            # ):
+            #     attention_mask = attention_mask[:, -max_cache_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -1271,8 +1277,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        # input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        # cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
         position_ids = position_ids.contiguous() if position_ids is not None else None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
