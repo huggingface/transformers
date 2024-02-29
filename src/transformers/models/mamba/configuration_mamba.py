@@ -44,24 +44,29 @@ class MambaConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`MambaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
-        state_size (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
+        state_size (`int`, *optional*, defaults to 16): shape of the state space latents.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the model.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
-        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the beginning of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer
             as GPTNeoX.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the end of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer as
             GPTNeoX.
-        expand (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        time_step_rank (`<fill_type>`, *optional*, defaults to `"auto"`): <fill_docstring>
-        use_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        use_conv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        hidden_act (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
-        initializer_range (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
+        expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
+        time_step_rank (`int`, *optional*, defaults to `"auto"`): rank fo the discretization projection matrix.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
+        use_conv_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to use bias in the convolution layer of the mixer block.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        initializer_range (`float`, *optional*, defaults to 0.1):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether or not residuals should be in `float32`.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -84,7 +89,6 @@ class MambaConfig(PretrainedConfig):
     ```"""
 
     model_type = "mamba"
-    attribute_map = {"max_position_embeddings": "context_length"}
 
     def __init__(
         self,
