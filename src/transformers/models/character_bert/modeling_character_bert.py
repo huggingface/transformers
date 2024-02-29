@@ -743,20 +743,15 @@ class CharacterBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1480,8 +1475,8 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
         >>> from transformers import AutoTokenizer, CharacterBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
-        >>> model = CharacterBertForNextSentencePrediction.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-character_bert/character_helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForNextSentencePrediction.from_pretrained("google-character_bert/character_helboukkouri/character-bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1692,7 +1687,7 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        input_ids = input_ids.view(-1, input_ids.size(-2), input_ids.size(-1)) if input_ids is not None else None
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None

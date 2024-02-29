@@ -100,9 +100,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        mlm_vocab_file (`str`, *optional*, defaults to `None`):
+        mlm_vocab_file (`str`, *optional*):
             File containing the vocabulary for Masked Language Modeling.
-        max_word_length (`int`, *optional*, defaults to `50`):
+        max_word_length (`int`, *optional*, defaults to 50):
             The maximum token length in characters (or bytes since any non-ascii characters
             are eventually converted into a sequence of UTF-8 bytes).
         do_lower_case (`bool`, *optional*, defaults to `True`):

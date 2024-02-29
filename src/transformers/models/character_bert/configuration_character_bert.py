@@ -41,20 +41,20 @@ class CharacterBertConfig(PretrainedConfig):
 
 
     Args:
-        character_embeddings_dim (`int`, *optional*, defaults to `16`):
+        character_embeddings_dim (`int`, *optional*, defaults to 16):
             The size of the character embeddings.
         cnn_activation (`str`, *optional*, defaults to `"relu"`):
             The activation function to apply to the cnn representations.
-        cnn_filters (:
             obj:*list(list(int))*, *optional*, defaults to `[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`): The list of CNN filters to use in the CharacterCNN module.
-        num_highway_layers (`int`, *optional*, defaults to `2`):
+        cnn_filters (`<fill_type>`, *optional*): <fill_docstring>
+        num_highway_layers (`int`, *optional*, defaults to 2):
             The number of Highway layers to apply to the CNNs output.
-        max_word_length (`int`, *optional*, defaults to `50`):
+        max_word_length (`int`, *optional*, defaults to 50):
             The maximum token length in characters (actually, in bytes as any non-ascii characters will be converted to
             a sequence of utf-8 bytes).
         mlm_vocab_size (`int`, *optional*, defaults to 100000):
             Size of the output vocabulary for MLM.
-        vocab_size (`int`, *optional*, defaults to None):
+        vocab_size (`int`, *optional*):
             Vocabulary size of the CHARACTER_BERT model. This is not relevant here since CharacterBERT does not
             rely on WordPieces and can support any input token.
         hidden_size (`int`, *optional*, defaults to 768):
@@ -81,19 +81,19 @@ class CharacterBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
 
     Examples:
 
