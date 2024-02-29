@@ -647,7 +647,7 @@ def strip_model_name_and_prefix(name, _prefix=None):
     return name
 
 
-def tf_shard_checkpoint(weights, max_shard_size="10GB"):
+def tf_shard_checkpoint(weights, max_shard_size="10GB", weights_name: str = TF2_WEIGHTS_NAME):
     """
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
     given size.
@@ -695,13 +695,16 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
 
     # If we only have one shard, we return it
     if len(sharded_state_dicts) == 1:
-        return {TF2_WEIGHTS_NAME: sharded_state_dicts[0]}, None
+        return {weights_name: sharded_state_dicts[0]}, None
 
     # Otherwise, let's build the index
     weight_map = {}
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
-        shard_file = TF2_WEIGHTS_NAME.replace(".h5", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.h5")
+        shard_file = weights_name.replace(".h5", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.h5")
+        shard_file = shard_file.replace(
+            ".safetensors", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.safetensors"
+        )
         shards[shard_file] = shard
         for weight in shard:
             weight_name = weight.name
@@ -2415,7 +2418,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else TF2_WEIGHTS_NAME
         output_model_file = os.path.join(save_directory, weights_name)
 
-        shards, index = tf_shard_checkpoint(self.weights, max_shard_size)
+        shards, index = tf_shard_checkpoint(self.weights, max_shard_size, weights_name=weights_name)
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -2438,7 +2441,8 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 self.save_weights(output_model_file)
             logger.info(f"Model weights saved in {output_model_file}")
         else:
-            save_index_file = os.path.join(save_directory, TF2_WEIGHTS_INDEX_NAME)
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
+            save_index_file = os.path.join(save_directory, save_index_file)
             # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as index_file:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"
@@ -2449,19 +2453,22 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 f"index located at {save_index_file}."
             )
             for shard_file, shard in shards.items():
-                with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
-                    layers = []
-                    for layer in sorted(shard, key=lambda x: x.name):
-                        if "model." in layer.name or len(layer.name.split("/")) == 1:
-                            layer_name = layer.name
-                        else:
-                            layer_name = "/".join(layer.name.split("/")[1:])
-                        param_dset = shard_file.create_dataset(
-                            layer_name, layer.numpy().shape, dtype=layer.numpy().dtype
-                        )
-                        param_dset[:] = layer.numpy()
-                        layers.append(layer_name.encode("utf8"))
-                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
+                if safe_serialization:
+                    safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "tf"})
+                else:
+                    with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
+                        layers = []
+                        for layer in sorted(shard, key=lambda x: x.name):
+                            if "model." in layer.name or len(layer.name.split("/")) == 1:
+                                layer_name = layer.name
+                            else:
+                                layer_name = "/".join(layer.name.split("/")[1:])
+                            param_dset = shard_file.create_dataset(
+                                layer_name, layer.numpy().shape, dtype=layer.numpy().dtype
+                            )
+                            param_dset[:] = layer.numpy()
+                            layers.append(layer_name.encode("utf8"))
+                        save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(
