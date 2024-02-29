@@ -246,7 +246,7 @@ class MambaMixer(nn.Module):
 
     def forward(self, hidden_states, inference_params=None):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
-            return self.cuda_kernel_forward(hidden_states, inference_params)
+            return self.cuda_kernels_forward(hidden_states, inference_params)
         return self.slow_forward(hidden_states, inference_params)
 
 
