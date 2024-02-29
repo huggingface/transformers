@@ -99,7 +99,7 @@ class MambaConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         expand=2,
-        dt_rank="auto",
+        time_step_rank="auto",
         tie_word_embeddings=True,
         use_bias=False,
         use_conv_bias=True,
@@ -114,10 +114,10 @@ class MambaConfig(PretrainedConfig):
         self.state_size = state_size
         self.num_hidden_layers = num_hidden_layers
         self.layer_norm_epsilon = layer_norm_epsilon
-        self.d_inner = hidden_size * 2
         self.conv_kernel = 4
         self.expand = expand
-        self.time_step_rank = math.ceil(self.hidden_size / 16) if dt_rank == "auto" else dt_rank
+        self.intermediate_size = int(self.expand * self.hidden_size)
+        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -127,7 +127,6 @@ class MambaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.residual_in_fp32 = residual_in_fp32
         self.tie_word_embeddings = tie_word_embeddings
-        self.dt_rank = dt_rank
         self.use_cache = use_cache
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

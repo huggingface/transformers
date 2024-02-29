@@ -50,7 +50,7 @@ class MambaModelTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
-        intermediate_size=37,
+        intermediate_size=32,
         hidden_act="silu",
         hidden_dropout_prob=0.1,
         max_position_embeddings=512,
@@ -183,11 +183,11 @@ class MambaModelTester:
         outputs = model(input_ids)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :2])
+        outputs = model(input_ids[:, :2], use_cache=True)
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, 2:], state=outputs.state)
+        outputs = model(input_ids[:, 2:], inference_params=outputs.inference_params)
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
@@ -227,6 +227,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_model_parallel = True
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
+    test_model_parallel = False
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
@@ -261,6 +262,35 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip("No attention in mamba")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    # @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    
+        # some params shouldn't be scattered by nn.DataParallel
+        # so just remove them if they are present.
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
+        for k in blacklist_non_batched_params:
+            inputs_dict.pop(k, None)
+    
+        # move input tensors to cuda:O
+        for k, v in inputs_dict.items():
+            if torch.is_tensor(v):
+                inputs_dict[k] = v.to(0)
+    
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            model.to(0)
+            model.eval()
+    
+            # Wrap model in nn.DataParallel
+            model = torch.nn.DataParallel(model)
+            with torch.no_grad():
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_mamba_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -327,11 +357,11 @@ class MambaIntegrationTests(unittest.TestCase):
         model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
 
-        logits = model(input_ids=input_ids)
+        logits = model(input_ids=input_ids).logits
 
         EXPECTED_LOGITS = torch.tensor([ -6.7070, -24.7656,  -6.4766,  -6.0078,  -9.7812, -13.0703, -11.4688, -10.6562,  -9.3359,  -9.4766,  -9.1719,  -7.9102, -13.0469,  -8.7266, -8.4297,  -8.4766,  -9.1094, -11.5234, -11.1250, -11.7812, -12.1562,  -12.8359, -12.1797, -13.4062, -13.6406, -13.4141, -13.6562,  -9.2344,   -7.9805,  -7.2188,  -9.9219,  -9.1719,  -7.8438,  -9.1250, -10.1094,  -10.2344, -10.2266,  -9.7578, -11.0000, -10.6406], device='cuda:0',dtype=torch.float16)  # fmt: skip
 
-        torch.testing.assert_allclose(logits, EXPECTED_LOGITS)
+        torch.testing.assert_allclose(logits[0,0,:40], EXPECTED_LOGITS)
 
         out = model.generate(input_ids, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
@@ -347,6 +377,17 @@ class MambaIntegrationTests(unittest.TestCase):
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16).to(torch_device)
+
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+    def test_simple_generate_cuda_kernels_mid(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-790m", torch_dtype=torch.float16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())

@@ -71,20 +71,20 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class MambaMixer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.d_model = config.hidden_size
-        self.d_state = config.state_size
-        self.d_conv = config.conv_kernel
+        self.hidden_size = config.hidden_size
+        self.ssm_state_size = config.state_size
+        self.conv_kernel_size = config.conv_kernel
         self.expand = config.expand
-        self.d_inner = int(self.expand * self.d_model)
+        self.intermediate_size = config.intermediate_size
         self.time_step_rank = config.time_step_rank
         self.layer_idx = layer_idx
 
         self.conv1d = nn.Conv1d(
-            in_channels=self.d_inner,
-            out_channels=self.d_inner,
+            in_channels=self.intermediate_size,
+            out_channels=self.intermediate_size,
             bias=config.use_conv_bias,
             kernel_size=config.conv_kernel,
-            groups=self.d_inner,
+            groups=self.intermediate_size,
             padding=config.conv_kernel - 1,
         )
 
@@ -92,22 +92,22 @@ class MambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         # projection of the input hidden states
-        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=config.use_bias)
+        self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependant
-        self.x_proj = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
+        self.x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
-        self.dt_proj = nn.Linear(self.time_step_rank, self.d_inner, bias=True)
+        self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
 
         # S4D real initialization. These are not discretized!
         # THe core is to load them, compute the discrete states, then write the updates state. Keeps the memory bounded
-        A = torch.arange(1, self.d_state + 1, dtype=torch.float32)[None, :].expand(self.d_inner, -1).contiguous()
+        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :].expand(self.intermediate_size, -1).contiguous()
         self.A_log = nn.Parameter(
             torch.log(A)
         )  # TODO this parameter should be kept in float32. We don't have support for that I think
 
         # D "skip" parameter
-        self.D = nn.Parameter(torch.ones(self.d_inner))  # Keep in fp32
-        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.use_bias)
+        self.D = nn.Parameter(torch.ones(self.intermediate_size))  # Keep in fp32
+        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor, inference_params=None):
         # 1. Gated MLP's linear projection
@@ -123,14 +123,14 @@ class MambaMixer(nn.Module):
             )
             hidden_states = hidden_states.unsqueeze(-1)
         else:
-            conv_state = nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
+            conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
             inference_params.conv_states[self.layer_idx].copy_(conv_state)
             hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
-        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
+        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
         discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
 
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
@@ -176,17 +176,16 @@ class MambaCache:
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.seqlen_offset = 0
 
-        d_model = config.hidden_size
-        d_state = config.state_size
-        expand = config.expand
-        d_conv = config.conv_kernel
+        intermediate_size = config.intermediate_size
+        ssm_state_size = config.state_size
+        conv_kernel_size = config.conv_kernel
 
         self.conv_states = {
-            i: torch.zeros(batch_size, d_model * expand, d_conv, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(batch_size, d_model * expand, d_state, device=device, dtype=dtype)
+            i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
 
@@ -224,16 +223,16 @@ class MambaMixerSlow(MambaMixer):
 
         else:
             inference_params.conv_states[self.layer_idx].copy_(
-                nn.functional.pad(hidden_states, (self.d_conv - hidden_states.shape[-1], 0))
+                nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(hidden_states.transpose(1, 2))
-        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.d_state, self.d_state], dim=-1)
+        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
         discrete_time_step = self.dt_proj(time_step)
-        A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
+        A = -torch.exp(self.A_log.float())  # (intermediate_size, ssm_state_size)
 
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
@@ -332,7 +331,7 @@ class MambaPreTrainedModel(PreTrainedModel):
         #
         # # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
         # dt = torch.exp(
-        #     torch.rand(self.d_inner, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
+        #     torch.rand(self.intermediate_size, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
         #     + math.log(dt_min)
         # ).clamp(min=dt_init_floor)
         # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
@@ -541,7 +540,8 @@ class MambaModel(MambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-        inference_params.seqlen_offset += inputs_embeds.shape[1]
+        if use_cache:
+            inference_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.norm_f(hidden_states)
 
