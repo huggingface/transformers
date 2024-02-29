@@ -94,7 +94,6 @@ class HieraBlockTest(unittest.TestCase):
 
 
 class HieraModelTester:
-
     all_model_classes = (HieraModel, HieraPreTrainedModel) if is_torch_available() else ()
 
     def __init__(
@@ -225,7 +224,10 @@ class HieraModelTester:
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             num_patches = (
-                int(((self.input_size[0] - self.patch_kernel[0] + 2 * self.patch_padding[0]) / self.patch_stride[0]) + 1)
+                int(
+                    ((self.input_size[0] - self.patch_kernel[0] + 2 * self.patch_padding[0]) / self.patch_stride[0])
+                    + 1
+                )
                 ** 2
             )
             flat_q_stride = math.prod(self.q_stride)

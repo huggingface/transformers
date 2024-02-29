@@ -39,9 +39,7 @@ else:
         "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "HieraModel",
         "HieraPreTrainedModel",
-        "HieraBlock",
     ]
-
 
 
 if TYPE_CHECKING:
@@ -57,11 +55,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_hiera import (
-            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, 
-            HieraModel, 
+            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            HieraModel,
             HieraPreTrainedModel,
-            HieraBlock,
-            )
+        )
 
 else:
     import sys

@@ -500,9 +500,9 @@ class Head(nn.Module):
 
 
 @add_start_docstrings(
-"""
-Patch embedding that supports any number of spatial dimensions (1d, 2d, 3d).
-"""
+    """
+    Patch embedding that supports any number of spatial dimensions (1d, 2d, 3d).
+    """
 )
 class PatchEmbedding(nn.Module):
     def __init__(
@@ -553,26 +553,26 @@ class HieraPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-"""
-Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
+    """
+    Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
 
-This model is a PyTorch implementation of the Hiera architecture for image classification. It introduces a hierarchical design that processes images in a coarse-to-fine manner, efficiently handling various scales and complexities within the images.
+    This model is a PyTorch implementation of the Hiera architecture for image classification. It introduces a hierarchical design that processes images in a coarse-to-fine manner, efficiently handling various scales and complexities within the images.
 
-The model is built on the principles of Vision Transformers but introduces mask units to focus on specific regions of interest, significantly reducing computational requirements while maintaining competitive performance.
+    The model is built on the principles of Vision Transformers but introduces mask units to focus on specific regions of interest, significantly reducing computational requirements while maintaining competitive performance.
 
-Parameters:
-    config ([`HieraConfig`]): Model configuration class with all the parameters of the model.
-        Initializing with a config file does not load the weights associated with the model, only the
-        configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    Parameters:
+        config ([`HieraConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 
-Example usage:
-    >>> from your_model_file import Hiera, HieraConfig
-    >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
+    Example usage:
+        >>> from your_model_file import Hiera, HieraConfig
+        >>> config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
 
-    >>> model = Hiera(config)
-    >>> inputs = torch.rand((1, 3, 224, 224))
-    >>> outputs = model(inputs)
-"""
+        >>> model = Hiera(config)
+        >>> inputs = torch.rand((1, 3, 224, 224))
+        >>> outputs = model(inputs)
+    """
 )
 class HieraModel(HieraPreTrainedModel):
     config_class = HieraConfig
@@ -742,18 +742,18 @@ class HieraModel(HieraPreTrainedModel):
             return self.position_embeddings
 
     @add_start_docstrings_to_model_forward(
-    """
-    The forward pass for the Hiera model.
+        """
+        The forward pass for the Hiera model.
 
-    Args:
-        pixel_values (`torch.Tensor`): Input tensor of shape `(batch_size, channels, height, width)`.
+        Args:
+            pixel_values (`torch.Tensor`): Input tensor of shape `(batch_size, channels, height, width)`.
 
-        mask (`torch.Tensor`, optional): A boolean tensor of shape `(batch_size, num_mask_units)` indicating which mask units to keep (True) or remove (False).
-        mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
-        Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
-        return_dict (`bool`, optional): Whether to return a dictionary of outputs or a plain tuple.
-        return_intermediates (`bool`, optional): Whether to return intermediate features from each stage of the model.
-    """
+            mask (`torch.Tensor`, optional): A boolean tensor of shape `(batch_size, num_mask_units)` indicating which mask units to keep (True) or remove (False).
+            mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
+            Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
+            return_dict (`bool`, optional): Whether to return a dictionary of outputs or a plain tuple.
+            return_intermediates (`bool`, optional): Whether to return intermediate features from each stage of the model.
+        """
     )
     def forward(
         self,
