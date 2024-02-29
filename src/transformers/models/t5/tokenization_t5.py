@@ -130,6 +130,9 @@ class T5Tokenizer(PreTrainedTokenizer):
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
@@ -151,6 +154,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=None,
+        add_prefix_space=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
@@ -200,6 +204,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             eos_token=eos_token,
@@ -209,6 +214,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -371,8 +377,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -380,7 +385,11 @@ class T5Tokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        text = text.replace(SPIECE_UNDERLINE, " ")
+        if self.add_prefix_space:
+            text = SPIECE_UNDERLINE + text
+
+        tokens = super().tokenize(text, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
@@ -420,9 +429,11 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
+            tokens[0] = tokens[0][1:]
+
         current_sub_tokens = []
-        # since we manually add the prefix space, we have to remove it
-        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:
