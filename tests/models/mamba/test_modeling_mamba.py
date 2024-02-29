@@ -383,6 +383,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
+    @slow
     def test_simple_generate_cuda_kernels_small(self):
         expected_output = "Hello my name is\n\nI am a student of the art of"
 
@@ -394,6 +395,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
+    @slow
     def test_simple_generate_cuda_kernels_mid(self):
         expected_output = "Hello my name is John and I am a software engineer. I have"
 
@@ -405,6 +407,7 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
+    @slow
     def test_simple_generate_cuda_kernels_big(self):
         expected_output = "Hello my name is John. I am a student at the University of"
 
