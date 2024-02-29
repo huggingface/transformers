@@ -60,6 +60,9 @@ jobs:
           pip install -e ".[testing]" 
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
