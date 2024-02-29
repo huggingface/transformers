@@ -465,6 +465,9 @@ class Message:
         failures = {k: v["failed"] for k, v in self.additional_results.items()}
         errors = {k: v["error"] for k, v in self.additional_results.items()}
 
+        # Force-skip some tests for inidivdual workflows.
+        skip_errored_out_tests = os.environ.get("CI_SKIP_ERRORED_OUT", False)
+
         individual_reports = []
         for key, value in failures.items():
             device_report = self.get_device_report(value)
@@ -476,7 +479,8 @@ class Message:
                 if device_report:
                     report = f"{device_report}{report}"
 
-                individual_reports.append(report)
+                if (errors[key] and not skip_errored_out_tests) or device_report:
+                    individual_reports.append(report)
 
         header = "Single |  Multi | Category\n"
         failures_report = prepare_reports(

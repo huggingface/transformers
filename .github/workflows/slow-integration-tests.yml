@@ -105,6 +105,7 @@ jobs:
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           SETUP_STATUS: success
+          CI_SKIP_ERRORED_OUT: true
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk

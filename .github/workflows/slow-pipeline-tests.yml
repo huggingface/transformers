@@ -13,6 +13,7 @@ on:
   push:
     branches:
       - run_scheduled_ci*
+      - younes-test-workflow
 
 env:
   HF_HOME: /mnt/cache
@@ -188,6 +189,7 @@ jobs:
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           SETUP_STATUS: success # No need for setup status here
+          CI_SKIP_ERRORED_OUT: true
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
