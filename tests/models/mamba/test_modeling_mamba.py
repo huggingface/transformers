@@ -53,13 +53,13 @@ class MambaModelTester:
         intermediate_size=37,
         hidden_act="silu",
         hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
         num_labels=3,
         num_choices=4,
         scope=None,
+        tie_word_embeddings=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,6 +81,7 @@ class MambaModelTester:
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
+        self.tie_word_embeddings = tie_word_embeddings
 
     def get_large_model_config(self):
         return MambaConfig.from_pretrained("ArthurZ/mamba-130m")
@@ -122,8 +123,6 @@ class MambaModelTester:
             num_hidden_layers=self.num_hidden_layers,
             intermediate_size=self.intermediate_size,
             activation_function=self.hidden_act,
-            # resid_pdrop=self.hidden_dropout_prob,
-            # attn_pdrop=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             use_cache=True,
@@ -131,6 +130,7 @@ class MambaModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
+            tie_word_embeddings=self.tie_word_embeddings
         )
 
     def get_pipeline_config(self):
