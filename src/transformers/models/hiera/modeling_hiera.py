@@ -69,7 +69,8 @@ def get_resized_mask(target_size: torch.Size, mask: torch.Tensor) -> torch.Tenso
 
 
 def do_masked_conv(x: torch.Tensor, conv: nn.Module, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-    """Zero-out the masked regions of the input before conv.
+    """
+    Zero-out the masked regions of the input before conv.
     Prevents leakage of masked regions when using overlapping kernels.
     """
     if conv is None:
@@ -296,9 +297,9 @@ class Reroll(nn.Module):
         Roll the given tensor back up to spatial order assuming it's from the given block.
 
         If no mask is provided:
-            - Returns [B, H, W, C] for 2d, [B, T, H, W, C] for 3d, etc.
+            Returns [B, H, W, C] for 2d, [B, T, H, W, C] for 3d, etc.
         If a mask is provided:
-            - Returns [B, #MUs, MUy, MUx, C] for 2d, etc.
+            Returns [B, #MUs, MUy, MUx, C] for 2d, etc.
         """
         schedule, size = self.schedule[block_idx]
         B, N, C = x.shape
@@ -377,12 +378,12 @@ class MaskUnitAttention(nn.Module):
     ):
         """
         Args:
-        input_dim (`int`): The input feature dimensions.
-        output_dim (`int`): The output feature dimensions.
-        number_of_heads (`int`): The number of attention heads.
-        - q_stride: If greater than 1, pool q with this stride. The stride should be flattened (e.g., 2x2 = 4).
-        - window_size: The current (flattened) size of a mask unit *after* pooling (if any).
-        - use_mask_unit_attention: Use Mask Unit or Global Attention.
+            input_dim (`int`): The input feature dimensions.
+            output_dim (`int`): The output feature dimensions.
+            number_of_heads (`int`): The number of attention heads.
+            q_stride: If greater than 1, pool q with this stride. The stride should be flattened (e.g., 2x2 = 4).
+            window_size: The current (flattened) size of a mask unit *after* pooling (if any).
+            use_mask_unit_attention: Use Mask Unit or Global Attention.
         """
         super().__init__()
 
@@ -499,7 +500,7 @@ class Head(nn.Module):
 
 
 @add_start_docstrings(
-    """
+"""
 Patch embedding that supports any number of spatial dimensions (1d, 2d, 3d).
 """
 )
@@ -552,7 +553,7 @@ class HieraPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    """
+"""
 Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles.
 
 This model is a PyTorch implementation of the Hiera architecture for image classification. It introduces a hierarchical design that processes images in a coarse-to-fine manner, efficiently handling various scales and complexities within the images.
@@ -571,7 +572,7 @@ Example usage:
     >>> model = Hiera(config)
     >>> inputs = torch.rand((1, 3, 224, 224))
     >>> outputs = model(inputs)
-                      """
+"""
 )
 class HieraModel(HieraPreTrainedModel):
     config_class = HieraConfig
@@ -741,7 +742,7 @@ class HieraModel(HieraPreTrainedModel):
             return self.position_embeddings
 
     @add_start_docstrings_to_model_forward(
-        """
+    """
     The forward pass for the Hiera model.
 
     Args:
@@ -750,14 +751,8 @@ class HieraModel(HieraPreTrainedModel):
         mask (`torch.Tensor`, optional): A boolean tensor of shape `(batch_size, num_mask_units)` indicating which mask units to keep (True) or remove (False).
         mask should be a boolean tensor of shape [batch_size , #MUt*#MUy*#MUx] where #MU are the number of mask units in that input_dim.
         Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
-
-
         return_dict (`bool`, optional): Whether to return a dictionary of outputs or a plain tuple.
-
         return_intermediates (`bool`, optional): Whether to return intermediate features from each stage of the model.
-
-
-
     """
     )
     def forward(
@@ -767,7 +762,6 @@ class HieraModel(HieraPreTrainedModel):
         return_dict: Optional[bool] = True,
         return_intermediates: bool = True,
     ) -> Union[Tuple[torch.Tensor], HieraModelOutput]:
-        """ """
         # Slowfast training passes in a list
         if isinstance(pixel_values, list):
             pixel_values = pixel_values[0]
