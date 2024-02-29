@@ -1043,6 +1043,7 @@ if __name__ == "__main__":
         "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
         "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
+        "Quantization tests": "run_tests_quantization_torch_gpu",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
