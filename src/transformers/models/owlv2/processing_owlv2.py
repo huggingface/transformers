@@ -37,6 +37,7 @@ class Owlv2Processor(ProcessorMixin):
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Owlv2ImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")

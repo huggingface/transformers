@@ -27,7 +27,6 @@ transcripts/translations autoregressively. Speech2Text has been fine-tuned on se
 
 This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text).
 
-
 ## Inference
 
 Speech2Text is a speech model that accepts a float tensor of log-mel filter-bank features extracted from the speech
@@ -43,7 +42,6 @@ The feature extractor depends on `torchaudio` and the tokenizer depends on `sent
 install those packages before running the examples. You could either install those as extra speech dependencies with
 `pip install transformers"[speech, sentencepiece]"` or install the packages separately with `pip install torchaudio sentencepiece`. Also `torchaudio` requires the development version of the [libsndfile](http://www.mega-nerd.com/libsndfile/) package which can be installed via a system package manager. On Ubuntu it can
 be installed as follows: `apt install libsndfile1-dev`
-
 
 - ASR and Speech Translation
 
@@ -98,7 +96,6 @@ be installed as follows: `apt install libsndfile1-dev`
 
 See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look for Speech2Text checkpoints.
 
-
 ## Speech2TextConfig
 
 [[autodoc]] Speech2TextConfig
@@ -125,6 +122,9 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
     - batch_decode
     - decode
 
+<frameworkcontent>
+<pt>
+
 ## Speech2TextModel
 
 [[autodoc]] Speech2TextModel
@@ -135,6 +135,9 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
 [[autodoc]] Speech2TextForConditionalGeneration
     - forward
 
+</pt>
+<tf>
+
 ## TFSpeech2TextModel
 
 [[autodoc]] TFSpeech2TextModel
@@ -144,3 +147,6 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
 
 [[autodoc]] TFSpeech2TextForConditionalGeneration
     - call
+
+</tf>
+</frameworkcontent>

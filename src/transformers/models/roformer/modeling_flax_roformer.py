@@ -49,7 +49,7 @@ FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "junnyu/roformer_chinese_char_small",
     "junnyu/roformer_chinese_char_base",
     "junnyu/roformer_small_discriminator",
-    "junnyu/roformer_small_generator"
+    "junnyu/roformer_small_generator",
     # See all RoFormer models at https://huggingface.co/models?filter=roformer
 ]
 
@@ -59,9 +59,10 @@ ROFORMER_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 

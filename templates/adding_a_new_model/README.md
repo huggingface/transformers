@@ -103,7 +103,7 @@ tests/test_modeling_tf_<model_name>.py
 
 You can run the tests to ensure that they all pass:
 
-```
+```bash
 python -m pytest ./tests/test_*<model_name>*.py
 ```
 
@@ -217,7 +217,7 @@ Next the questionnaire will ask
 Should we add # Copied from statements when creating the new modeling file?
 ```
 
-This is the intenal mechanism used in the library to make sure code copied from various modeling files stay consistent.
+This is the internal mechanism used in the library to make sure code copied from various modeling files stay consistent.
 If you plan to completely rewrite the modeling file, you should answer no, whereas if you just want to tweak one part
 of the model, you should answer yes.
 
@@ -236,7 +236,7 @@ depending on your choices).
 
 You will also see a doc file and tests for your new models. First you should run
 
-```
+```bash
 make style
 make fix-copies
 ```
@@ -247,7 +247,7 @@ and then you can start tweaking your model. You should:
 
 Once you're done, you can run the tests to ensure that they all pass:
 
-```
+```bash
 python -m pytest ./tests/test_*<model_name>*.py
 ```
 

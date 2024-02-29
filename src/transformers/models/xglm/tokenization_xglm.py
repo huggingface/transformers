@@ -127,7 +127,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         self.num_madeup_words = 7
         madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
         kwargs["additional_special_tokens"] += [
             word for word in madeup_words if word not in kwargs["additional_special_tokens"]
         ]

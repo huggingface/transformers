@@ -33,30 +33,30 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-dutch": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-base": "https://huggingface.co/FacebookAI/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
+        "FacebookAI/xlm-roberta-large": "https://huggingface.co/FacebookAI/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
+        "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model"
         ),
-        "xlm-roberta-large-finetuned-conll02-spanish": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model"
         ),
-        "xlm-roberta-large-finetuned-conll03-english": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-large-finetuned-conll03-english": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model"
         ),
-        "xlm-roberta-large-finetuned-conll03-german": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model"
+        "FacebookAI/xlm-roberta-large-finetuned-conll03-german": (
+            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model"
         ),
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlm-roberta-base": 512,
-    "xlm-roberta-large": 512,
-    "xlm-roberta-large-finetuned-conll02-dutch": 512,
-    "xlm-roberta-large-finetuned-conll02-spanish": 512,
-    "xlm-roberta-large-finetuned-conll03-english": 512,
-    "xlm-roberta-large-finetuned-conll03-german": 512,
+    "FacebookAI/xlm-roberta-base": 512,
+    "FacebookAI/xlm-roberta-large": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll03-english": 512,
+    "FacebookAI/xlm-roberta-large-finetuned-conll03-german": 512,
 }
 
 
@@ -146,7 +146,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

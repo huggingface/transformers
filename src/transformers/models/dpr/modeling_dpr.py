@@ -30,7 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bert.modeling_bert import BertEncoder, BertModel
+from ..bert.modeling_bert import BertModel
 from .configuration_dpr import DPRConfig
 
 
@@ -82,8 +82,8 @@ class DPRContextEncoderOutput(ModelOutput):
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -110,8 +110,8 @@ class DPRQuestionEncoderOutput(ModelOutput):
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -143,8 +143,8 @@ class DPRReaderOutput(ModelOutput):
     start_logits: torch.FloatTensor
     end_logits: torch.FloatTensor = None
     relevance_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class DPRPreTrainedModel(PreTrainedModel):
@@ -163,10 +163,6 @@ class DPRPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BertEncoder):
-            module.gradient_checkpointing = value
 
 
 class DPREncoder(DPRPreTrainedModel):

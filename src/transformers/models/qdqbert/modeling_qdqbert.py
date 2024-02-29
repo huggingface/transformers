@@ -66,11 +66,11 @@ if is_pytorch_quantization_available():
             " https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization."
         )
 
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "QDQBertConfig"
 
 QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bert-base-uncased",
+    "google-bert/bert-base-uncased",
     # See all BERT models at https://huggingface.co/models?filter=bert
 ]
 
@@ -581,20 +581,15 @@ class QDQBertEncoder(nn.Module):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -756,10 +751,6 @@ class QDQBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, QDQBertEncoder):
-            module.gradient_checkpointing = value
 
 
 QDQBERT_START_DOCSTRING = r"""
@@ -1085,10 +1076,10 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
         >>> from transformers import AutoTokenizer, QDQBertLMHeadModel, QDQBertConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        >>> config = QDQBertConfig.from_pretrained("bert-base-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+        >>> config = QDQBertConfig.from_pretrained("google-bert/bert-base-cased")
         >>> config.is_decoder = True
-        >>> model = QDQBertLMHeadModel.from_pretrained("bert-base-cased", config=config)
+        >>> model = QDQBertLMHeadModel.from_pretrained("google-bert/bert-base-cased", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1328,8 +1319,8 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
         >>> from transformers import AutoTokenizer, QDQBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = QDQBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        >>> model = QDQBertForNextSentencePrediction.from_pretrained("google-bert/bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."

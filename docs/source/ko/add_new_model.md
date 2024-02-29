@@ -369,7 +369,7 @@ def _init_weights(self, module):
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True
@@ -493,7 +493,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 
 **7. 순방향 패스 구현하기**
 
-🤗 Transformers 구현에 사전 훈련된 가중치를 정확하게 로드한 후에는 순방향 패스가 올바르게 구현되었는지 확인해야 합니다. [원본 저장소에 익숙해지기](#34-run-a-pretrained-checkpoint-using-the-original-repository)에서 이미 원본 저장소를 사용하여 모델의 순방향 패스를 실행하는 스크립트를 만들었습니다. 이제 원본 대신 🤗 Transformers 구현을 사용하는 유사한 스크립트를 작성해야 합니다. 다음과 같이 작성되어야 합니다:
+🤗 Transformers 구현에 사전 훈련된 가중치를 정확하게 로드한 후에는 순방향 패스가 올바르게 구현되었는지 확인해야 합니다. [원본 저장소에 익숙해지기](#3-4-run-a-pretrained-checkpoint-using-the-original-repository)에서 이미 원본 저장소를 사용하여 모델의 순방향 패스를 실행하는 스크립트를 만들었습니다. 이제 원본 대신 🤗 Transformers 구현을 사용하는 유사한 스크립트를 작성해야 합니다. 다음과 같이 작성되어야 합니다:
 
 ```python
 model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")

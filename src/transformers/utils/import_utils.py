@@ -24,7 +24,7 @@ import subprocess
 import sys
 import warnings
 from collections import OrderedDict
-from functools import lru_cache, wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
 from typing import Any, Tuple, Union
@@ -64,16 +64,18 @@ USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
+# `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
+
+ACCELERATE_MIN_VERSION = "0.21.0"
+FSDP_MIN_VERSION = "1.12.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
-_flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
-    importlib.metadata.version("flash_attn")
-) >= version.parse("2.0.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -94,6 +96,7 @@ except importlib.metadata.PackageNotFoundError:
     except importlib.metadata.PackageNotFoundError:
         _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
+_g2p_en_available = _is_package_available("g2p_en")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
@@ -107,6 +110,8 @@ _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
+# `importlib.metadata.version` doesn't work with `awq`
+_auto_awq_available = importlib.util.find_spec("awq") is not None
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -131,7 +136,7 @@ if _sklearn_available:
 _smdistributed_available = importlib.util.find_spec("smdistributed") is not None
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
-_sudachipy_available = _is_package_available("sudachipy")
+_sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
 _tensorflow_probability_available = _is_package_available("tensorflow_probability")
 _tensorflow_text_available = _is_package_available("tensorflow_text")
 _tf2onnx_available = _is_package_available("tf2onnx")
@@ -168,6 +173,7 @@ else:
                 "tf-nightly",
                 "tf-nightly-cpu",
                 "tf-nightly-gpu",
+                "tf-nightly-rocm",
                 "intel-tensorflow",
                 "intel-tensorflow-avx512",
                 "tensorflow-rocm",
@@ -258,6 +264,19 @@ def get_torch_version():
     return _torch_version
 
 
+def is_torch_sdpa_available():
+    if not is_torch_available():
+        return False
+    elif _torch_version == "N/A":
+        return False
+
+    # NOTE: We require torch>=2.1 (and not torch>=2.0) to use SDPA in Transformers for two reasons:
+    # - Allow the global use of the `scale` argument introduced in https://github.com/pytorch/pytorch/pull/95259
+    # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
+    # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
+    return version.parse(_torch_version) >= version.parse("2.1.1")
+
+
 def is_torchvision_available():
     return _torchvision_available
 
@@ -302,26 +321,7 @@ def is_torch_bf16_gpu_available():
 
     import torch
 
-    # since currently no utility function is available we build our own.
-    # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
-    # with additional check for torch version
-    # to succeed: (torch is required to be >= 1.10 anyway)
-    # 1. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
-    # 2. if using gpu, CUDA >= 11
-    # 3. torch.autocast exists
-    # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
-    # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if torch.cuda.is_available() and torch.version.cuda is not None:
-        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-            return False
-        if int(torch.version.cuda.split(".")[0]) < 11:
-            return False
-        if not hasattr(torch.cuda.amp, "autocast"):
-            return False
-    else:
-        return False
-
-    return True
+    return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 
 
 def is_torch_bf16_cpu_available():
@@ -348,6 +348,53 @@ def is_torch_bf16_available():
         FutureWarning,
     )
     return is_torch_bf16_gpu_available()
+
+
+@lru_cache()
+def is_torch_fp16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        _ = x @ x
+
+        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
+        # models use this layer.
+        batch, sentence_length, embedding_dim = 3, 4, 5
+        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
+        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        _ = layer_norm(embedding)
+
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache()
+def is_torch_bf16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if device == "cuda":
+        return is_torch_bf16_gpu_available()
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
 
 
 def is_torch_tf32_available():
@@ -406,6 +453,10 @@ def is_flax_available():
 
 def is_ftfy_available():
     return _ftfy_available
+
+
+def is_g2p_en_available():
+    return _g2p_en_available
 
 
 @lru_cache()
@@ -520,6 +571,10 @@ def is_apex_available():
     return _apex_available
 
 
+def is_aqlm_available():
+    return _aqlm_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -585,10 +640,29 @@ def is_flash_attn_2_available():
     if not is_torch_available():
         return False
 
+    if not _is_package_available("flash_attn"):
+        return False
+
     # Let's add an extra check to see if cuda is available
     import torch
 
-    return _flash_attn_2_available and torch.cuda.is_available()
+    if not torch.cuda.is_available():
+        return False
+
+    if torch.version.cuda:
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+    elif torch.version.hip:
+        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
+    else:
+        return False
+
+
+def is_flash_attn_greater_or_equal_2_10():
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
 def is_torchdistx_available():
@@ -621,18 +695,22 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = None):
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
 
 
-def is_fsdp_available(min_version: str = "1.12.0"):
+def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
     return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
 def is_optimum_available():
     return _optimum_available
+
+
+def is_auto_awq_available():
+    return _auto_awq_available
 
 
 def is_auto_gptq_available():
@@ -655,6 +733,7 @@ def is_tokenizers_available():
     return _tokenizers_available
 
 
+@lru_cache
 def is_vision_available():
     _pil_available = importlib.util.find_spec("PIL") is not None
     if _pil_available:
@@ -813,6 +892,19 @@ def is_decord_available():
 
 def is_sudachi_available():
     return _sudachipy_available
+
+
+def get_sudachi_version():
+    return _sudachipy_version
+
+
+def is_sudachi_projection_available():
+    if not is_sudachi_available():
+        return False
+
+    # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
+    # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
+    return version.parse(_sudachipy_version) >= version.parse("0.6.8")
 
 
 def is_jumanpp_available():
@@ -993,6 +1085,12 @@ install python-Levenshtein`. Please note that you may need to restart your runti
 """
 
 # docstyle-ignore
+G2P_EN_IMPORT_ERROR = """
+{0} requires the g2p-en library but it was not found in your environment. You can install it with pip:
+`pip install g2p-en`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
@@ -1033,7 +1131,6 @@ SACREMOSES_IMPORT_ERROR = """
 {0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
 `pip install sacremoses`. Please note that you may need to restart your runtime after installation.
 """
-
 
 # docstyle-ignore
 SCIPY_IMPORT_ERROR = """
@@ -1090,8 +1187,9 @@ PYCTCDECODE_IMPORT_ERROR = """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
-{0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`. Please note that you may need to restart your runtime after installation.
+{0} requires the accelerate library >= {ACCELERATE_MIN_VERSION} it was not found in your environment.
+You can install or update it with pip: `pip install --upgrade accelerate`. Please note that you may need to restart your
+runtime after installation.
 """
 
 # docstyle-ignore
@@ -1157,6 +1255,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
+        ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
@@ -1222,40 +1321,6 @@ class DummyObject(type):
         if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    warnings.warn(
-        "The method `torch_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.",
-        FutureWarning,
-    )
-
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    warnings.warn(
-        "The method `tf_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.",
-        FutureWarning,
-    )
-
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):

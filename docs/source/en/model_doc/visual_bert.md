@@ -32,7 +32,9 @@ simpler. Further analysis demonstrates that VisualBERT can ground elements of la
 explicit supervision and is even sensitive to syntactic relationships, tracking, for example, associations between
 verbs and image regions corresponding to their arguments.*
 
-Tips:
+This model was contributed by [gchhablani](https://huggingface.co/gchhablani). The original code can be found [here](https://github.com/uclanlp/visualbert).
+
+## Usage tips
 
 1. Most of the checkpoints provided work with the [`VisualBertForPreTraining`] configuration. Other
    checkpoints provided are the fine-tuned checkpoints for down-stream tasks - VQA ('visualbert-vqa'), VCR
@@ -42,8 +44,6 @@ Tips:
 2. For the VCR task, the authors use a fine-tuned detector for generating visual embeddings, for all the checkpoints.
    We do not provide the detector and its weights as a part of the package, but it will be available in the research
    projects, and the states can be loaded directly into the detector provided.
-
-## Usage
 
 VisualBERT is a multi-modal vision and language model. It can be used for visual question answering, multiple choice,
 visual reasoning and region-to-phrase correspondence tasks. VisualBERT uses a BERT-like transformer to prepare
@@ -73,7 +73,7 @@ The following example shows how to get the last hidden state using [`VisualBertM
 >>> from transformers import BertTokenizer, VisualBertModel
 
 >>> model = VisualBertModel.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 >>> inputs = tokenizer("What is the man eating?", return_tensors="pt")
 >>> # this is a custom function that returns the visual embeddings given the image path
@@ -91,8 +91,6 @@ The following example shows how to get the last hidden state using [`VisualBertM
 >>> outputs = model(**inputs)
 >>> last_hidden_state = outputs.last_hidden_state
 ```
-
-This model was contributed by [gchhablani](https://huggingface.co/gchhablani). The original code can be found [here](https://github.com/uclanlp/visualbert).
 
 ## VisualBertConfig
 

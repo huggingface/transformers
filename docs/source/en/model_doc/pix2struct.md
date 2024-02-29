@@ -39,7 +39,6 @@ The original code can be found [here](https://github.com/google-research/pix2str
 - [Fine-tuning Notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb)
 - [All models](https://huggingface.co/models?search=pix2struct)
 
-
 ## Pix2StructConfig
 
 [[autodoc]] Pix2StructConfig

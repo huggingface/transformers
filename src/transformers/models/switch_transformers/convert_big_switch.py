@@ -185,7 +185,7 @@ def sanity_check():
         "/home/arthur_huggingface_co/transformers/switch_converted", device_map="auto"
     )
 
-    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
     text = "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."
 
     input_ids = tokenizer(text, return_tensors="pt").input_ids

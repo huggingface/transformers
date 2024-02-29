@@ -40,6 +40,11 @@ else:
         "BeamSearchScorer",
         "ConstrainedBeamSearchScorer",
     ]
+    _import_structure["candidate_generator"] = [
+        "AssistedCandidateGenerator",
+        "CandidateGenerator",
+        "PromptLookupCandidateGenerator",
+    ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
         "ClassifierFreeGuidanceLogitsProcessor",
@@ -94,6 +99,10 @@ else:
         "BeamSampleDecoderOnlyOutput",
         "ContrastiveSearchEncoderDecoderOutput",
         "ContrastiveSearchDecoderOnlyOutput",
+        "GenerateBeamDecoderOnlyOutput",
+        "GenerateBeamEncoderDecoderOutput",
+        "GenerateDecoderOnlyOutput",
+        "GenerateEncoderDecoderOutput",
     ]
 
 try:
@@ -174,6 +183,7 @@ if TYPE_CHECKING:
     else:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .candidate_generator import AssistedCandidateGenerator, CandidateGenerator, PromptLookupCandidateGenerator
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -222,6 +232,10 @@ if TYPE_CHECKING:
             BeamSearchEncoderDecoderOutput,
             ContrastiveSearchDecoderOnlyOutput,
             ContrastiveSearchEncoderDecoderOutput,
+            GenerateBeamDecoderOnlyOutput,
+            GenerateBeamEncoderDecoderOutput,
+            GenerateDecoderOnlyOutput,
+            GenerateEncoderDecoderOutput,
             GenerationMixin,
             GreedySearchDecoderOnlyOutput,
             GreedySearchEncoderDecoderOutput,

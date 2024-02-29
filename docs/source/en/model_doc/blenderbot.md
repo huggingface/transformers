@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Blenderbot
 
-**DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) .
-
 ## Overview
 
 The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://arxiv.org/pdf/2004.13637.pdf) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,
@@ -36,26 +34,14 @@ and code publicly available. Human evaluations show our best models are superior
 dialogue in terms of engagingness and humanness measurements. We then discuss the limitations of this work by analyzing
 failure cases of our models.*
 
-Tips:
-
-- Blenderbot is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-
 This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The authors' code can be found [here](https://github.com/facebookresearch/ParlAI) .
 
+## Usage tips and example
 
-## Implementation Notes
+Blenderbot is a model with absolute position embeddings so it's usually advised to pad the inputs on the right 
+rather than the left.
 
-- Blenderbot uses a standard [seq2seq model transformer](https://arxiv.org/pdf/1706.03762.pdf) based architecture.
-- Available checkpoints can be found in the [model hub](https://huggingface.co/models?search=blenderbot).
-- This is the *default* Blenderbot model class. However, some smaller checkpoints, such as
-  `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with
-  [BlenderbotSmall](blenderbot-small).
-
-
-## Usage
-
-Here is an example of model usage:
+An example:
 
 ```python
 >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
@@ -70,7 +56,16 @@ Here is an example of model usage:
 ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
 ```
 
-## Documentation resources
+## Implementation Notes
+
+- Blenderbot uses a standard [seq2seq model transformer](https://arxiv.org/pdf/1706.03762.pdf) based architecture.
+- Available checkpoints can be found in the [model hub](https://huggingface.co/models?search=blenderbot).
+- This is the *default* Blenderbot model class. However, some smaller checkpoints, such as
+  `facebook/blenderbot_small_90M`, have a different architecture and consequently should be used with
+  [BlenderbotSmall](blenderbot-small).
+
+  
+## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
 - [Translation task guide](../tasks/translation)
@@ -90,9 +85,13 @@ Here is an example of model usage:
 [[autodoc]] BlenderbotTokenizerFast
     - build_inputs_with_special_tokens
 
+
+<frameworkcontent>
+<pt>
+
 ## BlenderbotModel
 
-See `transformers.BartModel` for arguments to *forward* and *generate*
+See [`~transformers.BartModel`] for arguments to *forward* and *generate*
 
 [[autodoc]] BlenderbotModel
     - forward
@@ -109,6 +108,9 @@ See [`~transformers.BartForConditionalGeneration`] for arguments to *forward* an
 [[autodoc]] BlenderbotForCausalLM
     - forward
 
+</pt>
+<tf>
+
 ## TFBlenderbotModel
 
 [[autodoc]] TFBlenderbotModel
@@ -118,6 +120,9 @@ See [`~transformers.BartForConditionalGeneration`] for arguments to *forward* an
 
 [[autodoc]] TFBlenderbotForConditionalGeneration
     - call
+
+</tf>
+<jax>
 
 ## FlaxBlenderbotModel
 
@@ -132,3 +137,8 @@ See [`~transformers.BartForConditionalGeneration`] for arguments to *forward* an
     - __call__
     - encode
     - decode
+
+</jax>
+</frameworkcontent>
+
+

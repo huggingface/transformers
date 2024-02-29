@@ -96,6 +96,7 @@ class MobileNetV2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mobilenet_v2"
 
     def __init__(

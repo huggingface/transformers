@@ -33,23 +33,26 @@ GPT-2 and RoBERTa checkpoints and conducted an extensive empirical study on the 
 encoder and decoder, with these checkpoints. Our models result in new state-of-the-art results on Machine Translation,
 Text Summarization, Sentence Splitting, and Sentence Fusion.*
 
-Usage:
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
+found [here](https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder).
 
-- The model can be used in combination with the [`EncoderDecoderModel`] to leverage two pretrained
-  BERT checkpoints for subsequent fine-tuning.
+## Usage examples and tips
+
+The model can be used in combination with the [`EncoderDecoderModel`] to leverage two pretrained BERT checkpoints for 
+subsequent fine-tuning:
 
 ```python
 >>> # leverage checkpoints for Bert2Bert model...
 >>> # use BERT's cls token as BOS token and sep token as EOS token
->>> encoder = BertGenerationEncoder.from_pretrained("bert-large-uncased", bos_token_id=101, eos_token_id=102)
+>>> encoder = BertGenerationEncoder.from_pretrained("google-bert/bert-large-uncased", bos_token_id=101, eos_token_id=102)
 >>> # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
 >>> decoder = BertGenerationDecoder.from_pretrained(
-...     "bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
+...     "google-bert/bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
 ... )
 >>> bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
 
 >>> # create tokenizer...
->>> tokenizer = BertTokenizer.from_pretrained("bert-large-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
 
 >>> input_ids = tokenizer(
 ...     "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
@@ -61,8 +64,7 @@ Usage:
 >>> loss.backward()
 ```
 
-- Pretrained [`EncoderDecoderModel`] are also directly available in the model hub, e.g.,
-
+Pretrained [`EncoderDecoderModel`] are also directly available in the model hub, e.g.:
 
 ```python
 >>> # instantiate sentence fusion model
@@ -84,9 +86,6 @@ Tips:
   combination with [`EncoderDecoder`].
 - For summarization, sentence splitting, sentence fusion and translation, no special tokens are required for the input.
   Therefore, no EOS token should be added to the end of the input.
-
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
-found [here](https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder).
 
 ## BertGenerationConfig
 

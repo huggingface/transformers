@@ -36,11 +36,6 @@ prediction tasks such as object detection (58.7 box AP and 51.1 mask AP on COCO 
 +2.6 mask AP on COCO, and +3.2 mIoU on ADE20K, demonstrating the potential of Transformer-based models as vision backbones.
 The hierarchical design and the shifted window approach also prove beneficial for all-MLP architectures.*
 
-Tips:
-- One can use the [`AutoImageProcessor`] API to prepare images for the model.
-- Swin pads the inputs supporting any input height and width (if divisible by `32`).
-- Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
 alt="drawing" width="600"/>
 
@@ -48,6 +43,10 @@ alt="drawing" width="600"/>
 
 This model was contributed by [novice03](https://huggingface.co/novice03). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts). The original code can be found [here](https://github.com/microsoft/Swin-Transformer).
 
+## Usage tips
+
+- Swin pads the inputs supporting any input height and width (if divisible by `32`).
+- Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## Resources
 
@@ -68,6 +67,8 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] SwinConfig
 
+<frameworkcontent>
+<pt>
 
 ## SwinModel
 
@@ -84,6 +85,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] transformers.SwinForImageClassification
     - forward
 
+</pt>
+<tf>
+
 ## TFSwinModel
 
 [[autodoc]] TFSwinModel
@@ -98,3 +102,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] transformers.TFSwinForImageClassification
     - call
+
+</tf>
+</frameworkcontent>

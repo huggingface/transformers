@@ -20,7 +20,7 @@ import math
 import unittest
 
 from transformers import GPT2Config, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -98,7 +98,7 @@ class GPT2ModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GPT2Config.from_pretrained("gpt2")
+        return GPT2Config.from_pretrained("openai-community/gpt2")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -505,7 +505,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -562,11 +562,29 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_weight_initialization(*config_and_inputs)
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @slow
     def test_batch_generation(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
 
@@ -623,9 +641,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
+        model = GPT2DoubleHeadsModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
 
@@ -694,7 +712,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def _test_lm_generate_gpt2_helper(
         self,
@@ -704,7 +722,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = GPT2LMHeadModel.from_pretrained(
-            "gpt2",
+            "openai-community/gpt2",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -718,11 +736,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)
 
         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [
-            464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
-        ]
-        # fmt: on
+        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False)
         if verify_outputs:
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
@@ -745,8 +759,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt2_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -773,8 +787,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt2_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -819,8 +833,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("gpt2-large")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(torch_device)
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
         input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt2_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)

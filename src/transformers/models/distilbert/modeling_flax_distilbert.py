@@ -48,9 +48,10 @@ FLAX_DISTILBERT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -145,7 +146,7 @@ class FlaxEmbeddings(nn.Module):
             position_embeds = self.position_embeddings(position_ids.astype("i4"))
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
-            # explictly cast the positions here, since self.embed_positions are not registered as parameters
+            # explicitly cast the positions here, since self.embed_positions are not registered as parameters
             position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
         # Sum all embeddings

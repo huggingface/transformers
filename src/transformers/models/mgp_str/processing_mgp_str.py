@@ -49,6 +49,7 @@ class MgpstrProcessor(ProcessorMixin):
         tokenizer ([`MgpstrTokenizer`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "char_tokenizer"]
     image_processor_class = "ViTImageProcessor"
     char_tokenizer_class = "MgpstrTokenizer"
@@ -70,8 +71,8 @@ class MgpstrProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         self.char_tokenizer = tokenizer
-        self.bpe_tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        self.wp_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        self.wp_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         super().__init__(image_processor, tokenizer)
 

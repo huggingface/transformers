@@ -20,11 +20,15 @@ import os
 import sys
 from unittest.mock import patch
 
-import torch
-
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
-from transformers.testing_utils import CaptureLogger, TestCasePlus, get_gpu_count, slow, torch_device
-from transformers.utils import is_apex_available
+from transformers.testing_utils import (
+    CaptureLogger,
+    TestCasePlus,
+    backend_device_count,
+    is_torch_fp16_available_on_device,
+    slow,
+    torch_device,
+)
 
 
 SRC_DIRS = [
@@ -86,11 +90,6 @@ def get_results(output_dir):
     return results
 
 
-def is_cuda_and_apex_available():
-    is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
-    return is_using_cuda and is_apex_available()
-
-
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 
@@ -100,7 +99,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue.py
-            --model_name_or_path distilbert-base-uncased
+            --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
@@ -116,7 +115,7 @@ class ExamplesTests(TestCasePlus):
             --max_seq_length=128
             """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -128,7 +127,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm.py
-            --model_name_or_path distilgpt2
+            --model_name_or_path distilbert/distilgpt2
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --do_train
@@ -141,7 +140,7 @@ class ExamplesTests(TestCasePlus):
             --overwrite_output_dir
             """.split()
 
-        if torch.cuda.device_count() > 1:
+        if backend_device_count(torch_device) > 1:
             # Skipping because there are not enough batches to train the model + would need a drop_last to work.
             return
 
@@ -161,7 +160,7 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_clm.py
             --model_type gpt2
-            --tokenizer_name gpt2
+            --tokenizer_name openai-community/gpt2
             --train_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
             --config_overrides n_embd=10,n_head=2
@@ -182,7 +181,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_mlm.py
-            --model_name_or_path distilroberta-base
+            --model_name_or_path distilbert/distilroberta-base
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
@@ -203,12 +202,12 @@ class ExamplesTests(TestCasePlus):
 
     def test_run_ner(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
-        epochs = 7 if get_gpu_count() > 1 else 2
+        epochs = 7 if backend_device_count(torch_device) > 1 else 2
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_ner.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
@@ -236,7 +235,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -261,7 +260,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_seq2seq_qa.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --context_column context
             --question_column question
             --answer_column answers
@@ -290,7 +289,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_swag.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
             --output_dir {tmp_dir}
@@ -312,7 +311,7 @@ class ExamplesTests(TestCasePlus):
     def test_generation(self):
         testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42"]
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         model_type, model_name = (
@@ -328,7 +327,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_summarization.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}
@@ -399,9 +398,10 @@ class ExamplesTests(TestCasePlus):
             --max_steps 10
             --train_val_split 0.1
             --seed 42
+            --label_column_name labels
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -431,7 +431,7 @@ class ExamplesTests(TestCasePlus):
             --seed 42
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -462,7 +462,7 @@ class ExamplesTests(TestCasePlus):
             --seed 42
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -493,7 +493,7 @@ class ExamplesTests(TestCasePlus):
             --seed 42
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -525,7 +525,7 @@ class ExamplesTests(TestCasePlus):
             --seed 42
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -550,9 +550,6 @@ class ExamplesTests(TestCasePlus):
             --validation_split_percentage 5
             --seed 42
         """.split()
-
-        if is_cuda_and_apex_available():
-            testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
             run_wav2vec2_pretraining_no_trainer.main()
@@ -579,7 +576,7 @@ class ExamplesTests(TestCasePlus):
             --seed 42
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -604,7 +601,7 @@ class ExamplesTests(TestCasePlus):
             --seed 32
         """.split()
 
-        if is_cuda_and_apex_available():
+        if is_torch_fp16_available_on_device(torch_device):
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):

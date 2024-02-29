@@ -1,7 +1,7 @@
 #### Fine-tuning BERT on SQuAD1.0 with relative position embeddings
 
 The following examples show how to fine-tune BERT models with different relative position embeddings. The BERT model 
-`bert-base-uncased` was pretrained with default absolute position embeddings. We provide the following pretrained 
+`google-bert/bert-base-uncased` was pretrained with default absolute position embeddings. We provide the following pretrained 
 models which were pre-trained on the same training data (BooksCorpus and English Wikipedia) as in the BERT model 
 training, but with different relative position embeddings. 
 
@@ -10,7 +10,7 @@ Shaw et al., [Self-Attention with Relative Position Representations](https://arx
 * `zhiheng-huang/bert-base-uncased-embedding-relative-key-query`, trained from scratch with relative embedding method 4 
 in Huang et al. [Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
 * `zhiheng-huang/bert-large-uncased-whole-word-masking-embedding-relative-key-query`, fine-tuned from model 
-`bert-large-uncased-whole-word-masking` with 3 additional epochs with relative embedding method 4 in Huang et al. 
+`google-bert/bert-large-uncased-whole-word-masking` with 3 additional epochs with relative embedding method 4 in Huang et al. 
 [Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
 
 
@@ -18,7 +18,7 @@ in Huang et al. [Improve Transformer Models with Better Relative Position Embedd
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+torchrun --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_name_or_path zhiheng-huang/bert-base-uncased-embedding-relative-key-query \
     --dataset_name squad \
     --do_train \
@@ -46,7 +46,7 @@ gpu training leads to the f1 score of 90.71.
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+torchrun --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_name_or_path zhiheng-huang/bert-large-uncased-whole-word-masking-embedding-relative-key-query \
     --dataset_name squad \
     --do_train \
@@ -61,15 +61,15 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --gradient_accumulation_steps 3
 ```
 Training with the above command leads to the f1 score of 93.52, which is slightly better than the f1 score of 93.15 for 
-`bert-large-uncased-whole-word-masking`.
+`google-bert/bert-large-uncased-whole-word-masking`.
 
 #### Distributed training
 
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+torchrun --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --dataset_name squad \
     --do_train \
     --do_eval \
@@ -90,7 +90,7 @@ exact_match = 86.91
 ```
 
 This fine-tuned model is available as a checkpoint under the reference
-[`bert-large-uncased-whole-word-masking-finetuned-squad`](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
+[`google-bert/bert-large-uncased-whole-word-masking-finetuned-squad`](https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad).
 
 ## Results
 

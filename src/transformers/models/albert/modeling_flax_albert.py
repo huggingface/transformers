@@ -47,7 +47,7 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "albert-base-v2"
+_CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 
@@ -86,9 +86,10 @@ ALBERT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -753,8 +754,8 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     ```python
     >>> from transformers import AutoTokenizer, FlaxAlbertForPreTraining
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert-base-v2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+    >>> model = FlaxAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)
@@ -828,7 +829,9 @@ class FlaxAlbertForMaskedLM(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForMaskedLMModule
 
 
-append_call_sample_docstring(FlaxAlbertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxAlbertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC, revision="refs/pr/11"
+)
 
 
 class FlaxAlbertForSequenceClassificationModule(nn.Module):

@@ -48,16 +48,16 @@ from .configuration_xlm_roberta import XLMRobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlm-roberta-base",
-    "xlm-roberta-large",
-    "xlm-roberta-large-finetuned-conll02-dutch",
-    "xlm-roberta-large-finetuned-conll02-spanish",
-    "xlm-roberta-large-finetuned-conll03-english",
-    "xlm-roberta-large-finetuned-conll03-german",
+    "FacebookAI/xlm-roberta-base",
+    "FacebookAI/xlm-roberta-large",
+    "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch",
+    "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish",
+    "FacebookAI/xlm-roberta-large-finetuned-conll03-english",
+    "FacebookAI/xlm-roberta-large-finetuned-conll03-german",
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
 ]
 
@@ -511,20 +511,15 @@ class XLMRobertaEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -613,10 +608,6 @@ class XLMRobertaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, XLMRobertaEncoder):
-            module.gradient_checkpointing = value
 
 
 XLM_ROBERTA_START_DOCSTRING = r"""
@@ -949,10 +940,10 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
         >>> from transformers import AutoTokenizer, XLMRobertaForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-        >>> config = AutoConfig.from_pretrained("roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+        >>> config = AutoConfig.from_pretrained("FacebookAI/roberta-base")
         >>> config.is_decoder = True
-        >>> model = XLMRobertaForCausalLM.from_pretrained("roberta-base", config=config)
+        >>> model = XLMRobertaForCausalLM.from_pretrained("FacebookAI/roberta-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

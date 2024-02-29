@@ -204,8 +204,6 @@ class BartTokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
 
         # Mask token behave like a normal word, i.e. include the space before it
-        # TODO seems like both slow and fast actually don't strip left and right soooooooo yeah. See `test_embeded_special_tokens`
-        # Also this not only will strip the spaces but any punctuation
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:

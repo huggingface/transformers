@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch EfficientNet model. """
 
 
-import inspect
 import unittest
 
 from transformers import EfficientNetConfig
@@ -131,7 +130,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
+        {"image-feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -171,18 +170,6 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @unittest.skip(reason="EfficientNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -228,6 +215,12 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         for model_name in EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = EfficientNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @is_pipeline_test
+    @require_vision
+    @slow
+    def test_pipeline_image_feature_extraction(self):
+        super().test_pipeline_image_feature_extraction()
 
     @is_pipeline_test
     @require_vision

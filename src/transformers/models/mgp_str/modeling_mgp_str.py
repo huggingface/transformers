@@ -333,10 +333,6 @@ class MgpstrPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: MgpstrEncoder, value: bool = False) -> None:
-        if isinstance(module, MgpstrEncoder):
-            module.gradient_checkpointing = value
-
 
 MGP_STR_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

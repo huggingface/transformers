@@ -1196,6 +1196,7 @@ class FlaxElectraSequenceSummary(nn.Module):
             - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
             - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
     """
+
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 

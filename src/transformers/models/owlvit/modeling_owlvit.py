@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch OWL-ViT model."""
 
-
 import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
@@ -25,6 +24,7 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -52,21 +52,6 @@ OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/owlvit-base-patch16",
     "google/owlvit-large-patch14",
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit
@@ -555,9 +540,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, OwlViTMLP):
             factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
@@ -575,10 +558,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, OwlViTEncoder):
-            module.gradient_checkpointing = value
 
 
 OWLVIT_START_DOCSTRING = r"""
@@ -753,18 +732,12 @@ class OwlViTEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -787,24 +760,6 @@ class OwlViTEncoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
 class OwlViTTextTransformer(nn.Module):
@@ -843,11 +798,13 @@ class OwlViTTextTransformer(nn.Module):
         # num_samples, seq_len = input_shape  where num_samples = batch_size * num_max_text_queries
         # OWLVIT's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = _make_causal_mask(input_shape, hidden_states.dtype, device=hidden_states.device)
+        causal_attention_mask = _create_4d_causal_attention_mask(
+            input_shape, hidden_states.dtype, device=hidden_states.device
+        )
         # expand attention_mask
         if attention_mask is not None:
             # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1335,6 +1292,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
+        self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
+
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
         # Computes normalized xy corner coordinates from feature_map.
         if not feature_map.ndim == 4:
@@ -1343,6 +1302,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         device = feature_map.device
         num_patches = feature_map.shape[1]
 
+        # TODO: Remove numpy usage.
         box_coordinates = np.stack(
             np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
         ).astype(np.float32)
@@ -1437,8 +1397,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1447,8 +1406,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1470,8 +1429,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1480,8 +1438,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1560,7 +1518,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     outputs = model.image_guided_detection(**inputs)
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
-        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
         ... )

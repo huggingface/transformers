@@ -48,11 +48,11 @@ from .configuration_camembert import CamembertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "camembert-base"
+_CHECKPOINT_FOR_DOC = "almanach/camembert-base"
 _CONFIG_FOR_DOC = "CamembertConfig"
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "camembert-base",
+    "almanach/camembert-base",
     "Musixmatch/umberto-commoncrawl-cased-v1",
     "Musixmatch/umberto-wikipedia-uncased-v1",
     # See all CamemBERT models at https://huggingface.co/models?filter=camembert
@@ -524,20 +524,15 @@ class CamembertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -624,10 +619,6 @@ class CamembertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CamembertEncoder):
-            module.gradient_checkpointing = value
 
 
 CAMEMBERT_INPUTS_DOCSTRING = r"""
@@ -1406,7 +1397,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
 @add_start_docstrings(
     """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT, roberta-base->camembert-base
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT, FacebookAI/roberta-base->almanach/camembert-base
 class CamembertForCausalLM(CamembertPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1480,10 +1471,10 @@ class CamembertForCausalLM(CamembertPreTrainedModel):
         >>> from transformers import AutoTokenizer, CamembertForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("camembert-base")
-        >>> config = AutoConfig.from_pretrained("camembert-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("almanach/camembert-base")
+        >>> config = AutoConfig.from_pretrained("almanach/camembert-base")
         >>> config.is_decoder = True
-        >>> model = CamembertForCausalLM.from_pretrained("camembert-base", config=config)
+        >>> model = CamembertForCausalLM.from_pretrained("almanach/camembert-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -26,6 +26,10 @@ The authors showcase their approach to model evaluation, focusing on practical t
 
 In terms of model details, the work outlines the architecture and training methodology of Persimmon-8B, providing insights into its design choices, sequence length, and dataset composition. The authors present a fast inference code that outperforms traditional implementations through operator fusion and CUDA graph utilization while maintaining code coherence. They express their anticipation of how the community will leverage this contribution to drive innovation, hinting at further upcoming releases as part of an ongoing series of developments.
 
+This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
+The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
+
+## Usage tips
 
 <Tip warning={true}>
 
@@ -67,8 +71,6 @@ model = PersimmonForCausalLM.from_pretrained("/output/path")
 tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
 ```
 
-This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
 
 - Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
 The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!

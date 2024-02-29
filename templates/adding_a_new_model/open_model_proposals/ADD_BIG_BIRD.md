@@ -7,7 +7,7 @@ Begin: 12.02.2020
 
 Estimated End: 19.03.2020
 
-Contributor: [Vasudev](https://github.com/vasudevgupta7)
+Contributor: [Vasudev](https://github.com/thevasudevgupta)
 
 Adding a new model is often difficult and requires an in-depth knowledge
 of the 🤗 Transformers library and ideally also of the model's original
@@ -593,27 +593,27 @@ You should do the following:
 
 1.  Create a branch with a descriptive name from your main branch
 
-```
+```bash
     git checkout -b add_big_bird
 ```
 
 2.  Commit the automatically generated code:
 
-```
+```bash
     git add .
     git commit
 ```
 
 3.  Fetch and rebase to current main
 
-```
+```bash
     git fetch upstream
     git rebase upstream/main
 ```
 
 4.  Push the changes to your account using:
 
-```
+```bash
     git push -u origin a-descriptive-name-for-my-changes
 ```
 
