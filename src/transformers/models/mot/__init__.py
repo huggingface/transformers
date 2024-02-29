@@ -79,7 +79,6 @@ if TYPE_CHECKING:
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
-    else:
 
 else:
     import sys

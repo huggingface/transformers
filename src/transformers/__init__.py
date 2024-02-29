@@ -469,11 +469,6 @@ _import_structure = {
         "GPT2Config",
         "GPT2Tokenizer",
     ],
-    "models.mot": [
-        "MOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "MoTConfig",
-       
-    ],
     "models.gpt_bigcode": [
         "GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPTBigCodeConfig",
@@ -627,6 +622,10 @@ _import_structure = {
     "models.mobilevitv2": [
         "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MobileViTV2Config",
+    ],
+    "models.mot": [
+        "MOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MoTConfig",
     ],
     "models.mpnet": [
         "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2291,19 +2290,6 @@ else:
             "load_tf_weights_in_gpt2",
         ]
     )
-    _import_structure["models.mot"].extend(
-        [
-            "MOT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MoTDoubleHeadsModel",
-            "MoTForQuestionAnswering",
-            "MoTForSequenceClassification",
-            "MoTForTokenClassification",
-            "MoTLMHeadModel",
-            "MoTModel",
-            "MoTPreTrainedModel",
-            "load_tf_weights_in_mot",
-        ]
-    )
     _import_structure["models.gpt_bigcode"].extend(
         [
             "GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2725,6 +2711,19 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.mot"].extend(
+        [
+            "MOT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MoTDoubleHeadsModel",
+            "MoTForQuestionAnswering",
+            "MoTForSequenceClassification",
+            "MoTForTokenClassification",
+            "MoTLMHeadModel",
+            "MoTModel",
+            "MoTPreTrainedModel",
+            "load_tf_weights_in_mot",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5271,11 +5270,6 @@ if TYPE_CHECKING:
         GPT2Config,
         GPT2Tokenizer,
     )
-    from .models.mot import (
-        MOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        MoTConfig,
-       
-    )
     from .models.gpt_bigcode import (
         GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTBigCodeConfig,
@@ -5428,6 +5422,10 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileViTV2Config,
+    )
+    from .models.mot import (
+        MOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MoTConfig,
     )
     from .models.mpnet import (
         MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6937,17 +6935,6 @@ if TYPE_CHECKING:
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
         )
-        from .models.mot import (
-            MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MoTDoubleHeadsModel,
-            MoTForQuestionAnswering,
-            MoTForSequenceClassification,
-            MoTForTokenClassification,
-            MoTLMHeadModel,
-            MoTModel,
-            MoTPreTrainedModel,
-            load_tf_weights_in_mot,
-        )
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTBigCodeForCausalLM,
@@ -7289,6 +7276,17 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.mot import (
+            MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MoTDoubleHeadsModel,
+            MoTForQuestionAnswering,
+            MoTForSequenceClassification,
+            MoTForTokenClassification,
+            MoTLMHeadModel,
+            MoTModel,
+            MoTPreTrainedModel,
+            load_tf_weights_in_mot,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,

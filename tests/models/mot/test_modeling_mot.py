@@ -33,13 +33,13 @@ if is_torch_available():
 
     from transformers import (
         MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2Tokenizer,
         MoTDoubleHeadsModel,
         MoTForQuestionAnswering,
         MoTForSequenceClassification,
         MoTForTokenClassification,
         MoTLMHeadModel,
         MoTModel,
-        GPT2Tokenizer,
     )
 
 
