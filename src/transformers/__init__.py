@@ -250,7 +250,6 @@ _import_structure = {
     ],
     "models.character_bert": [
         "CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BasicTokenizer",
         "CharacterBertConfig",
         "CharacterBertTokenizer",
     ],
@@ -5065,7 +5064,6 @@ if TYPE_CHECKING:
     )
     from .models.character_bert import (
         CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BasicTokenizer,
         CharacterBertConfig,
         CharacterBertTokenizer,
     )
