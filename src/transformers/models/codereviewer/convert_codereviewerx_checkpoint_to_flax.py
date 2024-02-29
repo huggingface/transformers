@@ -19,7 +19,7 @@ import argparse
 
 from codereviewerx import checkpoints
 
-from transformers import FlaxCodeReviewerForConditionalGeneration, CodeReviewerConfig
+from transformers import CodeReviewerConfig, FlaxCodeReviewerForConditionalGeneration
 
 
 def convert_codereviewerx_checkpoint_to_flax(codereviewerx_checkpoint_path, config_name, flax_dump_folder_path):
@@ -34,13 +34,23 @@ def convert_codereviewerx_checkpoint_to_flax(codereviewerx_checkpoint_path, conf
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
-        codereviewerx_attention_key = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["key"]["kernel"]
-        codereviewerx_attention_out = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["out"]["kernel"]
-        codereviewerx_attention_query = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["query"]["kernel"]
-        codereviewerx_attention_value = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["value"]["kernel"]
+        codereviewerx_attention_key = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["key"][
+            "kernel"
+        ]
+        codereviewerx_attention_out = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["out"][
+            "kernel"
+        ]
+        codereviewerx_attention_query = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["query"][
+            "kernel"
+        ]
+        codereviewerx_attention_value = codereviewerx_model["target"]["encoder"][layer_name]["attention"]["value"][
+            "kernel"
+        ]
 
         # Layer Normalization
-        codereviewerx_attention_layer_norm = codereviewerx_model["target"]["encoder"][layer_name]["pre_attention_layer_norm"]["scale"]
+        codereviewerx_attention_layer_norm = codereviewerx_model["target"]["encoder"][layer_name][
+            "pre_attention_layer_norm"
+        ]["scale"]
 
         if split_mlp_wi:
             codereviewerx_mlp_wi_0 = codereviewerx_model["target"]["encoder"][layer_name]["mlp"]["wi_0"]["kernel"]
@@ -51,7 +61,9 @@ def convert_codereviewerx_checkpoint_to_flax(codereviewerx_checkpoint_path, conf
         codereviewerx_mlp_wo = codereviewerx_model["target"]["encoder"][layer_name]["mlp"]["wo"]["kernel"]
 
         # Layer Normalization
-        codereviewerx_mlp_layer_norm = codereviewerx_model["target"]["encoder"][layer_name]["pre_mlp_layer_norm"]["scale"]
+        codereviewerx_mlp_layer_norm = codereviewerx_model["target"]["encoder"][layer_name]["pre_mlp_layer_norm"][
+            "scale"
+        ]
 
         # Assigning
         flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["k"][
@@ -105,32 +117,42 @@ def convert_codereviewerx_checkpoint_to_flax(codereviewerx_checkpoint_path, conf
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
-        codereviewerx_attention_key = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"]["key"]["kernel"]
-        codereviewerx_attention_out = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"]["out"]["kernel"]
-        codereviewerx_attention_query = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"]["query"]["kernel"]
-        codereviewerx_attention_value = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"]["value"]["kernel"]
+        codereviewerx_attention_key = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"]["key"][
+            "kernel"
+        ]
+        codereviewerx_attention_out = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"]["out"][
+            "kernel"
+        ]
+        codereviewerx_attention_query = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"][
+            "query"
+        ]["kernel"]
+        codereviewerx_attention_value = codereviewerx_model["target"]["decoder"][layer_name]["self_attention"][
+            "value"
+        ]["kernel"]
 
         # Layer Normalization
-        codereviewerx_pre_attention_layer_norm = codereviewerx_model["target"]["decoder"][layer_name]["pre_self_attention_layer_norm"][
-            "scale"
-        ]
+        codereviewerx_pre_attention_layer_norm = codereviewerx_model["target"]["decoder"][layer_name][
+            "pre_self_attention_layer_norm"
+        ]["scale"]
 
         # Encoder-Decoder-Attention
-        codereviewerx_enc_dec_attention_key = codereviewerx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["key"][
-            "kernel"
-        ]
-        codereviewerx_enc_dec_attention_out = codereviewerx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["out"][
-            "kernel"
-        ]
-        codereviewerx_enc_dec_attention_query = codereviewerx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["query"][
-            "kernel"
-        ]
-        codereviewerx_enc_dec_attention_value = codereviewerx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["value"][
-            "kernel"
-        ]
+        codereviewerx_enc_dec_attention_key = codereviewerx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["key"]["kernel"]
+        codereviewerx_enc_dec_attention_out = codereviewerx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["out"]["kernel"]
+        codereviewerx_enc_dec_attention_query = codereviewerx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["query"]["kernel"]
+        codereviewerx_enc_dec_attention_value = codereviewerx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["value"]["kernel"]
 
         # Layer Normalization
-        codereviewerx_cross_layer_norm = codereviewerx_model["target"]["decoder"][layer_name]["pre_cross_attention_layer_norm"]["scale"]
+        codereviewerx_cross_layer_norm = codereviewerx_model["target"]["decoder"][layer_name][
+            "pre_cross_attention_layer_norm"
+        ]["scale"]
 
         # MLP
         if split_mlp_wi:
@@ -227,9 +249,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--codereviewerx_checkpoint_path", default=None, type=str, required=True, help="Path the TX5 checkpoint."
     )
-    parser.add_argument("--config_name", default=None, type=str, required=True, help="Config name of CodeReviewer model.")
+    parser.add_argument(
+        "--config_name", default=None, type=str, required=True, help="Config name of CodeReviewer model."
+    )
     parser.add_argument(
         "--flax_dump_folder_path", default=None, type=str, required=True, help="Path to the output FLAX model."
     )
     args = parser.parse_args()
-    convert_codereviewerx_checkpoint_to_flax(args.codereviewerx_checkpoint_path, args.config_name, args.flax_dump_folder_path)
+    convert_codereviewerx_checkpoint_to_flax(
+        args.codereviewerx_checkpoint_path, args.config_name, args.flax_dump_folder_path
+    )

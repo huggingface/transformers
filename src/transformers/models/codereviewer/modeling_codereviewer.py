@@ -65,7 +65,6 @@ CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 ####################################################
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
@@ -660,7 +659,9 @@ class CodeReviewerBlock(nn.Module):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(CodeReviewerLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(
+            CodeReviewerLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        )
         if self.is_decoder:
             self.layer.append(CodeReviewerLayerCrossAttention(config))
 
@@ -831,7 +832,12 @@ class CodeReviewerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
             module,
-            (CodeReviewerModel, CodeReviewerForConditionalGeneration, CodeReviewerEncoderModel, CodeReviewerForQuestionAnswering),
+            (
+                CodeReviewerModel,
+                CodeReviewerForConditionalGeneration,
+                CodeReviewerEncoderModel,
+                CodeReviewerForQuestionAnswering,
+            ),
         ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624

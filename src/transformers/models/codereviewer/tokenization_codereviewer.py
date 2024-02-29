@@ -93,6 +93,7 @@ class CodeReviewerTokenizer(PreTrainedTokenizer):
             method
          additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
+        additional_special_tokens (`<fill_type>`, *optional*): <fill_docstring>
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -130,7 +131,7 @@ class CodeReviewerTokenizer(PreTrainedTokenizer):
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
 
@@ -236,7 +237,9 @@ class CodeReviewerTokenizer(PreTrainedTokenizer):
         return tokenizer
 
     @staticmethod
-    def _eventually_correct_codereviewer_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+    def _eventually_correct_codereviewer_max_length(
+        pretrained_model_name_or_path, max_model_length, init_max_model_length
+    ):
         if pretrained_model_name_or_path in CodeReviewerTokenizer.max_model_input_sizes:
             deprecated_max_model_length = CodeReviewerTokenizer.max_model_input_sizes[pretrained_model_name_or_path]
             if init_max_model_length is not None and init_max_model_length != max_model_length:

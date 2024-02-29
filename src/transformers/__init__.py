@@ -292,6 +292,7 @@ _import_structure = {
         "CodeGenConfig",
         "CodeGenTokenizer",
     ],
+    "models.codereviewer": ["CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeReviewerConfig"],
     "models.conditional_detr": [
         "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ConditionalDetrConfig",
@@ -821,7 +822,6 @@ _import_structure = {
         "SwitchTransformersConfig",
     ],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
-    "models.codereviewer": ["CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeReviewerConfig"],
     "models.table_transformer": [
         "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TableTransformerConfig",
@@ -1111,6 +1111,7 @@ else:
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
+    _import_structure["models.codereviewer"].append("CodeReviewerTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
@@ -1135,7 +1136,6 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
-    _import_structure["models.codereviewer"].append("CodeReviewerTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -1165,6 +1165,7 @@ else:
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
+    _import_structure["models.codereviewer"].append("CodeReviewerTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
@@ -1215,7 +1216,6 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
-    _import_structure["models.codereviewer"].append("CodeReviewerTokenizerFast")
     _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -1807,6 +1807,19 @@ else:
             "CodeGenForCausalLM",
             "CodeGenModel",
             "CodeGenPreTrainedModel",
+        ]
+    )
+    _import_structure["models.codereviewer"].extend(
+        [
+            "CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CodeReviewerEncoderModel",
+            "CodeReviewerForConditionalGeneration",
+            "CodeReviewerForQuestionAnswering",
+            "CodeReviewerForSequenceClassification",
+            "CodeReviewerForTokenClassification",
+            "CodeReviewerModel",
+            "CodeReviewerPreTrainedModel",
+            "load_tf_weights_in_codereviewer",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -3345,19 +3358,6 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
-    _import_structure["models.codereviewer"].extend(
-        [
-            "CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CodeReviewerEncoderModel",
-            "CodeReviewerForConditionalGeneration",
-            "CodeReviewerForQuestionAnswering",
-            "CodeReviewerForSequenceClassification",
-            "CodeReviewerForTokenClassification",
-            "CodeReviewerModel",
-            "CodeReviewerPreTrainedModel",
-            "load_tf_weights_in_codereviewer",
-        ]
-    )
     _import_structure["models.table_transformer"].extend(
         [
             "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3944,6 +3944,15 @@ else:
             "TFCLIPVisionModel",
         ]
     )
+    _import_structure["models.codereviewer"].extend(
+        [
+            "TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCodeReviewerEncoderModel",
+            "TFCodeReviewerForConditionalGeneration",
+            "TFCodeReviewerModel",
+            "TFCodeReviewerPreTrainedModel",
+        ]
+    )
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4396,15 +4405,6 @@ else:
             "TFT5ForConditionalGeneration",
             "TFT5Model",
             "TFT5PreTrainedModel",
-        ]
-    )
-    _import_structure["models.codereviewer"].extend(
-        [
-            "TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFCodeReviewerEncoderModel",
-            "TFCodeReviewerForConditionalGeneration",
-            "TFCodeReviewerModel",
-            "TFCodeReviewerPreTrainedModel",
         ]
     )
     _import_structure["models.tapas"].extend(
@@ -5108,6 +5108,7 @@ if TYPE_CHECKING:
         CodeGenConfig,
         CodeGenTokenizer,
     )
+    from .models.codereviewer import CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeReviewerConfig
     from .models.conditional_detr import (
         CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConditionalDetrConfig,
@@ -5629,7 +5630,6 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
-    from .models.codereviewer import CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeReviewerConfig
     from .models.table_transformer import (
         TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TableTransformerConfig,
@@ -5916,6 +5916,7 @@ if TYPE_CHECKING:
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.code_llama import CodeLlamaTokenizer
+        from .models.codereviewer import CodeReviewerTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.ernie_m import ErnieMTokenizer
@@ -5939,7 +5940,6 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
-        from .models.codereviewer import CodeReviewerTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -5964,6 +5964,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPTokenizerFast
         from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
+        from .models.codereviewer import CodeReviewerTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast
@@ -6012,7 +6013,6 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
-        from .models.codereviewer import CodeReviewerTokenizerFast
         from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -6541,6 +6541,17 @@ if TYPE_CHECKING:
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,
+        )
+        from .models.codereviewer import (
+            CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CodeReviewerEncoderModel,
+            CodeReviewerForConditionalGeneration,
+            CodeReviewerForQuestionAnswering,
+            CodeReviewerForSequenceClassification,
+            CodeReviewerForTokenClassification,
+            CodeReviewerModel,
+            CodeReviewerPreTrainedModel,
+            load_tf_weights_in_codereviewer,
         )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7801,17 +7812,6 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
-        from .models.codereviewer import (
-            CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CodeReviewerEncoderModel,
-            CodeReviewerForConditionalGeneration,
-            CodeReviewerForQuestionAnswering,
-            CodeReviewerForSequenceClassification,
-            CodeReviewerForTokenClassification,
-            CodeReviewerModel,
-            CodeReviewerPreTrainedModel,
-            load_tf_weights_in_codereviewer,
-        )
         from .models.table_transformer import (
             TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TableTransformerForObjectDetection,
@@ -8295,6 +8295,13 @@ if TYPE_CHECKING:
             TFCLIPTextModel,
             TFCLIPVisionModel,
         )
+        from .models.codereviewer import (
+            TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCodeReviewerEncoderModel,
+            TFCodeReviewerForConditionalGeneration,
+            TFCodeReviewerModel,
+            TFCodeReviewerPreTrainedModel,
+        )
         from .models.convbert import (
             TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFConvBertForMaskedLM,
@@ -8673,13 +8680,6 @@ if TYPE_CHECKING:
             TFT5Model,
             TFT5PreTrainedModel,
         )
-        from .models.codereviewer import (
-            TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFCodeReviewerEncoderModel,
-            TFCodeReviewerForConditionalGeneration,
-            TFCodeReviewerModel,
-            TFCodeReviewerPreTrainedModel,
-        )
         from .models.tapas import (
             TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFTapasForMaskedLM,
@@ -8907,6 +8907,12 @@ if TYPE_CHECKING:
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
         )
+        from .models.codereviewer import (
+            FlaxCodeReviewerEncoderModel,
+            FlaxCodeReviewerForConditionalGeneration,
+            FlaxCodeReviewerModel,
+            FlaxCodeReviewerPreTrainedModel,
+        )
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,
             FlaxDistilBertForMultipleChoice,
@@ -9031,12 +9037,6 @@ if TYPE_CHECKING:
             FlaxT5ForConditionalGeneration,
             FlaxT5Model,
             FlaxT5PreTrainedModel,
-        )
-        from .models.codereviewer import (
-            FlaxCodeReviewerEncoderModel,
-            FlaxCodeReviewerForConditionalGeneration,
-            FlaxCodeReviewerModel,
-            FlaxCodeReviewerPreTrainedModel,
         )
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel

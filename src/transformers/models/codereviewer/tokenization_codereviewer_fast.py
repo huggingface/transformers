@@ -72,9 +72,10 @@ class CodeReviewerTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
+        tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
@@ -98,8 +99,6 @@ class CodeReviewerTokenizerFast(PreTrainedTokenizerFast):
             Additional special tokens used by the tokenizer.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
-        from_slow (`book`, *optional*, defaults to `False`):
-            Whether or not the tokenizer should be converted from a slow one. If `add_prefix_space` is set, this will be set to `True`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -162,9 +161,13 @@ class CodeReviewerTokenizerFast(PreTrainedTokenizerFast):
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     @staticmethod
-    def _eventually_correct_codereviewer_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+    def _eventually_correct_codereviewer_max_length(
+        pretrained_model_name_or_path, max_model_length, init_max_model_length
+    ):
         if pretrained_model_name_or_path in CodeReviewerTokenizerFast.max_model_input_sizes:
-            deprecated_max_model_length = CodeReviewerTokenizerFast.max_model_input_sizes[pretrained_model_name_or_path]
+            deprecated_max_model_length = CodeReviewerTokenizerFast.max_model_input_sizes[
+                pretrained_model_name_or_path
+            ]
             if init_max_model_length is not None and init_max_model_length != max_model_length:
                 return init_max_model_length
             elif init_max_model_length is None:

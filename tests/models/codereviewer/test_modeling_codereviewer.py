@@ -15,13 +15,10 @@
 
 
 import copy
-import os
-import pickle
 import tempfile
 import unittest
 
 from transformers import CodeReviewerConfig, is_torch_available
-from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.testing_utils import (
     require_accelerate,
     require_sentencepiece,
@@ -34,12 +31,12 @@ from transformers.utils import cached_property, is_torch_fx_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+    pass
 
 
 if is_torch_available():
@@ -552,12 +549,19 @@ class CodeReviewerModelTester:
 @require_torch
 class CodeReviewerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (CodeReviewerModel, CodeReviewerForConditionalGeneration, CodeReviewerForSequenceClassification, CodeReviewerForQuestionAnswering)
+        (
+            CodeReviewerModel,
+            CodeReviewerForConditionalGeneration,
+            CodeReviewerForSequenceClassification,
+            CodeReviewerForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (CodeReviewerForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (CodeReviewerModel, CodeReviewerForConditionalGeneration) if is_torch_available() else ()
+    all_parallelizable_model_classes = (
+        (CodeReviewerModel, CodeReviewerForConditionalGeneration) if is_torch_available() else ()
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -931,12 +935,16 @@ class CodeReviewerModelFp16Tests(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = CodeReviewerForConditionalGeneration.from_pretrained("microsoft/codereviewer", torch_dtype=torch.float16)
+            model = CodeReviewerForConditionalGeneration.from_pretrained(
+                "microsoft/codereviewer", torch_dtype=torch.float16
+            )
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
             # Load without in bf16
-            model = CodeReviewerForConditionalGeneration.from_pretrained("microsoft/codereviewer", torch_dtype=torch.bfloat16)
+            model = CodeReviewerForConditionalGeneration.from_pretrained(
+                "microsoft/codereviewer", torch_dtype=torch.bfloat16
+            )
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
@@ -975,7 +983,9 @@ class CodeReviewerModelFp16Tests(unittest.TestCase):
 class CodeReviewerModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return CodeReviewerForConditionalGeneration.from_pretrained("google-codereviewer/codereviewer-base").to(torch_device)
+        return CodeReviewerForConditionalGeneration.from_pretrained("google-codereviewer/codereviewer-base").to(
+            torch_device
+        )
 
     @cached_property
     def tokenizer(self):
@@ -1414,7 +1424,9 @@ class CodeReviewerModelIntegrationTests(unittest.TestCase):
         )
         article = "summarize: " + article.strip()
         codereviewer_tokenizer = AutoTokenizer.from_pretrained("flax-community/codereviewer-base-cnn-dm")
-        codereviewer_model = CodeReviewerForConditionalGeneration.from_pretrained("flax-community/codereviewer-base-cnn-dm").to(torch_device)
+        codereviewer_model = CodeReviewerForConditionalGeneration.from_pretrained(
+            "flax-community/codereviewer-base-cnn-dm"
+        ).to(torch_device)
         input_ids = codereviewer_tokenizer(
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)

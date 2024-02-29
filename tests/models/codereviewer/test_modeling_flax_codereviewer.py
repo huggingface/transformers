@@ -228,7 +228,9 @@ class FlaxCodeReviewerModelTester:
 
 @require_flax
 class FlaxCodeReviewerModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxCodeReviewerModel, FlaxCodeReviewerForConditionalGeneration) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxCodeReviewerModel, FlaxCodeReviewerForConditionalGeneration) if is_flax_available() else ()
+    )
     all_generative_model_classes = (FlaxCodeReviewerForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
 

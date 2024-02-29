@@ -29,7 +29,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import ByCodeReviewerTokenizer, CodeReviewerTokenizer, TFCodeReviewerEncoderModel, TFCodeReviewerForConditionalGeneration, TFCodeReviewerModel
+    from transformers import (
+        ByCodeReviewerTokenizer,
+        CodeReviewerTokenizer,
+        TFCodeReviewerEncoderModel,
+        TFCodeReviewerForConditionalGeneration,
+        TFCodeReviewerModel,
+    )
 
 
 class TFCodeReviewerModelTester:

@@ -32,8 +32,8 @@ import argparse
 import collections
 
 import torch
-from flax import traverse_util
 from codereviewerx import checkpoints
+from flax import traverse_util
 
 from transformers import CodeReviewerConfig, CodeReviewerEncoderModel, CodeReviewerForConditionalGeneration
 from transformers.utils import logging
@@ -69,7 +69,9 @@ def codereviewerx_layer_norm_lookup(params, i, prefix, layer_name):
     return params[f"{prefix}/layers_{i}/{layer_name}/scale"]
 
 
-def convert_codereviewerx_to_pytorch(variables: dict, *, num_layers: int, num_decoder_layers: int, is_encoder_only: bool):
+def convert_codereviewerx_to_pytorch(
+    variables: dict, *, num_layers: int, num_decoder_layers: int, is_encoder_only: bool
+):
     """Converts the parameters from CodeReviewerX-Flax to Transformers-PyTorch."""
     old = traverse_util.flatten_dict(variables["target"])
     old = {"/".join(k): v for k, v in old.items()}
@@ -214,10 +216,16 @@ def convert_codereviewerx_checkpoint_to_pytorch(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Converts a native CodeReviewerX checkpoint into a PyTorch checkpoint.")
+    parser = argparse.ArgumentParser(
+        description="Converts a native CodeReviewerX checkpoint into a PyTorch checkpoint."
+    )
     # Required parameters
     parser.add_argument(
-        "--codereviewerx_checkpoint_path", default=None, type=str, required=True, help="Path to the CodeReviewerX checkpoint."
+        "--codereviewerx_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the CodeReviewerX checkpoint.",
     )
     parser.add_argument(
         "--config_file",

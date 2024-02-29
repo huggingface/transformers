@@ -25,7 +25,13 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_codereviewer": ["CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeReviewerConfig", "CodeReviewerOnnxConfig"]}
+_import_structure = {
+    "configuration_codereviewer": [
+        "CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CodeReviewerConfig",
+        "CodeReviewerOnnxConfig",
+    ]
+}
 
 try:
     if not is_sentencepiece_available():
@@ -90,7 +96,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_codereviewer import CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeReviewerConfig, CodeReviewerOnnxConfig
+    from .configuration_codereviewer import (
+        CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CodeReviewerConfig,
+        CodeReviewerOnnxConfig,
+    )
 
     try:
         if not is_sentencepiece_available():

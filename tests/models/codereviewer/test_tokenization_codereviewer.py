@@ -427,7 +427,9 @@ class CodeReviewerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_fast_slow_edge_cases(self):
         # We are testing spaces before and spaces after special tokens + space transformations
         slow_tokenizer = CodeReviewerTokenizer.from_pretrained("google-codereviewer/codereviewer-base", legacy=False)
-        fast_tokenizer = CodeReviewerTokenizerFast.from_pretrained("google-codereviewer/codereviewer-base", legacy=False, from_slow=True)
+        fast_tokenizer = CodeReviewerTokenizerFast.from_pretrained(
+            "google-codereviewer/codereviewer-base", legacy=False, from_slow=True
+        )
         slow_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
 
@@ -445,7 +447,9 @@ class CodeReviewerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with self.subTest(f"fast {edge_case} normalized = False"):
             self.assertEqual(fast_tokenizer.tokenize(hard_case), EXPECTED_SLOW)
 
-        fast_tokenizer = CodeReviewerTokenizerFast.from_pretrained("google-codereviewer/codereviewer-base", legacy=False, from_slow=True)
+        fast_tokenizer = CodeReviewerTokenizerFast.from_pretrained(
+            "google-codereviewer/codereviewer-base", legacy=False, from_slow=True
+        )
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
 
         # `normalized=True` is the default normalization scheme when adding a token. Normalize -> don't strip the space.
@@ -623,7 +627,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         hf_tokenizer = CodeReviewerTokenizer.from_pretrained("google/umcodereviewer-small", legacy=False)
         for text in input_texts:
             self.assertEqual(
-                hf_tokenizer.encode(text, add_special_tokens=False), codereviewerx_tokenizer.tokenizer.tokenize(text), f"{text}"
+                hf_tokenizer.encode(text, add_special_tokens=False),
+                codereviewerx_tokenizer.tokenizer.tokenize(text),
+                f"{text}",
             )
         for texts in tqdm.tqdm(ds["premise"]):
             for text in texts:
@@ -639,7 +645,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         codereviewerx_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
         for text in input_texts:
             self.assertEqual(
-                hf_tokenizer.encode(text, add_special_tokens=False), codereviewerx_tokenizer.tokenizer.tokenize(text), f"{text}"
+                hf_tokenizer.encode(text, add_special_tokens=False),
+                codereviewerx_tokenizer.tokenizer.tokenize(text),
+                f"{text}",
             )
         for texts in tqdm.tqdm(ds["premise"]):
             for text in texts:

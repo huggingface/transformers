@@ -171,7 +171,9 @@ class FlaxCodeReviewerLayerFF(nn.Module):
         else:
             self.DenseReluDense = FlaxCodeReviewerDenseActDense(self.config, dtype=self.dtype)
 
-        self.layer_norm = FlaxCodeReviewerLayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxCodeReviewerLayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(self, hidden_states, deterministic=True):
@@ -479,7 +481,9 @@ class FlaxCodeReviewerLayerSelfAttention(nn.Module):
             causal=self.config.causal,
             dtype=self.dtype,
         )
-        self.layer_norm = FlaxCodeReviewerLayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxCodeReviewerLayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -514,7 +518,9 @@ class FlaxCodeReviewerLayerCrossAttention(nn.Module):
         self.EncDecAttention = FlaxCodeReviewerAttention(
             self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
         )
-        self.layer_norm = FlaxCodeReviewerLayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxCodeReviewerLayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -1139,7 +1145,9 @@ class FlaxCodeReviewerPreTrainedModel(FlaxPreTrainedModel):
         )
 
     @add_start_docstrings(CODEREVIEWER_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=CodeReviewerConfig)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=CodeReviewerConfig
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1807,7 +1815,8 @@ FLAX_CODEREVIEWER_CONDITIONAL_GENERATION_DOCSTRING = """
 
 
 overwrite_call_docstring(
-    FlaxCodeReviewerForConditionalGeneration, CODEREVIEWER_INPUTS_DOCSTRING + FLAX_CODEREVIEWER_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxCodeReviewerForConditionalGeneration,
+    CODEREVIEWER_INPUTS_DOCSTRING + FLAX_CODEREVIEWER_CONDITIONAL_GENERATION_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxCodeReviewerForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
