@@ -58,11 +58,11 @@ is_fast_path_available = (
     any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is not None
 )
 
-_CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m"
+_CHECKPOINT_FOR_DOC = "ArthurZ/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
 
 MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "state-spaces/mamba-130m",
+    "ArthurZ/mamba-130m",
     "state-spaces/mamba-370m",
     "state-spaces/mamba-790m",
     "state-spaces/mamba-1.4b",
