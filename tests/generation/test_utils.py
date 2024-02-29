@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -2135,6 +2136,31 @@ class GenerationTesterMixin:
                         )
                     )
 
+    @require_torch_gpu
+    @slow
+    def test_generate_compile_fullgraph(self):
+        """Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results"""
+        for model_class in self.all_generative_model_classes:
+            if not hasattr(model_class, "_setup_cache"):
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device)
+            input_ids = inputs_dict["input_ids"].to(torch_device)
+
+            # dynamic cache
+            output_dynamic = model.generate(input_ids)
+
+            # eager static cache
+            model.generation_config.cache_implementation = "static"
+            output_static = model.generate(input_ids)
+            self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
+
+            # compiled static cache
+            compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
+            output_compiled = compiled_generate(input_ids)
+            self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
@@ -3638,3 +3664,21 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
+
+    def test_bad_generate_compilation_flags(self):
+        """
+        Tests that certain parameterization options in `generate` properly raise a custom exception (a `ValueError`
+        defined in `transformers` instead of general `torch._dynamo.exc.Unsupported`).
+        """
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+
+        # Passing generation_config parameters through kwargs is not supported
+        with self.assertRaises(ValueError):
+            compiled_generate(input_ids, max_length=10, do_sample=True, temperature=0.7)
