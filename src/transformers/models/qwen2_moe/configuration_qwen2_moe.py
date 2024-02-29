@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Qwen/Qwen2MoE-14B-beta": "https://huggingface.co/Qwen/Qwen2MoE-14B-beta/resolve/main/config.json",
+    "Qwen/Qwen1.5-MoE-A2.7B": "https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B/resolve/main/config.json",
 }
 
 
@@ -30,7 +30,7 @@ class Qwen2MoEConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen2MoEModel`]. It is used to instantiate a
     Qwen2MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2MoE-14B-beta [Qwen/Qwen2MoE-14B-beta](https://huggingface.co/Qwen/Qwen2MoE-14B-beta).
+    Qwen1.5-MoE-A2.7B" [Qwen/Qwen1.5-MoE-A2.7B"](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B").
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -90,6 +90,8 @@ class Qwen2MoEConfig(PretrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 60):
             Number of routed experts.
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to normalize the topk probabilities.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
@@ -102,7 +104,7 @@ class Qwen2MoEConfig(PretrainedConfig):
     >>> # Initializing a Qwen2MoE style configuration
     >>> configuration = Qwen2MoEConfig()
 
-    >>> # Initializing a model from the Qwen2MoE-14B style configuration
+    >>> # Initializing a model from the Qwen1.5-MoE-A2.7B" style configuration
     >>> model = Qwen2MoEModel(configuration)
 
     >>> # Accessing the model configuration
