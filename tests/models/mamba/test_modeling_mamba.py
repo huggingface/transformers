@@ -338,7 +338,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             model = MambaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-
+@require_torch
 class MambaIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.model_id = "ArthurZ/mamba-2.8b"
