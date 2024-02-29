@@ -1347,13 +1347,6 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output="'paris'",
-        expected_loss=0.88,
-    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1374,6 +1367,27 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, CharacterBertForMaskedLM
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForMaskedLM.from_pretrained("helboukkouri/character-bert-base-uncased")
+
+        >>> # add mask_token
+        >>> inputs = tokenizer("The capital of [MASK] is Paris.", return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> # retrieve index of [MASK]
+        >>> mask_token_index = (inputs.input_ids == torch.tensor(tokenizer.mask_token_id)).all(axis=-1)[0].nonzero(as_tuple=True)[0]
+        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+        >>> tokenizer.decode(predicted_token_id)
+        'france'
+        ```
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1432,7 +1446,7 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
     """CharacterBert Model with a `next sentence prediction (classification)` head on top.""",
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert,bert-base-uncased->helboukkouri/character-bert-base-uncased
+# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1475,8 +1489,8 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
         >>> from transformers import AutoTokenizer, CharacterBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-character_bert/character_helboukkouri/character-bert-base-uncased")
-        >>> model = CharacterBertForNextSentencePrediction.from_pretrained("google-character_bert/character_helboukkouri/character-bert-base-uncased")
+        >>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForNextSentencePrediction.from_pretrained("helboukkouri/character-bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1642,7 +1656,6 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
     """,
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1687,7 +1700,7 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        input_ids = input_ids.view(-1, input_ids.size(-2), input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
