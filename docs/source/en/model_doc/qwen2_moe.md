@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Qwen2
+# Qwen2MoE
 
 ## Overview
 
@@ -22,21 +22,25 @@ Qwen2MoE is the new model series of large language models from the Qwen team. Pr
 
 ### Model Details
 
-Qwen2MoE is a language model series including decoder language models of different model sizes. For each size, we release the base language model and the aligned chat model. It is based on the Transformer architecture with SwiGLU activation, attention QKV bias, group query attention, mixture of sliding window attention and full attention, etc. Additionally, we have an improved tokenizer adaptive to multiple natural languages and codes.
+Qwen2MoE is a language model series including decoder language models of different model sizes. For each size, we release the base language model and the aligned chat model. Qwen2MoE has the following architectural choices:
 
+- Qwen2MoE is based on the Transformer architecture with SwiGLU activation, attention QKV bias, group query attention, mixture of sliding window attention and full attention, etc. Additionally, we have an improved tokenizer adaptive to multiple natural languages and codes.
+- Qwen2MoE employs Mixture of Experts (MoE) architecture, where the models are upcycled from dense language models. For instance, `Qwen1.5-MoE-A2.7B` is upcycled from `Qwen-1.8B`. It has 14.3B parameters in total and 2.7B activated parameters during runtime, while it achieves comparable performance with `Qwen1.5-7B`, with only 20% of the training resources.
+
+For more details refer to the [release blog post](https://qwenlm.github.io/blog/qwen1.5/).
 
 ## Usage tips
 
-`Qwen1.5-MoE-2.7B` and `Qwen1.5-MoE-2.7B-Chat` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+`Qwen1.5-MoE-A2.7B` and `Qwen1.5-MoE-A2.7B-Chat` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen1.5-MoE-2.7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-2.7B-Chat", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-2.7B-Chat")
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
 
 >>> prompt = "Give me a short introduction to large language model."
 
@@ -53,30 +57,30 @@ In the following, we demonstrate how to use `Qwen1.5-MoE-2.7B-Chat` for the infe
 >>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
-## Qwen2MoEConfig
+## Qwen2MoeConfig
 
-[[autodoc]] Qwen2MoEConfig
+[[autodoc]] Qwen2MoeConfig
 
-## Qwen2MoETokenizer
+## Qwen2MoeTokenizer
 
-[[autodoc]] Qwen2MoETokenizer
+[[autodoc]] Qwen2MoeTokenizer
     - save_vocabulary
 
-## Qwen2MoETokenizerFast
+## Qwen2MoeTokenizerFast
 
-[[autodoc]] Qwen2MoETokenizerFast
+[[autodoc]] Qwen2MoeTokenizerFast
 
-## Qwen2MoEModel
+## Qwen2MoeModel
 
-[[autodoc]] Qwen2MoEModel
+[[autodoc]] Qwen2MoeModel
     - forward
 
-## Qwen2MoEForCausalLM
+## Qwen2MoeForCausalLM
 
-[[autodoc]] Qwen2MoEForCausalLM
+[[autodoc]] Qwen2MoeForCausalLM
     - forward
 
-## Qwen2MoEForSequenceClassification
+## Qwen2MoeForSequenceClassification
 
-[[autodoc]] Qwen2MoEForSequenceClassification
+[[autodoc]] Qwen2MoeForSequenceClassification
     - forward

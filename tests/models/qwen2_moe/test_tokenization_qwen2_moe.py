@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import AddedToken, Qwen2MoETokenizer, Qwen2MoETokenizerFast
+from transformers import AddedToken, Qwen2MoeTokenizer, Qwen2MoeTokenizerFast
 from transformers.models.qwen2_moe.tokenization_qwen2_moe import VOCAB_FILES_NAMES, bytes_to_unicode
 from transformers.testing_utils import require_tokenizers, slow
 
@@ -26,9 +26,9 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class Qwen2MoETokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = Qwen2MoETokenizer
-    rust_tokenizer_class = Qwen2MoETokenizerFast
+class Qwen2MoeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = Qwen2MoeTokenizer
+    rust_tokenizer_class = Qwen2MoeTokenizerFast
     test_slow_tokenizer = True
     test_rust_tokenizer = True
     space_between_special_tokens = False
@@ -87,11 +87,11 @@ class Qwen2MoETokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return Qwen2MoETokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return Qwen2MoeTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return Qwen2MoETokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return Qwen2MoeTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         # this case should cover
@@ -158,7 +158,7 @@ class Qwen2MoETokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(tokenizer_output_string, output_string)
 
     def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
-        # Qwen2MoETokenizer changes the default `spaces_between_special_tokens` in `decode` to False
+        # Qwen2MoeTokenizer changes the default `spaces_between_special_tokens` in `decode` to False
         if not self.test_slow_tokenizer:
             return
 

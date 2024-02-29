@@ -22,8 +22,8 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_qwen2_moe": ["QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2MoEConfig"],
-    "tokenization_qwen2_moe": ["Qwen2MoETokenizer"],
+    "configuration_qwen2_moe": ["QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2MoeConfig"],
+    "tokenization_qwen2_moe": ["Qwen2MoeTokenizer"],
 }
 
 try:
@@ -32,7 +32,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_qwen2_moe_fast"] = ["Qwen2MoETokenizerFast"]
+    _import_structure["tokenization_qwen2_moe_fast"] = ["Qwen2MoeTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -41,16 +41,16 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_qwen2_moe"] = [
-        "Qwen2MoEForCausalLM",
-        "Qwen2MoEModel",
-        "Qwen2MoEPreTrainedModel",
-        "Qwen2MoEForSequenceClassification",
+        "Qwen2MoeForCausalLM",
+        "Qwen2MoeModel",
+        "Qwen2MoePreTrainedModel",
+        "Qwen2MoeForSequenceClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoEConfig
-    from .tokenization_qwen2_moe import Qwen2MoETokenizer
+    from .configuration_qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
+    from .tokenization_qwen2_moe import Qwen2MoeTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_qwen2_moe_fast import Qwen2MoETokenizerFast
+        from .tokenization_qwen2_moe_fast import Qwen2MoeTokenizerFast
 
     try:
         if not is_torch_available():
@@ -67,10 +67,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_qwen2_moe import (
-            Qwen2MoEForCausalLM,
-            Qwen2MoEForSequenceClassification,
-            Qwen2MoEModel,
-            Qwen2MoEPreTrainedModel,
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeModel,
+            Qwen2MoePreTrainedModel,
         )
 
 

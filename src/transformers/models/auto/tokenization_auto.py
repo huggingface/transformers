@@ -357,8 +357,8 @@ else:
             (
                 "qwen2_moe",
                 (
-                    "Qwen2MoETokenizer",
-                    "Qwen2MoETokenizerFast" if is_tokenizers_available() else None,
+                    "Qwen2MoeTokenizer",
+                    "Qwen2MoeTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("rag", ("RagTokenizer", None)),
