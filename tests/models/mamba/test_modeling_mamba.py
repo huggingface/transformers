@@ -372,7 +372,7 @@ class MambaIntegrationTests(unittest.TestCase):
             ]
         ,dtype=torch.float16)  # fmt: skip
 
-        torch.testing.assert_allclose(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD)
+        torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD)
 
         out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])

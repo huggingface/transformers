@@ -200,14 +200,14 @@ class MambaMixer(nn.Module):
         # 2. Convolution sequence transformation
         if inference_params.seqlen_offset > 0:
             conv_state = inference_params.conv_states[self.layer_idx]
-            conv_state.copy_(torch.roll(conv_state, shifts=-1, dims=-1))
-            conv_state[:, :, -1].copy_(hidden_states[:, :, 0])
+            conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
+            conv_state[:, :, -1] = hidden_states[:, :, 0]
 
             hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + self.conv1d.bias)
             hidden_states = hidden_states.unsqueeze(-1)
 
         else:
-            inference_params.conv_states[self.layer_idx].copy_(
+            inference_params.conv_states[self.layer_idx] = (
                 nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
@@ -230,17 +230,17 @@ class MambaMixer(nn.Module):
         ssm_state = inference_params.ssm_states[self.layer_idx]
         ys = []
         for i in range(seq_len):
-            ssm_state.copy_(ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :])
+            ssm_state = (ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :])
             #    [b, d, n]   X  [b, n] -> [b, d]
             y = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1))
             ys.append(y[:, :, 0])
         y = torch.stack(ys, dim=-1)  # shape (b, l, d)
-        y = y + (hidden_states * self.D.to(hidden_states.dtype)[None, :, None])
+        y = y + (hidden_states * self.D[None, :, None])
         y = y * self.act(gate)  # (B D)
         # 4. Final linear projection
         selected_states = self.out_proj(y.transpose(1, 2))
 
-        inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
+        inference_params.ssm_states[self.layer_idx] = ssm_state
 
         return selected_states
 
@@ -266,8 +266,6 @@ class MambaCache:
             i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
-
-
 
 
 class MambaRMSNorm(nn.Module):
