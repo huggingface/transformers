@@ -54,6 +54,7 @@ else:
     )
     causal_conv1d_update, causal_conv1d_fn = None, None
 
+is_fast_path_available = not any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is None
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
@@ -111,7 +112,7 @@ class MambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.intermediate_size))  # Keep in fp32
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
-    def forward(self, hidden_states: torch.Tensor, inference_params=None):
+    def cuda_kernels_forward(self, hidden_states: torch.Tensor, inference_params=None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
@@ -175,26 +176,7 @@ class MambaMixer(nn.Module):
         return selected_states
 
 
-class MambaCache:
-    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
-        self.seqlen_offset = 0
-
-        intermediate_size = config.intermediate_size
-        ssm_state_size = config.state_size
-        conv_kernel_size = config.conv_kernel
-
-        self.conv_states = {
-            i: torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
-            for i in range(config.num_hidden_layers)
-        }
-        self.ssm_states = {
-            i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
-            for i in range(config.num_hidden_layers)
-        }
-
-
-class MambaMixerSlow(MambaMixer):
-    def forward(self, hidden_states, inference_params=None):
+    def slow_forward(self, hidden_states, inference_params=None):
         """
 
          Compute ∆ A B C D, the state space parameters.
@@ -262,6 +244,31 @@ class MambaMixerSlow(MambaMixer):
 
         return selected_states
 
+    def forward(self, hidden_states, inference_params=None):
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
+            return self.cuda_kernel_forward(hidden_states, inference_params)
+        return self.slow_forward(hidden_states, inference_params)
+
+
+class MambaCache:
+    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+        self.seqlen_offset = 0
+
+        intermediate_size = config.intermediate_size
+        ssm_state_size = config.state_size
+        conv_kernel_size = config.conv_kernel
+
+        self.conv_states = {
+            i: torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
+            for i in range(config.num_hidden_layers)
+        }
+        self.ssm_states = {
+            i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
+            for i in range(config.num_hidden_layers)
+        }
+
+
+
 
 class MambaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -287,13 +294,7 @@ class MambaBlock(nn.Module):
         self.layer_idx = layer_idx
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-
-        if any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is None:
-            MIXER_CLS = MambaMixerSlow
-        else:  # CUDA is available and the kernels are also available
-            MIXER_CLS = MambaMixer
-
-        self.mixer = MIXER_CLS(config, layer_idx=layer_idx)
+        self.mixer = MambaMixer(config, layer_idx=layer_idx)
 
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
