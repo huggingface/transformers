@@ -205,6 +205,7 @@ from . import (
     splinter,
     squeezebert,
     stablelm,
+    starcoder2,
     swiftformer,
     swin,
     swin2sr,
