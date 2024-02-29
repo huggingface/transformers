@@ -109,6 +109,7 @@ class CharacterBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "character_bert"
 
     def __init__(

@@ -186,12 +186,6 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
-    "models.character_bert": [
-        "CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BasicTokenizer",
-        "CharacterBertConfig",
-        "CharacterBertTokenizer",
-    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": [
         "BertJapaneseTokenizer",
@@ -253,6 +247,12 @@ _import_structure = {
         "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CanineConfig",
         "CanineTokenizer",
+    ],
+    "models.character_bert": [
+        "CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BasicTokenizer",
+        "CharacterBertConfig",
+        "CharacterBertTokenizer",
     ],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1599,22 +1599,6 @@ else:
             "load_tf_weights_in_bert",
         ]
     )
-    _import_structure["models.character_bert"].extend(
-        [
-            "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CharacterBertForMaskedLM",
-            "CharacterBertForMultipleChoice",
-            "CharacterBertForNextSentencePrediction",
-            "CharacterBertForPreTraining",
-            "CharacterBertForQuestionAnswering",
-            "CharacterBertForSequenceClassification",
-            "CharacterBertForTokenClassification",
-            "CharacterBertLayer",
-            "CharacterBertModel",
-            "CharacterBertPreTrainedModel",
-            "load_tf_weights_in_character_bert",
-        ]
-    )
     _import_structure["models.bert_generation"].extend(
         [
             "BertGenerationDecoder",
@@ -1765,6 +1749,22 @@ else:
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.character_bert"].extend(
+        [
+            "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CharacterBertForMaskedLM",
+            "CharacterBertForMultipleChoice",
+            "CharacterBertForNextSentencePrediction",
+            "CharacterBertForPreTraining",
+            "CharacterBertForQuestionAnswering",
+            "CharacterBertForSequenceClassification",
+            "CharacterBertForTokenClassification",
+            "CharacterBertLayer",
+            "CharacterBertModel",
+            "CharacterBertPreTrainedModel",
+            "load_tf_weights_in_character_bert",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
