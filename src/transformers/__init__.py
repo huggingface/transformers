@@ -1019,10 +1019,7 @@ _import_structure = {
     "tools": [
         "Agent",
         "ReactAgent",
-        "AzureOpenAiAgent",
-        "HfAgent",
-        "LocalAgent",
-        "OpenAiAgent",
+        "CodeAgent",
         "PipelineTool",
         "RemoteTool",
         "Tool",

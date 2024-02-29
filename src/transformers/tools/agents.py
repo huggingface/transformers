@@ -16,8 +16,6 @@
 # limitations under the License.
 import importlib.util
 import json
-import os
-import time
 from dataclasses import dataclass
 from typing import Dict
 
@@ -27,7 +25,7 @@ from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 from ..models.auto import AutoTokenizer
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote, get_tool_description_with_args
-from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
+from .prompts import CHAT_MESSAGE_PROMPT, download_prompt, DEFAULT_REACT_SYSTEM_PROMPT
 from .python_interpreter import evaluate
 
 
@@ -124,7 +122,7 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def resolve_tools(code, toolbox, remote=False, cached_tools=None):
+def parse_code_tool_call(code, toolbox, remote=False, cached_tools=None):
     if cached_tools is None:
         resolved_tools = BASE_PYTHON_TOOLS.copy()
     else:
@@ -192,106 +190,61 @@ def clean_code_for_run(result):
 
     return explanation, code
 
+def parse_json_tool_call(json_blob: str):
+    json_blob = json_blob.strip().replace("```json", "").replace("```", "").replace('\\', "")
+    try:
+        json_blob = json.loads(json_blob)
+    except Exception as e:
+        raise ValueError(f"The JSON blob you used is invalid: due to the following error: {e}. Try to correct its formatting.")
+    if "action" in json_blob and "action_input" in json_blob:
+        return json_blob["action"], json_blob["action_input"]
+    else:
+        raise ValueError(f"Missing keys: {[key for key in ['action', 'action_input'] if key not in json_blob]} in blob {json_blob}")
+
+
+class FinalAnswerTool(Tool):
+    name = "final_answer"
+    description = "Provides a final answer to the given problem"
+    inputs = {"answer": str}
+    outputs = {"answer": str}
+
+    def __call__(self):
+        pass
+
 
 class Agent:
-    """
-    Base class for all agents which contains the main API methods.
-
-    Args:
-        chat_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `chat` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `chat_prompt_template.txt` in this repo in this case.
-        run_prompt_template (`str`, *optional*):
-            Pass along your own prompt if you want to override the default template for the `run` method. Can be the
-            actual prompt template or a repo ID (on the Hugging Face Hub). The prompt should be in a file named
-            `run_prompt_template.txt` in this repo in this case.
-        additional_tools ([`Tool`], list of tools or dictionary with tool values, *optional*):
-            Any additional tools to include on top of the default ones. If you pass along a tool with the same name as
-            one of the default tools, that default tool will be overridden.
-    """
-
-    def __init__(self, llm_callable, chat_prompt_template=None, run_prompt_template=None, toolbox=None):
-        _setup_default_tools()
-
-        agent_name = self.__class__.__name__
-        self.chat_prompt_template = download_prompt(chat_prompt_template, agent_name, mode="chat")
-        self.run_prompt_template = download_prompt(run_prompt_template, agent_name, mode="run")
+    def __init__(self, llm_callable, toolbox=None):
+        self.agent_name = self.__class__.__name__
         self.log = print
         self.llm_callable = llm_callable
         if toolbox is None:
-            self._toolbox = []
+            _setup_default_tools()
+            self._toolbox = HUGGINGFACE_DEFAULT_TOOLS
         else:
             self._toolbox = {tool.name: tool for tool in toolbox}
-        self.prepare_for_new_chat()
+
+        self.memory = []
+        self.cached_tools = None
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
-        """Get all tool currently available to the agent"""
+        """Get all tools currently available to the agent"""
         return self._toolbox
+    
 
-    def format_prompt(self, task, chat_mode=False):
+class CodeAgent(Agent):
+    def __init__(self, llm_callable, toolbox=None, run_prompt_template=None, stop_sequences=None, **kwargs):
+        super().__init__(llm_callable, toolbox=toolbox)
+        self.stop_sequences = stop_sequences
+        self.run_prompt_template = download_prompt(run_prompt_template, self.agent_name, mode="run")
+
+
+    def format_prompt(self, task):
         tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
-        if chat_mode:
-            if self.chat_history is None:
-                prompt = self.chat_prompt_template.replace("<<all_tools>>", tool_descriptions)
-            else:
-                prompt = self.chat_history
-            prompt += CHAT_MESSAGE_PROMPT.replace("<<task>>", task)
-        else:
-            prompt = self.run_prompt_template.replace("<<all_tools>>", tool_descriptions)
-            prompt = prompt.replace("<<prompt>>", task)
+        prompt = self.run_prompt_template.replace("<<all_tools>>", tool_descriptions)
+        prompt = prompt.replace("<<prompt>>", task)
         return prompt
 
-    def chat(self, task, *, return_code=False, remote=False, **kwargs):
-        """
-        Sends a new request to the agent in a chat. Will use the previous ones in its history.
-
-        Args:
-            task (`str`): The task to perform
-            return_code (`bool`, *optional*, defaults to `False`):
-                Whether to just return code and not evaluate it.
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether or not to use remote tools (inference endpoints) instead of local ones.
-            kwargs (additional keyword arguments, *optional*):
-                Any keyword argument to send to the agent when evaluating the code.
-
-        Example:
-
-        ```py
-        from transformers import HfAgent
-
-        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
-        agent.chat("Draw me a picture of rivers and lakes")
-
-        agent.chat("Transform the picture so that there is a rock in there")
-        ```
-        """
-        prompt = self.format_prompt(task, chat_mode=True)
-        result = self.llm_callable(prompt, stop=["Human:", "=====", "Answer"])
-        self.chat_history = prompt + result.strip() + "\n"
-        explanation, code = clean_code_for_chat(result)
-
-        self.log(f"==Explanation from the agent==\n{explanation}")
-
-        if code is not None:
-            self.log(f"\n\n==Code generated by the agent==\n{code}")
-            if not return_code:
-                self.log("\n\n==Result==")
-                self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
-                self.chat_state.update(kwargs)
-                return evaluate(code, self.cached_tools, self.chat_state, chat_mode=True)
-            else:
-                tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
-                return f"{tool_code}\n{code}"
-
-    def prepare_for_new_chat(self):
-        """
-        Clears the history of prior calls to [`~Agent.chat`].
-        """
-        self.chat_history = None
-        self.chat_state = {}
-        self.cached_tools = None
 
     def clean_code_for_run(self, result):
         """
@@ -323,7 +276,7 @@ class Agent:
         ```
         """
         prompt = self.format_prompt(task)
-        print(prompt)
+        self.log(prompt)
         result = self.llm_callable(prompt, stop=["Task:"])
         explanation, code = self.clean_code_for_run(result)
 
@@ -331,11 +284,105 @@ class Agent:
 
         self.log(f"\n\n==Code generated by the agent==\n{code}")
         if not return_code:
-            self.log("\n\n==Result==")
-            self.cached_tools = resolve_tools(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
-            return evaluate(code, self.cached_tools, state=kwargs.copy())
-
+            try:
+                self.log("\n\n==Result==")
+                self.cached_tools = parse_code_tool_call(code, self.toolbox, remote=remote, cached_tools=self.cached_tools)
+                return evaluate(code, self.cached_tools, state=kwargs.copy())
+            except Exception as e:
+                self.log(f"Error: {e}")
+                return str(e)
         else:
             tool_code = get_tool_creation_code(code, self.toolbox, remote=remote)
             return f"{tool_code}\n{code}"
 
+
+
+class ReactAgent(Agent):
+    def __init__(
+            self,
+            llm_callable,
+            toolbox=None,
+            system_prompt=None,
+            max_iterations=5,
+        ):
+        super().__init__(llm_callable, toolbox=toolbox)
+        # Add final answer to tools
+        final_answer_tool = FinalAnswerTool()
+        self._toolbox["final_answer"] = final_answer_tool
+
+        # Init system prompt
+        if system_prompt:
+            self.system_prompt = system_prompt
+        else:
+            self.system_prompt = DEFAULT_REACT_SYSTEM_PROMPT
+
+        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
+
+        self.system_prompt = self.system_prompt.format(
+            tool_descriptions=tool_descriptions,
+            tool_names=", ".join([tool_name for tool_name in self._toolbox.keys()])
+        )
+
+        self.max_iterations = max_iterations
+
+
+    def run(self, task, *, return_code=False, remote=False, **kwargs):
+        """
+        Have the agent accomplish a task.
+        """
+        self.memory = []
+        self.task = task
+        final_answer = None
+        iteration = 0
+        while not final_answer and iteration < self.max_iterations:
+            final_answer = self.step()
+            iteration+=1
+        if not final_answer and iteration == self.max_iterations:
+            self.log("Failed by reaching max iterations, returning None.")
+
+        return final_answer
+
+
+    def step(self):
+        current_prompt = self.system_prompt + "\nTask: " + self.task
+        current_prompt += "\n" + "\n".join(self.memory)
+        self.log("=====Calling LLM with this prompt:=====")
+        self.log(current_prompt)
+        result = self.llm_callable(current_prompt, stop=["Observation:", "====="]).strip()
+        self.memory.append(result + "\n")
+        self.log(f"==Model output==\n{result}")
+        try:
+            _, tool_call = result.split("Action:")
+        except Exception as e:
+            self.memory.append("Error: you did not provide 'Action:': it is mandatory to provide an Action!")
+            return None
+
+        try:
+            tool_name, arguments = parse_json_tool_call(tool_call)
+        except Exception as e:
+            self.memory.append(f"Error in json parsing: {e}.")
+            self.log("====Error!====")
+            self.log(e)
+            return None
+
+        if tool_name == "final_answer":
+            return arguments['answer']
+        else:
+            if tool_name not in self.toolbox:
+                self.memory.append(f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.keys()]}.")
+            else:
+                self.log("\n\n==Result==")
+                try:
+                    observation = self.toolbox[tool_name](**arguments)
+                    self.memory.append("Observation: " + observation.strip() + "\n")
+                    return None
+                except Exception as e:
+                    self.memory.append(
+                        f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
+                        f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox[tool_name])}."
+                    )
+                    self.log("====Error!====")
+                    self.log(e)
+
+                    return None
+        

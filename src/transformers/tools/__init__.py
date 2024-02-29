@@ -24,8 +24,7 @@ from ..utils import (
 
 
 _import_structure = {
-    "agents": ["Agent", "AzureOpenAiAgent", "HfAgent", "LocalAgent", "OpenAiAgent"],
-    "react_agent": ["ReactAgent"],
+    "agents": ["Agent", "ReactAgent", "CodeAgent"],
     "base": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
 }
 
