@@ -593,7 +593,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         model_kwargs["inference_params"] = outputs["inference_params"]
         return model_kwargs
