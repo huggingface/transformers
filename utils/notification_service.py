@@ -932,7 +932,7 @@ if __name__ == "__main__":
 
     arguments = None
 
-    if len(sys.argv > 1):
+    if len(sys.argv) > 1:
         arguments = sys.argv[1:][0]    
 
     try:
