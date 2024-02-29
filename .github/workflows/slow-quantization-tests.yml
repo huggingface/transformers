@@ -1,4 +1,4 @@
-name: Self-hosted runner (scheduled)
+name: Self-hosted runner - SLOW quantization tests (scheduled)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
@@ -9,7 +9,7 @@ name: Self-hosted runner (scheduled)
 on:
   repository_dispatch:
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "6 2 * * *"
   push:
     branches:
       - run_scheduled_ci*
@@ -27,57 +27,66 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
-  NUM_SLICES: 128
-  CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-models
+  NUM_SLICES: 2
 
 jobs:
-  setup:
-    name: Setup
-    runs-on: ubuntu-latest
-    outputs:
-      folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
-      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
-    steps:
-
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-      - uses: actions/checkout@v3
-      - name: Cleanup
-        run: |
-          rm -rf tests/__pycache__
-          rm -rf tests/models/__pycache__
-          rm -rf reports
-
-      - id: set-matrix
-        name: Identify models to test
-        run: |
-          echo "folder_slices=$(python3 ./utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
-
-  run_model_tests_gpu:
-    name: "Run model tests"
-    needs: setup
+  run_tests_quantization_torch_gpu:
+    name: Quantization tests
     strategy:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-    uses: ./.github/workflows/model_jobs.yml
-    with:
-      folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      machine_type: ${{ matrix.machine_type }}
-      slice_id: ${{ matrix.slice_id }}
-    secrets: inherit
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    container:
+      image: huggingface/transformers-quantization-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run quantization tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_quantization_torch_gpu tests/quantization
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu
+
 
   run_extract_warnings:
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
     if: always()
     needs: [
-      setup,
-      run_model_tests_gpu,
+      run_tests_quantization_torch_gpu,
     ]
     steps:
       - name: Checkout transformers
@@ -119,16 +128,13 @@ jobs:
     runs-on: ubuntu-22.04
     if: always()
     needs: [
-      setup,
-      run_model_tests_gpu,
-      run_extract_warnings
+      run_tests_quantization_torch_gpu
     ]
     steps:
       - name: Preliminary job status
         shell: bash
-        # For the meaning of these environment variables, see the job `Setup`
         run: |
-          echo "Setup status: ${{ needs.setup.result }}"
+          echo "Quantization tests status: ${{ needs.run_tests_quantization_torch_gpu.result }}"
 
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
@@ -136,20 +142,18 @@ jobs:
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: transformers-ci-daily-quantization
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ env.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_REPORT_CHANNEL_ID: transformers-ci-daily-quantization
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: scheduled-models
+          CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
-          SETUP_STATUS: ${{ needs.setup.result }}
-        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
-        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup.outputs.folder_slices }}"
+          python utils/notification_service.py 
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
