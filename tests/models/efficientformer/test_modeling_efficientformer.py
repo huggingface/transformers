@@ -36,7 +36,10 @@ if is_torch_available():
         EfficientFormerForImageClassificationWithTeacher,
         EfficientFormerModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
+    )
     from transformers.models.efficientformer.modeling_efficientformer import (
         EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )

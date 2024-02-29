@@ -49,7 +49,13 @@ if is_torch_available():
         PerceiverModel,
         PerceiverTokenizer,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_MAPPING_NAMES,
+    )
     from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

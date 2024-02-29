@@ -29,6 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     from torch import nn
+
     from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST

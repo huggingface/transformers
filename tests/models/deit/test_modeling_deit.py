@@ -45,7 +45,11 @@ if is_torch_available():
         DeiTForMaskedImageModeling,
         DeiTModel,
     )
-    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES, MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES, MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
+    )
     from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
