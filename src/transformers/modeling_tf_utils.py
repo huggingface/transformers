@@ -2306,7 +2306,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         version=1,
         push_to_hub=False,
         signatures=None,
-        max_shard_size: Union[int, str] = "10GB",
+        max_shard_size: Union[int, str] = "5GB",
         create_pr: bool = False,
         safe_serialization: bool = False,
         token: Optional[Union[str, bool]] = None,
@@ -2454,7 +2454,8 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             )
             for shard_file, shard in shards.items():
                 if safe_serialization:
-                    safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "tf"})
+                    shard_state_dict = {strip_model_name_and_prefix(w.name): w.value() for w in shard}
+                    safe_save_file(shard_state_dict, os.path.join(save_directory, shard_file), metadata={"format": "tf"})
                 else:
                     with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
                         layers = []
