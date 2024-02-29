@@ -209,11 +209,10 @@ class FinalAnswerTool(Tool):
 
 
 class Agent:
-    def __init__(self, llm_callable,  messages=[],function_template=None,additional_args=Dict[str,any],toolbox=None):
+    def __init__(self, llm_callable,  function_template=None, additional_args=Dict[str,any],toolbox=None):
         self.agent_name = self.__class__.__name__
         self.log = print
         self.llm_callable = llm_callable
-        self.messages=messages
         self.function_template=function_template
         if toolbox is None:
             _setup_default_tools()
@@ -227,6 +226,7 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get all tools currently available to the agent"""
         return self._toolbox
+    
     @property
     def default_function_template(self)-> str:
         """
@@ -267,6 +267,7 @@ class Agent:
         pass
         #to continue
 
+
     def default_parse_tool_call(self,input_message):
         """
         Parses a JSON string that represents a tool call, extracting the tool's name
@@ -289,6 +290,8 @@ class Agent:
             }
         except json.JSONDecodeError:
             return {"error": "Invalid JSON parsed"}
+        
+
 class CodeAgent(Agent):
     def __init__(self, llm_callable, toolbox=None, run_prompt_template=None, stop_sequences=None, **kwargs):
         super().__init__(llm_callable, toolbox=toolbox)

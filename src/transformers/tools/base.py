@@ -349,12 +349,23 @@ class Tool:
         return GradioToolWrapper(gradio_tool)
 
 
-def get_tool_description_with_args(tool: Tool,function_template) -> str:
-    compiled_template = compile_jinja_template(function_template)
-    rendered = compiled_template.render(
-        tool=tool, #**self.special_tokens_map
-    )
-    return rendered
+DEFAULT_TOOL_TEMPLATE = """
+- {{ tool.name }}: {{ tool.description }}
+    Takes inputs: {{tool.inputs}}
+"""
+
+# def get_tool_description_with_args(tool: Tool, function_template: str = DEFAULT_TOOL_TEMPLATE) -> str:
+#     compiled_template = compile_jinja_template(function_template)
+#     rendered = compiled_template.render(
+#         tool=tool, #**self.special_tokens_map
+#     )
+#     return rendered
+
+def get_tool_description_with_args(tool: Tool) -> str:
+    description = f"- {tool.name}: {tool.description}\n"
+    description += f"     Takes inputs: {str(tool.inputs)}\n"
+    return description
+
 @lru_cache
 def compile_jinja_template(function_template):
     try:
