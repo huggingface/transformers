@@ -528,7 +528,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @slow
 @require_torch_gpu
-@pytest.mark.integration_test
 class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 

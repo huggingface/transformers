@@ -17,11 +17,7 @@
 
 import doctest
 import sys
-import os
 import warnings
-import inspect
-import unittest
-import re
 from os.path import abspath, dirname, join
 
 import _pytest
@@ -90,13 +86,13 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
     config.addinivalue_line("markers", "tool_tests: mark the tool tests that are run on their specific schedule")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
-    config.addinivalue_line("markers", "integration_tests: mark the integration tests")
 
 
 def pytest_collection_modifyitems(items):
     for item in items:
         if any(test_name in item.nodeid for test_name in NOT_DEVICE_TESTS):
             item.add_marker(pytest.mark.not_device_test)
+
 
 def pytest_addoption(parser):
     from transformers.testing_utils import pytest_addoption_shared

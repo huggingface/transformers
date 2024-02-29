@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ add-new-push-test-workflow ]
+    branches: [ main ]
 
 env:
   RUN_SLOW: "yes"
@@ -96,7 +96,7 @@ jobs:
         id: run_integration_tests
         if: always()
         run:
-          pytest -m integration_test tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -k "IntegrationTest" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post results Slack channel
         if: always()
         id: post-slack-integration-tests
