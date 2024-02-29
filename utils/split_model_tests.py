@@ -64,19 +64,19 @@ if __name__ == "__main__":
         model_splits.append(d[start:end])
     model_splits = [
         [
-            "models/vilt",
-            "models/segformer",
-            "models/pvt",
+            # "models/vilt",
+            # "models/segformer",
+            # "models/pvt",
             "models/perceiver",
-            "models/levit",
-            "models/glpn",
-            "models/efficientformer",
-            "models/dpt",
-            "models/deit",
-            "models/data2vec",
-            "models/clipseg",
-            "models/beit",
-            "models/data2vec",
+            # "models/levit",
+            # "models/glpn",
+            # "models/efficientformer",
+            # "models/dpt",
+            # "models/deit",
+            # "models/data2vec",
+            # "models/clipseg",
+            # "models/beit",
+            # "models/data2vec",
         ]
     ]
     print(model_splits)
