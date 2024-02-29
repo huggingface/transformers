@@ -230,7 +230,7 @@ class Agent:
     def toolbox(self) -> Dict[str, Tool]:
         """Get all tools currently available to the agent"""
         return self._toolbox
-    
+
 
 class CodeAgent(Agent):
     def __init__(self, llm_callable, toolbox=None, run_prompt_template=None, stop_sequences=None, **kwargs):
