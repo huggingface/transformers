@@ -202,6 +202,7 @@ class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_torch_dtype_property(self):
         import torch
+
         model_id = "hf-internal-testing/tiny-random-distilbert"
 
         # If dtype is specified in the pipeline constructor, the property should return that type

@@ -964,9 +964,10 @@ class Pipeline(_ScikitCompat):
             # but it is not straightforward to detect it in a generic way. Therefore, we assume that the
             # pipeline support torch_dtype if (1) the extracted dtype is not default one (float32), or
             # (2) the torch_dtype argument was set by the user when creating the pipeline.
-            if (
-                self._initial_torch_dtype is not None
-                or self.model.dtype not in (torch.float32, "float32", "torch.float32")
+            if self._initial_torch_dtype is not None or self.model.dtype not in (
+                torch.float32,
+                "float32",
+                "torch.float32",
             ):
                 return self.model.dtype
         return self._initial_torch_dtype
