@@ -335,7 +335,7 @@ class Idefics2VisionAttention(nn.Module):
 
 class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
     """
-    Llama flash attention module. This module inherits from `LlamaAttention` as the weights of the module stays
+    Idefics2 flash attention module. This module inherits from `Idefics2VisionAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -561,9 +561,8 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
         return hidden_state[:, 0]
 
 
-# FIXME - add back in copied from statement
 class Idefics2EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics2Config, layer_idx: int):
+    def __init__(self, config: Idefics2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
@@ -571,7 +570,7 @@ class Idefics2EncoderLayer(nn.Module):
         self.mlp = Idefics2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    # Ignore copy
+    # Copied from transformers.models.siglip.modeling_siglip.SiglipEncoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -835,8 +834,9 @@ class Idefics2DecoupledEmbedding(nn.Embedding):
         complex case if it's any faster, given that seqlens are usually relatively short it's
         probably not faster or if faster not by much - but might be a good idea to measure.
         """
+        # FIXME - double check intend behavior - possible bug in the original code
         if self.num_additional_embeddings == 0:
-            return self.additional_embedding(input_ids)
+            return F.embedding(input_ids, self.weight)
 
         # Clone so that we don't modify the original input_ids later on
         input_ids = input_ids.clone()
@@ -1913,99 +1913,9 @@ class Idefics2DecoderFlashAttention2(Idefics2DecoderAttention):
         )
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Ideifics2
-# TODO @Arthur no longer copied from LLama after static cache
-class Idefics2DecoderSdpaAttention(Idefics2DecoderAttention):
-    """
-    Mistral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `MistralAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Adapted from MistralAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "MistralModel is using MistralSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
-        if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None, past_key_value
-
-
 IDEFICS2_DECODER_ATTENTION_CLASSES = {
     "eager": Idefics2DecoderAttention,
     "flash_attention_2": Idefics2DecoderFlashAttention2,
-    "sdpa": Idefics2DecoderSdpaAttention,
 }
 
 
@@ -2124,7 +2034,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     config_class = Idefics2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics2VisionAttention"]
+    _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
@@ -2149,14 +2059,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 IDEFICS2_INPUTS_DOCSTRING = r"""
@@ -2322,10 +2224,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-        batch_size = input_ids.size(0)
+        batch_size = inputs_embeds.size(0)
 
         if inputs_embeds is not None:
-            if image_hidden_states is not None:
+            # if image_hidden_states is not None: # FIXME - check the intended behaviour here - should we need input_ids?
+            if image_hidden_states is not None and input_ids is not None:
                 vision_pipeline_output_seq_len = image_hidden_states.shape[1]
                 vision_hidden_size = image_hidden_states.shape[2]
                 new_inputs_embeds = inputs_embeds.clone()
@@ -2425,7 +2328,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
             batch_size, num_channels, height, width = pixel_values.shape
-            pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
+            # FIXME - is this needed?
+            # pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
             # FIXME - check the old dimensions here - are there more dimensions than h,w? Why num_images than num_channels?
             # batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
             # pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
@@ -2620,7 +2524,7 @@ class Idefics2DecoupledLinear(nn.Module):
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.linear.weight"]  # FIXME - check if additional_fc is needed here
 
     def __init__(self, config):
         super().__init__(config)
@@ -2660,10 +2564,16 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.lm_head
+        # FIXME - check if we need to return the additional_fc as well
+        return self.lm_head.linear
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        # FIXME - check if we need to return the additional_fc as well
+        return self.lm_head.linear
+
+    def set_output_embeddings(self, new_embeddings):
+        # FIXME - check if we need to return the additional_fc as well = new_embeddings
+        self.lm_head.linear = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -2742,7 +2652,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()  # FIXME - check if this is necessary
+        logits = logits.float()
 
         loss = None
         if labels is not None:

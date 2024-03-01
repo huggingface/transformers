@@ -177,7 +177,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
                 f" resampler_n_heads={self.resampler_n_heads}"
             )
 
-        # super().__init__(**kwargs)
+        super().__init__(**kwargs)
 
 
 class Idefics2Config(PretrainedConfig):
