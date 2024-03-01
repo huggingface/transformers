@@ -2312,11 +2312,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         self.perceiver_resampler = PerceiverResampler(config)
 
-        if self.config.use_resampler:
-            self.image_seq_len = config.perceiver_config.resampler_n_latents
-        else:
-            self.image_seq_len = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
-
+        self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
 
         self.layers = nn.ModuleList(
@@ -2525,10 +2521,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
             # Modality projection
             image_hidden_states = self.modality_projection(image_hidden_states)
 
-            if self.config.use_resampler:
-                image_hidden_states = self.perceiver_resampler(
-                    context=image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
-                )
+            image_hidden_states = self.perceiver_resampler(
+                context=image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
+            )
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 

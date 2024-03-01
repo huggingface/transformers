@@ -135,8 +135,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        use_resampler (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the resampler
         resampler_n_latents (`int`, *optional*, defaults to ):
             Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         resampler_depth (`int`, *optional*, defaults to 6):
@@ -251,7 +249,6 @@ class Idefics2TextConfig(PretrainedConfig):
         freeze_vision_layers (`bool`, *optional*, defaults to `True`):  Whether to freeze vision layers
         freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
-        use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
     Example:
     ```python
     >>> from transformers import MistralModel, MistralConfig
@@ -300,7 +297,6 @@ class Idefics2TextConfig(PretrainedConfig):
         freeze_vision_module_exceptions=[],
         attention_dropout=0.0,
         _flash_attn_2_enabled=True,
-        use_resampler=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -336,7 +332,6 @@ class Idefics2TextConfig(PretrainedConfig):
         self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
         self.freeze_lm_head = freeze_lm_head
 
-        self.use_resampler = use_resampler
         self._flash_attn_2_enabled = _flash_attn_2_enabled
         self.attention_dropout = attention_dropout
 
@@ -418,7 +413,6 @@ class Idefics2Config(PretrainedConfig):
         freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
         attention_dropout (`float`, *optional*, defaults to 0.0): The dropout ratio for the attention probabilities.
-        use_resampler (`bool`, *optional*, defaults to `True`): Whether to use the Resampler
         vision_config (`IdeficsVisionConfig`,  *optional*): Custom vision config or dict
         perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config or dict
 
@@ -470,7 +464,6 @@ class Idefics2Config(PretrainedConfig):
         freeze_vision_module_exceptions=[],
         attention_dropout=0.0,
         _flash_attn_2_enabled=True,
-        use_resampler=True,
         vision_config=None,
         perceiver_config=None,
         **kwargs,
@@ -508,7 +501,6 @@ class Idefics2Config(PretrainedConfig):
         self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
         self.freeze_lm_head = freeze_lm_head
 
-        self.use_resampler = use_resampler
         self._flash_attn_2_enabled = _flash_attn_2_enabled
         self.attention_dropout = attention_dropout
 
