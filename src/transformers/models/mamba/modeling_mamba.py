@@ -208,7 +208,7 @@ class MambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  (batch, seq_len, self.time_step_rank + self.ssm_state_size * 2)
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))  
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
@@ -236,7 +236,7 @@ class MambaMixer(nn.Module):
             scan_outputs.append(scan_output[:, :, 0])
         scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, seq_len, intermediade_size]
         scan_output = scan_output + (hidden_states * self.D[None, :, None].float())
-        contextualized_states = (scan_output * self.act(gate)).to(hidden_states.dtype)  # [batch, intermediade_size, seq_len]
+        contextualized_states = (scan_output * self.act(gate)).to(hidden_states.dtype)
         # 4. Final linear projection
         contextualized_states = self.out_proj(contextualized_states.transpose(1, 2))  # [batch, seq_len, hidden_size]
 
