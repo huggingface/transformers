@@ -300,7 +300,7 @@ class MambaBlock(nn.Module):
             residual = residual.to(torch.float32)
 
         hidden_states = self.mixer(hidden_states, inference_params=inference_params)
-        hidden_states = residual.to(torch.float32) + hidden_states
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
