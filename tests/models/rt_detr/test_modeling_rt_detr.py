@@ -58,7 +58,6 @@ class RTDetrModelTester:
         num_channels=3,
         backbone="resnet50d",
         use_pretrained_backbone=True,
-        dilation=False,
         # encoder HybridEncoder
         d_model=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -109,7 +108,6 @@ class RTDetrModelTester:
         self.num_channels = num_channels
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.dilation = dilation
         self.d_model = d_model
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
@@ -175,7 +173,6 @@ class RTDetrModelTester:
             num_channels=self.num_channels,
             backbone=self.backbone,
             use_pretrained_backbone=self.use_pretrained_backbone,
-            dilation=self.dilation,
             d_model=self.d_model,
             encoder_in_channels=self.encoder_in_channels,
             feat_strides=self.feat_strides,

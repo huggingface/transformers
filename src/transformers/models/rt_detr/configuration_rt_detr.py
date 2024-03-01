@@ -44,47 +44,69 @@ class RTDetrConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        use_timm_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        use_timm_backbone (`bool`, *optional*, defaults to `True`):
+            Whether the model use timm backbone.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
-        num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        backbone (`<fill_type>`, *optional*, defaults to `"resnet50d"`): <fill_docstring>
-        use_pretrained_backbone (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        dilation (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        d_model (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        encoder_in_channels (`<fill_type>`, *optional*, defaults to `[512, 1024, 2048]`): <fill_docstring>
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        backbone (`str`, *optional*, defaults to `"resnet50d"`):
+            Type of the backbone based on timm backbone.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+            Whether to use pretrained weight for backbone model.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimension of the layers.
+        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+            Multi level features input for encoder.
         feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
         encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
-        encoder_ffn_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        encoder_attention_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
         dropout (`float`, *optional*, defaults to 0.0):
             The ratio for all dropout layers.
-        activation_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
         encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
         pe_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
-        activation_function (`<fill_type>`, *optional*, defaults to `"silu"`): <fill_docstring>
+        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        activation_function (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         eval_size (`Tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride.
         normalize_before (`bool`, *optional*, defaults to `False`):
             Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
             feed-forward modules.
-        hidden_expansion (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        hidden_expansion (`float`, *optional*, defaults to 1.0):
+            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
-        decoder_in_channels (`<fill_type>`, *optional*, defaults to `[256, 256, 256]`): <fill_docstring>
-        decoder_ffn_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        num_feature_levels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        decoder_n_points (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-        decoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
-        decoder_attention_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
-        decoder_activation_function (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
-        attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+            Multi level features dimension for decoder
+        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        num_feature_levels (`int`, *optional*, defaults to 3):
+            The number of input feature levels.
+        decoder_n_points (`int`, *optional*, defaults to 4):
+            The number of sampled keys in each feature level for each attention head in the decoder.
+        decoder_layers (`int`, *optional*, defaults to 6):
+            Number of decoder layers.
+        decoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         num_denoising (`int`, *optional*, defaults to 100):
             The total number of denoising tasks or queries to be used for contrastive denoising.
         label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -97,9 +119,13 @@ class RTDetrConfig(PretrainedConfig):
             Height and width of the input image used during evaluation to generate the bounding box anchors.
         eval_idx (`int`, *optional*, defaults to -1):
             Id of the decoder layer used to obtain the logits and bounding boxes.
-        disable_custom_kernels (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        with_box_refine (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+            Whether to disable custom kernels.
+        with_box_refine (`bool`, *optional*, defaults to `True`):
+            Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
+            based on the predictions from the previous layer.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether basic arcitechture type is encoder decoder structure.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
@@ -112,7 +138,8 @@ class RTDetrConfig(PretrainedConfig):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if focal focal should be used.
-        auxiliary_loss (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        auxiliary_loss (`bool`, *optional*, defaults to `True`):
+            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
             Parameter alpha used to compute the focal loss.
         focal_loss_gamma (`float`, *optional*, defaults to 2.0):
@@ -159,7 +186,6 @@ class RTDetrConfig(PretrainedConfig):
         num_channels=3,
         backbone="resnet50d",
         use_pretrained_backbone=True,
-        dilation=False,
         # encoder HybridEncoder
         d_model=256,
         encoder_in_channels=[512, 1024, 2048],
