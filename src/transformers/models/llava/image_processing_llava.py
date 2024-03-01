@@ -435,7 +435,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_image_patches(self, image: Image, grid_pinpoints):
+    def get_image_patches(self, image: Image, grid_pinpoints) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -446,7 +446,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 A string representation of a list of possible resolutions.
 
         Returns:
-            torch.Tensor: A tensor containing the processed image patches.
+            List[np.array]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise ValueError("grid_pinpoints must be a list of possible resolutions.")
@@ -460,6 +460,8 @@ class LlavaImageProcessor(BaseImageProcessor):
         image_original_resize = image.resize((self.size["shortest_edge"], self.size["shortest_edge"]))
 
         image_patches = [image_original_resize] + patches
+
+        image_patches = [to_numpy_array(image) for image in image_patches]
 
         return image_patches
 
@@ -561,6 +563,9 @@ class LlavaImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        if image_aspect_ratio not in ["anyres", "pad"]:
+            raise ValueError(f"Invalid image aspect ratio: {image_aspect_ratio}")
+
         new_images = []
         image_sizes = [image.size for image in images]
         for image in images:
@@ -587,8 +592,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                     input_data_format=input_data_format,
                 ).pixel_values
 
-                new_images.append(pixel_values)
-
             elif image_aspect_ratio == "pad":
                 image = self.expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
                 pixel_values = self._preprocess(
@@ -608,13 +611,13 @@ class LlavaImageProcessor(BaseImageProcessor):
                     data_format=data_format,
                     input_data_format=input_data_format,
                 ).pixel_values
-            else:
-                raise ValueError(f"Invalid image aspect ratio: {image_aspect_ratio}")
 
+            new_images.append(pixel_values)
+
+        new_images = torch.stack(new_images, dim=0) if return_tensors == "pt" else np.stack(new_images, axis=0)
         if image_aspect_ratio == "anyres":
-            new_images = torch.stack(new_images, dim=0) if return_tensors == "pt" else np.stack(new_images, axis=0)
             data = {"pixel_values": new_images, "image_sizes": image_sizes}
         elif image_aspect_ratio == "pad":
-            data = {"pixel_values": pixel_values}
+            data = {"pixel_values": new_images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
