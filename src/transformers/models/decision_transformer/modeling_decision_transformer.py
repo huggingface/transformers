@@ -400,10 +400,9 @@ class DecisionTransformerGPT2FlashAttention2(DecisionTransformerGPT2Attention):
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
 
+        present = None
         if use_cache is True:
             present = (key, value)
-        else:
-            present = None
 
         query_length = query.shape[2]
         tgt_len = key.shape[2]
@@ -786,7 +785,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
-            if self._use_flash_attention_2:
+            if self._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # We create a 3D attention mask from a 2D tensor mask.

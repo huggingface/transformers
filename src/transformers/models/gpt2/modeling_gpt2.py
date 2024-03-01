@@ -913,7 +913,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-        self._attn_implementation = config._attn_implementation 
+        self._attn_implementation = config._attn_implementation
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1035,7 +1035,7 @@ class GPT2Model(GPT2PreTrainedModel):
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
-            if self. _attn_implementation == "flash_attention_2":
+            if self._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # We create a 3D attention mask from a 2D tensor mask.
