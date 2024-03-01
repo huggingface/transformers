@@ -1938,7 +1938,7 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
 
         >>> # We use arbitrary indices to avoids situations like end_index < start_index
         >>> predict_answer_tokens = inputs.input_ids[0, 13 : 14 + 1]
-        >>> tokenizer.decode(predict_answer_tokens, skip_special_tokens=True)
+        >>> predict_answer_tokens = tokenizer.decode(predict_answer_tokens, skip_special_tokens=True)
 
         >>> # target is "nice puppet"
         >>> target_start_index = torch.tensor([14])
