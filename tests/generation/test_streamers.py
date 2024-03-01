@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 from queue import Empty
 from threading import Thread
@@ -68,38 +69,6 @@ class StreamerTester(unittest.TestCase):
 
         self.assertEqual(streamer_text, greedy_text)
 
-    #TODO: annotated to matrix over sampling strategies
-    def test_output_iterator_streamer_matches_non_streaming(self):
-        #tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        model.config.eos_token_id = -1
-
-        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        greedy_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False)
-        #greedy_text = tokenizer.decode(greedy_ids[0])
-
-        streamer = OutputIteratorStreamer()
-        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
-        thread = Thread(target=model.generate, kwargs=generation_kwargs)
-        thread.start() # does this not need to be closed?
-
-        stream_ids = torch.Tensor()
-        for answer in streamer:
-            if isinstance(answer, list):
-                for output_object in answer:
-                    new_ids = output_object.sequences.cpu()
-                    if new_ids.ndim == 1:
-                        new_ids = new_ids.unsqueeze(0)
-                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            else:
-                new_ids = answer.sequences.cpu()
-                if new_ids.ndim == 1:
-                    new_ids = new_ids.unsqueeze(0)
-                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-
-        self.assertEqual(greedy_ids.shape, stream_ids.shape)
-        self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
-
     def test_text_streamer_skip_prompt(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -153,3 +122,72 @@ class StreamerTester(unittest.TestCase):
             streamer_text = ""
             for new_text in streamer:
                 streamer_text += new_text
+
+@require_torch
+class OutputIteratorStreamerTester(unittest.TestCase):
+
+    #TODO: annotated to matrix over sampling strategies
+    def test_greedy_ids_match(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        greedy_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False)
+
+        streamer = OutputIteratorStreamer()
+        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        thread = Thread(target=model.generate, kwargs=generation_kwargs)
+        thread.start() # does this not need to be closed?
+
+        stream_ids = torch.Tensor()
+        for answer in streamer:
+            if isinstance(answer, list):
+                for output_object in answer:
+                    new_ids = output_object.sequences.cpu()
+                    if new_ids.ndim == 1:
+                        new_ids = new_ids.unsqueeze(0)
+                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            else:
+                new_ids = answer.sequences.cpu()
+                if new_ids.ndim == 1:
+                    new_ids = new_ids.unsqueeze(0)
+                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+
+        self.assertEqual(greedy_ids.shape, stream_ids.shape)
+        self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
+
+    def test_contrastive_ids_match(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": True, 'penalty_alpha': 0.6, 'top_k': 4}
+        baseline_kwargs = copy.deepcopy(generation_kwargs)
+
+        torch.manual_seed(0)
+        outputs_baseline = model.generate(**baseline_kwargs)
+
+        streamer = OutputIteratorStreamer()
+        test_kwargs = copy.deepcopy(generation_kwargs)
+        test_kwargs['streamer'] = streamer
+
+        torch.manual_seed(0)
+        thread = Thread(target=model.generate, kwargs=test_kwargs)
+        thread.start()  # does this not need to be closed?
+
+        stream_ids = torch.Tensor()
+        for answer in streamer:
+            if isinstance(answer, list):
+                for output_object in answer:
+                    new_ids = output_object.sequences.cpu()
+                    if new_ids.ndim == 1:
+                        new_ids = new_ids.unsqueeze(0)
+                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            else:
+                new_ids = answer.sequences.cpu()
+                if new_ids.ndim == 1:
+                    new_ids = new_ids.unsqueeze(0)
+                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+
+        self.assertEqual(outputs_baseline.shape, stream_ids.shape)
+        self.assertEqual(outputs_baseline.tolist(), stream_ids.tolist())

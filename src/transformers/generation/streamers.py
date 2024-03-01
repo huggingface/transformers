@@ -53,9 +53,6 @@ class OutputStreamer(BaseStreamer):
         if cache is None:
             cache = []
         self.cache = cache # incoming unprocessed outputs
-        #if queue is None:
-        #    queue = Queue()
-        #self.queue = queue # outgoing finalized outputs
 
     def _filter_func(self, value):
         """

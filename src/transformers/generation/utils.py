@@ -2766,6 +2766,7 @@ class GenerationMixin:
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            #print(next_tokens.dtype, input_ids.dtype) # both int64 here
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -2779,7 +2780,12 @@ class GenerationMixin:
             # I am confusion...
             if streamer is not None:
                 #streamer.put(next_tokens.cpu())
-                streamer.put(GenerateDecoderOnlyOutput(sequences=next_tokens))
+                streamer.put(
+                    GenerateDecoderOnlyOutput(
+                        #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
+                        sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
+                    )
+                )
 
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
