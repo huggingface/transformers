@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import CharacterBertConfig, is_torch_available
-from transformers.models.auto import AutoModel, AutoModelForSequenceClassification, get_values
+from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
@@ -38,6 +38,8 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
+        AutoModel,
+        AutoModelForSequenceClassification,
         CharacterBertForMaskedLM,
         CharacterBertForMultipleChoice,
         CharacterBertForNextSentencePrediction,
