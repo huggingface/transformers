@@ -566,7 +566,7 @@ class MambaModel(MambaPreTrainedModel):
     MAMBA_START_DOCSTRING,
 )
 class MambaForCausalLM(MambaPreTrainedModel):
-    _tied_weights_keys = ["head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -588,12 +588,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return self.backbone.set_input_embeddings(new_embeddings)
 
     def _update_model_kwargs_for_generation(
-        self,
-        outputs: ModelOutput,
-        model_kwargs: Dict[str, Any],
-        is_encoder_decoder: bool = False,
-        standardize_cache_format: bool = False,
-        **kwargs,
+        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         model_kwargs["inference_params"] = outputs["inference_params"]
         return model_kwargs

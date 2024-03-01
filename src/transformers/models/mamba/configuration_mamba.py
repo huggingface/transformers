@@ -130,6 +130,7 @@ class MambaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.layer_norm_epsilon = layer_norm_epsilon
         self.conv_kernel = conv_kernel
+        self.expand = expand
         self.intermediate_size = int(expand * self.hidden_size)
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
