@@ -15,6 +15,7 @@
 """PyTorch MAMBA model."""
 
 from dataclasses import dataclass
+import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -320,53 +321,50 @@ class MambaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, MambaMixer):
-            pass
-        if isinstance(module, nn.Linear):
-            if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, std=self.config.initializer_range)
+            module.A_log._no_weight_decay = True
+            module.D._no_weight_decay = True    
 
-        # TODO make sure we properly init
-        # self.A_log._no_weight_decay = True
-        # self.D._no_weight_decay = True
-        #
-        # # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
-        # dt = torch.exp(
-        #     torch.rand(self.intermediate_size, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
-        #     + math.log(dt_min)
-        # ).clamp(min=dt_init_floor)
-        # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-        # inv_dt = dt + torch.log(-torch.expm1(-dt))
-        # with torch.no_grad():
-        #     self.dt_proj.bias.copy_(inv_dt)
-        # # Our initialization would set all Linear.bias to zero, need to mark this one as _no_reinit
-        # self.dt_proj.bias._no_reinit = True
+            dt_init_std = self.dt_rank**-0.5 * self.config.dt_scale
+            if self.config.dt_init == "constant":
+                nn.init.constant_(self.dt_proj.weight, dt_init_std)
+            elif self.config.dt_init == "random":
+                nn.init.uniform_(self.dt_proj.weight, -dt_init_std, dt_init_std)
 
-        # if isinstance(module, nn.Linear):
-        #     if module.bias is not None:
-        #         if not getattr(module.bias, "_no_reinit", False):
-        #             nn.init.zeros_(module.bias)
-        # elif isinstance(module, nn.Embedding):
-        #     nn.init.normal_(module.weight, std=initializer_range)
-        #
-        # if rescale_prenorm_residual:
-        #     # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-        #     #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-        #     #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-        #     #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-        #     #
-        #     # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        #     for name, p in module.named_parameters():
-        #         if name in ["out_proj.weight", "fc2.weight"]:
-        #             # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-        #             # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-        #             # We need to reinit p since this code could be called multiple times
-        #             # Having just p *= scale would repeatedly scale it down
-        #             nn.init.kaiming_uniform_(p, a=math.sqrt(5))
-        #             with torch.no_grad():
-        #                 p /= math.sqrt(n_residuals_per_layer * n_layer)
+            dt = torch.exp(
+                torch.rand(self.intermediate_size) * (math.log(self.config.dt_max) - math.log(self.config.dt_min))
+                + math.log(self.config.dt_min)
+            ).clamp(min=self.config.dt_init_floor)
+            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+            inv_dt = dt + torch.log(-torch.expm1(-dt))
+            with torch.no_grad():
+                self.dt_proj.bias.copy_(inv_dt)
+            self.dt_proj.bias._no_reinit = True
+
+            if isinstance(module, nn.Linear):
+                if module.bias is not None:
+                    if not getattr(module.bias, "_no_reinit", False):
+                        nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, std=self.config.initializer_range)
+
+            if self.config.rescale_prenorm_residual:
+                # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+                #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+                #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+                #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+                #
+                # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
+                for name, p in module.named_parameters():
+                    if name in ["out_proj.weight", "fc2.weight"]:
+                        # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                        # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+                        # We need to reinit p since this code could be called multiple times
+                        # Having just p *= scale would repeatedly scale it down
+                        nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+                        with torch.no_grad():
+                            p /= math.sqrt(n_residuals_per_layer * self.config.num_layers)
+
+
 
 
 @dataclass
