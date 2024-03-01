@@ -16,23 +16,14 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tokenizers_available,
     is_torch_available,
 )
 
 
 _import_structure = {
     "configuration_qwen2_moe": ["QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2MoeConfig"],
-    "tokenization_qwen2_moe": ["Qwen2MoeTokenizer"],
 }
 
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_qwen2_moe_fast"] = ["Qwen2MoeTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -50,15 +41,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
-    from .tokenization_qwen2_moe import Qwen2MoeTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_qwen2_moe_fast import Qwen2MoeTokenizerFast
 
     try:
         if not is_torch_available():
