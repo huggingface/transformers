@@ -195,6 +195,8 @@ class MambaMixer(nn.Module):
             conv_state = inference_params.conv_states[self.layer_idx]  # (batch, intermediate_size, conv_kernel_size)
             conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
             conv_state[:, :, -1] = hidden_states[:, :, 0]
+            inference_params.conv_states[self.layer_idx] = conv_state
+
             bias = getattr(self.conv1d, "bias", 0.0)
             hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias)
             hidden_states = hidden_states.unsqueeze(-1)  # (batch, intermediate_size, 1)
