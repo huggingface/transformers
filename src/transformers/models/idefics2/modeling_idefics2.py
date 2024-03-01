@@ -2737,48 +2737,33 @@ class Idefics2Model(Idefics2PreTrainedModel):
         )
 
 
-class Idefics2DecoupledLinear(nn.Linear):
-    # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
+class Idefics2DecoupledLinear(nn.Module):
     """
     Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters.
     In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `out_additional_features` > 0, then it will create `out_additional_features * in_features` additional parameters that are always trained.
     If `out_additional_features=0`, then the module defaults back to the regular behavior of `nn.Linear`.
     """
 
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        out_additional_features: int = 0,
-        bias: bool = True,
-        partially_freeze: bool = True,
-        device=None,
-        dtype=None,
-    ) -> None:
+    def __init__(self, config) -> None:
         """
         out_additional_features: int. Number of additional trainable dimensions. Only makes sense when `partially_freeze=True`.
         partially_freeze: bool. If True, the regular `weight` will be frozen and extra parameters (if any) will be trainable. If False, default to the regular behavior of nn.Linear.
         """
-        super().__init__(in_features, out_features, bias, device, dtype)
-        self.out_additional_features = out_additional_features
-        self.partially_freeze = partially_freeze
+        super().__init__()
+        self.in_features = config.hidden_size
+        self.out_features = config.vocab_size
+        self.out_additional_features = config.additional_vocab_size
+        self.partially_freeze = config.freeze_lm_head
 
-        self.in_features = in_features
-        self.out_features = out_features
+        self.linear = nn.Linear(in_features=self.in_features, out_features=self.out_features, bias=False)
 
         if partially_freeze:
-            self.weight.requires_grad_(False)
+            self.linear.weight.requires_grad_(False)
             if bias:
-                self.bias.requires_grad_(False)
+                self.linear.bias.requires_grad_(False)
 
         if out_additional_features > 0:
-            self.additional_fc = nn.Linear(
-                in_features=in_features,
-                out_features=out_additional_features,
-                bias=bias,
-                device=device,
-                dtype=dtype,
-            )
+            self.additional_fc = nn.Linear(in_features=self.in_features, out_features=self.out_additional_features, bias=bias)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         output = F.linear(input, self.weight, self.bias)
@@ -2797,13 +2782,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         super().__init__(config)
         self.model = Idefics2Model(config)
         self.image_token_id = self.config.image_token_id
-        self.lm_head = Idefics2DecoupledLinear(
-            in_features=config.hidden_size,
-            out_features=config.vocab_size,
-            out_additional_features=config.additional_vocab_size,
-            bias=False,
-            partially_freeze=config.freeze_lm_head,
-        )
+        self.lm_head = Idefics2DecoupledLinear(config)
 
         # Initialize weights and apply final processing
         self.post_init()
