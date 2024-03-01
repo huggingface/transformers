@@ -20,28 +20,22 @@ from dataclasses import dataclass
 from typing import Dict
 
 import requests
-from huggingface_hub import HfFolder, hf_hub_download, list_spaces
+from huggingface_hub import hf_hub_download, list_spaces
 
-from ..models.auto import AutoTokenizer
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote, get_tool_description_with_args
-from .prompts import CHAT_MESSAGE_PROMPT, download_prompt, DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE
+from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 
 
 logger = logging.get_logger(__name__)
 
 
-if is_openai_available():
-    import openai
-
 if is_torch_available():
     from ..generation import StoppingCriteria, StoppingCriteriaList
     from ..models.auto import AutoModelForCausalLM
 else:
     StoppingCriteria = object
-
-_tools_are_initialized = False
 
 
 BASE_PYTHON_TOOLS = {
@@ -167,6 +161,7 @@ def parse_code(code):
 
     return code
 
+
 def parse_json_tool_call(json_blob: str):
     json_blob = json_blob.strip().replace("```json", "").replace("```", "").replace('\\', "")
     try:
@@ -229,63 +224,16 @@ class Agent:
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.function_template` to an appropriate template. "
         )
-        return (
-"""
-{
-    "type": "{{ tool.type }}",
-    "function": {
-        "name": "{{ tool.name }}",
-        "description": "{{ tool.description }}",
-        "parameters": {
-            "type": "{{ tool.inputs.type }}",
-            "properties": {
-{% for property_name, property_details in tool.inputs.items() %}
-                "{{ property_name }}": {
-                    "type": "{{ property_details.type }}",
-{% if property_details.type == 'string' and property_details.enum %}
-                    "enum": [{{ property_details.enum|map('quote')|join(', ') }}],
-{% endif %}
-                    "description": "{{ property_details.description }}"
-                }{% if not loop.last %},{% endif %}\n
-{% endfor %}
-            },
-            "required": [{{ tool.required|map('quote')|join(', ') }}]
-        }
-    }
-}
-"""
-        )
+        return OPENAI_TOOL_DESCRIPTION_TEMPLATE
+
     def format_prompt(self, task):
+        """Override this for a custom prompt format"""
         return format_prompt(self.toolbox, self.prompt_template, task)
 
 
     def parser(self,input_message):
         pass
         # TODO: to continue
-
-
-    def default_parse_tool_call(self,input_message):
-        """
-        Parses a JSON string that represents a tool call, extracting the tool's name
-        and its arguments.
-        
-        Args:
-        - input_message (str): A JSON string containing the tool call.
-        
-        Returns:
-        - dict: A dictionary with 'tool_name' and 'arguments' as keys.
-        """
-        try:
-            tool_call = json.loads(input_message)
-            tool_name = tool_call.get("name", "")
-            arguments = tool_call.get("arguments", {})
-            
-            return {
-                "tool_name": tool_name,
-                "arguments": arguments
-            }
-        except json.JSONDecodeError:
-            return {"error": "Invalid JSON parsed"}
         
 
 class CodeAgent(Agent):

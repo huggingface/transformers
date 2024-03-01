@@ -349,12 +349,37 @@ class Tool:
         return GradioToolWrapper(gradio_tool)
 
 
-DEFAULT_TOOL_TEMPLATE = """
+DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 - {{ tool.name }}: {{ tool.description }}
     Takes inputs: {{tool.inputs}}
 """
 
-def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_TEMPLATE) -> str:
+OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
+{
+    "type": "{{ tool.type }}",
+    "function": {
+        "name": "{{ tool.name }}",
+        "description": "{{ tool.description }}",
+        "parameters": {
+            "type": "{{ tool.inputs.type }}",
+            "properties": {
+{% for property_name, property_details in tool.inputs.items() %}
+                "{{ property_name }}": {
+                    "type": "{{ property_details.type }}",
+{% if property_details.type == 'string' and property_details.enum %}
+                    "enum": [{{ property_details.enum|map('quote')|join(', ') }}],
+{% endif %}
+                    "description": "{{ property_details.description }}"
+                }{% if not loop.last %},{% endif %}\n
+{% endfor %}
+            },
+            "required": [{{ tool.required|map('quote')|join(', ') }}]
+        }
+    }
+}
+"""
+
+def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
     compiled_template = compile_jinja_template(description_template)
     rendered = compiled_template.render(
         tool=tool, #**self.special_tokens_map
