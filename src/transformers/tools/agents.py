@@ -122,25 +122,6 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def get_tools_from_code(code, toolbox, remote=False, cached_tools=None):
-    if cached_tools is None:
-        resolved_tools = BASE_PYTHON_TOOLS.copy()
-    else:
-        resolved_tools = cached_tools
-    for name, tool in toolbox.items():
-        if name not in code or name in resolved_tools:
-            continue
-
-        # if isinstance(tool, Tool):
-        resolved_tools[name] = tool
-        # else:
-        #     task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-        #     _remote = remote and supports_remote(task_or_repo_id)
-        #     resolved_tools[name] = load_tool(task_or_repo_id, remote=_remote)
-
-    return resolved_tools
-
-
 def get_tool_creation_code(code, toolbox, remote=False):
     code_lines = ["from transformers import load_tool", ""]
     for name, tool in toolbox.items():
@@ -219,8 +200,8 @@ class Agent:
             self._toolbox = HUGGINGFACE_DEFAULT_TOOLS
         else:
             self._toolbox = {tool.name: tool for tool in toolbox}
+        # TODO: allow to specifiy a repo_id str instead of a Tool object in toolbox, and load the corresponding tool from the hub
         self.memory = []
-        self.cached_tools = None
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -355,7 +336,6 @@ class CodeAgent(Agent):
         
         try: 
             code = self.parse_code(code)
-            self.cached_tools = get_tools_from_code(code, self.toolbox, cached_tools=self.cached_tools)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
             self.log(error_msg)
@@ -367,7 +347,9 @@ class CodeAgent(Agent):
         # Execute
         try: 
             self.log("\n\n==Execution==")
-            return evaluate_python_code(code, self.cached_tools, state=kwargs.copy())
+            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox} 
+            # NOTE: The base python tools are not added to toolbox, since they do not have the proper attributes for a description
+            return evaluate_python_code(code, available_tools, state=kwargs.copy())
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
             self.log(error_msg)
