@@ -14,8 +14,8 @@
 # limitations under the License.
 """PyTorch MAMBA model."""
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -133,7 +133,9 @@ class MambaMixer(nn.Module):
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
-        time_step, B, C = torch.split(ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
+        time_step, B, C = torch.split(
+            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
+        )
         discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
 
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
@@ -214,7 +216,9 @@ class MambaMixer(nn.Module):
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
-        time_step, B, C = torch.split(ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
+        time_step, B, C = torch.split(
+            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
+        )
         discrete_time_step = self.dt_proj(time_step)
         A = -torch.exp(self.A_log.float())  # (intermediate_size, ssm_state_size)
 
@@ -319,7 +323,7 @@ class MambaPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         if isinstance(module, MambaMixer):
             module.A_log._no_weight_decay = True
-            module.D._no_weight_decay = True    
+            module.D._no_weight_decay = True
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
             if self.config.time_step_init_scheme == "constant":
@@ -328,7 +332,8 @@ class MambaPreTrainedModel(PreTrainedModel):
                 nn.init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
 
             dt = torch.exp(
-                torch.rand(self.config.intermediate_size) * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                torch.rand(self.config.intermediate_size)
+                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
@@ -360,8 +365,6 @@ class MambaPreTrainedModel(PreTrainedModel):
                     nn.init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
                         p /= math.sqrt(self.config.num_layers)
-
-
 
 
 @dataclass

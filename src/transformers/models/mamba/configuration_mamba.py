@@ -70,10 +70,11 @@ class MambaConfig(PretrainedConfig):
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether or not residuals should be in `float32`.
         time_step_rank (`int`, *optional*, defaults to `"auto"`): rank fo the discretization projection matrix.
-        time_step_scale (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        time_step_init_floor (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        time_step_min (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        time_step_max (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        time_step_scale (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        time_step_min (`<fill_type>`, *optional*, defaults to 0.001): <fill_docstring>
+        time_step_max (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
+        time_step_init_scheme (`<fill_type>`, *optional*, defaults to `"random"`): <fill_docstring>
+        time_step_floor (`<fill_type>`, *optional*, defaults to 0.0001): <fill_docstring>
         rescale_prenorm_residual (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
@@ -116,7 +117,7 @@ class MambaConfig(PretrainedConfig):
         time_step_rank="auto",
         time_step_scale=1.0,
         time_step_min=0.001,
-        time_step_max=.1,
+        time_step_max=0.1,
         time_step_init_scheme="random",
         time_step_floor=1e-4,
         rescale_prenorm_residual=False,
@@ -129,8 +130,7 @@ class MambaConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.layer_norm_epsilon = layer_norm_epsilon
         self.conv_kernel = conv_kernel
-        self.expand = expand
-        self.intermediate_size = int(self.expand * self.hidden_size)
+        self.intermediate_size = int(expand * self.hidden_size)
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
