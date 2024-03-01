@@ -34,10 +34,10 @@ pip install optimum[exporters-tf]
 optimum-cli export tflite --help
 ```
 
-🤗 Hubからモデルのチェックポイントをエクスポートするには、例えば `bert-base-uncased` を使用する場合、次のコマンドを実行します：
+🤗 Hubからモデルのチェックポイントをエクスポートするには、例えば `google-bert/bert-base-uncased` を使用する場合、次のコマンドを実行します：
 
 ```bash
-optimum-cli export tflite --model bert-base-uncased --sequence_length 128 bert_tflite/
+optimum-cli export tflite --model google-bert/bert-base-uncased --sequence_length 128 bert_tflite/
 ```
 
 進行状況を示すログが表示され、生成された `model.tflite` が保存された場所も表示されるはずです：

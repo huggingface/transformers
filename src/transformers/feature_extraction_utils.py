@@ -281,8 +281,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
@@ -454,6 +453,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -503,6 +503,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    subfolder=subfolder,
                     token=token,
                     user_agent=user_agent,
                     revision=revision,
