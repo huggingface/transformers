@@ -34,7 +34,7 @@ from transformers import AutoBackbone
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -226,6 +226,10 @@ class RTDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
             layer plus the initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
@@ -246,6 +250,7 @@ class RTDetrModelOutput(ModelOutput):
     enc_topk_logits: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     dn_meta: Optional[Dict] = None
@@ -1119,12 +1124,10 @@ class RTDetrEncoder(nn.Module):
 
         self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-    def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
+    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False,) -> torch.Tensor:
         hidden_states = src
         for layer in self.layers:
-            layer_outputs = layer(hidden_states, attention_mask=src_mask, position_embeddings=pos_embed)
-            hidden_states = layer_outputs[0]
-
+            hidden_states = layer(hidden_states, attention_mask=src_mask, position_embeddings=pos_embed, output_attentions=output_attentions)
         return hidden_states
 
 
@@ -1231,9 +1234,14 @@ class RTDetrHybridEncoder(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeds
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         # encoder
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
+                if output_hidden_states:
+                    encoder_states = encoder_states + (hidden_states,)
                 height, width = hidden_states[enc_ind].shape[2:]
                 # flatten [batch, channel, height, width] to [batch, height*width, channel]
                 src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
@@ -1244,8 +1252,18 @@ class RTDetrHybridEncoder(nn.Module):
                 else:
                     pos_embed = None
 
-                memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
-                hidden_states[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
+                layer_outputs = self.encoder[i](
+                    src_flatten, 
+                    pos_embed=pos_embed, 
+                    output_attentions=output_attentions,
+                )
+                hidden_states[enc_ind] = layer_outputs[0].permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
+
+                if output_attentions:
+                    all_attentions = all_attentions + (layer_outputs[1],)
+
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
 
         # broadcasting and fusion
         fpn_feature_maps = [hidden_states[-1]]
@@ -1268,7 +1286,9 @@ class RTDetrHybridEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states] if v is not None)
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=encoder_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 class RTDetrDecoder(RTDetrPreTrainedModel):
@@ -1604,12 +1624,18 @@ class RTDetrModel(RTDetrPreTrainedModel):
         proj_feats = [self.encoder_input_proj[level](source) for level, (source, mask) in enumerate(features)]
 
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(proj_feats)
+            encoder_outputs = self.encoder(
+                proj_feats, 
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutputWithNoAttention):
-            encoder_outputs = BaseModelOutputWithNoAttention(
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         # Equivalent to def _get_encoder_input
@@ -1702,9 +1728,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
-            # valid_ratios=valid_ratios,
-            # output_attentions=output_attentions,
-            # output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
@@ -1727,7 +1752,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             enc_topk_logits=enc_topk_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
-            # encoder_attentions=encoder_outputs.attentions,
+            encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             dn_meta=dn_meta,

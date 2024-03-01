@@ -252,9 +252,8 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
-    test_resize_embeddings = False
-    has_attentions = False
     test_head_masking = False
+    test_missing_keys = False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -315,6 +314,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
+        config.output_attentions = True
 
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -323,10 +323,27 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         inputs = self._prepare_for_class(inputs_dict, model_class)
 
         outputs = model(**inputs)
+
+        # we take the second output since last_hidden_state is the second item
+        output = outputs[1]
+
         encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_attentions = outputs.encoder_attentions[0]
         encoder_hidden_states.retain_grad()
+        encoder_attentions.retain_grad()
+
+        decoder_attentions = outputs.decoder_attentions[0]
+        decoder_attentions.retain_grad()
+
+        cross_attentions = outputs.cross_attentions[0]
+        cross_attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
 
         self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(encoder_attentions.grad)
+        self.assertIsNotNone(decoder_attentions.grad)
+        self.assertIsNotNone(cross_attentions.grad)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

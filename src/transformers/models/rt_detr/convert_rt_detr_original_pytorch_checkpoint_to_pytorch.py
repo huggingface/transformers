@@ -53,7 +53,7 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     elif model_name == "rtdetr_r50vd_m":
         pass
     elif model_name == "rtdetr_r50vd":
-        pass
+        config.backbone = "resnet50d"
     elif model_name == "rtdetr_r101vd":
         pass
     elif model_name == "rtdetr_18vd_coco_o365":

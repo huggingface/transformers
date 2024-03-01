@@ -24,6 +24,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -66,6 +68,13 @@ class RTDetrImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
+        do_normalize:
+            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
+            `preprocess` method.
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -77,9 +86,16 @@ class RTDetrImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = False,
+        image_mean: Union[float, List[float]] = None,
+        image_std: Union[float, List[float]] = None,
+        do_convert_annotations: bool = False,
         **kwargs,
     ) -> None:
         size = size if size is not None else {"height": 640, "width": 640}
+        
+        if do_convert_annotations is None:
+            do_convert_annotations = do_normalize
 
         super().__init__(**kwargs)
         self.do_resize = do_resize
@@ -87,6 +103,10 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.do_convert_annotations = do_convert_annotations
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -145,6 +165,9 @@ class RTDetrImageProcessor(BaseImageProcessor):
         resample=None,  # PILImageResampling
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -167,6 +190,12 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
                 Rescale factor to use when rescaling the image.
+            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+                Mean to use when normalizing the image.
+            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+                Standard deviation to use when normalizing the image.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
                 Type of tensors to return. If `None`, will return the list of images.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
@@ -188,6 +217,9 @@ class RTDetrImageProcessor(BaseImageProcessor):
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
+        do_normalize = self.do_normalize if do_normalize is None else do_normalize
+        image_mean = self.image_mean if image_mean is None else image_mean
+        image_std = self.image_std if image_std is None else image_std
 
         if do_resize is not None and size is None:
             raise ValueError("Size and max_size must be specified if do_resize is True.")
@@ -197,7 +229,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
 
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
-            
+
         images = make_list_of_images(images)
         if not valid_images(images):
             raise ValueError(
@@ -227,6 +259,11 @@ class RTDetrImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
+
+        if do_normalize:
+            images = [
+                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
+            ]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images

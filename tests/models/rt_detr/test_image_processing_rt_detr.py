@@ -97,6 +97,10 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "return_tensors"))
 
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"height": 640, "width": 640})
+        
     @slow
     def test_image_processor_outputs(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
