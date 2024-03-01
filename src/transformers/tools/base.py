@@ -354,30 +354,26 @@ DEFAULT_TOOL_TEMPLATE = """
     Takes inputs: {{tool.inputs}}
 """
 
-# def get_tool_description_with_args(tool: Tool, function_template: str = DEFAULT_TOOL_TEMPLATE) -> str:
-#     compiled_template = compile_jinja_template(function_template)
-#     rendered = compiled_template.render(
-#         tool=tool, #**self.special_tokens_map
-#     )
-#     return rendered
+def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_TEMPLATE) -> str:
+    compiled_template = compile_jinja_template(description_template)
+    rendered = compiled_template.render(
+        tool=tool, #**self.special_tokens_map
+    )
+    return rendered
 
-def get_tool_description_with_args(tool: Tool) -> str:
-    description = f"- {tool.name}: {tool.description}\n"
-    description += f"     Takes inputs: {str(tool.inputs)}\n"
-    return description
 
 @lru_cache
-def compile_jinja_template(function_template):
+def compile_jinja_template(template):
     try:
         import jinja2
         from jinja2.exceptions import TemplateError
         from jinja2.sandbox import ImmutableSandboxedEnvironment
     except ImportError:
-        raise ImportError("function_template requires jinja2 to be installed.")
+        raise ImportError("template requires jinja2 to be installed.")
 
     if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
         raise ImportError(
-            "function_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
+            "template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
         )
 
     def raise_exception(message):
@@ -385,7 +381,7 @@ def compile_jinja_template(function_template):
 
     jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     jinja_env.globals["raise_exception"] = raise_exception
-    return jinja_env.from_string(function_template)
+    return jinja_env.from_string(template)
 
 class RemoteTool(Tool):
     """

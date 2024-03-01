@@ -314,7 +314,7 @@ class CodeAgent(Agent):
         """
         # Run LLM
         prompt = self.format_prompt(task)
-        if retrying: # Add memory of past failure
+        if retrying: # Add memory of the first (failed) run
             prompt += "\n" + "\n".join(self.memory)
 
         result = self.llm_callable(prompt, stop=["Task:"])
