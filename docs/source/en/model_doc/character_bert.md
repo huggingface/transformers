@@ -53,10 +53,6 @@ The original code can be found [here](https://github.com/helboukkouri/character-
 
 [[autodoc]] models.character_bert.modeling_character_bert.CharacterBertForPreTrainingOutput
 
-[[autodoc]] models.character_bert.modeling_tf_character_bert.TFCharacterBertForPreTrainingOutput
-
-[[autodoc]] models.character_bert.modeling_flax_character_bert.FlaxCharacterBertForPreTrainingOutput
-
 ## CharacterBertModel
 
 [[autodoc]] CharacterBertModel
