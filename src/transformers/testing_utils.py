@@ -31,6 +31,7 @@ import time
 import unittest
 from collections import defaultdict
 from collections.abc import Mapping
+from functools import wraps
 from io import StringIO
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
@@ -458,6 +459,20 @@ def require_torch_sdpa(test_case):
     These tests are skipped when requirements are not met (torch version).
     """
     return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
+
+
+def require_read_token(fn):
+    """
+    A decorator that loads the HF token for tests that require to load gated models.
+    """
+    token = os.getenv("HF_HUB_READ_TOKEN")
+
+    @wraps(fn)
+    def _inner(*args, **kwargs):
+        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+            return fn(*args, **kwargs)
+
+    return _inner
 
 
 def require_peft(test_case):
