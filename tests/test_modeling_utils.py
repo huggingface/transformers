@@ -1428,7 +1428,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertBot":
+                if discussion.author == "SFconvertbot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1450,6 +1450,32 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+    def test_absence_of_safetensors_triggers_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        initial_model = BertModel.from_pretrained(self.repo_name, token=self.token)
+        BertModel._auto_conversion.join()
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertbot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
 
 
 @require_torch

@@ -80,6 +80,7 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
         logger.info("Safetensors PR exists")
 
     sha = f"refs/pr/{pr.num}"
+    logger.info(sha)
 
     return sha
 
