@@ -239,7 +239,7 @@ def print_model_summary(model, name_width=25, line_width=180, ignore=None):
             continue
         if type(mod) in ignore:
             continue
-        if [True for s in ignore if type(s) is str and s in name]:
+        if [True for s in ignore if isinstance(s, str) and s in name]:
             continue
         act_str = f"Act:{input_q.extra_repr()}"
         wgt_str = f"Wgt:{weight_q.extra_repr()}"

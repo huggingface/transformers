@@ -76,6 +76,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         num_bars (`int`, *optional*, defaults to 2):
             Determines interval between each sequence.
     """
+
     model_input_names = ["input_features", "beatsteps", "extrapolated_beatstep"]
 
     def __init__(

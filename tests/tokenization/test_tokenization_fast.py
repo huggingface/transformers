@@ -132,7 +132,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
         sentences = ["Hello, y'all!", "How are you 😁 ? There should not be any issue right?"]
 
-        tokenizer = Tokenizer.from_pretrained("t5-base")
+        tokenizer = Tokenizer.from_pretrained("google-t5/t5-base")
         # Enable padding
         tokenizer.enable_padding(pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=8)
         self.assertEqual(
@@ -156,9 +156,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(tok.pad_token, "<pad>")
             self.assertEqual(tok.init_kwargs["max_length"], 512)
             self.assertEqual(tok.init_kwargs["pad_to_multiple_of"], 8)
-            # fmt: off
-            self.assertEqual(tok(sentences, padding = True), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1, 0, 0, 0, 0,0, 0, 0, 0],[ 571, 33, 25, 3, 2, 3, 58, 290, 225, 59, 36, 136, 962, 269, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]})
-            # fmt: on
+            self.assertEqual(tok(sentences, padding = True), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1, 0, 0, 0, 0,0, 0, 0, 0],[ 571, 33, 25, 3, 2, 3, 58, 290, 225, 59, 36, 136, 962, 269, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
 
         tokenizer.enable_truncation(8, stride=0, strategy="longest_first", direction="right")
         self.assertEqual(
@@ -175,15 +173,13 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(tok.init_kwargs["stride"], 0)
             # NOTE even if the model has a default max_length, it is not used...
             # thus tok(sentences, truncation = True) does nothing and does not warn either
-            # fmt: off
-            self.assertEqual(tok(sentences, truncation = True, max_length = 8), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1],[ 571, 33, 25, 3, 2, 3, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1]]})
-            # fmt: on
+            self.assertEqual(tok(sentences, truncation = True, max_length = 8), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1],[ 571, 33, 25, 3, 2, 3, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
 
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
     def test_local_versioning(self):
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
         json_tokenizer = json.loads(tokenizer._tokenizer.to_str())
         json_tokenizer["model"]["vocab"]["huggingface"] = len(tokenizer)
 

@@ -46,6 +46,16 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the
 [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen-).
 
+## Usage tips
+
+- After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models) , you can convert them using the **conversion script** available at
+`src/transformers/models/musicgen/convert_musicgen_transformers.py` with the following command:
+
+```bash
+python src/transformers/models/musicgen/convert_musicgen_transformers.py \
+    --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
+```
+
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
@@ -126,7 +136,7 @@ The same [`MusicgenProcessor`] can be used to pre-process an audio prompt that i
 following example, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command
 below:
 
-```
+```bash
 pip install --upgrade pip
 pip install datasets[audio]
 ```

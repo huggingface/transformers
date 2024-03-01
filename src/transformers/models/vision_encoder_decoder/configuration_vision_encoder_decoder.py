@@ -59,7 +59,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     >>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a ViTBert model (with random weights) from a ViT & bert-base-uncased style configurations
+    >>> # Initializing a ViTBert model (with random weights) from a ViT & google-bert/bert-base-uncased style configurations
     >>> model = VisionEncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -76,6 +76,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = VisionEncoderDecoderConfig.from_pretrained("my-model")
     >>> model = VisionEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "vision-encoder-decoder"
     is_composition = True
 

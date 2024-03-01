@@ -22,6 +22,7 @@ import os
 import re
 
 import tensorflow as tf
+from packaging.version import parse
 
 from transformers import (
     AutoConfig,
@@ -31,6 +32,19 @@ from transformers import (
     TFAutoModelForMaskedLM,
     create_optimizer,
 )
+
+
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +57,7 @@ def parse_args():
     parser.add_argument(
         "--pretrained_model_config",
         type=str,
-        default="roberta-base",
+        default="FacebookAI/roberta-base",
         help="The model config to use. Note that we don't copy the model's weights, only the config!",
     )
     parser.add_argument(
@@ -209,7 +223,7 @@ def main(args):
         strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
 
     if args.bfloat16:
-        tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
+        keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
     config = AutoConfig.from_pretrained(args.pretrained_model_config)

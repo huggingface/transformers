@@ -85,7 +85,7 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
+        tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-mlm-en-2048")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)

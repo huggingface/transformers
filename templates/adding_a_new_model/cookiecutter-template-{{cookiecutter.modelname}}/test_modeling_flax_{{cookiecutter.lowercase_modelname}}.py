@@ -541,7 +541,7 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
 class Flax{{cookiecutter.camelcase_modelname}}ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, 
+            Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
             Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
             Flax{{cookiecutter.camelcase_modelname}}Model,

@@ -308,6 +308,8 @@ class TFVisionEncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
@@ -407,7 +409,7 @@ class TFVisionEncoderDecoderMixin:
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
         pt_inputs_dict = {}
         for name, key in tf_inputs_dict.items():
-            if type(key) == bool:
+            if isinstance(key, bool):
                 pt_inputs_dict[name] = key
             elif name == "input_values":
                 pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
@@ -442,7 +444,7 @@ class TFVisionEncoderDecoderMixin:
         tf_outputs = tf_model(tf_inputs_dict)
 
         # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+        # (see `hf_compute_loss`: it uses `keras.losses.Reduction.NONE`)
         # Change it here to a scalar to match PyTorch models' loss
         tf_loss = getattr(tf_outputs, "loss", None)
         if tf_loss is not None:
@@ -627,7 +629,9 @@ class TFVisionEncoderDecoderMixin:
 @require_tf
 class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google/vit-base-patch16-224-in21k", "openai-community/gpt2"
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFViTModel(config, name="encoder")
@@ -672,10 +676,12 @@ class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.Te
 @require_tf
 class TFVisionEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google/vit-base-patch16-224-in21k", "openai-community/gpt2"
+        )
 
     def get_decoder_config(self):
-        config = AutoConfig.from_pretrained("gpt2")
+        config = AutoConfig.from_pretrained("openai-community/gpt2")
         config.is_decoder = True
         config.add_cross_attention = True
         return config
@@ -685,7 +691,9 @@ class TFVisionEncoderDecoderModelTest(unittest.TestCase):
 
     def get_encoder_decoder_models(self):
         encoder_model = TFViTModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
-        decoder_model = TFGPT2LMHeadModel.from_pretrained("gpt2", config=self.get_decoder_config(), name="decoder")
+        decoder_model = TFGPT2LMHeadModel.from_pretrained(
+            "openai-community/gpt2", config=self.get_decoder_config(), name="decoder"
+        )
         return {"encoder": encoder_model, "decoder": decoder_model}
 
     def _check_configuration_tie(self, model):
@@ -714,7 +722,7 @@ def prepare_img():
 class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
     def get_encoder_decoder_config(self):
         encoder_config = AutoConfig.from_pretrained("google/vit-base-patch16-224-in21k")
-        decoder_config = AutoConfig.from_pretrained("gpt2", is_decoder=True, add_cross_attention=True)
+        decoder_config = AutoConfig.from_pretrained("openai-community/gpt2", is_decoder=True, add_cross_attention=True)
         return VisionEncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
 
     def get_encoder_decoder_config_small(self):
@@ -729,9 +737,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random ViT/GPT2 models for vit-gpt2 & initialize weights (+cross_attention weights)
         encoder = TFViTModel(config.encoder)
-        encoder.build()
+        encoder.build_in_name_scope()
         decoder = TFGPT2LMHeadModel(config.decoder)
-        decoder.build()
+        decoder.build_in_name_scope()
 
         encoder_decoder_orig = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
@@ -829,7 +837,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         config = self.get_encoder_decoder_config()
         image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
-        decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        decoder_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         img = prepare_img()
         pixel_values = image_processor(images=img, return_tensors="tf").pixel_values
@@ -845,7 +853,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder = TFAutoModel.from_pretrained("google/vit-base-patch16-224-in21k", name="encoder")
             # It's necessary to specify `add_cross_attention=True` here.
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                "gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
+                "openai-community/gpt2", is_decoder=True, add_cross_attention=True, name="decoder"
             )
             pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
             pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")
@@ -858,6 +866,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
                 pretrained_encoder_dir,
                 pretrained_decoder_dir,
             )
+            enc_dec_model.build_in_name_scope()
             # check that the from pretrained methods work
             enc_dec_model.save_pretrained(tmp_dirname)
             enc_dec_model = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)

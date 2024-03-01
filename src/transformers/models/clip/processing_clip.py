@@ -35,6 +35,7 @@ class CLIPProcessor(ProcessorMixin):
         tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")

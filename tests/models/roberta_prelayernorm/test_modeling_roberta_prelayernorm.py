@@ -493,8 +493,8 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761
 
-        The position ids should be masked with the embedding object's padding index. Therefore, the first available
-        non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
+        The position ids should be masked with the embedding object's padding index. Therefore, the
+        first available non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
         model = RobertaPreLayerNormEmbeddings(config=config)
@@ -513,8 +513,8 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761
 
-        The position ids should be masked with the embedding object's padding index. Therefore, the first available
-        non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
+        The position ids should be masked with the embedding object's padding index. Therefore, the
+        first available non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
         embeddings = RobertaPreLayerNormEmbeddings(config=config)

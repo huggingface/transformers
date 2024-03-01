@@ -105,7 +105,7 @@ class GetFromCacheTests(unittest.TestCase):
 
     def test_get_file_from_repo_distant(self):
         # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("bert-base-cased", "ahah.txt"))
+        self.assertIsNone(get_file_from_repo("google-bert/bert-base-cased", "ahah.txt"))
 
         # The function raises if the repository does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
@@ -113,9 +113,9 @@ class GetFromCacheTests(unittest.TestCase):
 
         # The function raises if the revision does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("bert-base-cased", CONFIG_NAME, revision="ahaha")
+            get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME, revision="ahaha")
 
-        resolved_file = get_file_from_repo("bert-base-cased", CONFIG_NAME)
+        resolved_file = get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME)
         # The name is the cached name which is not very easy to test, so instead we load the content.
         config = json.loads(open(resolved_file, "r").read())
         self.assertEqual(config["hidden_size"], 768)
@@ -132,10 +132,10 @@ class GetFromCacheTests(unittest.TestCase):
         """Test download file from a gated repo fails with correct message when not authenticated."""
         with self.assertRaisesRegex(EnvironmentError, "You are trying to access a gated repo."):
             # All files except README.md are protected on a gated repo.
-            cached_file(GATED_REPO, "gated_file.txt", use_auth_token=False)
+            cached_file(GATED_REPO, "gated_file.txt", token=False)
 
     def test_has_file_gated_repo(self):
         """Test check file existence from a gated repo fails with correct message when not authenticated."""
         with self.assertRaisesRegex(EnvironmentError, "is a gated repository"):
             # All files except README.md are protected on a gated repo.
-            has_file(GATED_REPO, "gated_file.txt", use_auth_token=False)
+            has_file(GATED_REPO, "gated_file.txt", token=False)

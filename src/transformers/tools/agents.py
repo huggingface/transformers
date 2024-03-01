@@ -315,6 +315,13 @@ class Agent:
         self.chat_state = {}
         self.cached_tools = None
 
+    def clean_code_for_run(self, result):
+        """
+        Override this method if you want to change the way the code is
+        cleaned for the `run` method.
+        """
+        return clean_code_for_run(result)
+
     def run(self, task, *, return_code=False, remote=False, **kwargs):
         """
         Sends a request to the agent.
@@ -339,7 +346,7 @@ class Agent:
         """
         prompt = self.format_prompt(task)
         result = self.generate_one(prompt, stop=["Task:"])
-        explanation, code = clean_code_for_run(result)
+        explanation, code = self.clean_code_for_run(result)
 
         self.log(f"==Explanation from the agent==\n{explanation}")
 
@@ -440,13 +447,13 @@ class OpenAiAgent(Agent):
             return self._completion_generate([prompt], stop)[0]
 
     def _chat_generate(self, prompt, stop):
-        result = openai.ChatCompletion.create(
+        result = openai.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             stop=stop,
         )
-        return result["choices"][0]["message"]["content"]
+        return result.choices[0].message.content
 
     def _completion_generate(self, prompts, stop):
         result = openai.Completion.create(

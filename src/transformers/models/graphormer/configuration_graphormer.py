@@ -129,6 +129,7 @@ class GraphormerConfig(PretrainedConfig):
             >>> configuration = model.config
             ```
     """
+
     model_type = "graphormer"
     keys_to_ignore_at_inference = ["past_key_values"]
 

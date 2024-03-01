@@ -103,12 +103,13 @@ class Dinov2Embeddings(nn.Module):
         height, width = height + 0.1, width + 0.1
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(height / math.sqrt(num_positions), width / math.sqrt(num_positions)),
+            patch_pos_embed.to(dtype=torch.float32),
+            scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
             mode="bicubic",
             align_corners=False,
-        )
+        ).to(dtype=target_dtype)
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
@@ -116,7 +117,8 @@ class Dinov2Embeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values)
+        target_dtype = self.patch_embeddings.projection.weight.dtype
+        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
         if bool_masked_pos is not None:
             embeddings = torch.where(
@@ -378,7 +380,7 @@ class Dinov2Layer(nn.Module):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = Dinov2Attention(config)
         self.layer_scale1 = Dinov2LayerScale(config)
-        self.drop_path1 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -387,7 +389,6 @@ class Dinov2Layer(nn.Module):
         else:
             self.mlp = Dinov2MLP(config)
         self.layer_scale2 = Dinov2LayerScale(config)
-        self.drop_path2 = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
     def forward(
         self,
@@ -406,7 +407,7 @@ class Dinov2Layer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = self.drop_path(attention_output) + hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
@@ -414,7 +415,7 @@ class Dinov2Layer(nn.Module):
         layer_output = self.layer_scale2(layer_output)
 
         # second residual connection
-        layer_output = layer_output + hidden_states
+        layer_output = self.drop_path(layer_output) + hidden_states
 
         outputs = (layer_output,) + outputs
 
@@ -835,11 +836,12 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1:]
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
-                    hidden_state = hidden_state[:, 1:, :].reshape(
-                        batch_size, width // patch_size, height // patch_size, -1
-                    )
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

@@ -43,6 +43,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -72,7 +73,7 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFEmbeddings(tf.keras.layers.Layer):
+class TFEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -81,10 +82,10 @@ class TFEmbeddings(tf.keras.layers.Layer):
         self.dim = config.dim
         self.initializer_range = config.initializer_range
         self.max_position_embeddings = config.max_position_embeddings
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.dropout)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -99,7 +100,12 @@ class TFEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.dim])
 
     def call(self, input_ids=None, position_ids=None, inputs_embeds=None, training=False):
         """
@@ -127,31 +133,32 @@ class TFEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
+class TFMultiHeadSelfAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.n_heads = config.n_heads
         self.dim = config.dim
-        self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.dropout = keras.layers.Dropout(config.attention_dropout)
         self.output_attentions = config.output_attentions
 
         assert self.dim % self.n_heads == 0, f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}"
 
-        self.q_lin = tf.keras.layers.Dense(
+        self.q_lin = keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="q_lin"
         )
-        self.k_lin = tf.keras.layers.Dense(
+        self.k_lin = keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="k_lin"
         )
-        self.v_lin = tf.keras.layers.Dense(
+        self.v_lin = keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="v_lin"
         )
-        self.out_lin = tf.keras.layers.Dense(
+        self.out_lin = keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="out_lin"
         )
 
         self.pruned_heads = set()
+        self.config = config
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -212,18 +219,36 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         else:
             return (context,)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_lin", None) is not None:
+            with tf.name_scope(self.q_lin.name):
+                self.q_lin.build([None, None, self.config.dim])
+        if getattr(self, "k_lin", None) is not None:
+            with tf.name_scope(self.k_lin.name):
+                self.k_lin.build([None, None, self.config.dim])
+        if getattr(self, "v_lin", None) is not None:
+            with tf.name_scope(self.v_lin.name):
+                self.v_lin.build([None, None, self.config.dim])
+        if getattr(self, "out_lin", None) is not None:
+            with tf.name_scope(self.out_lin.name):
+                self.out_lin.build([None, None, self.config.dim])
 
-class TFFFN(tf.keras.layers.Layer):
+
+class TFFFN(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.lin1 = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.lin1 = keras.layers.Dense(
             config.hidden_dim, kernel_initializer=get_initializer(config.initializer_range), name="lin1"
         )
-        self.lin2 = tf.keras.layers.Dense(
+        self.lin2 = keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="lin2"
         )
         self.activation = get_tf_activation(config.activation)
+        self.config = config
 
     def call(self, input, training=False):
         x = self.lin1(input)
@@ -232,15 +257,26 @@ class TFFFN(tf.keras.layers.Layer):
         x = self.dropout(x, training=training)
         return x
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lin1", None) is not None:
+            with tf.name_scope(self.lin1.name):
+                self.lin1.build([None, None, self.config.dim])
+        if getattr(self, "lin2", None) is not None:
+            with tf.name_scope(self.lin2.name):
+                self.lin2.build([None, None, self.config.hidden_dim])
 
-class TFTransformerBlock(tf.keras.layers.Layer):
+
+class TFTransformerBlock(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.hidden_dim = config.hidden_dim
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation = config.activation
         self.output_attentions = config.output_attentions
 
@@ -249,10 +285,11 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
-        self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
+        self.sa_layer_norm = keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
 
         self.ffn = TFFFN(config, name="ffn")
-        self.output_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="output_layer_norm")
+        self.output_layer_norm = keras.layers.LayerNormalization(epsilon=1e-12, name="output_layer_norm")
+        self.config = config
 
     def call(self, x, attn_mask, head_mask, output_attentions, training=False):  # removed: src_enc=None, src_len=None
         """
@@ -281,8 +318,25 @@ class TFTransformerBlock(tf.keras.layers.Layer):
             output = (sa_weights,) + output
         return output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "sa_layer_norm", None) is not None:
+            with tf.name_scope(self.sa_layer_norm.name):
+                self.sa_layer_norm.build([None, None, self.config.dim])
+        if getattr(self, "ffn", None) is not None:
+            with tf.name_scope(self.ffn.name):
+                self.ffn.build(None)
+        if getattr(self, "output_layer_norm", None) is not None:
+            with tf.name_scope(self.output_layer_norm.name):
+                self.output_layer_norm.build([None, None, self.config.dim])
 
-class TFTransformer(tf.keras.layers.Layer):
+
+class TFTransformer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.n_layers = config.n_layers
@@ -336,9 +390,18 @@ class TFTransformer(tf.keras.layers.Layer):
             last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFDistilBertMainLayer(tf.keras.layers.Layer):
+class TFDistilBertMainLayer(keras.layers.Layer):
     config_class = DistilBertConfig
 
     def __init__(self, config, **kwargs):
@@ -412,6 +475,17 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class TFDistilBertPreTrainedModel(TFPreTrainedModel):
@@ -430,7 +504,7 @@ DISTILBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -548,8 +622,16 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         )
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "distilbert", None) is not None:
+            with tf.name_scope(self.distilbert.name):
+                self.distilbert.build(None)
 
-class TFDistilBertLMHead(tf.keras.layers.Layer):
+
+class TFDistilBertLMHead(keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
@@ -599,11 +681,11 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.config = config
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.vocab_transform = tf.keras.layers.Dense(
+        self.vocab_transform = keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="vocab_transform"
         )
         self.act = get_tf_activation(config.activation)
-        self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
+        self.vocab_layer_norm = keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def get_lm_head(self):
@@ -667,6 +749,23 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             attentions=distilbert_output.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "distilbert", None) is not None:
+            with tf.name_scope(self.distilbert.name):
+                self.distilbert.build(None)
+        if getattr(self, "vocab_transform", None) is not None:
+            with tf.name_scope(self.vocab_transform.name):
+                self.vocab_transform.build([None, None, self.config.dim])
+        if getattr(self, "vocab_layer_norm", None) is not None:
+            with tf.name_scope(self.vocab_layer_norm.name):
+                self.vocab_layer_norm.build([None, None, self.config.dim])
+        if getattr(self, "vocab_projector", None) is not None:
+            with tf.name_scope(self.vocab_projector.name):
+                self.vocab_projector.build(None)
+
 
 @add_start_docstrings(
     """
@@ -681,16 +780,17 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         self.num_labels = config.num_labels
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.pre_classifier = tf.keras.layers.Dense(
+        self.pre_classifier = keras.layers.Dense(
             config.dim,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="relu",
             name="pre_classifier",
         )
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
-        self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
+        self.dropout = keras.layers.Dropout(config.seq_classif_dropout)
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -746,6 +846,20 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             attentions=distilbert_output.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "distilbert", None) is not None:
+            with tf.name_scope(self.distilbert.name):
+                self.distilbert.build(None)
+        if getattr(self, "pre_classifier", None) is not None:
+            with tf.name_scope(self.pre_classifier.name):
+                self.pre_classifier.build([None, None, self.config.dim])
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.dim])
+
 
 @add_start_docstrings(
     """
@@ -760,10 +874,11 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         self.num_labels = config.num_labels
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -814,6 +929,17 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "distilbert", None) is not None:
+            with tf.name_scope(self.distilbert.name):
+                self.distilbert.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -827,16 +953,17 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         super().__init__(config, *inputs, **kwargs)
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
-        self.pre_classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.seq_classif_dropout)
+        self.pre_classifier = keras.layers.Dense(
             config.dim,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="relu",
             name="pre_classifier",
         )
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
@@ -908,6 +1035,20 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             attentions=distilbert_output.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "distilbert", None) is not None:
+            with tf.name_scope(self.distilbert.name):
+                self.distilbert.build(None)
+        if getattr(self, "pre_classifier", None) is not None:
+            with tf.name_scope(self.pre_classifier.name):
+                self.pre_classifier.build([None, None, self.config.dim])
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.dim])
+
 
 @add_start_docstrings(
     """
@@ -921,11 +1062,12 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         super().__init__(config, *inputs, **kwargs)
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
-        self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
+        self.dropout = keras.layers.Dropout(config.qa_dropout)
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -991,3 +1133,14 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             hidden_states=distilbert_output.hidden_states,
             attentions=distilbert_output.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "distilbert", None) is not None:
+            with tf.name_scope(self.distilbert.name):
+                self.distilbert.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.dim])

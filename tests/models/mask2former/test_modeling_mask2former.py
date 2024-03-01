@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Mask2Former model. """
 
-import inspect
 import unittest
 
 import numpy as np
@@ -115,6 +114,7 @@ class Mask2FormerModelTester:
         config.backbone_config.hidden_size = 16
         config.backbone_config.num_channels = self.num_channels
         config.backbone_config.num_heads = [1, 1, 2, 2]
+        config.backbone = None
 
         config.hidden_dim = self.hidden_dim
         config.mask_feature_size = self.hidden_dim
@@ -191,13 +191,13 @@ class Mask2FormerModelTester:
         comm_check_on_output(result)
 
         self.parent.assertTrue(result.loss is not None)
-        self.parent.assertEqual(result.loss.shape, torch.Size([1]))
+        self.parent.assertEqual(result.loss.shape, torch.Size([]))
 
 
 @require_torch
 class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Mask2FormerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
     test_pruning = False
@@ -241,18 +241,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @slow
     def test_model_from_pretrained(self):

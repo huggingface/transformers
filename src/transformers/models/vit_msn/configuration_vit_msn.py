@@ -81,6 +81,7 @@ class ViTMSNConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vit_msn"
 
     def __init__(

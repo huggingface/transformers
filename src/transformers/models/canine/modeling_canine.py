@@ -54,7 +54,7 @@ _CONFIG_FOR_DOC = "CanineConfig"
 
 CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/canine-s",
-    "google/canine-r"
+    "google/canine-r",
     # See all CANINE models at https://huggingface.co/models?filter=canine
 ]
 

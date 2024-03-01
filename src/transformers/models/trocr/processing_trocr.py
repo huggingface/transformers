@@ -35,6 +35,7 @@ class TrOCRProcessor(ProcessorMixin):
         tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`], *optional*):
             An instance of [`RobertaTokenizer`/`XLMRobertaTokenizer`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"

@@ -538,9 +538,11 @@ class LoadImageTester(unittest.TestCase):
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_rgba(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img = load_image(dataset[0]["file"])  # img with mode RGBA
+        img = load_image(dataset[0]["image"])  # img with mode RGBA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -549,9 +551,11 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_la(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img = load_image(dataset[1]["file"])  # img with mode LA
+        img = load_image(dataset[1]["image"])  # img with mode LA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -560,9 +564,11 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_l(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img = load_image(dataset[2]["file"])  # img with mode L
+        img = load_image(dataset[2]["image"])  # img with mode L
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -571,10 +577,11 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_exif_transpose(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
-        img_file = dataset[3]["file"]
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-        img_without_exif_transpose = PIL.Image.open(img_file)
+        img_without_exif_transpose = dataset[3]["image"]
         img_arr_without_exif_transpose = np.array(img_without_exif_transpose)
 
         self.assertEqual(
@@ -582,7 +589,7 @@ class LoadImageTester(unittest.TestCase):
             (333, 500, 3),
         )
 
-        img_with_exif_transpose = load_image(img_file)
+        img_with_exif_transpose = load_image(dataset[3]["image"])
         img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
 
         self.assertEqual(

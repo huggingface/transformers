@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections import OrderedDict
 
 import torch
@@ -137,6 +138,14 @@ class AccurateGELUActivation(nn.Module):
         return 0.5 * input * (1 + torch.tanh(self.precomputed_constant * (input + 0.044715 * torch.pow(input, 3))))
 
 
+class SiLUActivation(nn.SiLU):
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "The SiLUActivation class has been deprecated and will be removed in v4.39. Please use nn.SiLU instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
 class MishActivation(nn.Module):
     """
     See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://arxiv.org/abs/1908.08681). Also
@@ -206,6 +215,7 @@ ACT2CLS = {
     "gelu_pytorch_tanh": PytorchGELUTanh,
     "gelu_accurate": AccurateGELUActivation,
     "laplace": LaplaceActivation,
+    "leaky_relu": nn.LeakyReLU,
     "linear": LinearActivation,
     "mish": MishActivation,
     "quick_gelu": QuickGELUActivation,

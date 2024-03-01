@@ -574,7 +574,7 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         processor = AltCLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(text=["一张猫的照片", "一张狗的照片"], images=image, padding=True, return_tensors="pt").to(torch_device)
+        inputs = processor(text=["一张猫的照片", "一张狗的照片"], images=image, padding=True, return_tensors="pt").to(torch_device)  # fmt: skip
 
         # forward pass
         with torch.no_grad():

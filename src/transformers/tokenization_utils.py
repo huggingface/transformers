@@ -452,8 +452,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        model = BertModel.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        model = BertModel.from_pretrained("google-bert/bert-base-uncased")
 
         num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
         print("We have added", num_added_toks, "tokens")
@@ -540,7 +540,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def tokenize(self, text: TextInput, **kwargs) -> List[str]:
         """
-        Converts a string in a sequence of tokens, using the tokenizer.
+        Converts a string into a sequence of tokens, using the tokenizer.
 
         Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies
         (BPE/SentencePieces/WordPieces). Takes care of added tokens.
@@ -620,7 +620,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _tokenize(self, text, **kwargs):
         """
-        Converts a string in a sequence of tokens (string), using the tokenizer. Split in words for word-based
+        Converts a string into a sequence of tokens (string), using the tokenizer. Split in words for word-based
         vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
 
         Do NOT take care of added tokens.

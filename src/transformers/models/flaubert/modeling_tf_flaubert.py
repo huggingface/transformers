@@ -46,6 +46,7 @@ from ...modeling_tf_utils import (
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -76,7 +77,7 @@ FLAUBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -290,9 +291,17 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMMultiHeadAttention with XLM->Flaubert
-class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
+class TFFlaubertMultiHeadAttention(keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config, **kwargs):
@@ -303,12 +312,13 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
-        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
-        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
-        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
-        self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.q_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
+        self.k_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
+        self.v_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
+        self.out_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
+        self.dropout = keras.layers.Dropout(config.attention_dropout)
         self.pruned_heads = set()
+        self.dim = dim
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -383,16 +393,35 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_lin", None) is not None:
+            with tf.name_scope(self.q_lin.name):
+                self.q_lin.build([None, None, self.dim])
+        if getattr(self, "k_lin", None) is not None:
+            with tf.name_scope(self.k_lin.name):
+                self.k_lin.build([None, None, self.dim])
+        if getattr(self, "v_lin", None) is not None:
+            with tf.name_scope(self.v_lin.name):
+                self.v_lin.build([None, None, self.dim])
+        if getattr(self, "out_lin", None) is not None:
+            with tf.name_scope(self.out_lin.name):
+                self.out_lin.build([None, None, self.dim])
+
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMTransformerFFN
-class TFFlaubertTransformerFFN(tf.keras.layers.Layer):
+class TFFlaubertTransformerFFN(keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
-        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
+        self.lin1 = keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
+        self.lin2 = keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.in_dim = in_dim
+        self.dim_hidden = dim_hidden
 
     def call(self, input, training=False):
         x = self.lin1(input)
@@ -402,9 +431,20 @@ class TFFlaubertTransformerFFN(tf.keras.layers.Layer):
 
         return x
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lin1", None) is not None:
+            with tf.name_scope(self.lin1.name):
+                self.lin1.build([None, None, self.in_dim])
+        if getattr(self, "lin2", None) is not None:
+            with tf.name_scope(self.lin2.name):
+                self.lin2.build([None, None, self.dim_hidden])
+
 
 @keras_serializable
-class TFFlaubertMainLayer(tf.keras.layers.Layer):
+class TFFlaubertMainLayer(keras.layers.Layer):
     config_class = FlaubertConfig
 
     def __init__(self, config, **kwargs):
@@ -427,11 +467,11 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.max_position_embeddings = config.max_position_embeddings
         self.embed_init_std = config.embed_init_std
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.embeddings = TFSharedEmbeddings(
             self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
         )
-        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
+        self.layer_norm_emb = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
         self.attentions = []
         self.layer_norm1 = []
         self.ffns = []
@@ -442,7 +482,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                 TFFlaubertMultiHeadAttention(self.n_heads, self.dim, config=config, name=f"attentions_._{i}")
             )
             self.layer_norm1.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
+                keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
             )
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
@@ -451,10 +491,10 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                 TFFlaubertTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name=f"ffns_._{i}")
             )
             self.layer_norm2.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
+                keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
             )
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         with tf.name_scope("position_embeddings"):
             self.position_embeddings = self.add_weight(
                 name="embeddings",
@@ -470,7 +510,27 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                     initializer=get_initializer(self.embed_init_std),
                 )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "layer_norm_emb", None) is not None:
+            with tf.name_scope(self.layer_norm_emb.name):
+                self.layer_norm_emb.build([None, None, self.dim])
+        for layer in self.attentions:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.layer_norm1:
+            with tf.name_scope(layer.name):
+                layer.build([None, None, self.dim])
+        for layer in self.ffns:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.layer_norm2:
+            with tf.name_scope(layer.name):
+                layer.build([None, None, self.dim])
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -518,9 +578,10 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        tf.debugging.assert_equal(
-            shape_list(lengths)[0], bs
-        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(lengths)[0], bs),
+            f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched",
+        )
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -539,17 +600,19 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             position_ids = tf.tile(position_ids, (bs, 1))
 
         # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-        tf.debugging.assert_equal(
-            shape_list(position_ids), [bs, slen]
-        ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen]),
+            f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched",
+        )
         # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(
-                shape_list(langs), [bs, slen]
-            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
+            (
+                tf.debugging.assert_equal(shape_list(langs), [bs, slen]),
+                f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched",
+            )
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
@@ -677,7 +740,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMPredLayer
-class TFFlaubertPredLayer(tf.keras.layers.Layer):
+class TFFlaubertPredLayer(keras.layers.Layer):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
     """
@@ -838,6 +901,17 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "pred_layer", None) is not None:
+            with tf.name_scope(self.pred_layer.name):
+                self.pred_layer.build(None)
+
 
 @add_start_docstrings(
     """
@@ -917,6 +991,17 @@ class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceC
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+
 
 @add_start_docstrings(
     """
@@ -930,9 +1015,10 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1009,6 +1095,17 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1024,10 +1121,11 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
         self.num_labels = config.num_labels
 
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1090,6 +1188,17 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1105,9 +1214,10 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
 
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
-        self.logits_proj = tf.keras.layers.Dense(
+        self.logits_proj = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
+        self.config = config
 
     @property
     def dummy_inputs(self):
@@ -1211,3 +1321,17 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "logits_proj", None) is not None:
+            with tf.name_scope(self.logits_proj.name):
+                self.logits_proj.build([None, None, self.config.num_labels])
