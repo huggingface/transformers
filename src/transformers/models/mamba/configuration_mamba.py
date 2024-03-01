@@ -113,7 +113,7 @@ class MambaConfig(PretrainedConfig):
         use_conv_bias=True,
         hidden_act="silu",
         initializer_range=0.1,
-        residual_in_fp32=False,
+        residual_in_fp32=True,
         time_step_rank="auto",
         time_step_scale=1.0,
         time_step_min=0.001,

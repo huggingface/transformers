@@ -371,7 +371,7 @@ class MambaIntegrationTests(unittest.TestCase):
                 -53.4688, -57.3750, -56.9375, -55.7500, -53.3125, -55.8438, -57.0000,
                 -56.9062, -56.2188, -54.7188, -56.4375, -57.5000
             ]
-        ,dtype=torch.float16)  # fmt: skip
+        ,dtype=torch.float32)  # fmt: skip
 
         torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD)
 

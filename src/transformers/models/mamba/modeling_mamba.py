@@ -73,6 +73,16 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class MambaMixer(nn.Module):
+    """
+    Selective layer TODO DOC DOC DOC
+        Compute ∆ A B C D, the state space parameters.
+        A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+        ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
+                                    and is why Mamba is called **selective** state spaces)
+
+        ∆, B and C are the `selective` parameters
+    """
+
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -102,14 +112,12 @@ class MambaMixer(nn.Module):
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
 
         # S4D real initialization. These are not discretized!
-        # THe core is to load them, compute the discrete states, then write the updates state. Keeps the memory bounded
+        # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
         A = A.expand(self.intermediate_size, -1).contiguous()
 
-        # TODO this parameter should be kept in float32. We don't have support for in _keep_in_float32
         self.A_log = nn.Parameter(torch.log(A))
-        # D "skip" parameter
-        self.D = nn.Parameter(torch.ones(self.intermediate_size))  # Keep in fp32
+        self.D = nn.Parameter(torch.ones(self.intermediate_size))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, inference_params=None):
@@ -132,20 +140,18 @@ class MambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
         discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
 
-        # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         A = -torch.exp(self.A_log.float())
-
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
         time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
         if inference_params is not None and inference_params.seqlen_offset > 0:
-            y = selective_state_update(
+            scan_outputs = selective_state_update(
                 ssm_state,
                 hidden_states[..., 0],
                 discrete_time_step[..., 0],
@@ -158,7 +164,7 @@ class MambaMixer(nn.Module):
                 dt_softplus=True,
             ).unsqueeze(-1)
         else:
-            y, last_state = selective_scan_fn(
+            scan_outputs, last_state = selective_scan_fn(
                 hidden_states,
                 discrete_time_step,
                 A,
@@ -174,82 +180,71 @@ class MambaMixer(nn.Module):
                 inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
-        selected_states = self.out_proj(y.transpose(1, 2))
+        selected_states = self.out_proj(scan_outputs.transpose(1, 2))
         return selected_states
 
     def slow_forward(self, hidden_states, inference_params=None):
-        """
-
-         Compute ∆ A B C D, the state space parameters.
-             A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-             ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
-                                          and is why Mamba is called **selective** state spaces)
-
-        Args:
-            hidden_states:
-            inference_params:
-
-        Returns:
-
-        """
-        batch_size, seq_len, _ = hidden_states.shape
+        _, seq_len, _ = hidden_states.shape
 
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1, 2)
+        projected_states = self.in_proj(hidden_states).transpose(1, 2)  # (batch, 2 * intermediate_size, seq_len)
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
         if inference_params.seqlen_offset > 0:
-            conv_state = inference_params.conv_states[self.layer_idx]
+            conv_state = inference_params.conv_states[self.layer_idx]  # (batch, intermediate_size, conv_kernel_size)
             conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
             conv_state[:, :, -1] = hidden_states[:, :, 0]
-
-            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + self.conv1d.bias)
-            hidden_states = hidden_states.unsqueeze(-1)
-
+            bias = getattr(self.conv1d, "bias", 0.0)
+            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias)
+            hidden_states = hidden_states.unsqueeze(-1)  # (batch, intermediate_size, 1)
         else:
             inference_params.conv_states[self.layer_idx] = nn.functional.pad(
                 hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
             )
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (batch, intermediate_size, seq_len)
 
         # 3. State Space Model sequence transformation
-        # 3.a. input varying initialization of time_step, B and C
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
+        # 3.a. Selection:  (batch, seq_len, self.time_step_rank + self.ssm_state_size * 2)
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))  
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
-        discrete_time_step = self.dt_proj(time_step)
-        A = -torch.exp(self.A_log.float())  # (intermediate_size, ssm_state_size)
-
-        # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
+        discrete_time_step = self.dt_proj(time_step)  # (batch, seq_len, intermediate_size)
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
-        #                [batch_size, d, l, 1]     X        [1, d, 1, n] ->  [batch_size, d, l, n]
-        dA = torch.exp(discrete_time_step[:, :, :, None] * A[None, :, None, :])
-        #     [batch_size, d, l, 1]   [b, d, l, 1]  ->  [batch_size, d, l, 1]  X  [batch_size, 1, l, n] -> [batch_size, d, l, n]
-        deltaB_u = (discrete_time_step[:, :, :, None] * hidden_states[:, :, :, None]) * B[:, None, :, :]
+
+        # 3.b. Discretization: B and C to [batch_size, seq_len, intermediate_size, ssm_state_size] (SRAM)
+        A = -torch.exp(self.A_log.float())  # (intermediate_size, ssm_state_size)
+        # [batch_size, intermediate_size, seq_len, 1]    X [1, intermediate_size, 1, ssm_state_size]
+        discrete_A = torch.exp(discrete_time_step[:, :, :, None] * A[None, :, None, :])
+        # [batch_size, intermediate_size, seq_len, 1] X [batch_size, 1, seq_len, ssm_state_size]
+        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
+        # [batch_size, intermediade_size, seq_len, 1] X [batch_size, seq_len, ssm_state_size, 1]
+        deltaB_u = discrete_B * hidden_states[:, :, :, None]
+
+        deltaB_u = (discrete_time_step[:, :, :, None] * hidden_states[:, :, :, None]) * B[:, None, :, :].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
-        ys = []
+        scan_outputs = []
         for i in range(seq_len):
-            ssm_state = ssm_state * dA[:, :, i, :] + deltaB_u[:, :, i, :]
-            #    [b, d, n]   X  [b, n] -> [b, d]
-            y = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1))
-            ys.append(y[:, :, 0])
-        y = torch.stack(ys, dim=-1)  # shape (b, l, d)
-        y = y + (hidden_states * self.D[None, :, None])
-        y = y * self.act(gate)  # (B D)
+            ssm_state = ssm_state * discrete_A[:, :, i, :] + deltaB_u[:, :, i, :]
+            # [batch_size, intermediade_size, ssm_state]   X  [batch_size, ssm_state] -> [batch_size, intermediade_size]
+            scan_output = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1).float())
+            scan_outputs.append(scan_output[:, :, 0])
+        scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, seq_len, intermediade_size]
+        scan_output = scan_output + (hidden_states * self.D[None, :, None].float())
+        contextualized_states = (scan_output * self.act(gate)).to(hidden_states.dtype)  # [batch, intermediade_size, seq_len]
         # 4. Final linear projection
-        selected_states = self.out_proj(y.transpose(1, 2))
+        contextualized_states = self.out_proj(contextualized_states.transpose(1, 2))  # [batch, seq_len, hidden_size]
 
         inference_params.ssm_states[self.layer_idx] = ssm_state
 
-        return selected_states
+        return contextualized_states
 
     def forward(self, hidden_states, inference_params=None):
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, inference_params)
+        # if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
+        #     return self.cuda_kernels_forward(hidden_states, inference_params)
         return self.slow_forward(hidden_states, inference_params)
 
 
@@ -300,7 +295,7 @@ class MambaBlock(nn.Module):
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.residual_in_fp32:
+        if self.residual_in_fp32 or True:
             residual = residual.to(torch.float32)
 
         hidden_states = self.mixer(hidden_states, inference_params=inference_params)
@@ -641,7 +636,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         )
         hidden_states = mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype))
+        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
