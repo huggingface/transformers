@@ -3231,7 +3231,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             **has_file_kwargs,
                         }
                         if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                            logging.set_verbosity_debug()
                             cls._auto_conversion = Thread(
                                 target=auto_conversion,
                                 args=(pretrained_model_name_or_path,),
