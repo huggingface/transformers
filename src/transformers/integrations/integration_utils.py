@@ -961,7 +961,7 @@ class MLflowCallback(TrainerCallback):
             [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
             storage will just copy the files to your artifact location.
         - **MLFLOW_TRACKING_URI** (`str`, *optional*):
-            Whether to store runs at a specific path or remote server. Default to `None` which skips setting the
+            Whether to store runs at a specific path or remote server. Unset by default, which skips setting the
             tracking URI entirely.
         - **MLFLOW_EXPERIMENT_NAME** (`str`, *optional*, defaults to `None`):
             Whether to use an MLflow experiment_name under which to launch the run. Default to `None` which will point
