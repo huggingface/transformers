@@ -1434,7 +1434,10 @@ class GenerationMixin:
         # NB: if user wants prompt logits, this will prob need to be moved down
         if streamer is not None:
             #streamer.put(input_ids.cpu())
-            output_stub = GenerateDecoderOnlyOutput(sequences=input_ids) # Do we need an OutputStub type?
+            output_stub = GenerateDecoderOnlyOutput(
+                sequences=input_ids,
+                #scores=None # uh....
+            ) # Do we need an OutputStub type?
             streamer.put(output_stub)
 
         # 6. Prepare `max_length` depending on other stopping criteria.
@@ -2197,7 +2200,7 @@ class GenerationMixin:
                 #streamer.put(next_tokens.cpu())
                 output_stub = GenerateDecoderOnlyOutput(
                     sequences=next_tokens,
-                    scores=None,
+                    scores=scores,
                     logits=logits,
                 )
                 streamer.put(output_stub)
@@ -2480,8 +2483,13 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 #streamer.put(next_tokens.cpu())
-                output_stub = GenerateDecoderOnlyOutput(sequences=next_tokens)
+                output_stub = GenerateDecoderOnlyOutput(
+                    sequences=next_tokens,
+                    scores=next_tokens_scores,
+                    logits=next_token_logits, # why are these names inconsistent....
+                )
                 streamer.put(output_stub)
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
