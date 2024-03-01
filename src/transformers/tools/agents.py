@@ -237,7 +237,7 @@ class Agent:
         
 
 class CodeAgent(Agent):
-    def __init__(self, llm_callable, toolbox=None, run_prompt_template=None, stop_sequences=None, **kwargs):
+    def __init__(self, llm_callable, toolbox=None, stop_sequences=None, **kwargs):
         super().__init__(llm_callable, toolbox=toolbox)
         self.stop_sequences = stop_sequences
         self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
@@ -263,9 +263,11 @@ class CodeAgent(Agent):
 
         ```py
         from transformers import CodeAgent
+        from transformers.tools.base import CalculatorTool
 
-        agent = CodeAgent() # TODO: fill this
-        agent.run("Draw me a picture of rivers and lakes")
+        calculator = CalculatorTool()
+        agent = CodeAgent(toolbox=[CalculatorTool()])
+        agent.run("What is the result of 2 power 3.7384?")
         ```
         """
         # Run LLM
@@ -334,14 +336,28 @@ class ReactAgent(Agent):
         else:
             self.prompt_template = DEFAULT_REACT_SYSTEM_PROMPT
 
-        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
-
         self.max_iterations = max_iterations
 
 
     def run(self, task):
         """
-        Have the agent accomplish a task.
+        Sends a request to the agent.
+
+        Args:
+            task (`str`): The task to perform
+            kwargs (additional keyword arguments, *optional*):
+                Any keyword argument to send to the agent when evaluating the code.
+
+        Example:
+
+        ```py
+        from transformers import ReactAgent
+        from transformers.tools.base import CalculatorTool
+
+        calculator = CalculatorTool()
+        agent = ReactAgent(toolbox=[CalculatorTool()])
+        agent.run("What is the result of 2 power 3.7384?")
+        ```
         """
         self.memory = []
         self.task = task
@@ -395,7 +411,6 @@ class ReactAgent(Agent):
             return arguments['answer']
         else:
             self.log("\n\n==Result==")
-            print("HERE ARE THE AEGGS:", arguments)
             try:
                 if isinstance(arguments, str):
                     observation = self.toolbox[tool_name](arguments)
