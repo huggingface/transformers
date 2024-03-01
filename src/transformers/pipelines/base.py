@@ -943,9 +943,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        # TODO:
-        # depricate the safe_serialization parameter and use kwargs instead
-        # or update the save_pretrained to get all the parameters such as max_shard_size, ...
         kwargs["safe_serialization"] = safe_serialization
         self.model.save_pretrained(save_directory, **kwargs)
 
