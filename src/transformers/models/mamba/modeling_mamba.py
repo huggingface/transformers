@@ -232,19 +232,18 @@ class MambaMixer(nn.Module):
             # [batch_size, intermediade_size, ssm_state]   X  [batch_size, ssm_state] -> [batch_size, intermediade_size]
             scan_output = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1).float())
             scan_outputs.append(scan_output[:, :, 0])
+        inference_params.ssm_states[self.layer_idx] = ssm_state
         scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, seq_len, intermediade_size]
         scan_output = scan_output + (hidden_states * self.D[None, :, None].float())
         scan_output = (scan_output * self.act(gate)).to(hidden_states.dtype)
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
 
-        inference_params.ssm_states[self.layer_idx] = ssm_state
-
         return contextualized_states
 
     def forward(self, hidden_states, inference_params=None):
-        # if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
-        #     return self.cuda_kernels_forward(hidden_states, inference_params)
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
+            return self.cuda_kernels_forward(hidden_states, inference_params)
         return self.slow_forward(hidden_states, inference_params)
 
 
