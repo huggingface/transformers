@@ -294,7 +294,7 @@ class MambaBlock(nn.Module):
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.residual_in_fp32 or True:
+        if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
         hidden_states = self.mixer(hidden_states, inference_params=inference_params)
