@@ -413,10 +413,9 @@ class GPT2FlashAttention2(GPT2Attention):
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
 
+        present = None
         if use_cache is True:
             present = (key, value)
-        else:
-            present = None
 
         query_length = query.shape[2]
         tgt_len = key.shape[2]
