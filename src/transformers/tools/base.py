@@ -657,8 +657,8 @@ def launch_gradio_demo(tool_class: Tool):
 
     gr.Interface(
         fn=fn,
-        inputs=tool_class.inputs,
-        outputs=tool_class.outputs,
+        inputs=tool_class.inputs.keys(),
+        outputs=tool_class.outputs.keys(),
         title=tool_class.__name__,
         article=tool.description,
     ).launch()
