@@ -72,7 +72,7 @@ def load_cuda_kernels():
         ]
     ]
 
-    MultiScaleDeformableAttention = load(
+    load(
         "MultiScaleDeformableAttention",
         src_files,
         with_cuda=True,

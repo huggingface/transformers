@@ -195,6 +195,9 @@ class RTDetrImageProcessor(BaseImageProcessor):
         if do_rescale is not None and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
+        if do_normalize is not None and (image_mean is None or image_std is None):
+            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+            
         images = make_list_of_images(images)
         if not valid_images(images):
             raise ValueError(
