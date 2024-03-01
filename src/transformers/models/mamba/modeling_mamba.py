@@ -437,11 +437,9 @@ MAMBA_START_DOCSTRING = r"""
 MAMBA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
-            sequence tokens in the vocabulary.
+            Indices of input sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `inference_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -452,11 +450,11 @@ MAMBA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        inference_params (tuple of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`, *optional*):
+        inference_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
-            If set to `True`, the last state is returned and can be used to quickly generate the next logits.
+            If set to `True`, the `inference_params` is returned and can be used to quickly generate the next logits.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
