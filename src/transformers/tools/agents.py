@@ -193,6 +193,9 @@ def format_prompt(toolbox, prompt_template, task):
     tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in toolbox.values()])
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     prompt = prompt.replace("<<task>>", task)
+    if "<<tool_names>>" in prompt:
+        tool_names = [f"'{tool_name}'" for tool_name in toolbox.keys()]
+        prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
     return prompt
 
 
@@ -253,7 +256,6 @@ class Agent:
 """
         )
     def format_prompt(self, task):
-        # TODO: add tool names recap
         return format_prompt(self.toolbox, self.prompt_template, task)
 
 

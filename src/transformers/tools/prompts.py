@@ -132,7 +132,7 @@ DEFAULT_REACT_SYSTEM_PROMPT = """Solve the following task as best you can. You h
 The way you use the tools is by specifying a json blob.
 Specifically, this json should have a `action` key (name of the tool to use) and a `action_input` key (input to the tool).
 
-The value in the "action" field should belong to this list: {tool_names}.
+The value in the "action" field should belong to this list: <<tool_names>>.
 
 The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in markdown. Do not try to escape special characters. Here is an example of a valid $ACTION_JSON_BLOB:
 ```json
