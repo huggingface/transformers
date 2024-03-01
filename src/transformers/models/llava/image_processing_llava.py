@@ -15,7 +15,6 @@
 """Image processor class for LLaVa 1.6."""
 
 import math
-from ast import literal_eval
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -449,10 +448,10 @@ class LlavaImageProcessor(BaseImageProcessor):
         Returns:
             torch.Tensor: A tensor containing the processed image patches.
         """
-        if isinstance(grid_pinpoints, list):
-            possible_resolutions = grid_pinpoints
-        else:
-            possible_resolutions = literal_eval(grid_pinpoints)
+        if not isinstance(grid_pinpoints, list):
+            raise ValueError("grid_pinpoints must be a list of possible resolutions.")
+
+        possible_resolutions = grid_pinpoints
         best_resolution = select_best_resolution(image.size, possible_resolutions)
         image_padded = self.resize_and_pad_image(image, best_resolution)
 
@@ -554,8 +553,13 @@ class LlavaImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if not isinstance(images, list):
-            images = [images]
+        images = make_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
 
         new_images = []
         image_sizes = [image.size for image in images]
