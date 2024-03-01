@@ -135,6 +135,8 @@ class Idefics2PerceiverConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
         resampler_n_latents (`int`, *optional*, defaults to ):
             Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         resampler_depth (`int`, *optional*, defaults to 6):
@@ -151,6 +153,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
 
     def __init__(
         self,
+        hidden_size=4096,
         hidden_act="silu",
         resampler_n_latents=64,
         resampler_depth=6,
