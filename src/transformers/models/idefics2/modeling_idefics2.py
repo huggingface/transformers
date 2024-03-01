@@ -243,7 +243,6 @@ def freeze_model(model, module_exceptions=[]):
 class Idefics2VisionEmbeddings(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
-        self.config = config
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
@@ -304,7 +303,6 @@ class Idefics2VisionAttention(nn.Module):
     # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -566,7 +564,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
 class Idefics2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -670,7 +667,6 @@ class Idefics2Encoder(nn.Module):
 
     def __init__(self, config: Idefics2Config):
         super().__init__()
-        self.config = config
         self.layers = nn.ModuleList([Idefics2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -765,7 +761,6 @@ class Idefics2MultiModalProjector(nn.Module):
 class Idefics2VisionTransformer(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
-        self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = Idefics2VisionEmbeddings(config)
@@ -1168,8 +1163,6 @@ class PerceiverAttention(nn.Module):
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
 
-        self.config = config
-
         # FIXME - perceiver layers should be fully defined by the perceiver config
         self.hidden_size = config.hidden_size
         self.num_heads = config.perceiver_config.resampler_n_heads
@@ -1530,7 +1523,6 @@ class PerceiverFlashAttention2(PerceiverAttention):
 class PerceiverLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
         self.hidden_act = config.perceiver_config.hidden_act
         self.n_latents = config.perceiver_config.resampler_n_latents
@@ -1638,7 +1630,6 @@ class PerceiverResampler(nn.Module):
         :param n_latents: Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         """
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
         self.hidden_act = config.perceiver_config.hidden_act
         self.n_latents = config.perceiver_config.resampler_n_latents
@@ -1686,7 +1677,6 @@ class Idefics2DecoderAttention(nn.Module):
 
     def __init__(self, config: Idefics2Config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.config = config
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
@@ -2289,12 +2279,120 @@ class Idefics2DecoderLayer(nn.Module):
         return outputs
 
 
+@add_start_docstrings(
+    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
+    IDEFICS2_START_DOCSTRING,
+)
+class Idefics2PreTrainedModel(PreTrainedModel):
+    config_class = Idefics2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Idefics2VisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+
+    def _init_weights(self, module):
+        # important: this ported version of Idefics2 isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+        # https://github.com/haotian-liu/LLaVA/tree/main/idefics2 should serve for that purpose
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return self.language_model._supports_sdpa
+
+
+IDEFICS2_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`CLIPImageProcessor`] for processing images).
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
 class Idefics2Model(Idefics2PreTrainedModel):
     def __init__(self, config: Idefics2Config):
         super().__init__(config)
 
         # FIXME - check the config settings here
-        self.config = config
         self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
 
