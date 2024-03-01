@@ -31,8 +31,6 @@ else:
         "Idefics2PreTrainedModel",
         "Idefics2Model",
     ]
-    _import_structure["processing_idefics2"] = ["LlavaProcessor"]
-
 
 if TYPE_CHECKING:
     from .configuration_idefics2 import IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP, Idefics2Config

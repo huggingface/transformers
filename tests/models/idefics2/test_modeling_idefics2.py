@@ -23,11 +23,13 @@ from transformers import (
     AutoProcessor,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
+    Idefics2Model,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -152,7 +154,24 @@ class Idefics2VisionText2TextModelTester:
 
 
 @require_torch
-class Idefics2ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Model tester for `Idefics2`.
+    """
+
+    all_model_classes = (Idefics2Model,) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = True
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = Idefics2VisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Idefics2Config, has_text_modality=False)
+
+
+@require_torch
+class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `Idefics2ForConditionalGeneration`.
     """

@@ -1204,6 +1204,9 @@ def check_docstrings(overwrite: bool = False):
         except Exception as e:
             print(e)
             hard_failures.append(name)
+            import pdb
+
+            pdb.set_trace()
             continue
         if old_doc != new_doc:
             if overwrite:

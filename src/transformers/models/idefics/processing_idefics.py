@@ -218,7 +218,7 @@ class IdeficsProcessor(ProcessorMixin):
         prompts = [
             "User:",
             img,
-            "Describe this image.\nAssistant: An image of two kittens in grass.\n",
+            "Describe this image.\nAssistant: An image of two kittns in grass.\n",
             "User:",
             "https://hips.hearstapps.com/hmg-prod/images/dog-puns-1581708208.jpg",
             "Describe this image.\nAssistant:",

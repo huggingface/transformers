@@ -193,7 +193,6 @@ def update_model_kwargs_for_generation(outputs, model_kwargs):
     return model_kwargs
 
 
-
 def freeze_model(model, module_exceptions=[]):
     mapping = {
         "LayerNorm": nn.LayerNorm,
@@ -257,13 +256,14 @@ class Idefics2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.siglip.modeling_siglip.SiglipAttention with Siglip->Idefics2
+# Copied from transformers.models.siglip.modeling_siglip.SiglipAttention with Siglip->Idefics2Vision
 class Idefics2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -514,11 +514,17 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
         )
 
 
-# FIXME - remap the weights and use the standard MLP implementation
+IDEFICS_VISION_ATTENTION_CLASSES = {
+    "eager": Idefics2VisionAttention,
+    "flash_attention_2": Idefics2VisionFlashAttention2,
+}
+
+
 # Copied from transformers.models.siglip.modeling_siglip.SiglipMLP with Siglip->Idefics2Vision
 class Idefics2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -557,15 +563,10 @@ class Idefics2MultiheadAttentionPoolingHead(nn.Module):
 
 # FIXME - add back in copied from statement
 class Idefics2EncoderLayer(nn.Module):
-    def __init__(self, config: Idefics2Config):
+    def __init__(self, config: Idefics2Config, layer_idx: int):
         super().__init__()
         self.embed_dim = config.hidden_size
-        # FIXME - should work with eager attention too
-        self.self_attn = (
-            Idefics2VisionAttention(config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else Idefics2VisionFlashAttention2(config)
-        )
+        self.self_attn = IDEFICS_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Idefics2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -698,6 +699,7 @@ class Idefics2Encoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+
 class Idefics2VisionTransformer(nn.Module):
     def __init__(self, config: Idefics2VisionConfig):
         super().__init__()
@@ -707,6 +709,7 @@ class Idefics2VisionTransformer(nn.Module):
         self.embeddings = Idefics2VisionEmbeddings(config)
         self.encoder = Idefics2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -716,9 +719,6 @@ class Idefics2VisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        Returns:
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -745,7 +745,7 @@ class Idefics2VisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             attention_mask=(
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not self.config._flash_attn_2_enabled
+                if not self._use_flash_attention_2
                 else patch_attention_mask
             ),
             output_attentions=output_attentions,
@@ -869,6 +869,7 @@ class Idefics2MLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
 
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Idefics2
 # TODO @Arthur no longer copied from LLama after static cache
@@ -1084,6 +1085,7 @@ class Idefics2PerceiverAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
     """
@@ -1333,9 +1335,18 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
         )
 
 
+IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
+    "eager": Idefics2PerceiverAttention,
+    "flash_attention_2": Idefics2PerceiverFlashAttention2,
+}
+
+
 class Idefics2PerceiverLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx: int):
         super().__init__()
+
+        self.config = config  # FIXME - remove this after removing _flash_attn_2_enabled
+
         self.hidden_size = config.hidden_size
         self.hidden_act = config.perceiver_config.hidden_act
         self.n_latents = config.perceiver_config.resampler_n_latents
@@ -1345,11 +1356,8 @@ class Idefics2PerceiverLayer(nn.Module):
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        self.self_attn = (
-            Idefics2PerceiverAttention(config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else Idefics2PerceiverFlashAttention2(config)
-        )
+        self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config)
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         # FIXME - make a perceiver MLP and put this information in its config
         self.mlp = Idefics2MLP(config, intermediate_size=self.intermediate_size, act=self.hidden_act)
@@ -1406,7 +1414,7 @@ class Idefics2PerceiverLayer(nn.Module):
             context=context,
             attention_mask=(
                 _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-                if not self.config._flash_attn_2_enabled
+                if not self._use_flash_attention_2
                 else attention_mask
             ),
         )
@@ -1453,7 +1461,7 @@ class Idefics2PerceiverResampler(nn.Module):
         self.latents = nn.Parameter(torch.ones(self.n_latents, self.hidden_size))
 
         # Create Transformer Blocks
-        self.layers = nn.ModuleList([Idefics2PerceiverLayer(config) for _ in range(self.depth)])
+        self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
 
     def forward(
@@ -1490,6 +1498,7 @@ class Idefics2DecoderAttention(nn.Module):
 
     def __init__(self, config: Idefics2Config, layer_idx: Optional[int] = None):
         super().__init__()
+        self.config = config
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
@@ -1609,9 +1618,10 @@ class Idefics2DecoderAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with MistralFlashAttention->Idefics2DecoderFlashAttention,MistralAttention->Idefics2DecoderAttention,Mistral->Idefics2
 class Idefics2DecoderFlashAttention2(Idefics2DecoderAttention):
     """
-    Mistral flash attention module. This module inherits from `MistralAttention` as the weights of the module stays
+    Idefics2 flash attention module. This module inherits from `Idefics2DecoderAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -1903,7 +1913,7 @@ class Idefics2DecoderFlashAttention2(Idefics2DecoderAttention):
         )
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mistral
+# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Ideifics2
 # TODO @Arthur no longer copied from LLama after static cache
 class Idefics2DecoderSdpaAttention(Idefics2DecoderAttention):
     """
@@ -2017,16 +2027,13 @@ class Idefics2RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer with Mistral->Idefics2,MISTRAL_ATTENTION->IDEFICS2_DECODER_ATTENTION
 class Idefics2DecoderLayer(nn.Module):
     def __init__(self, config: Idefics2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = self.self_attn = (
-            Idefics2DecoderAttention(config=config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else Idefics2DecoderFlashAttention2(config)
-        )
+        self.self_attn = IDEFICS2_DECODER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.mlp = Idefics2MLP(config)
         self.input_layernorm = Idefics2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -2220,7 +2227,7 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """Idefics2 model consisting of a vision encoder and laguage decoder""", # FIXME
+    """Idefics2 model consisting of a vision encoder and laguage decoder""",  # FIXME
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2Model(Idefics2PreTrainedModel):
@@ -2251,10 +2258,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.layers = nn.ModuleList(
             [Idefics2DecoderLayer(self.config, i) for i in range(self.config.num_hidden_layers)]
         )
-
         self.gradient_checkpointing = False
-
         self.norm = Idefics2RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 
@@ -2419,7 +2426,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         elif pixel_values is not None:
             batch_size, num_channels, height, width = pixel_values.shape
             pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
-            #FIXME - check the old dimensions here - are there more dimensions than h,w? Why num_images than num_channels?
+            # FIXME - check the old dimensions here - are there more dimensions than h,w? Why num_images than num_channels?
             # batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
             # pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
             pixel_values = pixel_values.view(batch_size * num_channels, *pixel_values.shape[2:])
@@ -2439,7 +2446,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             else:
                 # Remove padding images from the mask
                 pixel_attention_mask = pixel_attention_mask.view(
-                    batch_size * num_images, *pixel_attention_mask.shape[2:]
+                    batch_size * num_channels, *pixel_attention_mask.shape[2:]
                 )
                 pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
 
@@ -2477,12 +2484,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         # something like inputs_embeds += self.token_types(token_types)
 
         # embed positions
-        if (
-            attention_mask is not None
-            and hasattr(self.config, "_flash_attn_2_enabled")
-            and self.config._flash_attn_2_enabled
-            and past_key_values is not None
-        ):
+        if attention_mask is not None and past_key_values is not None and self._use_flash_attention_2:
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
@@ -2491,7 +2493,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
@@ -2599,10 +2601,12 @@ class Idefics2DecoupledLinear(nn.Module):
             self.linear.weight.requires_grad_(False)
 
         if self.out_additional_features > 0:
-            self.additional_fc = nn.Linear(in_features=self.in_features, out_features=self.out_additional_features, bias=False)
+            self.additional_fc = nn.Linear(
+                in_features=self.in_features, out_features=self.out_additional_features, bias=False
+            )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        output = self.linear(input, self.weight, self.bias)
+        output = self.linear(input)
 
         if self.out_additional_features > 0:
             additional_features = self.additional_fc(input)
@@ -2639,7 +2643,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 return module
             else:
                 # Recursively call the function on each child module
-                return get_lowest_module(list(module.children())[0]) # FIXME - check if this is correct
+                return get_lowest_module(list(module.children())[0])  # FIXME - check if this is correct
 
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
@@ -2738,7 +2742,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float() # FIXME - check if this is necessary
+        logits = logits.float()  # FIXME - check if this is necessary
 
         loss = None
         if labels is not None:
@@ -2768,16 +2772,15 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
+    # FIXME - double check - past vs past_key_values -- possible bug?
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
         pixel_values = kwargs.get("pixel_values", None)
         image_hidden_states = kwargs.get("image_hidden_states", None)
+        use_cache = kwargs.get("use_cache", None)
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
 
@@ -2791,7 +2794,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         return {
             "input_ids": input_ids,
             "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
+            "use_cache": use_cache,
             "position_ids": position_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
@@ -2811,8 +2814,10 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
     @staticmethod
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
