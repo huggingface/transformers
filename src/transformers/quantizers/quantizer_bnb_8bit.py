@@ -139,7 +139,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
+        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Int8Params):
             if self.pre_quantized:
                 if param_name.replace("weight", "SCB") not in state_dict.keys():
                     raise ValueError("Missing quantization component `SCB`")
