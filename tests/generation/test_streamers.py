@@ -70,7 +70,7 @@ class StreamerTester(unittest.TestCase):
 
     #TODO: annotated to matrix over sampling strategies
     def test_output_iterator_streamer_matches_non_streaming(self):
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        #tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         model.config.eos_token_id = -1
 
@@ -81,18 +81,24 @@ class StreamerTester(unittest.TestCase):
         streamer = OutputIteratorStreamer()
         generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
-        thread.start()
-        #streamer_text = ""
-        #for new_text in streamer:
-        #    streamer_text += new_text
-        stream_ids = []
-        for answer in streamer:
-            # answer is a list object? maybe has something to do with the iterator?
-            for output_object in answer:
-                stream_ids.extend(output_object.sequences.tolist())
+        thread.start() # does this not need to be closed?
 
-        #self.assertEqual(streamer_text, greedy_text)
-        self.assertEqual(greedy_ids, stream_ids)
+        stream_ids = torch.Tensor()
+        for answer in streamer:
+            if isinstance(answer, list):
+                for output_object in answer:
+                    new_ids = output_object.sequences.cpu()
+                    if new_ids.ndim == 1:
+                        new_ids = new_ids.unsqueeze(0)
+                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            else:
+                new_ids = answer.sequences.cpu()
+                if new_ids.ndim == 1:
+                    new_ids = new_ids.unsqueeze(0)
+                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+
+        self.assertEqual(greedy_ids.shape, stream_ids.shape)
+        self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
 
     def test_text_streamer_skip_prompt(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")

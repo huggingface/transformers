@@ -2775,8 +2775,12 @@ class GenerationMixin:
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+
+            # I am confusion...
             if streamer is not None:
-                streamer.put(next_tokens.cpu())
+                #streamer.put(next_tokens.cpu())
+                streamer.put(GenerateDecoderOnlyOutput(sequences=next_tokens))
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )

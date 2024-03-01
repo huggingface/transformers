@@ -94,12 +94,9 @@ class OutputStreamer(BaseStreamer):
         """
         What to do with the values that were previously in the buffer
         """
-        #self.queue.put(values)
-        #print(values)
         return values
 
     def put(self, value):
-        #print(type(value))
         value = self.process_incoming_value(value)
         if value is not None:
             if isinstance(value, list):
@@ -131,17 +128,22 @@ class OutputIteratorStreamer(OutputStreamer):
         """
         self.queue.put(values)
 
+
     def __iter__(self):
         return self
 
     def __next__(self):
         value = self.queue.get(timeout=self.timeout)
+        # unclear why all outputs are being wrapped in a list except very last.
+        # frankly... none of them should be? why are any wrapped in a list? maybe something to do with Queue.put?
+        #print(("__next__",value))
         if value == self.stop_signal:
             raise StopIteration()
         else:
             return value
 
     def end(self):
+        self.on_ready() # flush the cache if there's anything in it
         self.queue.put(self.stop_signal)
 
 
