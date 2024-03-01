@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.37.0.dev0")
+check_min_version("4.39.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -131,6 +131,20 @@ class ModelArguments:
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
+    )
+    ctc_zero_infinity: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly"
+            " occur when the inputs are too short to be aligned to the targets."
+        },
+    )
+    add_adapter: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether a convolutional attention network should be stacked on top of the Wav2Vec2Bert Encoder. Can be very"
+            "useful to downsample the output length."
+        },
     )
 
 
@@ -248,7 +262,7 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -309,11 +323,14 @@ class DataCollatorCTCWithPadding:
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
+    feature_extractor_input_name: Optional[str] = "input_values"
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
+        input_features = [
+            {self.feature_extractor_input_name: feature[self.feature_extractor_input_name]} for feature in features
+        ]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         batch = self.processor.pad(
@@ -599,9 +616,11 @@ def main():
             "gradient_checkpointing": training_args.gradient_checkpointing,
             "layerdrop": model_args.layerdrop,
             "ctc_loss_reduction": model_args.ctc_loss_reduction,
+            "ctc_zero_infinity": model_args.ctc_zero_infinity,
             "pad_token_id": tokenizer.pad_token_id,
             "vocab_size": len(tokenizer),
             "activation_dropout": model_args.activation_dropout,
+            "add_adapter": model_args.add_adapter,
         }
     )
 
@@ -635,6 +654,7 @@ def main():
     min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
+    feature_extractor_input_name = feature_extractor.model_input_names[0]
 
     # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
     phoneme_language = data_args.phoneme_language
@@ -646,8 +666,9 @@ def main():
         sample = batch[audio_column_name]
 
         inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
-        batch["input_values"] = inputs.input_values[0]
-        batch["input_length"] = len(batch["input_values"])
+        batch[feature_extractor_input_name] = getattr(inputs, feature_extractor_input_name)[0]
+        # take length of raw audio waveform
+        batch["input_length"] = len(sample["array"].squeeze())
 
         # encode targets
         additional_kwargs = {}
@@ -728,7 +749,9 @@ def main():
         processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor)
+    data_collator = DataCollatorCTCWithPadding(
+        processor=processor, feature_extractor_input_name=feature_extractor_input_name
+    )
 
     # Initialize Trainer
     trainer = Trainer(
