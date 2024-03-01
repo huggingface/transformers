@@ -801,7 +801,7 @@ class QuantoConfig(QuantizationConfigMixin):
     Args:
         weights (`str`, *optional*, defaults to `"int8"`):
             The target dtype for the weights after quantization. Supported values are ("float8","int8","int4","int2")
-        activations (`str`, *optional*, defaults to `None`):
+        activations (`str`, *optional*):
             The target dtype for the activations after quantization. Supported values are (None,"int8","float8_e4m3,"float8_e5m2")
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have

@@ -388,6 +388,7 @@ class QuantoQuantizationTestSerialization(QuantoQuantizationTest):
         )
 
 
+@require_torch_gpu
 class QuantoQuantizationActivationTest(unittest.TestCase):
     def test_quantize_activation(self):
         quantization_config = QuantoConfig(
