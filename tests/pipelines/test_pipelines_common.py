@@ -199,6 +199,29 @@ class CommonPipelineTest(unittest.TestCase):
         outputs = text_classifier(["This is great !"] * 20, batch_size=32)
         self.assertEqual(len(outputs), 20)
 
+    @require_torch
+    def test_torch_dtype_set_to_pipeline(self):
+        import torch
+
+        # If dtype is specified in the pipeline constructor, it should be set to the pipeline and the model config
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", torch_dtype=torch.float16)
+        self.assertEqual(pipe.torch_dtype, torch.float16)
+        self.assertEqual(pipe.model.config.torch_dtype, torch.float16)
+
+        # If dtype is not specified, it should be set based on the model config
+        model = DistilBertForSequenceClassification.from_pretrained(
+            "hf-internal-testing/tiny-random-distilbert", torch_dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-distilbert")
+        pipe = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+        self.assertEqual(pipe.torch_dtype, torch.bfloat16)
+
+        # If dtype is not specified and not available in the model config, it should be set based
+        # on the model's parameters dtype
+        model.config.torch_dtype = None
+        pipe = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+        self.assertEqual(pipe.torch_dtype, torch.bfloat16)
+
 
 @is_pipeline_test
 class PipelineScikitCompatTest(unittest.TestCase):

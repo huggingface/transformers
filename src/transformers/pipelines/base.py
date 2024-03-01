@@ -862,6 +862,16 @@ class Pipeline(_ScikitCompat):
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
+
+        if not self.torch_dtype and is_torch_available():
+            # If pipeline dtype is not specified, populate it from the model
+            # NB: We should only do this when the extracted dtype is not default one (float32),
+            # because not all models/pipelines support torch_dtype. Here we assume that if the
+            # model dtype is not float32 it is set by the user with torch_dtype param, so the
+            # model or pipeline should support it.
+            if hasattr(model, "dtype") and model.dtype not in (torch.float32, "float32", "torch.float32"):
+                self.torch_dtype = model.dtype
+
         self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate
