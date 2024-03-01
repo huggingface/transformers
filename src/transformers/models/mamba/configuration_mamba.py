@@ -58,7 +58,7 @@ class MambaConfig(PretrainedConfig):
             The id of the end of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer as
             GPTNeoX.
         expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
-        time_step_rank (`int`, *optional*, defaults to `"auto"`): rank fo the discretization projection matrix.
+        conv_kernel (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
         use_conv_bias (`bool`, *optional*, defaults to `True`):
@@ -69,6 +69,12 @@ class MambaConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         residual_in_fp32 (`bool`, *optional*, defaults to `False`):
             Whether or not residuals should be in `float32`.
+        time_step_rank (`int`, *optional*, defaults to `"auto"`): rank fo the discretization projection matrix.
+        time_step_scale (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        time_step_init_floor (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        time_step_min (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        time_step_max (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        rescale_prenorm_residual (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
 
@@ -101,12 +107,18 @@ class MambaConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         expand=2,
-        time_step_rank="auto",
+        conv_kernel=4,
         use_bias=False,
         use_conv_bias=True,
         hidden_act="silu",
         initializer_range=0.1,
         residual_in_fp32=False,
+        time_step_rank="auto",
+        time_step_scale=0,
+        time_step_init_floor=0,
+        time_step_min=0,
+        time_step_max=0,
+        rescale_prenorm_residual=False,
         use_cache=True,
         **kwargs,
     ):
@@ -115,10 +127,9 @@ class MambaConfig(PretrainedConfig):
         self.state_size = state_size
         self.num_hidden_layers = num_hidden_layers
         self.layer_norm_epsilon = layer_norm_epsilon
-        self.conv_kernel = 4
+        self.conv_kernel = conv_kernel
         self.expand = expand
         self.intermediate_size = int(self.expand * self.hidden_size)
-        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -126,6 +137,12 @@ class MambaConfig(PretrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
+        self.time_step_scale = time_step_scale
+        self.time_step_init_floor = time_step_init_floor
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
 

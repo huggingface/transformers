@@ -43,7 +43,7 @@ if is_mamba_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
     logger.warning_once(
-        " `mamba_ssm` is not installed in your environnement. Make sure to install it following `src/transformers/kernels/mamba/Makefile`"
+        "The `mamba_ssm` package is not installed in your environnement. Make sure to install it if you want to use the custom cuda kernels"
     )
     selective_state_update, selective_scan_fn = None, None
 
@@ -51,7 +51,7 @@ if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     logger.warning_once(
-        " `causal_conv1d` is not installed in your environnement. Make sure to install it: `src/transformers/kernels/mamba/Makefile`"
+        "The `causal_conv1d` package is not installed in your environnement. Make sure to install it if you want to use the custom cuda kernels"
     )
     causal_conv1d_update, causal_conv1d_fn = None, None
 
@@ -78,7 +78,6 @@ class MambaMixer(nn.Module):
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.expand = config.expand
         self.intermediate_size = config.intermediate_size
         self.time_step_rank = config.time_step_rank
         self.layer_idx = layer_idx
@@ -107,10 +106,8 @@ class MambaMixer(nn.Module):
         A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
         A = A.expand(self.intermediate_size, -1).contiguous()
 
-        self.A_log = nn.Parameter(
-            torch.log(A)
-        )  # TODO this parameter should be kept in float32. We don't have support for that I think
-
+        # TODO this parameter should be kept in float32. We don't have support for in _keep_in_float32
+        self.A_log = nn.Parameter(torch.log(A))
         # D "skip" parameter
         self.D = nn.Parameter(torch.ones(self.intermediate_size))  # Keep in fp32
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
@@ -135,8 +132,8 @@ class MambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        x_dbl = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
-        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))  # TODO find a better name for this one
+        time_step, B, C = torch.split(ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
         discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
 
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
@@ -216,8 +213,8 @@ class MambaMixer(nn.Module):
 
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
-        x_dbl = self.x_proj(hidden_states.transpose(1, 2))
-        time_step, B, C = torch.split(x_dbl, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
+        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
+        time_step, B, C = torch.split(ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1)
         discrete_time_step = self.dt_proj(time_step)
         A = -torch.exp(self.A_log.float())  # (intermediate_size, ssm_state_size)
 
@@ -324,15 +321,15 @@ class MambaPreTrainedModel(PreTrainedModel):
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True    
 
-            dt_init_std = self.dt_rank**-0.5 * self.config.dt_scale
+            dt_init_std = self.time_step_rank**-0.5 * self.config.time_step_scale
             if self.config.dt_init == "constant":
                 nn.init.constant_(self.dt_proj.weight, dt_init_std)
             elif self.config.dt_init == "random":
                 nn.init.uniform_(self.dt_proj.weight, -dt_init_std, dt_init_std)
 
             dt = torch.exp(
-                torch.rand(self.intermediate_size) * (math.log(self.config.dt_max) - math.log(self.config.dt_min))
-                + math.log(self.config.dt_min)
+                torch.rand(self.intermediate_size) * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                + math.log(self.config.time_step_min)
             ).clamp(min=self.config.dt_init_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
@@ -362,7 +359,7 @@ class MambaPreTrainedModel(PreTrainedModel):
                         # Having just p *= scale would repeatedly scale it down
                         nn.init.kaiming_uniform_(p, a=math.sqrt(5))
                         with torch.no_grad():
-                            p /= math.sqrt(n_residuals_per_layer * self.config.num_layers)
+                            p /= math.sqrt(self.config.num_layers)
 
 
 
