@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shutil
+shutil.rmtree('/mnt/cache/hub/models--microsoft--mpnet-base', ignore_errors=True)
+
 
 import os
 import unittest
