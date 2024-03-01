@@ -141,6 +141,9 @@ class OutputIteratorStreamer(OutputStreamer):
         else:
             return value
 
+    def end(self):
+        self.queue.put(self.stop_signal)
+
 
 ###############################
 

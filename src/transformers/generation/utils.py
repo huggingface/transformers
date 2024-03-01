@@ -1435,7 +1435,7 @@ class GenerationMixin:
         if streamer is not None:
             #streamer.put(input_ids.cpu())
             output_stub = GenerateDecoderOnlyOutput(sequences=input_ids) # Do we need an OutputStub type?
-            streamer.put(input_ids)
+            streamer.put(output_stub)
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[-1]

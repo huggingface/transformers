@@ -17,7 +17,8 @@ import unittest
 from queue import Empty
 from threading import Thread
 
-from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available
+from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available #, OutputIteratorStreamer
+from transformers.generation.streamers import OutputIteratorStreamer # TODO: fix import
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
@@ -66,6 +67,32 @@ class StreamerTester(unittest.TestCase):
             streamer_text += new_text
 
         self.assertEqual(streamer_text, greedy_text)
+
+    #TODO: annotated to matrix over sampling strategies
+    def test_output_iterator_streamer_matches_non_streaming(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        greedy_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False)
+        #greedy_text = tokenizer.decode(greedy_ids[0])
+
+        streamer = OutputIteratorStreamer()
+        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        thread = Thread(target=model.generate, kwargs=generation_kwargs)
+        thread.start()
+        #streamer_text = ""
+        #for new_text in streamer:
+        #    streamer_text += new_text
+        stream_ids = []
+        for answer in streamer:
+            # answer is a list object? maybe has something to do with the iterator?
+            for output_object in answer:
+                stream_ids.extend(output_object.sequences.tolist())
+
+        #self.assertEqual(streamer_text, greedy_text)
+        self.assertEqual(greedy_ids, stream_ids)
 
     def test_text_streamer_skip_prompt(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")

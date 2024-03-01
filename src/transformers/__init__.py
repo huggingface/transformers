@@ -4883,7 +4883,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer
+    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, OutputIteratorStreamer
     from .hf_argparser import HfArgumentParser
 
     # Integrations
