@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -599,7 +598,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
-    @require_read_token
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
