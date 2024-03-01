@@ -143,6 +143,7 @@ if TYPE_CHECKING:
         run_hp_search_wandb,
     )
     from .peft import PeftAdapterMixin
+    from .quanto import replace_with_quanto_layers
 else:
     import sys
 
