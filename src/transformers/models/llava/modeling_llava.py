@@ -445,9 +445,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
                     target_length = input_ids.shape[1]
+                    past_length = first_layer_past_key_value.shape[-1]
 
                     extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], first_layer_past_key_value.shape[-1]),
+                        (attention_mask.shape[0], past_length),
                         dtype=attention_mask.dtype,
                         device=attention_mask.device,
                     )
