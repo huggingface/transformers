@@ -1385,7 +1385,7 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
         >>> # retrieve index of [MASK]
         >>> mask_token_index = (inputs.input_ids == torch.tensor(tokenizer.mask_token_id)).all(axis=-1)[0].nonzero(as_tuple=True)[0]
         >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
+        >>> tokenizer.convert_mlm_id_to_token(predicted_token_id.item())
         'france'
         ```
         """
