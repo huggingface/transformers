@@ -252,10 +252,7 @@ class Qwen2MoeMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        if intermediate_size is None:
-            self.intermediate_size = config.intermediate_size
-        else:
-            self.intermediate_size = intermediate_size
+        self.intermediate_size = intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -870,10 +867,10 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
         if self.shared_expert is not None:
-            y = self.shared_expert(hidden_states)
+            shared_expert_output = self.shared_expert(hidden_states)
             if self.shared_expert_gate is not None:
-                y = F.sigmoid(self.shared_expert_gate(hidden_states)) * y
-            final_hidden_states = final_hidden_states + y
+                shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states)) * shared_expert_output
+            final_hidden_states = final_hidden_states + shared_expert_output
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
@@ -891,10 +888,10 @@ class Qwen2MoeDecoderLayer(nn.Module):
             )
         self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        if config.num_experts and config.expert_interval is not None and (layer_idx + 1) % config.expert_interval == 0:
+        if config.num_experts > 0 and (layer_idx + 1) % config.expert_interval == 0:
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
-            self.mlp = Qwen2MoeMLP(config)
+            self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
 
         self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
