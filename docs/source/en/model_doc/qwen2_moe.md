@@ -61,15 +61,6 @@ In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inf
 
 [[autodoc]] Qwen2MoeConfig
 
-## Qwen2MoeTokenizer
-
-[[autodoc]] Qwen2MoeTokenizer
-    - save_vocabulary
-
-## Qwen2MoeTokenizerFast
-
-[[autodoc]] Qwen2MoeTokenizerFast
-
 ## Qwen2MoeModel
 
 [[autodoc]] Qwen2MoeModel
