@@ -64,12 +64,6 @@ _TOKEN_CLASS_EXPECTED_OUTPUT = (
 )
 _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "helboukkouri/character-bert-base-uncased"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.01
-
-
 CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "helboukkouri/character-bert-base-uncased",
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
@@ -1544,7 +1538,6 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
     """,
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1562,13 +1555,6 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1587,6 +1573,60 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Example of single-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, CharacterBertForSequenceClassification
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForSequenceClassification.from_pretrained("helboukkouri/character-bert-base-uncased")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> predicted_label = model.config.id2label[predicted_class_id]
+
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CharacterBertForSequenceClassification.from_pretrained("helboukkouri/character-bert-base-uncased", num_labels=num_labels)
+
+        >>> labels = torch.tensor([1])
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> rounded_loss = round(loss.item(), 2)
+        ```
+
+        Example of multi-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, CharacterBertForSequenceClassification
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForSequenceClassification.from_pretrained("helboukkouri/character-bert-base-uncased", problem_type="multi_label_classification")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_ids = torch.arange(0, logits.shape[-1])[torch.sigmoid(logits).squeeze(dim=0) > 0.5]
+
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CharacterBertForSequenceClassification.from_pretrained(
+        ...     "helboukkouri/character-bert-base-uncased", num_labels=num_labels, problem_type="multi_label_classification"
+        ... )
+
+        >>> labels = torch.sum(
+        ...     torch.nn.functional.one_hot(predicted_class_ids[None, :].clone(), num_classes=num_labels), dim=1
+        ... ).to(torch.float)
+        >>> loss = model(**inputs, labels=labels).loss
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
