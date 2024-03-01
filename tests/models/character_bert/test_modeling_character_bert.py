@@ -35,8 +35,6 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers.models.character_bert.modeling_character_bert import CharacterCnn
-
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         AutoModel,
@@ -51,7 +49,10 @@ if is_torch_available():
         CharacterBertModel,
         logging,
     )
-    from transformers.models.character_bert.modeling_character_bert import CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.character_bert.modeling_character_bert import (
+        CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CharacterCnn,
+    )
 
 
 class CharacterBertModelTester:
