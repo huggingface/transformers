@@ -25,7 +25,7 @@ from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 from ..models.auto import AutoTokenizer
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote, get_tool_description_with_args
-from .prompts import CHAT_MESSAGE_PROMPT, download_prompt, DEFAULT_REACT_SYSTEM_PROMPT
+from .prompts import CHAT_MESSAGE_PROMPT, download_prompt, DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 
 
@@ -189,6 +189,13 @@ class FinalAnswerTool(Tool):
         pass
 
 
+def format_prompt(toolbox, prompt_template, task):
+    tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in toolbox.values()])
+    prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+    prompt = prompt.replace("<<task>>", task)
+    return prompt
+
+
 class Agent:
     def __init__(self, llm_callable,  function_template=None, additional_args=Dict[str,any],toolbox=None):
         self.agent_name = self.__class__.__name__
@@ -202,6 +209,7 @@ class Agent:
             self._toolbox = {tool.name: tool for tool in toolbox}
         # TODO: allow to specifiy a repo_id str instead of a Tool object in toolbox, and load the corresponding tool from the hub
         self.memory = []
+        self.prompt_template = None
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -244,9 +252,14 @@ class Agent:
 }
 """
         )
+    def format_prompt(self, task):
+        # TODO: add tool names recap
+        return format_prompt(self.toolbox, self.prompt_template, task)
+
+
     def parser(self,input_message):
         pass
-        #to continue
+        # TODO: to continue
 
 
     def default_parse_tool_call(self,input_message):
@@ -277,14 +290,7 @@ class CodeAgent(Agent):
     def __init__(self, llm_callable, toolbox=None, run_prompt_template=None, stop_sequences=None, **kwargs):
         super().__init__(llm_callable, toolbox=toolbox)
         self.stop_sequences = stop_sequences
-        self.run_prompt_template = download_prompt(run_prompt_template, self.agent_name, mode="run")
-
-
-    def format_prompt(self, task):
-        tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
-        prompt = self.run_prompt_template.replace("<<all_tools>>", tool_descriptions)
-        prompt = prompt.replace("<<prompt>>", task)
-        return prompt
+        self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
 
 
     def parse_code(self, result):
@@ -374,16 +380,11 @@ class ReactAgent(Agent):
 
         # Init system prompt
         if system_prompt:
-            self.system_prompt = system_prompt
+            self.prompt_template = system_prompt
         else:
-            self.system_prompt = DEFAULT_REACT_SYSTEM_PROMPT
+            self.prompt_template = DEFAULT_REACT_SYSTEM_PROMPT
 
         tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in self.toolbox.values()])
-
-        self.system_prompt = self.system_prompt.format(
-            tool_descriptions=tool_descriptions,
-            tool_names=", ".join([tool_name for tool_name in self._toolbox.keys()])
-        )
 
         self.max_iterations = max_iterations
 
@@ -407,7 +408,7 @@ class ReactAgent(Agent):
 
     def step(self):
         # Run LLM
-        current_prompt = self.system_prompt + "\nTask: " + self.task
+        current_prompt = self.format_prompt(self.task)
         current_prompt += "\n" + "\n".join(self.memory)
         self.log("=====Calling LLM with this prompt:=====")
         self.log(current_prompt)

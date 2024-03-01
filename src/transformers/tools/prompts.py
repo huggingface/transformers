@@ -54,7 +54,7 @@ You should first explain which tool you will use to perform the task and for wha
 Each instruction in Python should be a simple assignment. You can print intermediate results if it makes sense to do so.
 
 Tools:
-<<all_tools>>
+<<tool_descriptions>>
 
 
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
@@ -120,14 +120,14 @@ Answer:
 caption = image_captioner(image)
 ```
 
-Task: "<<prompt>>"
+Task: "<<task>>"
 
 I will use the following
 """
 
 DEFAULT_REACT_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
 
-{tool_descriptions}
+<<tool_descriptions>>
 
 The way you use the tools is by specifying a json blob.
 Specifically, this json should have a `action` key (name of the tool to use) and a `action_input` key (input to the tool).
@@ -159,4 +159,6 @@ ALWAYS provide a 'Thought:' and an 'Action:' part.
 Use the 'final_answer' tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
 
 Now begin!
+
+Task: <<task>>
 """
