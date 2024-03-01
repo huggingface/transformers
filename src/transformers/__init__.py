@@ -5788,10 +5788,8 @@ if TYPE_CHECKING:
     # Tools
     from .tools import (
         Agent,
-        AzureOpenAiAgent,
-        HfAgent,
-        LocalAgent,
-        OpenAiAgent,
+        CodeAgent,
+        ReactAgent,
         PipelineTool,
         RemoteTool,
         Tool,

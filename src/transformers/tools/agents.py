@@ -262,9 +262,9 @@ class CodeAgent(Agent):
         Example:
 
         ```py
-        from transformers import HfAgent
+        from transformers import CodeAgent
 
-        agent = HfAgent("https://api-inference.huggingface.co/models/bigcode/starcoder")
+        agent = CodeAgent() # TODO: fill this
         agent.run("Draw me a picture of rivers and lakes")
         ```
         """

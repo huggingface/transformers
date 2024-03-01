@@ -19,6 +19,8 @@ import importlib
 import inspect
 import io
 import json
+import numexpr
+import math
 import os
 import tempfile
 from typing import Any, Dict, List, Optional, Union
@@ -803,3 +805,21 @@ class EndpointClient:
             return self.decode_image(response.content)
         else:
             return response.json()
+
+class CalculatorTool(Tool):
+    name = "calculator"
+    description = "This is a tool that calculates. It can be used to perform simple arithmetic operations. The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers"
+
+    inputs = {"expression": str}
+    outputs = {"calculator_result": str}
+
+    def __call__(self, expression):
+        local_dict = {"pi": math.pi, "e": math.e}
+        output = str(
+            numexpr.evaluate(
+                expression.strip(),
+                global_dict={},  # restrict access to globals
+                local_dict=local_dict,  # add common mathematical functions
+            )
+        )
+        return output
