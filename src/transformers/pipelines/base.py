@@ -861,16 +861,8 @@ class Pipeline(_ScikitCompat):
                 raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
-        self.torch_dtype = torch_dtype
 
-        if not self.torch_dtype and is_torch_available():
-            # If pipeline dtype is not specified, populate it from the model
-            # NB: We should only do this when the extracted dtype is not default one (float32),
-            # because not all models/pipelines support torch_dtype. Here we assume that if the
-            # model dtype is not float32 it is set by the user with torch_dtype param, so the
-            # model or pipeline should support it.
-            if hasattr(model, "dtype") and model.dtype not in (torch.float32, "float32", "torch.float32"):
-                self.torch_dtype = model.dtype
+        self._initial_torch_dtype = torch_dtype
 
         self.binary_output = binary_output
 
@@ -963,6 +955,21 @@ class Pipeline(_ScikitCompat):
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
         """
         return self(X)
+
+    @property
+    def torch_dtype(self):
+        if hasattr(self.model, "dtype"):
+            # NB: We extract dtype from the underlying model, but it is possible that the model has dtype
+            # but the pipeline subclass doesn't support it. In such case we should not return anything,
+            # but it is not straightforward to detect it in a generic way. Therefore, we assume that the
+            # pipeline support torch_dtype if (1) the extracted dtype is not default one (float32), or
+            # (2) the torch_dtype argument was set by the user when creating the pipeline.
+            if (
+                self._initial_torch_dtype is not None
+                or self.model.dtype not in (torch.float32, "float32", "torch.float32")
+            ):
+                return self.model.dtype
+        return self._initial_torch_dtype
 
     @contextmanager
     def device_placement(self):

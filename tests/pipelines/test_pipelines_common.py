@@ -200,27 +200,35 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
     @require_torch
-    def test_torch_dtype_set_to_pipeline(self):
+    def test_torch_dtype_property(self):
         import torch
+        model_id = "hf-internal-testing/tiny-random-distilbert"
 
-        # If dtype is specified in the pipeline constructor, it should be set to the pipeline and the model config
-        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", torch_dtype=torch.float16)
+        # If dtype is specified in the pipeline constructor, the property should return that type
+        pipe = pipeline(model=model_id, torch_dtype=torch.float16)
         self.assertEqual(pipe.torch_dtype, torch.float16)
-        self.assertEqual(pipe.model.config.torch_dtype, torch.float16)
 
-        # If dtype is not specified, it should be set based on the model config
-        model = DistilBertForSequenceClassification.from_pretrained(
-            "hf-internal-testing/tiny-random-distilbert", torch_dtype=torch.bfloat16
-        )
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-distilbert")
-        pipe = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+        # If the underlying model changes dtype, the property should return the new type
+        pipe.model.to(torch.bfloat16)
         self.assertEqual(pipe.torch_dtype, torch.bfloat16)
 
-        # If dtype is not specified and not available in the model config, it should be set based
-        # on the model's parameters dtype
-        model.config.torch_dtype = None
-        pipe = TextClassificationPipeline(model=model, tokenizer=tokenizer)
-        self.assertEqual(pipe.torch_dtype, torch.bfloat16)
+        # Even if the model dtype is the default one, we can safely assume the pipeline supports torch_dtype
+        # as it is constructed with torch_dtype specified
+        pipe.model.to(torch.float32)
+        self.assertEqual(pipe.torch_dtype, torch.float32)
+
+        # If dtype is NOT specified in the pipeline constructor, the property should NOT return type
+        # as we don't know if the pipeline supports torch_dtype
+        pipe = pipeline(model=model_id)
+        self.assertEqual(pipe.torch_dtype, None)
+
+        # If the model changes to non default dtype, we assume the pipeline supports torch_dtype
+        pipe.model.to(torch.float16)
+        self.assertEqual(pipe.torch_dtype, torch.float16)
+
+        # If the model dtype is the default, we conservatively assume the pipeline doesn't support torch_dtype
+        pipe.model.to(torch.float32)
+        self.assertEqual(pipe.torch_dtype, None)
 
 
 @is_pipeline_test
