@@ -1003,10 +1003,8 @@ class MLflowCallback(TrainerCallback):
                     logger.debug(f"MLflow tracking URI is set to {self._tracking_uri}")
                 else:
                     logger.debug(
-                        (
-                            "Environment variable `MLFLOW_TRACKING_URI` is not provided and therefore will not be"
-                            " explicitly set."
-                        )
+                        "Environment variable `MLFLOW_TRACKING_URI` is not provided and therefore will not be"
+                        " explicitly set."
                     )
             else:
                 logger.debug(f"MLflow tracking URI is set to {self._ml_flow.get_tracking_uri()}")
