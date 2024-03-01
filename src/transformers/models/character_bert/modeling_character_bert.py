@@ -64,13 +64,6 @@ _TOKEN_CLASS_EXPECTED_OUTPUT = (
 )
 _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 
-# QuestionAnswering docstring
-_CHECKPOINT_FOR_QA = "helboukkouri/character-bert-base-uncased"
-_QA_EXPECTED_OUTPUT = "'a nice puppet'"
-_QA_EXPECTED_LOSS = 7.41
-_QA_TARGET_START_INDEX = 14
-_QA_TARGET_END_INDEX = 15
-
 # SequenceClassification docstring
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "helboukkouri/character-bert-base-uncased"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
@@ -1835,7 +1828,6 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
     """,
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1848,15 +1840,6 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_QA,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        qa_target_start_index=_QA_TARGET_START_INDEX,
-        qa_target_end_index=_QA_TARGET_END_INDEX,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
-    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1880,6 +1863,38 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CharacterBertForQuestionAnswering
+        >>> import torch
+
+        >>> # This checkpoint is not pre-trained and may behave in unexpected ways
+        >>> tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForQuestionAnswering.from_pretrained("helboukkouri/character-bert-base-uncased")
+
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+
+        >>> inputs = tokenizer(question, text, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # These indices might not be correct due to the model being untrained
+        >>> answer_start_index = outputs.start_logits.argmax()
+        >>> answer_end_index = outputs.end_logits.argmax()
+
+        >>> # We use arbitrary indices to avoids situations like end_index < start_index
+        >>> predict_answer_tokens = inputs.input_ids[0, 13 : 14 + 1]
+        >>> tokenizer.decode(predict_answer_tokens, skip_special_tokens=True)
+
+        >>> # target is "nice puppet"
+        >>> target_start_index = torch.tensor([14])
+        >>> target_end_index = torch.tensor([15])
+
+        >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
+        >>> loss = outputs.loss
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
