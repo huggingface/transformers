@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Idefics2 model."""
+"""PyTorch Idefics2 model."""
 
 import inspect
 import math
@@ -25,15 +25,15 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from einops import repeat
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
-from ... import AutoModel, AutoModelForCausalLM, PreTrainedModel
+from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -134,6 +134,110 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+def expand_inputs_for_generation(
+    input_ids,
+    expand_size=1,
+    is_encoder_decoder=False,
+    attention_mask=None,
+    encoder_outputs=None,
+    **model_kwargs,
+):
+    expanded_return_idx = (
+        torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
+    )
+    input_ids = input_ids.index_select(0, expanded_return_idx)
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
+    model_kwargs["image_hidden_states"] = model_kwargs.get("image_hidden_states", None)
+
+    if "token_type_ids" in model_kwargs:
+        token_type_ids = model_kwargs["token_type_ids"]
+        model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
+
+    if attention_mask is not None:
+        model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+
+    if model_kwargs["pixel_values"] is not None:
+        model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
+
+    elif model_kwargs["image_hidden_states"] is not None:
+        model_kwargs["image_hidden_states"] = model_kwargs["image_hidden_states"].index_select(0, expanded_return_idx)
+
+    return input_ids, model_kwargs
+
+
+def update_model_kwargs_for_generation(outputs, model_kwargs):
+    # must have this key set to at least None
+    if "past_key_values" in outputs:
+        model_kwargs["past_key_values"] = outputs.past_key_values
+    else:
+        model_kwargs["past_key_values"] = None
+
+    # update token_type_ids with last value
+    if "token_type_ids" in model_kwargs:
+        token_type_ids = model_kwargs["token_type_ids"]
+        model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
+
+    # update attention masks
+    if "attention_mask" in model_kwargs:
+        attention_mask = model_kwargs["attention_mask"]
+        model_kwargs["attention_mask"] = torch.cat(
+            [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+        )
+
+    # Get the precomputed image_hidden_states
+    model_kwargs["image_hidden_states"] = outputs.image_hidden_states
+
+    return model_kwargs
+
+
+def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
+    token_type_ids = kwargs.get("token_type_ids", None)
+    # only last token for inputs_ids if past is defined in kwargs
+    if past_key_values:
+        input_ids = input_ids[:, -1].unsqueeze(-1)
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+
+    attention_mask = kwargs.get("attention_mask", None)
+    position_ids = kwargs.get("position_ids", None)
+
+    if attention_mask is not None and position_ids is None:
+        # create position_ids on the fly for batch generation
+        position_ids = attention_mask.long().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 1)
+        if past_key_values:
+            position_ids = position_ids[:, -1].unsqueeze(-1)
+
+    pixel_values = kwargs.get("pixel_values", None)
+    image_hidden_states = kwargs.get("image_hidden_states", None)
+
+    return {
+        "input_ids": input_ids,
+        "past_key_values": past_key_values,
+        "use_cache": kwargs.get("use_cache"),
+        "position_ids": position_ids,
+        "attention_mask": attention_mask,
+        "token_type_ids": token_type_ids,
+        "pixel_values": pixel_values,
+        "image_hidden_states": image_hidden_states,
+    }
+
+
+def freeze_model(model, module_exceptions=[]):
+    mapping = {
+        "LayerNorm": nn.LayerNorm,
+        "Linear": nn.Linear,
+        "Embedding": nn.Embedding,
+    }
+    module_exceptions_mapped = [mapping[m] for m in module_exceptions]
+    for module in model.modules():
+        if module_exceptions and any(isinstance(module, t) for t in module_exceptions_mapped):
+            module.requires_grad_(True)  # Explicitly setting it to true to avoid any mistakes
+        else:
+            module.requires_grad_(False)
+    return model
 
 
 class Idefics2VisionEmbeddings(nn.Module):

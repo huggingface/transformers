@@ -20,7 +20,6 @@ import numpy as np
 
 from .image_utils import (
     ChannelDimension,
-    ImageInput,
     get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
@@ -37,6 +36,7 @@ from .utils.import_utils import (
 
 if is_vision_available():
     import PIL
+    from PIL import Image
 
     from .image_utils import PILImageResampling
 
