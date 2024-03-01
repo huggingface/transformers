@@ -913,7 +913,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._attn_implementation = config._attn_implementation 
 
         # Initialize weights and apply final processing
         self.post_init()
