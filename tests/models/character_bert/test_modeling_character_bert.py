@@ -23,7 +23,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
 )
-from transformers.models.character_bert.modeling_character_bert import CharacterCnn
 from transformers.testing_utils import CaptureLogger, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -35,6 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     from torch import nn
+
+    from transformers.models.character_bert.modeling_character_bert import CharacterCnn
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
