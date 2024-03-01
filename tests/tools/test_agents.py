@@ -71,3 +71,8 @@ class AgentTests(unittest.TestCase):
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
 
+    def test_code_agent_remote_tool(self):
+        agent = CodeAgent(fake_code_llm, toolbox=[''])
+        output = agent.run("What is 2 multiplied by 3.6452?")
+        assert output == "7.2904"
+

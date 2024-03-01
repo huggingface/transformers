@@ -806,6 +806,7 @@ class EndpointClient:
         else:
             return response.json()
 
+
 class CalculatorTool(Tool):
     name = "calculator"
     description = "This is a tool that calculates. It can be used to perform simple arithmetic operations. The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers"
