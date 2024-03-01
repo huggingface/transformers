@@ -57,13 +57,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "helboukkouri/character-bert-base-uncased"
 _CONFIG_FOR_DOC = "CharacterBertConfig"
 
-# TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "helboukkouri/character-bert-base-uncased"
-_TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC'] "
-)
-_TOKEN_CLASS_EXPECTED_LOSS = 0.01
-
 CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "helboukkouri/character-bert-base-uncased",
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
@@ -1784,7 +1777,6 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
     """,
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1801,13 +1793,6 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
-    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1824,6 +1809,33 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CharacterBertForTokenClassification
+        >>> import torch
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("helboukkouri/character-bert-base-uncased")
+        >>> model = CharacterBertForTokenClassification.from_pretrained("helboukkouri/character-bert-base-uncased")
+
+        >>> inputs = tokenizer(
+        ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="pt"
+        ... )
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_token_class_ids = logits.argmax(-1)
+
+        >>> # Note that tokens are classified rather then input words which means that
+        >>> # there might be more predicted token classes than words.
+        >>> # Multiple token classes might account for the same word
+        >>> predicted_tokens_classes = [model.config.id2label[t.item()] for t in predicted_token_class_ids[0]]
+
+        >>> labels = predicted_token_class_ids
+        >>> loss = model(**inputs, labels=labels).loss
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
