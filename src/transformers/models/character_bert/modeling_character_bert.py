@@ -1446,7 +1446,6 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
     """CharacterBert Model with a `next sentence prediction (classification)` head on top.""",
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
