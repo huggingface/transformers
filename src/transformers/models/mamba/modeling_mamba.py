@@ -180,8 +180,8 @@ class MambaMixer(nn.Module):
                 inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
-        selected_states = self.out_proj(scan_outputs.transpose(1, 2))
-        return selected_states
+        contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
+        return contextualized_states
 
     def slow_forward(self, hidden_states, inference_params=None):
         _, seq_len, _ = hidden_states.shape
@@ -224,8 +224,6 @@ class MambaMixer(nn.Module):
         # [batch_size, intermediade_size, seq_len, 1] X [batch_size, seq_len, ssm_state_size, 1]
         deltaB_u = discrete_B * hidden_states[:, :, :, None]
 
-        deltaB_u = (discrete_time_step[:, :, :, None] * hidden_states[:, :, :, None]) * B[:, None, :, :].float()
-
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
         scan_outputs = []
@@ -236,9 +234,9 @@ class MambaMixer(nn.Module):
             scan_outputs.append(scan_output[:, :, 0])
         scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, seq_len, intermediade_size]
         scan_output = scan_output + (hidden_states * self.D[None, :, None].float())
-        contextualized_states = (scan_output * self.act(gate)).to(hidden_states.dtype)
+        scan_output = (scan_output * self.act(gate)).to(hidden_states.dtype)
         # 4. Final linear projection
-        contextualized_states = self.out_proj(contextualized_states.transpose(1, 2))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
 
         inference_params.ssm_states[self.layer_idx] = ssm_state
 
