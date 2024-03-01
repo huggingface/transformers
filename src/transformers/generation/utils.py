@@ -1430,8 +1430,12 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
+        # echo back the prompt
+        # NB: if user wants prompt logits, this will prob need to be moved down
         if streamer is not None:
-            streamer.put(input_ids.cpu())
+            #streamer.put(input_ids.cpu())
+            output_stub = GenerateDecoderOnlyOutput(sequences=input_ids) # Do we need an OutputStub type?
+            streamer.put(input_ids)
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[-1]
@@ -2093,6 +2097,12 @@ class GenerationMixin:
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
+            ### dmarx
+            # NB: I'm a bit confused why the logic here is disguised in this _ranking_fast function, which is only used here
+            # but is defined 2000 lines later down the file. Moreover, I think that means the returned scores will never
+            # take into account this "degeneration penalty" that's applied here for the re-ranking
+            ### /dmarx
+
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
             # model confidence. Keeping `selected_idx` on CPU enables multi-device contrastive search and doesn't
             # introduce (noticeable) slowdowns on single-device runs.
@@ -2185,7 +2195,11 @@ class GenerationMixin:
             if streamer is not None:
                 #when does this even get invoked? doesn't seem to be getting hit in tests i don't think?
                 #streamer.put(next_tokens.cpu())
-                output_stub = GenerateDecoderOnlyOutput(sequences=next_tokens)
+                output_stub = GenerateDecoderOnlyOutput(
+                    sequences=next_tokens,
+                    scores=None,
+                    logits=logits,
+                )
                 streamer.put(output_stub)
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs

@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Optional
 
 import torch
 
+from transformers.generation.utils import GenerateDecoderOnlyOutput
+
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
 
@@ -108,7 +110,39 @@ class OutputStreamer(BaseStreamer):
         if self.is_ready():
             return self.on_ready()
 
-from transformers.generation.utils import GenerateDecoderOnlyOutput
+
+class OutputIteratorStreamer(OutputStreamer):
+    def __init__(self,
+                 filter_func=None,
+                 cache = None,
+                 queue=None,
+                 timeout: Optional[float] = None,
+    ):
+        super().__init__(filter_func=filter_func, cache=cache)
+        if queue is None:
+           queue = Queue()
+        self.queue = queue # outgoing finalized outputs
+        self.timeout = timeout
+        self.stop_signal = None
+
+    def process_outgoing_values(self, values):
+        """
+        What to do with the values that were previously in the buffer
+        """
+        self.queue.put(values)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        value = self.queue.get(timeout=self.timeout)
+        if value == self.stop_signal:
+            raise StopIteration()
+        else:
+            return value
+
+
+###############################
 
 class TokenStreamer(OutputStreamer):
     """
