@@ -289,7 +289,7 @@ def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps:
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
     shift = timescale - num_warmup_steps
-    decay = 1.0 / math.sqrt(((current_step + shift) / (timescale + 1e-9)) + 1e-9)
+    decay = 1.0 / math.sqrt((current_step + shift) / timescale)
     return decay
 
 
@@ -317,7 +317,7 @@ def get_inverse_sqrt_schedule(
     # https://github.com/google-research/big_vision/blob/f071ce68852d56099437004fd70057597a95f6ef/big_vision/utils.py#L930
 
     if timescale is None:
-        timescale = num_warmup_steps
+        timescale = num_warmup_steps or 10_000
 
     lr_lambda = partial(_get_inverse_sqrt_schedule_lr_lambda, num_warmup_steps=num_warmup_steps, timescale=timescale)
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
