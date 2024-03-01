@@ -662,18 +662,21 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # 3. assert equivalence
         for key in cpu_outputs.keys():
-            assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
+            self.assertTrue(torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4))
 
         expected_logits = torch.tensor(
             [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         )
-        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-3)
+        self.assertTrue(torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
 
         # assert postprocessing
         results_cpu = processor.image_processor.post_process_object_detection(
             cpu_outputs, threshold=0.35, target_sizes=[image.size[::-1]]
         )[0]
 
-        print(results_cpu)
+        result_gpu = processor.image_processor.post_process_object_detection(
+            gpu_outputs, threshold=0.35, target_sizes=[image.size[::-1]]
+        )[0]
 
-        assert False
+        self.assertTrue(torch.allclose(results_cpu["scores"], result_gpu["scores"].cpu(), atol=1e-3))
+        self.assertTrue(torch.allclose(results_cpu["boxes"], result_gpu["boxes"].cpu(), atol=1e-3))

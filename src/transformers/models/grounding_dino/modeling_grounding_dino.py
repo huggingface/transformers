@@ -62,7 +62,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
     src_files = [
         root / filename
         for filename in [
