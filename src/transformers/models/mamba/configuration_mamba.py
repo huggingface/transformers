@@ -114,10 +114,11 @@ class MambaConfig(PretrainedConfig):
         initializer_range=0.1,
         residual_in_fp32=False,
         time_step_rank="auto",
-        time_step_scale=0,
-        time_step_init_floor=0,
-        time_step_min=0,
-        time_step_max=0,
+        time_step_scale=1.0,
+        time_step_min=0.001,
+        time_step_max=.1,
+        time_step_init_scheme="random",
+        time_step_floor=1e-4,
         rescale_prenorm_residual=False,
         use_cache=True,
         **kwargs,
@@ -139,9 +140,10 @@ class MambaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
         self.time_step_scale = time_step_scale
-        self.time_step_init_floor = time_step_init_floor
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
+        self.time_step_init_scheme = time_step_init_scheme
+        self.time_step_floor = time_step_floor
         self.rescale_prenorm_residual = rescale_prenorm_residual
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
