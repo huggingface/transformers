@@ -164,14 +164,15 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": True, 'penalty_alpha': 0.6, 'top_k': 4}
         baseline_kwargs = copy.deepcopy(generation_kwargs)
 
-        torch.manual_seed(0)
+        seed = random.randint(0, int(1e9))
+        torch.manual_seed(seed)
         outputs_baseline = model.generate(**baseline_kwargs)
 
         streamer = OutputIteratorStreamer()
         test_kwargs = copy.deepcopy(generation_kwargs)
         test_kwargs['streamer'] = streamer
 
-        torch.manual_seed(0)
+        torch.manual_seed(seed)
         thread = Thread(target=model.generate, kwargs=test_kwargs)
         thread.start()  # does this not need to be closed?
 
