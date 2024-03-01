@@ -354,7 +354,7 @@ class Idefics2Config(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        additional_vocab_size (`int`, *optional`, defaults to 0):
+        additional_vocab_size (`int`, *optional`, defaults to 0, *optional*, defaults to 0):
             Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
             are always trainable whereas regular vocab tokens can be frozen or not.
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -377,7 +377,7 @@ class Idefics2Config(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
+        max_position_embeddings (`int`, *optional*, defaults to 32768):
             The maximum sequence length that this model might ever be used with. Mistral's sliding window attention
             allows sequence of up to 4096*32 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -394,19 +394,20 @@ class Idefics2Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 0):
             The id of the padding token.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        image_token_id (`int`, *optional*, defaults to 32001): The id of the "image" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
-        cross_layer_interval (`int`, *optional*, default to 1)
+        cross_layer_interval (`int`, *optional*, defaults to 1):
             Interval for cross attention (from text to image) layers.
         qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
         freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers
@@ -416,9 +417,11 @@ class Idefics2Config(PretrainedConfig):
         freeze_vision_layers (`bool`, *optional*, defaults to `True`):  Whether to freeze vision layers
         freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
-        use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
+        attention_dropout (`float`, *optional*, defaults to 0.0): The dropout ratio for the attention probabilities.
+        use_resampler (`bool`, *optional*, defaults to `True`): Whether to use the Resampler
         vision_config (`IdeficsVisionConfig`,  *optional*): Custom vision config or dict
         perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config or dict
+
     Example:
     ```python
     >>> from transformers import MistralModel, MistralConfig
@@ -470,7 +473,6 @@ class Idefics2Config(PretrainedConfig):
         use_resampler=True,
         vision_config=None,
         perceiver_config=None,
-        # text_config=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -523,13 +525,6 @@ class Idefics2Config(PretrainedConfig):
             self.vision_config = Idefics2VisionConfig(**vision_config)
         elif isinstance(vision_config, Idefics2VisionConfig):
             self.vision_config = vision_config
-
-        # if text_config is None:
-        #     self.text_config = Idefics2TextConfig(**kwargs)
-        # elif isinstance(text_config, dict):
-        #     self.text_config = Idefics2TextConfig(**text_config)
-        # elif isinstance(text_config, Idefics2TextConfig):
-        #     self.text_config = text_config
 
         super().__init__(
             pad_token_id=pad_token_id,

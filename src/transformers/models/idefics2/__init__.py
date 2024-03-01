@@ -29,6 +29,7 @@ else:
         "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Idefics2ForConditionalGeneration",
         "Idefics2PreTrainedModel",
+        "Idefics2Model",
     ]
     _import_structure["processing_idefics2"] = ["LlavaProcessor"]
 
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
         from .modeling_idefics2 import (
             IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Idefics2ForConditionalGeneration,
+            Idefics2Model,
             Idefics2PreTrainedModel,
         )
 

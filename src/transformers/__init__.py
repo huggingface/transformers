@@ -2437,6 +2437,7 @@ else:
         [
             "IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Idefics2ForConditionalGeneration",
+            "Idefics2Model",
             "Idefics2PreTrainedModel",
         ]
     )
@@ -7152,6 +7153,7 @@ if TYPE_CHECKING:
         from .models.idefics2 import (
             IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Idefics2ForConditionalGeneration,
+            Idefics2Model,
             Idefics2PreTrainedModel,
         )
         from .models.imagegpt import (

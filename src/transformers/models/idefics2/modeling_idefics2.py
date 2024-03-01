@@ -2414,11 +2414,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
                             f" {example_num_images}*{vision_pipeline_output_seq_len}={example_num_images * vision_pipeline_output_seq_len} "
                         )
                     # Insert the image_hidden_states
-                    new_inputs_embeds[batch_idx][input_ids[batch_idx] == self.image_token_id] = (
-                        example_true_image_hidden_states.view(
-                            example_num_images * vision_pipeline_output_seq_len,
-                            vision_hidden_size,
-                        )
+                    new_inputs_embeds[batch_idx][
+                        input_ids[batch_idx] == self.image_token_id
+                    ] = example_true_image_hidden_states.view(
+                        example_num_images * vision_pipeline_output_seq_len,
+                        vision_hidden_size,
                     )
             else:
                 new_inputs_embeds = inputs_embeds
