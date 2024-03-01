@@ -3152,7 +3152,7 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
-            if model_kwargs["past_key_values"] is not None:
+            if model_kwargs.get("past_key_values",None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], beam_idx
                 )
@@ -3499,7 +3499,7 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
-            if model_kwargs["past_key_values"] is not None:
+            if model_kwargs.get("past_key_values",None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], beam_idx
                 )
@@ -3898,7 +3898,7 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
-            if model_kwargs["past_key_values"] is not None:
+            if model_kwargs.get("past_key_values",None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], reordering_indices
                 )
@@ -4250,7 +4250,7 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
-            if model_kwargs["past_key_values"] is not None:
+            if model_kwargs.get("past_key_values",None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], beam_idx
                 )
