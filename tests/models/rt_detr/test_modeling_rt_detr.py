@@ -304,10 +304,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="RTDetr is not a generative model")
-    def test_generate_without_input_ids(self):
-        pass
-
     @unittest.skip(reason="RTDetr does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
@@ -341,10 +337,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    @unittest.skip(reason="Model doesn't use tied weights")
-    def test_tied_weights_keys(self):
-        pass
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
