@@ -463,17 +463,17 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         image_size = get_image_size(image)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
-        image_padded = self.resize_and_pad_image(image, best_resolution)
+        padded_image = self.resize_and_pad_image(image, best_resolution)
 
-        patches = divide_to_patches(image_padded, patch_size=self.crop_size["height"])
+        patches = divide_to_patches(padded_image, patch_size=self.crop_size["height"])
 
-        original_image_resized = resize(
+        resized_original_image = resize(
             image,
             size=size,
             resample=PILImageResampling.BICUBIC,
         )
 
-        image_patches = [original_image_resized] + patches
+        image_patches = [resized_original_image] + patches
 
         return image_patches
 
