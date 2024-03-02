@@ -67,8 +67,8 @@ def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     if not isinstance(grid_pinpoints, list):
         raise ValueError("grid_pinpoints should be a list of tuples or lists")
 
-    width, height = select_best_resolution(image_size, grid_pinpoints)
-    return width // patch_size, height // patch_size
+    height, width = select_best_resolution(image_size, grid_pinpoints)
+    return height // patch_size, width // patch_size
 
 
 def unpad_image(tensor, original_size):
@@ -505,7 +505,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                             )
                             if height * width != base_image_feature.shape[0]:
                                 raise ValueError("The number of patches is not consistent with the image size.")
-                            num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                            num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                                 image_sizes[image_idx],
                                 self.config.image_grid_pinpoints,
                                 self.config.vision_config.image_size,

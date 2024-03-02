@@ -62,7 +62,7 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
         original_size (tuple):
             The original size of the image in the format (height, width).
         possible_resolutions (list):
-            A list of possible resolutions in the format [(width1, height1), (width2, height2), ...].
+            A list of possible resolutions in the format [(height1, width1), (height2, width2), ...].
 
     Returns:
         tuple: The best fit resolution in the format (height, width).
@@ -72,7 +72,7 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
     max_effective_resolution = 0
     min_wasted_resolution = float("inf")
 
-    for width, height in possible_resolutions:
+    for height, width in possible_resolutions:
         scale = min(width / original_width, height / original_height)
         downscaled_width, downscaled_height = int(original_width * scale), int(original_height * scale)
         effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
@@ -151,7 +151,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
-        image_grid_pinpoints (`List` *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
+        image_grid_pinpoints (`List` *optional*, defaults to `[[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]`):
             A list of possible resolutions to use for processing high resolution images. The best resolution is selected
             based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
             method.
@@ -573,7 +573,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        
+
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
