@@ -140,9 +140,9 @@ class LlavaImageProcessor(BaseImageProcessor):
     for processing high resolution images as explained in the [LLaVa paper](https://arxiv.org/abs/2310.03744).
 
     Args:
-        image_aspect_ratio (`str`, *optional*, defaults to `"anyres"`):
-            The aspect ratio setting to use. Can be "" (as in CLIP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
-            an be overridden by `image_aspect_ratio` in the `preprocess` method.
+        aspect_ratio_setting (`str`, *optional*, defaults to `"anyres"`):
+            The aspect ratio setting to use. Can be "CLIP", "pad" (as in LLaVa 1.5) or "anyres" (as in LLaVa 1.6).
+            an be overridden by `aspect_ratio_setting` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
@@ -185,7 +185,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_aspect_ratio: str = "anyres",
+        aspect_ratio_setting: str = "anyres",
         do_resize: bool = True,
         size: Dict[str, int] = None,
         image_grid_pinpoints: List = None,
@@ -211,7 +211,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
-        self.image_aspect_ratio = image_aspect_ratio
+        self.aspect_ratio_setting = aspect_ratio_setting
         self.do_resize = do_resize
         self.size = size
         self.image_grid_pinpoints = image_grid_pinpoints
@@ -478,7 +478,7 @@ class LlavaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        image_aspect_ratio=None,
+        aspect_ratio_setting=None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         image_grid_pinpoints: List = None,
@@ -500,7 +500,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            image_aspect_ratio (`str`, *optional*, defaults to `"anyres"`):
+            aspect_ratio_setting (`str`, *optional*, defaults to `"anyres"`):
                 The aspect ratio setting to use. Can be "" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -549,7 +549,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        image_aspect_ratio = image_aspect_ratio if image_aspect_ratio is not None else self.image_aspect_ratio
+        aspect_ratio_setting = aspect_ratio_setting if aspect_ratio_setting is not None else self.aspect_ratio_setting
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, param_name="size", default_to_square=False)
@@ -576,13 +576,13 @@ class LlavaImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if image_aspect_ratio not in ["anyres", "pad"]:
-            raise ValueError(f"Invalid image aspect ratio: {image_aspect_ratio}")
+        if aspect_ratio_setting not in ["anyres", "pad"]:
+            raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
 
         new_images = []
         image_sizes = [get_image_size(image) for image in images]
         for image in images:
-            if image_aspect_ratio == "anyres":
+            if aspect_ratio_setting == "anyres":
                 # convert image into a list of patches
                 image_patches = self.get_image_patches(
                     image, image_grid_pinpoints, size=(self.size["shortest_edge"], self.size["shortest_edge"])
@@ -607,7 +607,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 )
                 pixel_values = np.array(pixel_values)
 
-            elif image_aspect_ratio == "pad":
+            elif aspect_ratio_setting == "pad":
                 image = expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
                 pixel_values = self._preprocess(
                     image,
@@ -647,9 +647,9 @@ class LlavaImageProcessor(BaseImageProcessor):
 
             new_images.append(pixel_values)
 
-        if image_aspect_ratio == "anyres":
+        if aspect_ratio_setting == "anyres":
             data = {"pixel_values": new_images, "image_sizes": image_sizes}
-        elif image_aspect_ratio == "pad":
+        elif aspect_ratio_setting == "pad":
             data = {"pixel_values": new_images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
