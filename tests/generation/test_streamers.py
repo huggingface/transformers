@@ -180,10 +180,11 @@ class OutputIteratorStreamerTester(unittest.TestCase):
 
         stream_ids = torch.Tensor()
         stream_scores = torch.Tensor()
+        n_times_scores_extended = 0
         for answer in streamer:
             if isinstance(answer, list):
                 for output_object in answer:
-                    print(output_object.__dict__.keys())
+
                     new_ids = output_object.sequences.cpu()
                     if new_ids.ndim == 1:
                         new_ids = new_ids.unsqueeze(0)
@@ -195,6 +196,7 @@ class OutputIteratorStreamerTester(unittest.TestCase):
                         if new_scores.ndim == 1:
                             new_scores = new_scores.unsqueeze(0)
                         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
+                        n_times_scores_extended +=1
 
             # Boy do I need to DRY this
             else:
@@ -208,10 +210,12 @@ class OutputIteratorStreamerTester(unittest.TestCase):
                     if new_scores.ndim == 1:
                         new_scores = new_scores.unsqueeze(0)
                     stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
+                    n_times_scores_extended += 1
 
         greedy_ids = baseline_outputs.sequences
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
         self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
+        self.assertTrue(n_times_scores_extended>1) # make sure we're not just comparing to the final output tensor
 
 
     def test_contrastive_ids_match(self):
