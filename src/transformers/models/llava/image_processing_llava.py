@@ -25,6 +25,7 @@ from ...image_transforms import (
     get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
+    to_pil_image,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -190,7 +191,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             result.paste(image, ((height - width) // 2, 0))
             return result
 
-    def resize_and_pad_image(self, image: np.array, target_resolution: tuple) -> Image.Image:
+    def resize_and_pad_image(self, image: np.array, target_resolution: tuple) -> np.array:
         """
         Resize and pad an image to a target resolution while maintaining aspect ratio.
 
@@ -201,7 +202,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 The target resolution (height, width) of the image.
 
         Returns:
-            PIL.Image.Image: The resized and padded image.
+            np.array: The resized and padded image.
         """
         original_height, original_width = get_image_size(image)
         target_height, target_width = target_resolution
@@ -225,14 +226,14 @@ class LlavaImageProcessor(BaseImageProcessor):
         paste_y = (target_height - new_height) // 2
         new_image.paste(resized_image, (paste_x, paste_y))
 
-        return new_image
+        return to_numpy_array(new_image)
 
-    def divide_to_patches(self, image, patch_size: int) -> list:
+    def divide_to_patches(self, image: np.array, patch_size: int) -> list:
         """
         Divides an image into patches of a specified size.
 
         Args:
-            image (`PIL.Image.Image`):
+            image (`np.array`):
                 The input image.
             patch_size (`int`):
                 The size of each patch.
@@ -241,7 +242,8 @@ class LlavaImageProcessor(BaseImageProcessor):
             list: A list of PIL.Image.Image objects representing the patches.
         """
         patches = []
-        width, height = image.size
+        height, width = get_image_size(image)
+        image = to_pil_image(image)
         for i in range(0, height, patch_size):
             for j in range(0, width, patch_size):
                 box = (j, i, j + patch_size, i + patch_size)
