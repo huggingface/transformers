@@ -14,11 +14,12 @@
 # limitations under the License.
 
 
+from parameterized import parameterized
 import unittest
 from unittest.util import safe_repr
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, require_torch_multi_gpu
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -183,14 +184,15 @@ class MambaModelTester:
         outputs = model(input_ids)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :2], use_cache=True)
+        outputs = model(input_ids[:, :-1], use_cache=True)
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, 2:], inference_params=outputs.inference_params)
+        outputs = model(input_ids[:, -1:], inference_params=outputs.inference_params)
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
+        # TODO the orignal mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_forward_and_backwards(self, config, input_ids, *args, gradient_checkpointing=False):
         model = MambaForCausalLM(config)
@@ -268,7 +270,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # @require_torch_multi_gpu
+    @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -346,18 +348,15 @@ class MambaIntegrationTests(unittest.TestCase):
         self.model_id = "ArthurZ/mamba-2.8b"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
-    def test_simple_generate(self):
-        import torch
-
-        from transformers import AutoTokenizer, MambaForCausalLM
-
+    @parameterized.expand([(torch_device,), ("cpu",)])
+    def test_simple_generate(self, device):
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/mamba-130m")
         tokenizer.pad_token = tokenizer.eos_token
 
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16)
-        model.to(torch_device)
+        model.to(device)
         model.config.use_cache = True
-        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
+        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
         with torch.no_grad():
             logits = model(input_ids=input_ids).logits
@@ -377,49 +376,53 @@ class MambaIntegrationTests(unittest.TestCase):
 
         out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, "Hey how are you doing?\n\nA:\n\nI have a similar")
+        self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
 
-    def test_simple_generate_cuda_kernels_tiny(self):
-        expected_output = "Hello my name is John of the Golden, and I am the Lord"
+    @parameterized.expand([(torch_device,), ("cpu",)])
+    def test_simple_generate_cuda_kernels_tiny(self, device):
+        expected_output = "Hello my name is John and I am a newbie to the world"
 
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16).to(torch_device)
-
-        output = model.generate(input_ids, max_new_tokens=10)
-        output_sentence = self.tokenizer.decode(output[0].tolist())
-
-        self.assertEqual(output_sentence, expected_output)
-
-    @slow
-    def test_simple_generate_cuda_kernels_small(self):
-        expected_output = "Hello my name is\n\nI am a student of the art of"
-
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-790m", torch_dtype=torch.float16).to(torch_device)
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", torch_dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_sentence, expected_output)
 
+    @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_generate_cuda_kernels_mid(self):
-        expected_output = "Hello my name is John and I am a software engineer. I have"
+    def test_simple_generate_cuda_kernels_small(self, device):
+        expected_output = "Hello my name is\n\nI am a\n\nI am a"
 
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-1.4b", torch_dtype=torch.float16).to(torch_device)
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-790m", torch_dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_sentence, expected_output)
 
+    @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_generate_cuda_kernels_big(self):
-        expected_output = "Hello my name is John. I am a student at the University of"
+    def test_simple_generate_cuda_kernels_mid(self, device):
+        expected_output = "Hello my name is John and I am a\n\nI am a"
 
-        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-2.8b", torch_dtype=torch.float16).to(torch_device)
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-1.4b", torch_dtype=torch.float16).to(device)
+
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+    @parameterized.expand([(torch_device,), ("cpu",)])
+    @slow
+    def test_simple_generate_cuda_kernels_big(self, device):
+        expected_output = "Hello my name is John and I am a new member of this forum"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
+        model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-2.8b", torch_dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
