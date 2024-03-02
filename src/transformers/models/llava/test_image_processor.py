@@ -17,7 +17,7 @@ def load_image():
 
 image = load_image()
 
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=[image, image], return_tensors="pt")
 
 
 filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
@@ -27,3 +27,9 @@ assert torch.allclose(inputs.pixel_values.half(), original_pixel_values)
 
 image_sizes = torch.tensor([[1024, 899]])
 assert image_sizes[0].tolist() == inputs.image_sizes[0].tolist()
+
+print(inputs.pixel_values.shape)
+
+concat_images = torch.cat(list(inputs.pixel_values), dim=0)
+
+print(concat_images.shape)

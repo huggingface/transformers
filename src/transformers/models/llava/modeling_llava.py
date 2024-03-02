@@ -479,8 +479,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 if pixel_values.ndim == 5:
-                    concat_images = torch.cat(list(pixel_values), dim=0)
-                    image_features = self.vision_tower(concat_images, output_hidden_states=True)
+                    batch_size, num_patches, num_channels, height, width = pixel_values.shape
+                    reshaped_pixel_values = pixel_values.view(batch_size * num_patches, num_channels, height, width)
+                    image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
 
                     selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
