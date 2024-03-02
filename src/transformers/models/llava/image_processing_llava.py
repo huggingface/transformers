@@ -59,6 +59,10 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
     """
     Selects the best resolution from a list of possible resolutions based on the original size.
 
+    This is done by calculating the effective and wasted resolution for each possible resolution.
+
+    The best fit resolution is the one that maximizes the effective resolution and minimizes the wasted resolution.
+
     Args:
         original_size (tuple):
             The original size of the image in the format (height, width).

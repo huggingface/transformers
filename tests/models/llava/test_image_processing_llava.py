@@ -16,6 +16,7 @@
 
 import unittest
 
+from transformers.models.llava.image_processing_llava import select_best_resolution
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -76,9 +77,11 @@ class LlavaImageProcessingTester(unittest.TestCase):
             "do_convert_rgb": self.do_convert_rgb,
         }
 
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.expected_output_image_shape
     def expected_output_image_shape(self, images):
         return self.num_channels, self.crop_size["height"], self.crop_size["width"]
 
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
@@ -96,10 +99,12 @@ class LlavaImageProcessingTester(unittest.TestCase):
 class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LlavaImageProcessor if is_vision_available() else None
 
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Llava
     def setUp(self):
         self.image_processor_tester = LlavaImageProcessingTester(self)
 
     @property
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
@@ -113,7 +118,9 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+        self.assertTrue(hasattr(image_processing, "aspect_ratio_setting"))
 
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"shortest_edge": 20})
@@ -122,6 +129,13 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+
+    def test_select_best_resolution(self):
+        possible_resolutions = [[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]
+
+        # Test with a square aspect ratio
+        best_resolution = select_best_resolution((336, 336), possible_resolutions)
+        self.assertEqual(best_resolution, (672, 336))
 
     @unittest.skip("LlavaImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):
