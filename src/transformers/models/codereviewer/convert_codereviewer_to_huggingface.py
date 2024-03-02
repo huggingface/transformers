@@ -6,22 +6,17 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from packaging import version
-from torch import nn, tensor
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from transformers import (
-    CodeReviewerConfig,
     CodeReviewerForConditionalGeneration,
-    CodeReviewerForSequenceClassification,
-    CodeReviewerModel,
-    CodeReviewerTokenizer,
-    T5Config,
     RobertaTokenizer,
-    T5ForConditionalGeneration
-
+    T5Config,
+    T5ForConditionalGeneration,
 )
 from transformers.utils import logging
+
 
 #  logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -92,7 +87,7 @@ class ReviewerModel(T5ForConditionalGeneration):
         first_hidden = nn.Dropout(0.3)(first_hidden)
         logits = self.cls_head(first_hidden)
         loss_fct = CrossEntropyLoss()
-        if labels != None:
+        if labels is not None:
             loss = loss_fct(logits, labels)
             return loss
         return logits
@@ -431,7 +426,7 @@ def rename_key(dct, old, new):
 
 def build_or_load_gen_model(model_name_or_path, load_model_path):
     config_class, model_class, tokenizer_class = T5Config, ReviewerModel, RobertaTokenizer
-    
+
     config = config_class.from_pretrained(model_name_or_path)
     tokenizer = tokenizer_class.from_pretrained(model_name_or_path)
     model = model_class.from_pretrained(model_name_or_path, config=config)
@@ -493,9 +488,9 @@ def convert_CodeReviewer_checkpoint_for_conditional_generation(checkpoint_path, 
 
     state_dict = model.state_dict()
     remove_ignore_keys_(state_dict)
-    
+
     new_lm_model = CodeReviewerForConditionalGeneration(config).eval()
-    
+
     lm_state_dict = state_dict
     lm_state_dict.pop('cls_head.weight',None)
     lm_state_dict.pop('cls_head.bias',None)
@@ -507,7 +502,7 @@ def convert_CodeReviewer_checkpoint_for_conditional_generation(checkpoint_path, 
     compare_models(model, new_lm_model)
     if old_model_outputs.shape != new_lm_model_outputs.shape:
         raise ValueError(
-            f"`old_model_output` shape and `new_lm_model_output` shape are different: {old_model_output.shape}, {new_lm_model_outputs.shape}"
+            f"`old_model_outputs` shape and `new_lm_model_output` shape are different: {old_model_outputs.shape}, {new_lm_model_outputs.shape}"
         )
     if (old_model_outputs != new_lm_model_outputs).any().item():
         raise ValueError("Some values in `old_model_output` are different from `new_lm_model_outputs`")
