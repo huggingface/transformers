@@ -114,22 +114,24 @@ def divide_to_patches(image: np.array, patch_size: int) -> List[np.array]:
     return patches
 
 
-def expand_to_square(image: Image.Image, background_color) -> Image.Image:
+def expand_to_square(image: np.array, background_color) -> np.array:
     """
     Expands an image to a square by adding a background color.
     """
 
-    width, height = image.size
+    height, width = get_image_size(image)
     if width == height:
         return image
     elif width > height:
+        image = to_pil_image(image)
         result = Image.new(image.mode, (width, width), background_color)
         result.paste(image, (0, (width - height) // 2))
-        return result
+        return to_numpy_array(result)
     else:
+        image = to_pil_image(image)
         result = Image.new(image.mode, (height, height), background_color)
         result.paste(image, ((height - width) // 2, 0))
-        return result
+        return to_numpy_array(result)
 
 
 class LlavaImageProcessor(BaseImageProcessor):
