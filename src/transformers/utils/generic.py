@@ -28,7 +28,7 @@ from typing import Any, ContextManager, Iterable, List, Tuple
 import numpy as np
 from packaging import version
 
-from .import_utils import get_torch_version, is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
+from .import_utils import get_torch_version, is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy, is_mlx_available
 
 
 if is_flax_available():
@@ -499,6 +499,7 @@ class TensorType(ExplicitEnum):
     TENSORFLOW = "tf"
     NUMPY = "np"
     JAX = "jax"
+    MLX = "mlx"
 
 
 class ContextManagers:

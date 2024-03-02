@@ -57,6 +57,7 @@ from .utils import (
     is_torch_available,
     is_torch_device,
     is_torch_tensor,
+    is_mlx_available,
     logging,
     requires_backends,
     to_py_obj,
@@ -726,6 +727,14 @@ class BatchEncoding(UserDict):
 
             as_tensor = jnp.array
             is_tensor = is_jax_tensor
+
+        elif tensor_type == TensorType.MLX:
+            if not is_mlx_available():
+                raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
+            import mlx.core as mx
+
+            as_tensor = mx.array
+            is_tensor = lambda obj: isinstance(obj, mx.array)
         else:
 
             def as_tensor(value, dtype=None):

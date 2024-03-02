@@ -51,6 +51,7 @@ from .generic import (
     is_torch_device,
     is_torch_dtype,
     is_torch_tensor,
+    is_mlx_available,
     reshape,
     squeeze,
     strtobool,
