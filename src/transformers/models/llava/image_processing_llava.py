@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for LLaVa 1.6."""
+"""Image processor class for LLaVa."""
 
 import math
 from typing import Dict, List, Optional, Union
@@ -309,6 +309,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             default_to_square=default_to_square,
             input_data_format=input_data_format,
         )
+
         return resize(
             image,
             size=output_size,
@@ -331,7 +332,6 @@ class LlavaImageProcessor(BaseImageProcessor):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Image.Image:
@@ -365,8 +365,6 @@ class LlavaImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -380,41 +378,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         images = make_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_center_crop and crop_size is None:
-            raise ValueError("Crop size must be specified if do_center_crop is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
             images = [
@@ -445,7 +408,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return images
 
-    def get_image_patches(self, image: np.array, grid_pinpoints, size: tuple) -> List[np.array]:
+    def get_image_patches(self, image: np.array, grid_pinpoints, size: tuple, input_data_format) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -456,6 +419,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 A string representation of a list of possible resolutions.
             size (`tuple`):
                 Size to resize the original image to.
+            input_data_format (`ChannelDimension` or `str`):
+                The channel dimension format of the input image.
 
         Returns:
             List[np.array]: A list of NumPy arrays containing the processed image patches.
@@ -470,6 +435,9 @@ class LlavaImageProcessor(BaseImageProcessor):
         padded_image = self.resize_and_pad_image(image, best_resolution)
 
         patches = divide_to_patches(padded_image, patch_size=self.crop_size["height"])
+
+        # make sure that all patches use the input data format
+        patches = [to_channel_dimension_format(patch, channel_dim=input_data_format) for patch in patches]
 
         resized_original_image = resize(
             image,
@@ -592,8 +560,21 @@ class LlavaImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if aspect_ratio_setting not in ["clip", "pad", "anyres"]:
             raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
@@ -604,7 +585,10 @@ class LlavaImageProcessor(BaseImageProcessor):
             if aspect_ratio_setting == "anyres":
                 # convert image into a list of patches
                 image_patches = self.get_image_patches(
-                    image, image_grid_pinpoints, size=(self.size["shortest_edge"], self.size["shortest_edge"])
+                    image,
+                    image_grid_pinpoints,
+                    size=(self.size["shortest_edge"], self.size["shortest_edge"]),
+                    input_data_format=input_data_format,
                 )
 
                 # preprocess patches
@@ -620,7 +604,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
-                    do_convert_rgb=do_convert_rgb,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
@@ -642,7 +625,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
-                    do_convert_rgb=do_convert_rgb,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )[0]
@@ -660,7 +642,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
-                    do_convert_rgb=do_convert_rgb,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )[0]
