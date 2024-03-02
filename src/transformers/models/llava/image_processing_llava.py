@@ -447,7 +447,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_image_patches(self, image: np.array, grid_pinpoints) -> List[np.array]:
+    def get_image_patches(self, image: np.array, grid_pinpoints, size: tuple) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -456,6 +456,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 The input image to be processed.
             grid_pinpoints (List):
                 A string representation of a list of possible resolutions.
+            size (`tuple`):
+                Size to resize the original image to.
 
         Returns:
             List[np.array]: A list of NumPy arrays containing the processed image patches.
@@ -471,13 +473,13 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         patches = divide_to_patches(image_padded, patch_size=self.crop_size["height"])
 
-        image_original_resize = resize(
+        original_image_resized = resize(
             image,
-            (self.size["shortest_edge"], self.size["shortest_edge"]),
+            size=size,
             resample=PILImageResampling.BICUBIC,
         )
 
-        image_patches = [image_original_resize] + patches
+        image_patches = [original_image_resized] + patches
 
         return image_patches
 
@@ -590,7 +592,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         for image in images:
             if image_aspect_ratio == "anyres":
                 # convert image into a list of patches
-                image_patches = self.get_image_patches(image, image_grid_pinpoints)
+                image_patches = self.get_image_patches(image, image_grid_pinpoints, size=(self.size["shortest_edge"], self.size["shortest_edge"]))
 
                 # preprocess patches
                 pixel_values = self._preprocess(
