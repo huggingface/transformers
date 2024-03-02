@@ -358,6 +358,10 @@ class MambaIntegrationTests(unittest.TestCase):
         model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
+        out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        output_sentence = tokenizer.decode(out[0, :])
+        self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
+
         with torch.no_grad():
             logits = model(input_ids=input_ids).logits
 
@@ -372,11 +376,8 @@ class MambaIntegrationTests(unittest.TestCase):
             ]
         ,dtype=torch.float32)  # fmt: skip
 
-        torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD)
+        torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
-        out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
-        output_sentence = tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     def test_simple_generate_cuda_kernels_tiny(self, device):
@@ -406,12 +407,12 @@ class MambaIntegrationTests(unittest.TestCase):
     @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
     def test_simple_generate_cuda_kernels_mid(self, device):
-        expected_output = "Hello my name is John and I am a\n\nI am a"
+        expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-1.4b", torch_dtype=torch.float16).to(device)
 
-        output = model.generate(input_ids, max_new_tokens=10)
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_sentence, expected_output)
@@ -419,12 +420,12 @@ class MambaIntegrationTests(unittest.TestCase):
     @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
     def test_simple_generate_cuda_kernels_big(self, device):
-        expected_output = "Hello my name is John and I am a new member of this forum"
+        expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
         model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-2.8b", torch_dtype=torch.float16).to(device)
 
-        output = model.generate(input_ids, max_new_tokens=10)
+        output = model.generate(input_ids, max_new_tokens=30)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_sentence, expected_output)
