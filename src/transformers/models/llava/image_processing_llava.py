@@ -592,7 +592,9 @@ class LlavaImageProcessor(BaseImageProcessor):
         for image in images:
             if image_aspect_ratio == "anyres":
                 # convert image into a list of patches
-                image_patches = self.get_image_patches(image, image_grid_pinpoints, size=(self.size["shortest_edge"], self.size["shortest_edge"]))
+                image_patches = self.get_image_patches(
+                    image, image_grid_pinpoints, size=(self.size["shortest_edge"], self.size["shortest_edge"])
+                )
 
                 # preprocess patches
                 pixel_values = self._preprocess(
