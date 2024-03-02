@@ -39,7 +39,7 @@ from .configuration_mamba import MambaConfig
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, mamba_inner_fn
+    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
     logger.warning_once(
@@ -133,7 +133,7 @@ class MambaMixer(nn.Module):
                 self.dt_proj.weight,
                 self.out_proj.weight,
                 self.out_proj.bias,
-                A,
+                -torch.exp(self.A_log.float()),
                 None,  # input-dependent B
                 None,  # input-dependent C
                 self.D.float(),
@@ -148,12 +148,20 @@ class MambaMixer(nn.Module):
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
             if inference_params is not None and inference_params.seqlen_offset > 0:
                 hidden_states = causal_conv1d_update(
-                    hidden_states.squeeze(-1), inference_params.conv_states[self.layer_idx], conv_weights, self.conv1d.bias, self.activation
+                    hidden_states.squeeze(-1),
+                    inference_params.conv_states[self.layer_idx],
+                    conv_weights,
+                    self.conv1d.bias,
+                    self.activation,
                 )
                 hidden_states = hidden_states.unsqueeze(-1)
             else:
-                inference_params.conv_states[self.layer_idx] = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-                hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
+                inference_params.conv_states[self.layer_idx] = nn.functional.pad(
+                    hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
+                )
+                hidden_states = causal_conv1d_fn(
+                    hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
+                )
 
             # 3. State Space Model sequence transformation
             # 3.a. input varying initialization of time_step, B and C
@@ -199,6 +207,7 @@ class MambaMixer(nn.Module):
         contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
+    # fmt: off
     def slow_forward(self, input_states, inference_params=None):
         _, seq_len, _ = input_states.shape
         dtype = input_states.dtype
@@ -215,12 +224,12 @@ class MambaMixer(nn.Module):
 
             bias = getattr(self.conv1d, "bias", 0.0)
             hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias).to(dtype)
-            hidden_states = hidden_states.unsqueeze(-1)                                 # (batch, intermediate_size, 1) : decoding
+            hidden_states = hidden_states.unsqueeze(-1)                                 # [batch, intermediate_size, 1] : decoding
         else:
             inference_params.conv_states[self.layer_idx] = nn.functional.pad(
                 hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
             ).to(inference_params.dtype)
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # (batch, intermediate_size, seq_len)
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
 
         # 3. State Space Model sequence transformation
         # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
@@ -252,6 +261,7 @@ class MambaMixer(nn.Module):
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))             # [batch, seq_len, hidden_size]
         return contextualized_states
+    # fmt: on
 
     def forward(self, hidden_states, inference_params=None):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
