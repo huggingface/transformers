@@ -65,7 +65,7 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
     Returns:
         tuple: The best fit resolution in the format (height, width).
     """
-    original_width, original_height = original_size
+    original_height, original_width = original_size
     best_fit = None
     max_effective_resolution = 0
     min_wasted_resolution = float("inf")
@@ -190,12 +190,12 @@ class LlavaImageProcessor(BaseImageProcessor):
             result.paste(image, ((height - width) // 2, 0))
             return result
 
-    def resize_and_pad_image(self, image: Image.Image, target_resolution: tuple) -> Image.Image:
+    def resize_and_pad_image(self, image: np.array, target_resolution: tuple) -> Image.Image:
         """
         Resize and pad an image to a target resolution while maintaining aspect ratio.
 
         Args:
-            image (PIL.Image.Image):
+            image (np.array):
                 The input image.
             target_resolution (tuple):
                 The target resolution (height, width) of the image.
@@ -203,7 +203,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         Returns:
             PIL.Image.Image: The resized and padded image.
         """
-        original_width, original_height = image.size
+        original_height, original_width = get_image_size(image)
         target_height, target_width = target_resolution
 
         scale_w = target_width / original_width
@@ -217,8 +217,9 @@ class LlavaImageProcessor(BaseImageProcessor):
             new_width = min(math.ceil(original_width * scale_h), target_width)
 
         # Resize the image
-        resized_image = image.resize((new_width, new_height))
+        resized_image = resize(image, (new_height, new_width), resample=PILImageResampling.BICUBIC, return_numpy=False)
 
+        # Pad the image
         new_image = Image.new("RGB", (target_width, target_height), (0, 0, 0))
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
@@ -436,14 +437,14 @@ class LlavaImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_image_patches(self, image: Image, grid_pinpoints) -> List[np.array]:
+    def get_image_patches(self, image: np.array, grid_pinpoints) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (PIL.Image.Image):
+            image (np.array):
                 The input image to be processed.
-            grid_pinpoints (str):
+            grid_pinpoints (List):
                 A string representation of a list of possible resolutions.
 
         Returns:
@@ -454,14 +455,14 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         possible_resolutions = grid_pinpoints
 
-        image_size = get_image_size(np.array(image))
+        image_size = get_image_size(image)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
         image_padded = self.resize_and_pad_image(image, best_resolution)
 
         patches = self.divide_to_patches(image_padded, self.crop_size["height"])
 
         image_original_resize = resize(
-            np.array(image),
+            image,
             (self.size["shortest_edge"], self.size["shortest_edge"]),
             resample=PILImageResampling.BICUBIC,
         )
@@ -570,11 +571,14 @@ class LlavaImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
         if image_aspect_ratio not in ["anyres", "pad"]:
             raise ValueError(f"Invalid image aspect ratio: {image_aspect_ratio}")
 
         new_images = []
-        image_sizes = [image.size for image in images]
+        image_sizes = [get_image_size(image)[::-1] for image in images]
         for image in images:
             if image_aspect_ratio == "anyres":
                 # convert image into a list of patches
