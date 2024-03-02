@@ -87,6 +87,51 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
     return best_fit
 
 
+def divide_to_patches(image: np.array, patch_size: int) -> List[np.array]:
+    """
+    Divides an image into patches of a specified size.
+
+    Args:
+        image (`np.array`):
+            The input image.
+        patch_size (`int`):
+            The size of each patch.
+
+    Returns:
+        list: A list of np.array representing the patches.
+    """
+    patches = []
+    height, width = get_image_size(image)
+    image = to_pil_image(image)
+    for i in range(0, height, patch_size):
+        for j in range(0, width, patch_size):
+            box = (j, i, j + patch_size, i + patch_size)
+            patch = image.crop(box)
+            patches.append(patch)
+
+    patches = [to_numpy_array(patch) for patch in patches]
+
+    return patches
+
+
+def expand_to_square(image: Image.Image, background_color) -> Image.Image:
+    """
+    Expands an image to a square by adding a background color.
+    """
+
+    width, height = image.size
+    if width == height:
+        return image
+    elif width > height:
+        result = Image.new(image.mode, (width, width), background_color)
+        result.paste(image, (0, (width - height) // 2))
+        return result
+    else:
+        result = Image.new(image.mode, (height, height), background_color)
+        result.paste(image, ((height - width) // 2, 0))
+        return result
+
+
 class LlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
@@ -178,19 +223,6 @@ class LlavaImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
-    def expand_to_square(self, image: Image.Image, background_color) -> Image.Image:
-        width, height = image.size
-        if width == height:
-            return image
-        elif width > height:
-            result = Image.new(image.mode, (width, width), background_color)
-            result.paste(image, (0, (width - height) // 2))
-            return result
-        else:
-            result = Image.new(image.mode, (height, height), background_color)
-            result.paste(image, ((height - width) // 2, 0))
-            return result
-
     def resize_and_pad_image(self, image: np.array, target_resolution: tuple) -> np.array:
         """
         Resize and pad an image to a target resolution while maintaining aspect ratio.
@@ -227,32 +259,6 @@ class LlavaImageProcessor(BaseImageProcessor):
         new_image.paste(resized_image, (paste_x, paste_y))
 
         return to_numpy_array(new_image)
-
-    def divide_to_patches(self, image: np.array, patch_size: int) -> List[np.array]:
-        """
-        Divides an image into patches of a specified size.
-
-        Args:
-            image (`np.array`):
-                The input image.
-            patch_size (`int`):
-                The size of each patch.
-
-        Returns:
-            list: A list of np.array representing the patches.
-        """
-        patches = []
-        height, width = get_image_size(image)
-        image = to_pil_image(image)
-        for i in range(0, height, patch_size):
-            for j in range(0, width, patch_size):
-                box = (j, i, j + patch_size, i + patch_size)
-                patch = image.crop(box)
-                patches.append(patch)
-
-        patches = [to_numpy_array(patch) for patch in patches]
-
-        return patches
 
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize with CLIP->LLaVa
     def resize(
@@ -463,7 +469,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         best_resolution = select_best_resolution(image_size, possible_resolutions)
         image_padded = self.resize_and_pad_image(image, best_resolution)
 
-        patches = self.divide_to_patches(image_padded, self.crop_size["height"])
+        patches = divide_to_patches(image_padded, patch_size=self.crop_size["height"])
 
         image_original_resize = resize(
             image,
@@ -606,7 +612,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 ).pixel_values
 
             elif image_aspect_ratio == "pad":
-                image = self.expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
+                image = expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
                 pixel_values = self._preprocess(
                     image,
                     do_resize=do_resize,
