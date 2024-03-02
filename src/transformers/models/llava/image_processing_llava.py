@@ -460,7 +460,11 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         patches = self.divide_to_patches(image_padded, self.crop_size["height"])
 
-        image_original_resize = image.resize((self.size["shortest_edge"], self.size["shortest_edge"]))
+        image_original_resize = resize(
+            np.array(image),
+            (self.size["shortest_edge"], self.size["shortest_edge"]),
+            resample=PILImageResampling.BICUBIC,
+        )
 
         image_patches = [image_original_resize] + patches
 
