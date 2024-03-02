@@ -50,7 +50,7 @@ if is_vision_available():
     from PIL import Image
 
 if is_torch_available():
-    import torch
+    pass
 
 
 def select_best_resolution(original_size: tuple, possible_resolutions: list) -> tuple:
@@ -609,6 +609,24 @@ class LlavaImageProcessor(BaseImageProcessor):
 
             elif image_aspect_ratio == "pad":
                 image = expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
+                pixel_values = self._preprocess(
+                    image,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_center_crop=do_center_crop,
+                    crop_size=crop_size,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    do_convert_rgb=do_convert_rgb,
+                    return_tensors=return_tensors,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                ).pixel_values
+            else:
                 pixel_values = self._preprocess(
                     image,
                     do_resize=do_resize,

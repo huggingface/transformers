@@ -489,10 +489,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         selected_image_feature = selected_image_feature[:, 1:]
                     elif vision_feature_select_strategy == "full":
                         selected_image_feature = selected_image_feature
-                    else:
-                        raise ValueError(
-                            f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                        )
                     image_features = self.multi_modal_projector(selected_image_feature)
 
                     split_sizes = [image.shape[0] for image in pixel_values]
@@ -542,10 +538,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         selected_image_feature = selected_image_feature[:, 1:]
                     elif vision_feature_select_strategy == "full":
                         selected_image_feature = selected_image_feature
-                    else:
-                        raise ValueError(
-                            f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                        )
 
                     image_features = self.multi_modal_projector(selected_image_feature)
 
