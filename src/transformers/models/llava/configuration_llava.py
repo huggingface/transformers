@@ -102,7 +102,7 @@ class LlavaConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
 
-        if not vision_feature_select_strategy in ["default", "full"]:
+        if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."
                 f"Got: {vision_feature_select_strategy}"
