@@ -84,7 +84,7 @@ def unpad_image(tensor, original_size):
     Returns:
         `torch.Tensor`: The unpadded image tensor.
     """
-    original_width, original_height = original_size
+    original_height, original_width = original_size
     current_height, current_width = tensor.shape[1:]
 
     original_aspect_ratio = original_width / original_height

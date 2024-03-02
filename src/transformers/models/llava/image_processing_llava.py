@@ -590,7 +590,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             raise ValueError(f"Invalid image aspect ratio: {image_aspect_ratio}")
 
         new_images = []
-        image_sizes = [get_image_size(image)[::-1] for image in images]
+        image_sizes = [get_image_size(image) for image in images]
         for image in images:
             if image_aspect_ratio == "anyres":
                 # convert image into a list of patches

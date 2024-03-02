@@ -174,7 +174,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     # verify single forward pass
-    image_sizes = torch.tensor([[1024, 899]])
+    image_sizes = torch.tensor([[899, 1024]])
     assert image_sizes[0].tolist() == inputs.image_sizes[0].tolist()
 
     print("Single forward pass")

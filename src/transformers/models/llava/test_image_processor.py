@@ -25,7 +25,7 @@ original_pixel_values = torch.load(filepath, map_location="cpu")
 
 assert torch.allclose(inputs.pixel_values.half(), original_pixel_values)
 
-image_sizes = torch.tensor([[1024, 899]])
+image_sizes = torch.tensor([[899, 1024]])
 assert image_sizes[0].tolist() == inputs.image_sizes[0].tolist()
 
 print(inputs.pixel_values.shape)
