@@ -23,6 +23,9 @@ inputs = image_processor(images=[image, image], return_tensors="pt")
 filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
 original_pixel_values = torch.load(filepath, map_location="cpu")
 
+print(inputs.pixel_values.shape)
+print(original_pixel_values.shape)
+
 assert torch.allclose(inputs.pixel_values.half(), original_pixel_values)
 
 image_sizes = torch.tensor([[899, 1024]])

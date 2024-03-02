@@ -326,10 +326,8 @@ class LlavaImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> Image.Image:
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -363,13 +361,6 @@ class LlavaImageProcessor(BaseImageProcessor):
                 `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -446,8 +437,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return images
 
     def get_image_patches(self, image: np.array, grid_pinpoints, size: tuple) -> List[np.array]:
         """
@@ -612,10 +602,10 @@ class LlavaImageProcessor(BaseImageProcessor):
                     image_mean=image_mean,
                     image_std=image_std,
                     do_convert_rgb=do_convert_rgb,
-                    return_tensors=return_tensors,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                ).pixel_values
+                )
+                pixel_values = np.array(pixel_values)
 
             elif image_aspect_ratio == "pad":
                 image = expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
@@ -639,7 +629,6 @@ class LlavaImageProcessor(BaseImageProcessor):
 
             new_images.append(pixel_values)
 
-        new_images = torch.stack(new_images, dim=0) if return_tensors == "pt" else np.stack(new_images, axis=0)
         if image_aspect_ratio == "anyres":
             data = {"pixel_values": new_images, "image_sizes": image_sizes}
         elif image_aspect_ratio == "pad":
