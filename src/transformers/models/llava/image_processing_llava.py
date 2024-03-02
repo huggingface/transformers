@@ -39,6 +39,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
 
@@ -501,7 +502,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             aspect_ratio_setting (`str`, *optional*, defaults to `"anyres"`):
-                The aspect ratio setting to use. Can be "" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
+                The aspect ratio setting to use. Can be "CLIP" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -572,11 +573,24 @@ class LlavaImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+        
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if aspect_ratio_setting not in ["anyres", "pad"]:
+        if aspect_ratio_setting not in ["CLIP", "pad", "anyres"]:
             raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
 
         new_images = []
@@ -608,7 +622,9 @@ class LlavaImageProcessor(BaseImageProcessor):
                 pixel_values = np.array(pixel_values)
 
             elif aspect_ratio_setting == "pad":
+                # pad image to square
                 image = expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
+                # preprocess image
                 pixel_values = self._preprocess(
                     image,
                     do_resize=do_resize,
@@ -626,7 +642,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                     data_format=data_format,
                     input_data_format=input_data_format,
                 ).pixel_values
-            else:
+            elif aspect_ratio_setting == "CLIP":
                 pixel_values = self._preprocess(
                     image,
                     do_resize=do_resize,
