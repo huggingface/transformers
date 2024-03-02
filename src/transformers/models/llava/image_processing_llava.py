@@ -32,6 +32,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -57,12 +58,12 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
 
     Args:
         original_size (tuple):
-            The original size of the image in the format (width, height).
+            The original size of the image in the format (height, width).
         possible_resolutions (list):
             A list of possible resolutions in the format [(width1, height1), (width2, height2), ...].
 
     Returns:
-        tuple: The best fit resolution in the format (width, height).
+        tuple: The best fit resolution in the format (height, width).
     """
     original_width, original_height = original_size
     best_fit = None
@@ -80,7 +81,7 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
         ):
             max_effective_resolution = effective_resolution
             min_wasted_resolution = wasted_resolution
-            best_fit = (width, height)
+            best_fit = (height, width)
 
     return best_fit
 
@@ -92,7 +93,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     Args:
         image_aspect_ratio (`str`, *optional*, defaults to `"anyres"`):
-            The aspect ratio setting to use. Can be "" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
+            The aspect ratio setting to use. Can be "" (as in CLIP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
             an be overridden by `image_aspect_ratio` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
@@ -197,13 +198,13 @@ class LlavaImageProcessor(BaseImageProcessor):
             image (PIL.Image.Image):
                 The input image.
             target_resolution (tuple):
-                The target resolution (width, height) of the image.
+                The target resolution (height, width) of the image.
 
         Returns:
             PIL.Image.Image: The resized and padded image.
         """
         original_width, original_height = image.size
-        target_width, target_height = target_resolution
+        target_height, target_width = target_resolution
 
         scale_w = target_width / original_width
         scale_h = target_height / original_height
@@ -452,7 +453,9 @@ class LlavaImageProcessor(BaseImageProcessor):
             raise ValueError("grid_pinpoints must be a list of possible resolutions.")
 
         possible_resolutions = grid_pinpoints
-        best_resolution = select_best_resolution(image.size, possible_resolutions)
+
+        image_size = get_image_size(np.array(image))
+        best_resolution = select_best_resolution(image_size, possible_resolutions)
         image_padded = self.resize_and_pad_image(image, best_resolution)
 
         patches = self.divide_to_patches(image_padded, self.crop_size["height"])
