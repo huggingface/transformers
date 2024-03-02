@@ -228,7 +228,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return to_numpy_array(new_image)
 
-    def divide_to_patches(self, image: np.array, patch_size: int) -> list:
+    def divide_to_patches(self, image: np.array, patch_size: int) -> List[np.array]:
         """
         Divides an image into patches of a specified size.
 
@@ -239,7 +239,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 The size of each patch.
 
         Returns:
-            list: A list of PIL.Image.Image objects representing the patches.
+            list: A list of np.array representing the patches.
         """
         patches = []
         height, width = get_image_size(image)
@@ -249,6 +249,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 box = (j, i, j + patch_size, i + patch_size)
                 patch = image.crop(box)
                 patches.append(patch)
+
+        patches = [to_numpy_array(patch) for patch in patches]
 
         return patches
 
@@ -470,8 +472,6 @@ class LlavaImageProcessor(BaseImageProcessor):
         )
 
         image_patches = [image_original_resize] + patches
-
-        image_patches = [to_numpy_array(image) for image in image_patches]
 
         return image_patches
 
