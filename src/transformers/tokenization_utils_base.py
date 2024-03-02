@@ -48,6 +48,7 @@ from .utils import (
     extract_commit_hash,
     is_flax_available,
     is_jax_tensor,
+    is_mlx_available,
     is_numpy_array,
     is_offline_mode,
     is_remote_url,
@@ -57,7 +58,6 @@ from .utils import (
     is_torch_available,
     is_torch_device,
     is_torch_tensor,
-    is_mlx_available,
     logging,
     requires_backends,
     to_py_obj,
@@ -734,7 +734,8 @@ class BatchEncoding(UserDict):
             import mlx.core as mx
 
             as_tensor = mx.array
-            is_tensor = lambda obj: isinstance(obj, mx.array)
+            def is_tensor(obj):
+                return isinstance(obj, mx.array)
         else:
 
             def as_tensor(value, dtype=None):
