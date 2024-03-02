@@ -734,6 +734,7 @@ class BatchEncoding(UserDict):
             import mlx.core as mx
 
             as_tensor = mx.array
+
             def is_tensor(obj):
                 return isinstance(obj, mx.array)
         else:
