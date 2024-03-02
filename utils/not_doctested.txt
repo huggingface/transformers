@@ -575,6 +575,10 @@ src/transformers/models/funnel/convert_funnel_original_tf_checkpoint_to_pytorch.
 src/transformers/models/funnel/modeling_funnel.py
 src/transformers/models/funnel/modeling_tf_funnel.py
 src/transformers/models/fuyu/convert_fuyu_model_weights_to_hf.py
+src/transformers/models/gemma/configuration_gemma.py
+src/transformers/models/gemma/convert_gemma_weights_to_hf.py
+src/transformers/models/gemma/modeling_flax_gemma.py
+src/transformers/models/gemma/modeling_gemma.py
 src/transformers/models/git/configuration_git.py
 src/transformers/models/git/convert_git_to_pytorch.py
 src/transformers/models/glpn/configuration_glpn.py
@@ -805,6 +809,7 @@ src/transformers/models/splinter/configuration_splinter.py
 src/transformers/models/splinter/modeling_splinter.py
 src/transformers/models/squeezebert/modeling_squeezebert.py
 src/transformers/models/stablelm/modeling_stablelm.py
+src/transformers/models/starcoder2/modeling_starcoder2.py
 src/transformers/models/swiftformer/configuration_swiftformer.py
 src/transformers/models/swiftformer/convert_swiftformer_original_to_hf.py
 src/transformers/models/swiftformer/modeling_swiftformer.py

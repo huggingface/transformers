@@ -20,7 +20,6 @@ import warnings
 from typing import List
 
 from transformers import EfficientFormerConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -33,11 +32,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         EfficientFormerForImageClassification,
         EfficientFormerForImageClassificationWithTeacher,
         EfficientFormerModel,
+    )
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
     )
     from transformers.models.efficientformer.modeling_efficientformer import (
         EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -308,7 +309,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         for model_class in self.all_model_classes:
             # EfficientFormerForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in get_values(MODEL_MAPPING)
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
                 or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
             ):
                 continue
@@ -330,9 +331,9 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
             ):
