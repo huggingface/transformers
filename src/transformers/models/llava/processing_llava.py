@@ -30,18 +30,18 @@ class LlavaProcessor(ProcessorMixin):
     r"""
     Constructs a Llava processor which wraps any image processor and a Llava tokenizer into a single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`AutoImageProcessor`], *optional*):
+        image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
+    image_processor_class = ("CLIPImageProcessor", "LlavaImageProcessor")
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):

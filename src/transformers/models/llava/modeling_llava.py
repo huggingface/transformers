@@ -408,9 +408,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
-    def num_patches_per_side(self):
-        return self.config.vision_config.image_size // self.config.vision_config.patch_size
-
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -506,7 +503,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         if image_feature.shape[0] > 1:
                             base_image_feature = image_feature[0]
                             image_feature = image_feature[1:]
-                            height = width = self.num_patches_per_side()
+                            height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
                             if height * width != base_image_feature.shape[0]:
                                 raise ValueError("The number of patches is not consistent with the image size.")
                             num_patch_width, num_patch_height = get_anyres_image_grid_shape(
