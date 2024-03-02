@@ -143,7 +143,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     Args:
         aspect_ratio_setting (`str`, *optional*, defaults to `"anyres"`):
-            The aspect ratio setting to use. Can be "CLIP", "pad" (as in LLaVa 1.5) or "anyres" (as in LLaVa 1.6).
+            The aspect ratio setting to use. Can be "clip" (as in CLIP), "pad" (as in LLaVa 1.5) or "anyres" (as in LLaVa 1.6).
             an be overridden by `aspect_ratio_setting` in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
@@ -503,7 +503,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             aspect_ratio_setting (`str`, *optional*, defaults to `"anyres"`):
-                The aspect ratio setting to use. Can be "CLIP" (as in CILP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
+                The aspect ratio setting to use. Can be "clip" (as in CLIP), "pad" (LLaVa 1.5) or "anyres" (LLaVa 1.6).
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -591,7 +591,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if aspect_ratio_setting not in ["CLIP", "pad", "anyres"]:
+        if aspect_ratio_setting not in ["clip", "pad", "anyres"]:
             raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
 
         new_images = []
@@ -639,11 +639,11 @@ class LlavaImageProcessor(BaseImageProcessor):
                     image_mean=image_mean,
                     image_std=image_std,
                     do_convert_rgb=do_convert_rgb,
-                    return_tensors=return_tensors,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                ).pixel_values
-            elif aspect_ratio_setting == "CLIP":
+                )[0]
+
+            elif aspect_ratio_setting == "clip":
                 pixel_values = self._preprocess(
                     image,
                     do_resize=do_resize,
@@ -657,16 +657,15 @@ class LlavaImageProcessor(BaseImageProcessor):
                     image_mean=image_mean,
                     image_std=image_std,
                     do_convert_rgb=do_convert_rgb,
-                    return_tensors=return_tensors,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                ).pixel_values
+                )[0]
 
             new_images.append(pixel_values)
 
         if aspect_ratio_setting == "anyres":
             data = {"pixel_values": new_images, "image_sizes": image_sizes}
-        elif aspect_ratio_setting == "pad":
+        elif aspect_ratio_setting in ["clip", "pad"]:
             data = {"pixel_values": new_images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
