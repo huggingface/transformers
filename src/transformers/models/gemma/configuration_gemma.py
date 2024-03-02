@@ -57,8 +57,9 @@ class GemmaConfig(PretrainedConfig):
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the decoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the decoder. "gelu_pytorch_tanh" uses an
+            approximation to the more exact "gelu" activation function.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -108,7 +109,7 @@ class GemmaConfig(PretrainedConfig):
         num_attention_heads=16,
         num_key_value_heads=16,
         head_dim=256,
-        hidden_act="gelu",
+        hidden_act="gelu_pytorch_tanh",
         max_position_embeddings=8192,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
