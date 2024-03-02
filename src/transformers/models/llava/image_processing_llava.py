@@ -23,6 +23,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import (
     convert_to_rgb,
     get_resize_output_image_size,
+    pad,
     resize,
     to_channel_dimension_format,
     to_pil_image,
@@ -253,15 +254,15 @@ class LlavaImageProcessor(BaseImageProcessor):
             new_width = min(math.ceil(original_width * scale_h), target_width)
 
         # Resize the image
-        resized_image = resize(image, (new_height, new_width), resample=PILImageResampling.BICUBIC, return_numpy=False)
+        resized_image = resize(image, (new_height, new_width), resample=PILImageResampling.BICUBIC)
 
         # Pad the image
-        new_image = Image.new("RGB", (target_width, target_height), (0, 0, 0))
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
-        new_image.paste(resized_image, (paste_x, paste_y))
 
-        return to_numpy_array(new_image)
+        padded_image = pad(resized_image, padding=((paste_y, paste_y), (paste_x, paste_x)))
+
+        return padded_image
 
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize with CLIP->LLaVa
     def resize(
