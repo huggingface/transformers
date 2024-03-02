@@ -14,12 +14,13 @@
 # limitations under the License.
 
 
-from parameterized import parameterized
 import unittest
 from unittest.util import safe_repr
 
+from parameterized import parameterized
+
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device, require_torch_multi_gpu
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -377,7 +378,6 @@ class MambaIntegrationTests(unittest.TestCase):
         ,dtype=torch.float32)  # fmt: skip
 
         torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
-
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     def test_simple_generate_cuda_kernels_tiny(self, device):
