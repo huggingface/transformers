@@ -169,7 +169,16 @@ class GemmaMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        hidden_act = config.hidden_act
+        if hidden_act != "gelu_pytorch_tanh":
+            logger.warning_once(
+                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"\
+                "Please edit your model config to use `gelu_pytorch_tanh` and not `gelu`.\n"\
+                "For now, we shall use `gelu_pytorch_tanh` temporarily.\n"\
+                "See https://github.com/huggingface/transformers/pull/29402 for more details."
+            )
+            hidden_act = "gelu_pytorch_tanh"
+        self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
