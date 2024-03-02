@@ -1539,8 +1539,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
             's', '>']`. This argument is only supported for `slow` tokenizers for the moment.
         oov_error (`str`, *optional*, defaults to `"replace"`):
             Defines the behavior when converting out-of-vocabulary (OOV) IDs to tokens, aiming to unify the behavior
-            between slow and fast tokenizers. The parameter can be set to either "replace" to replace OOV IDs with an
-            empty string, or "strict" to keep the original behavior. Note: Although `_convert_id_to_token` is declared
+            between slow and fast tokenizers. The parameter can be set to either `"replace"` to replace OOV IDs with an
+            empty string, or `"strict"` to keep the original behavior. Note: Although `_convert_id_to_token` is declared
             to return a `str` type, specific implementations in subclasses may return `None` for OOV IDs (e.g., in the
             `codegen` tokenizer) or may raise exceptions (e.g., in the `llama` tokenizer). While the fast tokenizer
             developed in Rust uniformly returns an empty string for such cases.

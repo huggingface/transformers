@@ -988,11 +988,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             if index in self._added_tokens_decoder:
                 tokens.append(self._added_tokens_decoder[index].content)
-            elif index >= self.vocab_size and index not in self.all_special_ids:
-                if self.oov_error == "replace":
+            elif index >= self.vocab_size and self.oov_error == "replace":
                     tokens.append("")
-                elif self.oov_error == "strict":
-                    tokens.append(self._convert_id_to_token(index))
             else:
                 tokens.append(self._convert_id_to_token(index))
         return tokens if not is_single_element else tokens[0]
