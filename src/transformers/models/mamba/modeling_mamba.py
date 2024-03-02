@@ -39,13 +39,13 @@ from .configuration_mamba import MambaConfig
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, mamba_inner_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
     logger.warning_once(
         "The `mamba_ssm` package is not installed in your environnement. Make sure to install it if you want to use the custom cuda kernels"
     )
-    selective_state_update, selective_scan_fn = None, None
+    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
@@ -123,122 +123,134 @@ class MambaMixer(nn.Module):
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, inference_params=None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-        hidden_states, gate = projected_states.chunk(2, dim=1)
 
-        # 2. Convolution sequence transformation
-        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-        if inference_params is not None and inference_params.seqlen_offset > 0:
-            conv_state = inference_params.conv_states[self.layer_idx]
-            hidden_states = causal_conv1d_update(
-                hidden_states.squeeze(-1), conv_state, conv_weights, self.conv1d.bias, self.activation
-            )
-            hidden_states = hidden_states.unsqueeze(-1)
-        else:
-            conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
-            inference_params.conv_states[self.layer_idx].copy_(conv_state)
-            hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
-
-        # 3. State Space Model sequence transformation
-        # 3.a. input varying initialization of time_step, B and C
-        ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
-        time_step, B, C = torch.split(
-            ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
-        )
-        discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-
-        A = -torch.exp(self.A_log.float())
-        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        ssm_state = inference_params.ssm_states[self.layer_idx]
-        time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-        if inference_params is not None and inference_params.seqlen_offset > 0:
-            scan_outputs = selective_state_update(
-                ssm_state,
-                hidden_states[..., 0],
-                discrete_time_step[..., 0],
+        if self.training and inference_params is None:  # Doesn't support outputting the states -> used for training
+            contextualized_states = mamba_inner_fn(
+                projected_states,
+                self.conv1d.weight,
+                self.conv1d.bias,
+                self.x_proj.weight,
+                self.dt_proj.weight,
+                self.out_proj.weight,
+                self.out_proj.bias,
                 A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                gate[..., 0],
-                time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
-        else:
-            scan_outputs, last_state = selective_scan_fn(
-                hidden_states,
-                discrete_time_step,
-                A,
-                B.transpose(1, 2),
-                C.transpose(1, 2),
+                None,  # input-dependent B
+                None,  # input-dependent C
                 self.D.float(),
-                gate,
-                time_proj_bias,
+                delta_bias=self.dt_proj.bias.float(),
                 delta_softplus=True,
-                return_last_state=True,
             )
-            if last_state is not None:
-                inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
+
+        else:
+            hidden_states, gate = projected_states.chunk(2, dim=1)
+
+            # 2. Convolution sequence transformation
+            conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
+            if inference_params is not None and inference_params.seqlen_offset > 0:
+                hidden_states = causal_conv1d_update(
+                    hidden_states.squeeze(-1), inference_params.conv_states[self.layer_idx], conv_weights, self.conv1d.bias, self.activation
+                )
+                hidden_states = hidden_states.unsqueeze(-1)
+            else:
+                inference_params.conv_states[self.layer_idx] = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
+                hidden_states = causal_conv1d_fn(hidden_states, conv_weights, self.conv1d.bias, activation=self.activation)
+
+            # 3. State Space Model sequence transformation
+            # 3.a. input varying initialization of time_step, B and C
+            ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
+            time_step, B, C = torch.split(
+                ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
+            )
+            discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
+
+            A = -torch.exp(self.A_log.float())
+            # 3.c perform the recurrence y ← SSM(A, B, C)(x)
+            time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
+            if inference_params is not None and inference_params.seqlen_offset > 0:
+                scan_outputs = selective_state_update(
+                    inference_params.ssm_states[self.layer_idx],
+                    hidden_states[..., 0],
+                    discrete_time_step[..., 0],
+                    A,
+                    B[:, 0],
+                    C[:, 0],
+                    self.D,
+                    gate[..., 0],
+                    time_proj_bias,
+                    dt_softplus=True,
+                ).unsqueeze(-1)
+            else:
+                scan_outputs, ssm_state = selective_scan_fn(
+                    hidden_states,
+                    discrete_time_step,
+                    A,
+                    B.transpose(1, 2),
+                    C.transpose(1, 2),
+                    self.D.float(),
+                    gate,
+                    time_proj_bias,
+                    delta_softplus=True,
+                    return_last_state=True,
+                )
+                if ssm_state is not None:
+                    inference_params.ssm_states[self.layer_idx] = ssm_state
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
-    def slow_forward(self, hidden_states, inference_params=None):
-        _, seq_len, _ = hidden_states.shape
-
+    def slow_forward(self, input_states, inference_params=None):
+        _, seq_len, _ = input_states.shape
+        dtype = input_states.dtype
         # 1. Gated MLP's linear projection
-        projected_states = self.in_proj(hidden_states).transpose(1, 2)  # (batch, 2 * intermediate_size, seq_len)
+        projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
         if inference_params.seqlen_offset > 0:
-            conv_state = inference_params.conv_states[self.layer_idx]  # (batch, intermediate_size, conv_kernel_size)
+            conv_state = inference_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
             conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
             conv_state[:, :, -1] = hidden_states[:, :, 0]
-            inference_params.conv_states[self.layer_idx] = conv_state
+            inference_params.conv_states[self.layer_idx].copy_(conv_state)
 
             bias = getattr(self.conv1d, "bias", 0.0)
-            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias)
-            hidden_states = hidden_states.unsqueeze(-1)  # (batch, intermediate_size, 1)
+            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias).to(dtype)
+            hidden_states = hidden_states.unsqueeze(-1)                                 # (batch, intermediate_size, 1) : decoding
         else:
             inference_params.conv_states[self.layer_idx] = nn.functional.pad(
                 hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
-            )
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])  # (batch, intermediate_size, seq_len)
+            ).to(inference_params.dtype)
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # (batch, intermediate_size, seq_len)
 
         # 3. State Space Model sequence transformation
-        # 3.a. Selection:  (batch, seq_len, self.time_step_rank + self.ssm_state_size * 2)
+        # 3.a. Selection:  [batch, seq_len, self.time_step_rank + self.ssm_state_size * 2]
         ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
         time_step, B, C = torch.split(
             ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
         )
-        discrete_time_step = self.dt_proj(time_step)  # (batch, seq_len, intermediate_size)
-        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2)
+        discrete_time_step = self.dt_proj(time_step)                                    # [batch, seq_len, intermediate_size]
+        discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2) # [batch, intermediate_size, seq_len]
 
-        # 3.b. Discretization: B and C to [batch_size, seq_len, intermediate_size, ssm_state_size] (SRAM)
-        A = -torch.exp(self.A_log.float())  # (intermediate_size, ssm_state_size)
-        # [batch_size, intermediate_size, seq_len, 1]    X [1, intermediate_size, 1, ssm_state_size]
-        discrete_A = torch.exp(discrete_time_step[:, :, :, None] * A[None, :, None, :])
-        # [batch_size, intermediate_size, seq_len, 1] X [batch_size, 1, seq_len, ssm_state_size]
-        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()
-        # [batch_size, intermediade_size, seq_len, 1] X [batch_size, seq_len, ssm_state_size, 1]
-        deltaB_u = discrete_B * hidden_states[:, :, :, None]
+        # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
+        A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
+        discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
+        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediade_size, seq_len, ssm_state_size]
+        deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         ssm_state = inference_params.ssm_states[self.layer_idx]
         scan_outputs = []
         for i in range(seq_len):
-            ssm_state = ssm_state * discrete_A[:, :, i, :] + deltaB_u[:, :, i, :]
-            # [batch_size, intermediade_size, ssm_state]   X  [batch_size, ssm_state] -> [batch_size, intermediade_size]
-            scan_output = torch.matmul(ssm_state, C[:, i, :].unsqueeze(-1).float())
+            ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediade_size, ssm_state]
+            scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediade_size, 1]
             scan_outputs.append(scan_output[:, :, 0])
-        inference_params.ssm_states[self.layer_idx] = ssm_state
-        scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, seq_len, intermediade_size]
-        scan_output = scan_output + (hidden_states * self.D[None, :, None].float())
-        scan_output = (scan_output * self.act(gate)).to(hidden_states.dtype)
-        # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
+        scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, seq_len, intermediade_size]
+        scan_output = scan_output + (hidden_states * self.D[None, :, None])
+        scan_output = (scan_output * self.act(gate))
 
+        inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
+        # 4. Final linear projection
+        contextualized_states = self.out_proj(scan_output.transpose(1, 2))             # [batch, seq_len, hidden_size]
         return contextualized_states
 
     def forward(self, hidden_states, inference_params=None):
@@ -250,7 +262,7 @@ class MambaMixer(nn.Module):
 class MambaCache:
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.seqlen_offset = 0
-
+        self.dtype = dtype
         intermediate_size = config.intermediate_size
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
@@ -294,7 +306,7 @@ class MambaBlock(nn.Module):
     def forward(self, hidden_states, inference_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.residual_in_fp32:
+        if self.residual_in_fp32 or True:
             residual = residual.to(torch.float32)
 
         hidden_states = self.mixer(hidden_states, inference_params=inference_params)
