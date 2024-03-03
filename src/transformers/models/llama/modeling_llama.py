@@ -1083,10 +1083,10 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
+        causal_mask = (min_dtype * self.causal_mask[None, None, :, :].to(dtype=dtype)).to(dtype=dtype, device=device).expand(batch_size, 1, -1, -1)
 
-        causal_mask = causal_mask.to(dtype=dtype, device=device)
         if attention_mask is not None and attention_mask.dim() == 2:
+            causal_mask = causal_mask.clone() # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
