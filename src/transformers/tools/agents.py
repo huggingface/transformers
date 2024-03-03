@@ -184,9 +184,9 @@ class FinalAnswerTool(Tool):
         pass
 
 
-def format_prompt(toolbox, prompt_template, task):
+def format_prompt(toolbox, prompt_template,function_template, task):
     print(prompt_template)
-    tool_descriptions = "\n".join([get_tool_description_with_args(tool,prompt_template) for tool in toolbox.values()])
+    tool_descriptions = "\n".join([get_tool_description_with_args(tool,function_template) for tool in toolbox.values()])
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     prompt = prompt.replace("<<task>>", task)
     if "<<tool_names>>" in prompt:
@@ -243,7 +243,7 @@ class Agent:
 
     def format_prompt(self, task):
         """Override this for a custom prompt format"""
-        return format_prompt(self.toolbox, self.prompt_template, task)
+        return format_prompt(self.toolbox, self.prompt_template, self.function_template, task)
     
     def parse_action(self, llm_output, split_token):
         """
