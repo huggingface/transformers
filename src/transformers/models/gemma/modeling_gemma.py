@@ -1096,7 +1096,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        # logits = logits.float()
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
