@@ -65,6 +65,9 @@ class CodeReviewerConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. T5v1.1 uses the
+            `"gated-gelu"` feed forward projection. Original T5 uses `"relu"`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         eos_token_id (`int`, *optional*, defaults to 1):
@@ -113,6 +116,7 @@ class CodeReviewerConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
+        self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
 
         act_info = self.feed_forward_proj.split("-")
