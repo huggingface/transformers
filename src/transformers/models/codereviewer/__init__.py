@@ -34,22 +34,6 @@ _import_structure = {
 }
 
 try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_codereviewer"] = ["CodeReviewerTokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_codereviewer_fast"] = ["CodeReviewerTokenizerFast"]
-
-try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -101,22 +85,6 @@ if TYPE_CHECKING:
         CodeReviewerConfig,
         CodeReviewerOnnxConfig,
     )
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_codereviewer import CodeReviewerTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_codereviewer_fast import CodeReviewerTokenizerFast
 
     try:
         if not is_torch_available():

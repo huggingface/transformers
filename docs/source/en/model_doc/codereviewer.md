@@ -37,18 +37,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] CodeReviewerConfig
 
-## CodeReviewerTokenizer
-
-[[autodoc]] CodeReviewerTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## CodeReviewerTokenizerFast
-
-[[autodoc]] CodeReviewerTokenizerFast
-
 <frameworkcontent>
 <pt>
 

@@ -1111,7 +1111,6 @@ else:
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
-    _import_structure["models.codereviewer"].append("CodeReviewerTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
@@ -1165,7 +1164,6 @@ else:
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
-    _import_structure["models.codereviewer"].append("CodeReviewerTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
@@ -5916,7 +5914,6 @@ if TYPE_CHECKING:
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.code_llama import CodeLlamaTokenizer
-        from .models.codereviewer import CodeReviewerTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.ernie_m import ErnieMTokenizer
@@ -5964,7 +5961,6 @@ if TYPE_CHECKING:
         from .models.clip import CLIPTokenizerFast
         from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
-        from .models.codereviewer import CodeReviewerTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast

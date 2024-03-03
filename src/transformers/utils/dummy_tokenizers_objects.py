@@ -86,13 +86,6 @@ class CodeGenTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class CodeReviewerTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
 class ConvBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

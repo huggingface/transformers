@@ -140,8 +140,8 @@ else:
             (
                 "codereviewer",
                 (
-                    "CodeReviewerTokenizer" if is_sentencepiece_available() else None,
-                    "CodeReviewerTokenizerFast" if is_tokenizers_available() else None,
+                    "RobertaTokenizer",
+                    "RobertaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),

@@ -194,16 +194,16 @@ PARALLELIZE_DOCSTRING = r"""
             following number of attention modules:
 
                 - microsoft/codereviewer: 6
-                - google-codereviewer/codereviewer-base: 12
-                - google-codereviewer/codereviewer-large: 24
-                - google-codereviewer/codereviewer-3b: 24
-                - google-codereviewer/codereviewer-11b: 24
+                - microsoft/codereviewer/codereviewer-base: 12
+                - microsoft/codereviewer/codereviewer-large: 24
+                - microsoft/codereviewer/codereviewer-3b: 24
+                - microsoft/codereviewer/codereviewer-11b: 24
 
     Example:
 
     ```python
-    # Here is an example of a device map on a machine with 4 GPUs using google-codereviewer/codereviewer-3b, which has a total of 24 attention modules:
-    model = CodeReviewerForConditionalGeneration.from_pretrained("google-codereviewer/codereviewer-3b")
+    # Here is an example of a device map on a machine with 4 GPUs using microsoft/codereviewer/codereviewer-3b, which has a total of 24 attention modules:
+    model = CodeReviewerForConditionalGeneration.from_pretrained("microsoft/codereviewer/codereviewer-3b")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
@@ -219,8 +219,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Example:
 
     ```python
-    # On a 4 GPU machine with google-codereviewer/codereviewer-3b:
-    model = CodeReviewerForConditionalGeneration.from_pretrained("google-codereviewer/codereviewer-3b")
+    # On a 4 GPU machine with microsoft/codereviewer/codereviewer-3b:
+    model = CodeReviewerForConditionalGeneration.from_pretrained("microsoft/codereviewer/codereviewer-3b")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
@@ -844,13 +844,12 @@ class CodeReviewerPreTrainedModel(PreTrainedModel):
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
-                nn.init.xavier_uniform_(module.lm_head.weight)
             if hasattr(module, "qa_outputs"):
                 module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
                 module.qa_outputs.bias.data.zero_()
-        elif isinstance(module, CodeReviewerForSequenceClassification):
+        elif isinstance(module, CodeReviewerForTokenClassification):
             if hasattr(module, "classifier"):
-                module.classifier.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                module.classifier.weight.data.normal_(mean=0.0, std=factor * 1.0)
                 module.classifier.bias.data.zero_()
         elif isinstance(module, CodeReviewerClassificationHead):
             module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
