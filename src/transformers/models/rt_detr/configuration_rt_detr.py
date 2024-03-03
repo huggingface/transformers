@@ -17,7 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..timm_backbone import TimmBackboneConfig
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -51,7 +51,7 @@ class RTDetrConfig(PretrainedConfig):
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         backbone (`str`, *optional*, defaults to `"resnet50d"`):
-            Type of the backbone based on timm backbone.
+            Type of the backbone based on timm.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weight for backbone model.
         d_model (`int`, *optional*, defaults to 256):
@@ -186,6 +186,8 @@ class RTDetrConfig(PretrainedConfig):
         num_channels=3,
         backbone="resnet50d",
         use_pretrained_backbone=True,
+        backbone_kwargs=None,
+        dilation=False,
         # encoder HybridEncoder
         d_model=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -241,25 +243,38 @@ class RTDetrConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        # backbone
-        self.use_timm_backbone = use_timm_backbone
-        if backbone_config is None:
-            logger.info("Initializing the config with a `TimmBackbone` backbone.")
-            backbone_config = {
-                "backbone": backbone,
-                "out_indices": [2, 3, 4],
-                "freeze_batch_norm_2d": True,
-            }
-            self.backbone_config = TimmBackboneConfig(**backbone_config)
-        elif isinstance(backbone_config, dict):
-            logger.info("Initializing the config with a `TimmBackbone` backbone.")
-            self.backbone_config = TimmBackboneConfig(**backbone_config)
-        elif isinstance(backbone_config, PretrainedConfig):
-            self.backbone_config = backbone_config
-        else:
+        if not use_timm_backbone and use_pretrained_backbone:
             raise ValueError(
-                f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
             )
+
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is not None and use_timm_backbone:
+            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
+        if not use_timm_backbone:
+            if backbone_config is None:
+                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+            # set timm attributes to None
+            dilation, backbone, use_pretrained_backbone = None, None, None
+
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_config = backbone_config
+        self.num_channels = num_channels
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.backbone_kwargs = backbone_kwargs
+        self.dilation = dilation
 
         # encoder
         self.d_model = d_model
@@ -319,3 +334,15 @@ class RTDetrConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @classmethod
+    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`RTDetrConfig`] (or a derived class) from a pre-trained backbone model configuration.
+
+        Args:
+            backbone_config ([`PretrainedConfig`]):
+                The backbone configuration.
+        Returns:
+            [`DetrConfig`]: An instance of a configuration object
+        """
+        return cls(backbone_config=backbone_config, **kwargs)

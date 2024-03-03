@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import RTDetrConfig, RTDetrImageProcessor, is_torch_available, is_vision_available
+from transformers import ResNetConfig, RTDetrConfig, RTDetrImageProcessor, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, torch_device
 from transformers.utils import cached_property
 
@@ -59,8 +59,8 @@ class RTDetrModelTester:
         backbone="resnet18d",
         use_pretrained_backbone=True,
         # encoder HybridEncoder
-        d_model=256,
-        encoder_in_channels=[512, 1024, 2048],
+        d_model=32,
+        encoder_in_channels=[128, 256, 512],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
         encoder_ffn_dim=64,
@@ -75,11 +75,11 @@ class RTDetrModelTester:
         normalize_before=False,
         # decoder RTDetrTransformer
         num_queries=30,
-        decoder_in_channels=[256, 256, 256],
+        decoder_in_channels=[32, 32, 32],
         decoder_ffn_dim=64,
         num_feature_levels=3,
         decoder_n_points=4,
-        decoder_layers=2,
+        decoder_layers=1,
         decoder_attention_heads=2,
         decoder_activation_function="relu",
         attention_dropout=0.0,
@@ -164,17 +164,29 @@ class RTDetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
+        hidden_sizes = [10, 20, 30, 40]
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=hidden_sizes,
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
+        use_timm_backbone = False
         return RTDetrConfig(
             initializer_range=self.initializer_range,
             layer_norm_eps=self.layer_norm_eps,
             batch_norm_eps=self.batch_norm_eps,
-            use_timm_backbone=self.use_timm_backbone,
-            backbone_config=self.backbone_config,
+            use_timm_backbone=use_timm_backbone,
+            backbone_config=resnet_config,
             num_channels=self.num_channels,
-            backbone=self.backbone,
-            use_pretrained_backbone=self.use_pretrained_backbone,
+            backbone=None,
+            use_pretrained_backbone=False,
             d_model=self.d_model,
-            encoder_in_channels=self.encoder_in_channels,
+            encoder_in_channels=hidden_sizes[1:],
             feat_strides=self.feat_strides,
             encoder_layers=self.encoder_layers,
             encoder_ffn_dim=self.encoder_ffn_dim,
@@ -310,6 +322,105 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [
+                    self.model_tester.encoder_attention_heads,
+                    self.model_tester.num_feature_levels,
+                    self.model_tester.encoder_n_points,
+                ],
+            )
+            out_len = len(outputs)
+
+            correct_outlen = 8
+
+            # loss is at first position
+            if "labels" in inputs_dict:
+                correct_outlen += 1  # loss is added to beginning
+            # Object Detection model returns pred_logits and pred_boxes
+            if model_class.__name__ == "RTDetrForObjectDetection":
+                correct_outlen += 2
+
+            self.assertEqual(out_len, correct_outlen)
+
+            # decoder attentions
+            decoder_attentions = outputs.decoder_attentions
+            self.assertIsInstance(decoder_attentions, (list, tuple))
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
+            )
+
+            # cross attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertIsInstance(cross_attentions, (list, tuple))
+            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(cross_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_feature_levels,
+                    self.model_tester.decoder_n_points,
+                ],
+            )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_feature_levels,
+                    self.model_tester.encoder_n_points,
+                ],
+            )
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

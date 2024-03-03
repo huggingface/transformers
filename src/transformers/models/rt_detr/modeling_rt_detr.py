@@ -29,8 +29,6 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
-from transformers import AutoBackbone
-
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -48,6 +46,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 
 
@@ -140,7 +139,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    pass
+    from timm import create_model
 
 logger = logging.get_logger(__name__)
 
@@ -275,16 +274,48 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized (absolute) bounding boxes.
+        auxiliary_outputs (`list[Dict]`, *optional*):
+            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+            `pred_boxes`) for each decoder layer.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of each
+            layer plus the initial embedding outputs.
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor`, being one for the output of the embeddings (logits) + one for the boxes + one
-            containing the outputs of each layer.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
+            layer plus the initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
+    auxiliary_outputs: Optional[List[Dict]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def _get_clones(module, N):
@@ -487,9 +518,27 @@ class RTDetrConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        backbone = AutoBackbone.from_config(config.backbone_config)
 
-        self.model = backbone._backbone
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(2, 3, 4),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
+
+        # replace batch norm by frozen batch norm
+        with torch.no_grad():
+            replace_batch_norm(backbone)
+        self.model = backbone
         self.intermediate_channel_sizes = (
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
@@ -2220,7 +2269,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
-                outputs_loss["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
+                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_loss["aux_outputs"] = auxiliary_outputs
                 outputs_loss["aux_outputs"].extend(
                     self._set_aux_loss([outputs.enc_topk_logits], [outputs.enc_topk_bboxes])
                 )
@@ -2243,10 +2293,11 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 "weight_loss_scaled": weight_loss_scaled,
             }
 
-        encoder_states = encoder_outputs if output_hidden_states else ()
-
         if not return_dict:
-            output = (logits, pred_boxes, encoder_states)
+            if auxiliary_outputs is not None:
+                output = (logits, pred_boxes) + auxiliary_outputs + outputs
+            else:
+                output = (logits, pred_boxes) + outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
         return RTDetrObjectDetectionOutput(
@@ -2254,7 +2305,14 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
-            encoder_hidden_states=encoder_states,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=outputs.last_hidden_state,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
 
 
