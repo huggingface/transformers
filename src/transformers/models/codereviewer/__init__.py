@@ -51,33 +51,6 @@ else:
         "CodeReviewerForTokenClassification",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_codereviewer"] = [
-        "TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFCodeReviewerEncoderModel",
-        "TFCodeReviewerForConditionalGeneration",
-        "TFCodeReviewerModel",
-        "TFCodeReviewerPreTrainedModel",
-    ]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_codereviewer"] = [
-        "FlaxCodeReviewerEncoderModel",
-        "FlaxCodeReviewerForConditionalGeneration",
-        "FlaxCodeReviewerModel",
-        "FlaxCodeReviewerPreTrainedModel",
-    ]
-
 
 if TYPE_CHECKING:
     from .configuration_codereviewer import (
@@ -102,33 +75,6 @@ if TYPE_CHECKING:
             CodeReviewerModel,
             CodeReviewerPreTrainedModel,
             load_tf_weights_in_codereviewer,
-        )
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_codereviewer import (
-            TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFCodeReviewerEncoderModel,
-            TFCodeReviewerForConditionalGeneration,
-            TFCodeReviewerModel,
-            TFCodeReviewerPreTrainedModel,
-        )
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_codereviewer import (
-            FlaxCodeReviewerEncoderModel,
-            FlaxCodeReviewerForConditionalGeneration,
-            FlaxCodeReviewerModel,
-            FlaxCodeReviewerPreTrainedModel,
         )
 
 

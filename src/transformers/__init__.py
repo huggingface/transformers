@@ -3942,15 +3942,6 @@ else:
             "TFCLIPVisionModel",
         ]
     )
-    _import_structure["models.codereviewer"].extend(
-        [
-            "TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFCodeReviewerEncoderModel",
-            "TFCodeReviewerForConditionalGeneration",
-            "TFCodeReviewerModel",
-            "TFCodeReviewerPreTrainedModel",
-        ]
-    )
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4819,14 +4810,6 @@ else:
             "FlaxT5ForConditionalGeneration",
             "FlaxT5Model",
             "FlaxT5PreTrainedModel",
-        ]
-    )
-    _import_structure["models.codereviewer"].extend(
-        [
-            "FlaxCodeReviewerEncoderModel",
-            "FlaxCodeReviewerForConditionalGeneration",
-            "FlaxCodeReviewerModel",
-            "FlaxCodeReviewerPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
@@ -8291,13 +8274,6 @@ if TYPE_CHECKING:
             TFCLIPTextModel,
             TFCLIPVisionModel,
         )
-        from .models.codereviewer import (
-            TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFCodeReviewerEncoderModel,
-            TFCodeReviewerForConditionalGeneration,
-            TFCodeReviewerModel,
-            TFCodeReviewerPreTrainedModel,
-        )
         from .models.convbert import (
             TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFConvBertForMaskedLM,
@@ -8902,12 +8878,6 @@ if TYPE_CHECKING:
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
-        )
-        from .models.codereviewer import (
-            FlaxCodeReviewerEncoderModel,
-            FlaxCodeReviewerForConditionalGeneration,
-            FlaxCodeReviewerModel,
-            FlaxCodeReviewerPreTrainedModel,
         )
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,

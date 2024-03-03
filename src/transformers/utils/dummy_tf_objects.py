@@ -756,37 +756,6 @@ class TFCLIPVisionModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TF_CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class TFCodeReviewerEncoderModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFCodeReviewerForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFCodeReviewerModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFCodeReviewerPreTrainedModel(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
 TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
