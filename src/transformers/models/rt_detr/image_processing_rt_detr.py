@@ -26,6 +26,7 @@ from ...image_transforms import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    AnnotationType,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
