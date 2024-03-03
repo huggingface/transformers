@@ -23,7 +23,7 @@ import requests
 from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 
@@ -185,7 +185,7 @@ class FinalAnswerTool(Tool):
 
 
 def format_prompt(toolbox, prompt_template, task):
-    tool_descriptions = "\n".join([get_tool_description_with_args(tool) for tool in toolbox.values()])
+    tool_descriptions = "\n".join([get_tool_description_with_args(tool,prompt_template) for tool in toolbox.values()])
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     prompt = prompt.replace("<<task>>", task)
     if "<<tool_names>>" in prompt:
@@ -206,7 +206,10 @@ class Agent:
         self.agent_name = self.__class__.__name__
         self.log = print
         self.llm_callable = llm_callable
-        self.function_template=function_template
+        if function_template:
+            self.function_template=function_template
+        else :
+            self.function_template=self.default_function_template
         if toolbox is None:
             _setup_default_tools()
             self._toolbox = HUGGINGFACE_DEFAULT_TOOLS
@@ -233,6 +236,9 @@ class Agent:
             "your model, please set `tokenizer.function_template` to an appropriate template. "
         )
         return OPENAI_TOOL_DESCRIPTION_TEMPLATE
+    
+    def show_memory(self):
+        self.log(self.memory)
 
     def format_prompt(self, task):
         """Override this for a custom prompt format"""
@@ -334,17 +340,32 @@ class CodeAgent(Agent):
     def __init__(
             self, 
             llm_callable, 
+            function_template=None, 
+            additional_args=Dict[str,any],
             toolbox=None, 
             stop_sequences=None, 
             max_iterations=1, 
             **kwargs
         ):
 
-        super().__init__(llm_callable, toolbox=toolbox)
+        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations)
+        if function_template:
+            self.function_template=function_template
+        else :
+            self.function_template=self.default_function_template
         self.stop_sequences = stop_sequences
         self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
-        self.max_iterations = max_iterations
-
+    @property
+    def default_function_template(self)-> str:
+        """
+        This template is taking can desbribe a tool as it is expected by the model
+        """
+        logger.warning_once(
+            "\nNo function template is defined for this tokenizer - using a default function template "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
+            "your model, please set `tokenizer.function_template` to an appropriate template. "
+        )
+        return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
     def clean_code_for_run(self, result):
         """
         Override this method if you want to change the way the code is
@@ -394,11 +415,19 @@ class ReactAgent(Agent):
     def __init__(
             self,
             llm_callable,
-            toolbox=None,
-            system_prompt=None,
-            max_iterations=5,
+            function_template=None, 
+            additional_args=Dict[str,any],
+            toolbox=None, 
+            stop_sequences=None, 
+            max_iterations=5, 
+            **kwargs
         ):
-        super().__init__(llm_callable, toolbox=toolbox)
+
+        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations)
+        if function_template:
+            self.function_template=function_template
+        else :
+            self.function_template=self.default_function_template
         # Add final answer to tools
         final_answer_tool = FinalAnswerTool()
         self._toolbox["final_answer"] = final_answer_tool
@@ -409,8 +438,19 @@ class ReactAgent(Agent):
         else:
             self.prompt_template = DEFAULT_REACT_SYSTEM_PROMPT
 
-        self.max_iterations = max_iterations
-    
+
+    @property
+    def default_function_template(self)-> str:
+        """
+        This template is taking can desbribe a tool as it is expected by the model
+        """
+        logger.warning_once(
+            "\nNo function template is defined for this tokenizer - using a default function template "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
+            "your model, please set `tokenizer.function_template` to an appropriate template. "
+        )
+        return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+
     def step(self):
         """
         Runs agent step with the current prompt (task + state)
