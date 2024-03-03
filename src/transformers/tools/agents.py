@@ -195,7 +195,14 @@ def format_prompt(toolbox, prompt_template, task):
 
 
 class Agent:
-    def __init__(self, llm_callable,  function_template=None, additional_args=Dict[str,any],toolbox=None):
+    def __init__(
+            self, 
+            llm_callable,  
+            function_template=None, 
+            additional_args=Dict[str,any],
+            toolbox=None, 
+            max_iterations=1,
+        ):
         self.agent_name = self.__class__.__name__
         self.log = print
         self.llm_callable = llm_callable
@@ -208,6 +215,7 @@ class Agent:
         # TODO: allow to specifiy a repo_id str instead of a Tool object in toolbox, and load the corresponding tool from the hub
         self.memory = []
         self.prompt_template = None
+        self.max_iterations = max_iterations
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -275,6 +283,47 @@ class Agent:
                 f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
                 f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox[tool_name])}."
             )
+    
+    def run(self, task):
+        """
+        Sends a request to the agent.
+
+        Args:
+            task (`str`): The task to perform
+
+        Example:
+
+        ```py
+        from transformers import ReactAgent
+        from transformers.tools.base import CalculatorTool
+
+        calculator = CalculatorTool()
+        agent = ReactAgent(toolbox=[CalculatorTool()])
+        agent.run("What is the result of 2 power 3.7384?")
+        ```
+        """
+        self.memory = []
+        self.task = task
+        final_answer = None
+        iteration = 0
+
+        while not final_answer and iteration < self.max_iterations:
+            try:
+                final_answer = self.step()
+            except Exception as e:
+                self.log(e)
+                self.memory.append(str(e) + ". Now let's retry.")
+            finally:
+                iteration += 1
+        
+        if not final_answer and iteration == self.max_iterations:
+            self.log("Failed by reaching max iterations, returning None.")
+
+        return final_answer
+    
+    def step(self, **kwargs):
+        """To be implemented in the child class"""
+        pass
 
     def parser(self,input_message):
         pass
@@ -282,11 +331,19 @@ class Agent:
         
 
 class CodeAgent(Agent):
-    def __init__(self, llm_callable, toolbox=None, stop_sequences=None, **kwargs):
+    def __init__(
+            self, 
+            llm_callable, 
+            toolbox=None, 
+            stop_sequences=None, 
+            max_iterations=1, 
+            **kwargs
+        ):
+
         super().__init__(llm_callable, toolbox=toolbox)
         self.stop_sequences = stop_sequences
         self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
-
+        self.max_iterations = max_iterations
 
     def clean_code_for_run(self, result):
         """
@@ -294,43 +351,6 @@ class CodeAgent(Agent):
         cleaned for the `run` method.
         """
         return clean_code_for_run(result)
-    
-    def run(self, task, **kwargs):
-        """
-        Sends a request to the agent.
-
-        Args:
-            task (`str`): The task to perform
-            kwargs (additional keyword arguments, *optional*):
-                Any keyword argument to send to the agent when evaluating the code.
-
-        Example:
-
-        ```py
-        from transformers import CodeAgent
-        from transformers.tools.base import CalculatorTool
-
-        calculator = CalculatorTool()
-        agent = CodeAgent(toolbox=[CalculatorTool()])
-        agent.run("What is the result of 2 power 3.7384?")
-        ```
-        """
-        self.memory = []
-        self.task = task       
-        retrying = False
-
-        while True:
-            try:
-                result = self.step(**kwargs)
-                return result
-            except Exception as e:
-                self.log(e)
-                if not retrying:
-                    self.memory.append(str(e) + ". Now let's retry.")
-                    retrying = True
-                else:
-                    return str(e)
-
 
     def step(self, **kwargs):
         """
@@ -390,43 +410,6 @@ class ReactAgent(Agent):
             self.prompt_template = DEFAULT_REACT_SYSTEM_PROMPT
 
         self.max_iterations = max_iterations
-
-    def run(self, task):
-        """
-        Sends a request to the agent.
-
-        Args:
-            task (`str`): The task to perform
-
-        Example:
-
-        ```py
-        from transformers import ReactAgent
-        from transformers.tools.base import CalculatorTool
-
-        calculator = CalculatorTool()
-        agent = ReactAgent(toolbox=[CalculatorTool()])
-        agent.run("What is the result of 2 power 3.7384?")
-        ```
-        """
-        self.memory = []
-        self.task = task
-        final_answer = None
-        iteration = 0
-
-        while not final_answer and iteration < self.max_iterations:
-            try:
-                final_answer = self.step()
-            except Exception as e:
-                self.log(e)
-                self.memory.append(str(e))
-            finally:
-                iteration += 1
-        
-        if not final_answer and iteration == self.max_iterations:
-            self.log("Failed by reaching max iterations, returning None.")
-
-        return final_answer
     
     def step(self):
         """
