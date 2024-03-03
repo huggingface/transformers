@@ -1124,10 +1124,21 @@ class RTDetrEncoder(nn.Module):
 
         self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False,) -> torch.Tensor:
+    def forward(
+        self,
+        src,
+        src_mask=None,
+        pos_embed=None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor:
         hidden_states = src
         for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask=src_mask, position_embeddings=pos_embed, output_attentions=output_attentions)
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=src_mask,
+                position_embeddings=pos_embed,
+                output_attentions=output_attentions,
+            )
         return hidden_states
 
 
@@ -1253,11 +1264,13 @@ class RTDetrHybridEncoder(nn.Module):
                     pos_embed = None
 
                 layer_outputs = self.encoder[i](
-                    src_flatten, 
-                    pos_embed=pos_embed, 
+                    src_flatten,
+                    pos_embed=pos_embed,
                     output_attentions=output_attentions,
                 )
-                hidden_states[enc_ind] = layer_outputs[0].permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
+                hidden_states[enc_ind] = (
+                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
+                )
 
                 if output_attentions:
                     all_attentions = all_attentions + (layer_outputs[1],)
@@ -1625,7 +1638,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                proj_feats, 
+                proj_feats,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,

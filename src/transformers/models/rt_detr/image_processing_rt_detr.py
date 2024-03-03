@@ -93,7 +93,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         size = size if size is not None else {"height": 640, "width": 640}
-        
+
         if do_convert_annotations is None:
             do_convert_annotations = do_normalize
 
