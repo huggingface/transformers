@@ -363,7 +363,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 8
+            correct_outlen = 14
 
             # loss is at first position
             if "labels" in inputs_dict:
