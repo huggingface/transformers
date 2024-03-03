@@ -60,14 +60,16 @@ class CodeReviewerConfig(PretrainedConfig):
             The maximum distance of the longer sequences for the bucket separation.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-06):
             The epsilon to use in the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        eos_token_id (`int`, *optional*, defaults to 50256):
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        eos_token_id (`int`, *optional*, defaults to 1):
             End of stream token id.
         classifier_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for classifier.
