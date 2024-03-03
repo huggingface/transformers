@@ -16,6 +16,7 @@
 
 
 import inspect
+import math
 import unittest
 
 from transformers import ResNetConfig, RTDetrConfig, RTDetrImageProcessor, is_torch_available, is_vision_available
@@ -141,6 +142,8 @@ class RTDetrModelTester:
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
         self.is_encoder_decoder = is_encoder_decoder
+
+        self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -337,7 +340,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), self.model_tester.encoder_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -348,14 +351,14 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), self.model_tester.encoder_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
                 [
                     self.model_tester.encoder_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.encoder_n_points,
+                    self.model_tester.encoder_seq_length,
+                    self.model_tester.encoder_seq_length,
                 ],
             )
             out_len = len(outputs)
@@ -374,7 +377,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # decoder attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertIsInstance(decoder_attentions, (list, tuple))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(decoder_attentions), self.model_tester.decoder_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
@@ -383,7 +386,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # cross attentions
             cross_attentions = outputs.cross_attentions
             self.assertIsInstance(cross_attentions, (list, tuple))
-            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(cross_attentions), self.model_tester.decoder_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
                 [
@@ -412,13 +415,13 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.encoder_attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(self_attentions), self.model_tester.encoder_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [
                     self.model_tester.num_attention_heads,
                     self.model_tester.num_feature_levels,
-                    self.model_tester.encoder_n_points,
+                    self.model_tester.decoder_n_points,
                 ],
             )
 

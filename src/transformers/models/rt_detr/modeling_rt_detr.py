@@ -1347,7 +1347,7 @@ class RTDetrHybridEncoder(nn.Module):
             encoder_states.append(hidden_states)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states] if v is not None)
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -1796,25 +1796,26 @@ class RTDetrModel(RTDetrPreTrainedModel):
         )
 
         if not return_dict:
-            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            enc_outputs = tuple(value for value in [enc_topk_bboxes, enc_topk_logits, enc_outputs_class, enc_outputs_coord_logits] if value is not None)
+            dn_outputs = tuple(value for value in [dn_meta] if value is not None)            
+            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs + dn_outputs
 
             return tuple_outputs
 
         return RTDetrModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
             init_reference_points=init_reference_points,
+            last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
             intermediate_logits=decoder_outputs.intermediate_logits,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            enc_topk_bboxes=enc_topk_bboxes,
-            enc_topk_logits=enc_topk_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            enc_topk_bboxes=enc_topk_bboxes,
+            enc_topk_logits=enc_topk_logits,            
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             dn_meta=dn_meta,
@@ -2259,7 +2260,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
 
-        loss, loss_dict = None, None
+        loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the criterion
             criterion = RTDetrLoss(self.config)
