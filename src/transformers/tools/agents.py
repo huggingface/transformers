@@ -185,6 +185,7 @@ class FinalAnswerTool(Tool):
 
 
 def format_prompt(toolbox, prompt_template, task):
+    print(prompt_template)
     tool_descriptions = "\n".join([get_tool_description_with_args(tool,prompt_template) for tool in toolbox.values()])
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     prompt = prompt.replace("<<task>>", task)
@@ -417,6 +418,7 @@ class ReactAgent(Agent):
             llm_callable,
             function_template=None, 
             additional_args=Dict[str,any],
+            system_prompt=None,
             toolbox=None, 
             stop_sequences=None, 
             max_iterations=5, 
