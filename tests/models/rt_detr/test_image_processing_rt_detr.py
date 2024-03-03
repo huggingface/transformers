@@ -116,7 +116,6 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_slice = torch.tensor([0.5490196347236633, 0.5647059082984924, 0.572549045085907])
         self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-5))
 
-    @slow
     def test_multiple_images_processor_outputs(self):
         images_urls = [
             "http://images.cocodataset.org/val2017/000000000139.jpg",

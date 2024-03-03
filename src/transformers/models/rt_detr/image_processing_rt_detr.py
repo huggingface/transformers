@@ -160,6 +160,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample=None,  # PILImageResampling
@@ -180,6 +181,17 @@ class RTDetrImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
                 from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                List of annotations associated with the image or batch of images. If annotation is for object
+                detection, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                  dictionary. An image can have no annotations, in which case the list should be empty.
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                  An image can have no segments, in which case the list should be empty.
+                - "file_name" (`str`): The file name of the image.
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to self.size):
