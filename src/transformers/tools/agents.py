@@ -24,7 +24,7 @@ from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
+from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_AGENT_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 
 
@@ -185,8 +185,7 @@ class FinalAnswerTool(Tool):
 
 
 def format_prompt(toolbox, prompt_template,function_template, task):
-    print(prompt_template)
-    tool_descriptions = "\n".join([get_tool_description_with_args(tool,function_template) for tool in toolbox.values()])
+    tool_descriptions = "\n".join([get_tool_description_with_args(tool, function_template) for tool in toolbox.values()])
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     prompt = prompt.replace("<<task>>", task)
     if "<<tool_names>>" in prompt:
@@ -199,10 +198,12 @@ class Agent:
     def __init__(
             self, 
             llm_callable,  
-            function_template=None, 
+            function_template=None,
+            system_prompt=None, 
             additional_args=Dict[str,any],
             toolbox=None, 
             max_iterations=1,
+            tool_parser=None,
         ):
         self.agent_name = self.__class__.__name__
         self.log = print
@@ -221,6 +222,16 @@ class Agent:
         self.prompt_template = None
         self.max_iterations = max_iterations
 
+        # Init system prompt
+        if system_prompt:
+            self.prompt_template = system_prompt
+        else:
+            self.prompt_template = DEFAULT_AGENT_SYSTEM_PROMPT # TODO write default agent prompt
+
+        if not tool_parser:
+            # apply default JSON parser
+            self.tool_parser = parse_json_tool_call
+
     @property
     def toolbox(self) -> Dict[str, Tool]:
         """Get all tools currently available to the agent"""
@@ -232,7 +243,7 @@ class Agent:
         This template is taking can desbribe a tool as it is expected by the model
         """
         logger.warning_once(
-            "\nNo function template is defined for this tokenizer - using a default function template "
+            "\nNo function template is defined for this tokenizer - using a default function template " #TODO change message
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.function_template` to an appropriate template. "
         )
@@ -342,20 +353,28 @@ class CodeAgent(Agent):
             self, 
             llm_callable, 
             function_template=None, 
+            system_prompt=None,
             additional_args=Dict[str,any],
             toolbox=None, 
             stop_sequences=None, 
             max_iterations=1, 
+            tool_parser=None,
             **kwargs
         ):
 
-        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations)
+        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations, tool_parser=tool_parser)
         if function_template:
             self.function_template=function_template
         else :
             self.function_template=self.default_function_template
         self.stop_sequences = stop_sequences
-        self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
+
+        # Init system prompt
+        if system_prompt:
+            self.prompt_template = system_prompt
+        else:
+            self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
+    
     @property
     def default_function_template(self)-> str:
         """
@@ -416,16 +435,17 @@ class ReactAgent(Agent):
     def __init__(
             self,
             llm_callable,
-            function_template=None, 
+            function_template=None,
+            system_prompt=None, 
             additional_args=Dict[str,any],
-            system_prompt=None,
             toolbox=None, 
             stop_sequences=None, 
             max_iterations=5, 
+            tool_parser=None,
             **kwargs
         ):
 
-        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations)
+        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations, tool_parser=tool_parser)
         if function_template:
             self.function_template=function_template
         else :
@@ -439,7 +459,6 @@ class ReactAgent(Agent):
             self.prompt_template = system_prompt
         else:
             self.prompt_template = DEFAULT_REACT_SYSTEM_PROMPT
-
 
     @property
     def default_function_template(self)-> str:
@@ -475,7 +494,7 @@ class ReactAgent(Agent):
         )
 
         try:
-            tool_name, arguments = parse_json_tool_call(action)
+            tool_name, arguments = self.tool_parser(action)
         except Exception as e:
             raise RuntimeError(f"Error in json parsing: {e}.")
     
