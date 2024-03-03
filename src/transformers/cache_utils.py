@@ -5,6 +5,7 @@ import torch
 
 from .configuration_utils import PretrainedConfig
 
+
 _LegacyLayerCache = Tuple[torch.Tensor, torch.Tensor]
 _LegacyCache = Tuple[_LegacyLayerCache, ...]
 
@@ -269,7 +270,7 @@ class SinkCache(Cache):
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
         if cache_kwargs is None:
-            cache_kwargs = dict()
+            cache_kwargs = {}
         sin = cache_kwargs.get("sin")
         cos = cache_kwargs.get("cos")
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
@@ -393,7 +394,7 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         if cache_kwargs is None:
-            cache_kwargs = dict()
+            cache_kwargs = {}
         new_cache_positions = cache_kwargs.get("cache_position")
         k_out = self.key_cache
         v_out = self.value_cache
