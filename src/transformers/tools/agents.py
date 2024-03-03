@@ -17,7 +17,7 @@
 import importlib.util
 import json
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Union, List
 
 import requests
 from huggingface_hub import hf_hub_download, list_spaces
@@ -193,44 +193,43 @@ def format_prompt(toolbox, prompt_template,function_template, task):
         prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
     return prompt
 
+def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
+    if isinstance(input, list):
+        return "\n".join(map(lambda m: m["content"], input))
+    elif isinstance(input, dict):
+        return input["content"]
+    else:
+        return input
 
 class Agent:
     def __init__(
             self, 
             llm_callable,  
+            system_prompt=DEFAULT_AGENT_SYSTEM_PROMPT, # TODO write default agent prompt
             function_template=None,
-            system_prompt=None, 
-            additional_args=Dict[str,any],
-            toolbox=None, 
+            additional_args={},
             max_iterations=1,
-            tool_parser=None,
+            tool_parser=parse_json_tool_call,
+            toolbox=None, 
         ):
+        
         self.agent_name = self.__class__.__name__
-        self.log = print
         self.llm_callable = llm_callable
-        if function_template:
-            self.function_template=function_template
-        else :
-            self.function_template=self.default_function_template
+        self.prompt_template = system_prompt
+        self.function_template = function_template if function_template else self.default_function_template
+        self.additional_args = additional_args
+        self.max_iterations = max_iterations
+        self.log = lambda x: print(to_text(x))
+        self.tool_parser = tool_parser
+        self.messages = []
+
         if toolbox is None:
             _setup_default_tools()
             self._toolbox = HUGGINGFACE_DEFAULT_TOOLS
         else:
             self._toolbox = {tool.name: tool for tool in toolbox}
-        # TODO: allow to specifiy a repo_id str instead of a Tool object in toolbox, and load the corresponding tool from the hub
-        self.memory = []
-        self.prompt_template = None
-        self.max_iterations = max_iterations
 
-        # Init system prompt
-        if system_prompt:
-            self.prompt_template = system_prompt
-        else:
-            self.prompt_template = DEFAULT_AGENT_SYSTEM_PROMPT # TODO write default agent prompt
-
-        if not tool_parser:
-            # apply default JSON parser
-            self.tool_parser = parse_json_tool_call
+        self.system_message = self.create_system_message(self.prompt_template, self.function_template)
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -250,9 +249,53 @@ class Agent:
         return OPENAI_TOOL_DESCRIPTION_TEMPLATE
     
     def show_memory(self):
-        self.log(self.memory)
+        self.log(self.messages)
 
-    def format_prompt(self, task):
+    def create_system_message(self, prompt_template, function_template):
+        """
+        Create system message from 'prompt_template' and 'function_template' which defines
+        agent's behaviour and provides tools.
+
+        Args:
+            prompt_template (`str`): Prompt template for the system message.
+            function_template (`str`): Template for the tool description. 
+        """
+        tool_descriptions = "\n".join(
+            [get_tool_description_with_args(tool, function_template) for tool in self.toolbox.values()]
+        )
+        prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+        if "<<tool_names>>" in prompt:
+            tool_names = [f"'{tool_name}'" for tool_name in self.toolbox.keys()]
+            prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
+        
+        system_message = {
+            "role": "system",
+            "content": prompt,
+        }
+
+        return system_message
+    
+    def add_message(self, message: Dict[str, str]):
+        """
+        Append provided message to the message history of the current agent run.
+        Subsequent messages with the same role will be concatenated to a single message.
+
+        Args:
+            message (`Dict[str, str]`): Chat message with corresponding role. 
+        """
+
+        if not set(message.keys()) == {"role", "content"}:
+            raise ValueError("Message should contain only 'role' and 'content' keys!")
+        
+        if message["role"] not in ("user", "assistant", "system"):
+            raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
+        
+        if len(self.messages) > 0 and self.messages[-1]["role"] == message["role"]:
+            self.messages[-1]["content"] += "\n" + message["content"]
+        else:
+            self.messages.append(message)
+
+    def format_prompt(self, task): 
         """Override this for a custom prompt format"""
         return format_prompt(self.toolbox, self.prompt_template, self.function_template, task)
     
@@ -295,7 +338,12 @@ class Agent:
                 observation = self.toolbox[tool_name](arguments)
             else:
                 observation = self.toolbox[tool_name](**arguments)
-            self.memory.append("Observation: " + observation.strip() + "\n")
+            observation_message = {
+                "role": "assistant",
+                "content": "Observation: " + observation.strip()
+            }
+            self.log(observation_message)
+            self.add_message(observation_message)
         except Exception as e:
             raise RuntimeError(
                 f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
@@ -321,7 +369,15 @@ class Agent:
         ```
         """
         self.memory = []
+        self.add_message(self.system_message)
+        
         self.task = task
+        task_message = {
+            "role": "user",
+            "content": f"Task: {self.task}"
+        }
+        self.add_message(task_message)
+
         final_answer = None
         iteration = 0
 
@@ -330,7 +386,11 @@ class Agent:
                 final_answer = self.step()
             except Exception as e:
                 self.log(e)
-                self.memory.append(str(e) + ". Now let's retry.")
+                error_message = {
+                    "role": "user",
+                    "content": str(e) + ". Now let's retry."
+                }
+                self.add_message(error_message)
             finally:
                 iteration += 1
         
@@ -352,28 +412,17 @@ class CodeAgent(Agent):
     def __init__(
             self, 
             llm_callable, 
-            function_template=None, 
-            system_prompt=None,
-            additional_args=Dict[str,any],
-            toolbox=None, 
-            stop_sequences=None, 
-            max_iterations=1, 
-            tool_parser=None,
+            system_prompt=DEFAULT_CODE_SYSTEM_PROMPT, 
+            function_template=None,
             **kwargs
         ):
-
-        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations, tool_parser=tool_parser)
-        if function_template:
-            self.function_template=function_template
-        else :
-            self.function_template=self.default_function_template
-        self.stop_sequences = stop_sequences
-
-        # Init system prompt
-        if system_prompt:
-            self.prompt_template = system_prompt
-        else:
-            self.prompt_template = DEFAULT_CODE_SYSTEM_PROMPT
+        
+        super().__init__(
+            llm_callable, 
+            system_prompt=system_prompt,
+            function_template=function_template if function_template else self.default_function_template,
+            **kwargs
+        )
     
     @property
     def default_function_template(self)-> str:
@@ -386,6 +435,7 @@ class CodeAgent(Agent):
             "your model, please set `tokenizer.function_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+    
     def clean_code_for_run(self, result):
         """
         Override this method if you want to change the way the code is
@@ -401,11 +451,15 @@ class CodeAgent(Agent):
             kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
         """
-        current_prompt = self.format_prompt(self.task)
-        current_prompt += "\n" + "\n".join(self.memory)
+        self.log("=====Calling LLM with these messages:=====")
+        self.log(self.messages)
 
-        result = self.llm_callable(current_prompt, stop=["Task:"]).strip()
-        #self.memory.append(result + "\n") #NOTE uncomment if intend to give output history for retry
+        result_message = self.llm_callable(self.messages, stop=["Task:"])
+        self.log("=====Output message of the LLM:=====")
+        self.log(result_message)
+
+        self.add_message(result_message)
+        result = result_message["content"]
 
         # Parse
         result = f"I will use the following {result}"
@@ -433,32 +487,23 @@ class CodeAgent(Agent):
 
 class ReactAgent(Agent):
     def __init__(
-            self,
-            llm_callable,
+            self, 
+            llm_callable, 
+            system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, 
             function_template=None,
-            system_prompt=None, 
-            additional_args=Dict[str,any],
-            toolbox=None, 
-            stop_sequences=None, 
-            max_iterations=5, 
-            tool_parser=None,
+            max_iterations=5,
             **kwargs
         ):
-
-        super().__init__(llm_callable, toolbox=toolbox, additional_args=additional_args,max_iterations=max_iterations, tool_parser=tool_parser)
-        if function_template:
-            self.function_template=function_template
-        else :
-            self.function_template=self.default_function_template
-        # Add final answer to tools
-        final_answer_tool = FinalAnswerTool()
-        self._toolbox["final_answer"] = final_answer_tool
-
-        # Init system prompt
-        if system_prompt:
-            self.prompt_template = system_prompt
-        else:
-            self.prompt_template = DEFAULT_REACT_SYSTEM_PROMPT
+        
+        super().__init__(
+            llm_callable, 
+            system_prompt=system_prompt,
+            function_template=function_template if function_template else self.default_function_template,
+            max_iterations=max_iterations,
+            **kwargs
+        )
+        
+        self._toolbox["final_answer"] = FinalAnswerTool()
 
     @property
     def default_function_template(self)-> str:
@@ -476,18 +521,17 @@ class ReactAgent(Agent):
         """
         Runs agent step with the current prompt (task + state)
         """
+        self.log("=====Calling LLM with these messages:=====")
+        self.log(self.messages)
 
-        # Run LLM
-        current_prompt = self.format_prompt(self.task)
-        current_prompt += "\n" + "\n".join(self.memory)
-        self.log("=====Calling LLM with this prompt:=====")
-        self.log(current_prompt)
+        result_message = self.llm_callable(self.messages, stop=["Task:"])
+        self.log("=====Output message of the LLM:=====")
+        self.log(result_message)
 
-        result = self.llm_callable(current_prompt, stop=["Observation:", "====="]).strip()
-        self.log(f"==Model output==\n{result}")
-        self.memory.append(result + "\n")
+        self.add_message(result_message)
 
         # Parse
+        result = result_message["content"]
         action = self.parse_action(
             llm_output=result,
             split_token="Action:"

@@ -119,11 +119,11 @@ Answer:
 ```py
 caption = image_captioner(image)
 ```
-
-Task: "<<task>>"
-
-I will use the following
 """
+
+# Task: "<<task>>"
+
+# I will use the following
 
 DEFAULT_REACT_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
 
@@ -159,9 +159,9 @@ ALWAYS provide a 'Thought:' and an 'Action:' part.
 Use the 'final_answer' tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
 
 Now begin!
-
-Task: <<task>>
 """
+
+#Task: <<task>>
 DEFAULT_AGENT_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
 
 <<tool_descriptions>>
@@ -196,6 +196,6 @@ ALWAYS provide a 'Thought:' and an 'Action:' part.
 Use the 'final_answer' tool to provide the final answer to the task. It is the only way to complete the task, else you will be stuck on a loop.
 
 Now begin!
-
-Task: <<task>>
 """
+
+#Task: <<task>>
