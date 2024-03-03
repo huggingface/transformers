@@ -50,3 +50,8 @@ The model version was contributed by [rafaelpadilla](https://huggingface.co/rafa
 
 [[autodoc]] RTDetrModel
     - forward
+
+## RTDetrForObjectDetection
+
+[[autodoc]] RTDetrForObjectDetection
+    - forward
