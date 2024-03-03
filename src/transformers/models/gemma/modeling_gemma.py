@@ -27,6 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
@@ -101,18 +102,25 @@ class GemmaRotaryEmbedding(nn.Module):
         self.base = base
         self.register_buffer("inv_freq", None, persistent=False)
 
+    @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if self.inv_freq is None:
             self.inv_freq = 1.0 / (
                 self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
             )
-
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -810,8 +818,11 @@ class GemmaModel(GemmaPreTrainedModel):
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
+        # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
+        # NOTE: This is not friendly with TorchScript, ONNX, ExportedProgram serialization for very large `max_position_embeddings`.
+        causal_mask = torch.full(
+            (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
+        )
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
@@ -968,7 +979,11 @@ class GemmaModel(GemmaPreTrainedModel):
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if self.config._attn_implementation == "sdpa" and attention_mask is not None:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+        ):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
             is_tracing = (
                 torch.jit.is_tracing()
@@ -976,10 +991,10 @@ class GemmaModel(GemmaPreTrainedModel):
                 or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
             if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
                 # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == min_dtype, dim=-1, keepdim=True)).to(dtype)
+                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
@@ -1079,7 +1094,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
+        logits = logits.float()
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
@@ -1146,7 +1161,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        if getattr(self.model.layers[0].self_attn, "past_key_value", None) is not None:
+        if self.generation_config.cache_implementation == "static":
             # generation with static cache
             cache_position = kwargs.get("cache_position", None)
             if cache_position is None:
@@ -1158,7 +1173,9 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
         # same goes for position ids. Could also help with continued generation.
-        cache_position = torch.arange(past_length, past_length + position_ids.shape[-1], device=position_ids.device)
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        position_ids = position_ids.contiguous() if position_ids is not None else None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1171,7 +1188,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
         model_inputs.update(
             {
-                "position_ids": position_ids.contiguous(),
+                "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),

@@ -99,6 +99,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("rt_detr", "RTDetrImageProcessor"),
         ("sam", "SamImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
+        ("seggpt", "SegGptImageProcessor"),
         ("siglip", "SiglipImageProcessor"),
         ("swiftformer", "ViTImageProcessor"),
         ("swin", "ViTImageProcessor"),
