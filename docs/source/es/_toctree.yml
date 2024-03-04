@@ -57,7 +57,6 @@
   - local: run_scripts
   - local: trainer
     title: Entrenador
-    title: Entrenamiento con scripts
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
   - local: converting_tensorflow_models
