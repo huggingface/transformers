@@ -105,21 +105,24 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
         list: A list of np.array representing the patches.
     """
     patches = []
-    height, width, _ = image.shape if input_data_format == ChannelDimension.LAST else image.shape[1:]
+    height, width = image.shape[:-1] if input_data_format == ChannelDimension.LAST else image.shape[1:]
     for i in range(0, height, patch_size):
         for j in range(0, width, patch_size):
-            patch = image[i : i + patch_size, j : j + patch_size]
+            if input_data_format == ChannelDimension.LAST:
+                patch = image[i : i + patch_size, j : j + patch_size]
+            else:
+                patch = image[:, i : i + patch_size, j : j + patch_size]
             patches.append(patch)
 
     return patches
 
 
-def expand_to_square(image: np.array, background_color) -> np.array:
+def expand_to_square(image: np.array, background_color, input_data_format) -> np.array:
     """
     Expands an image to a square by adding a background color.
     """
 
-    height, width = get_image_size(image)
+    height, width = get_image_size(image, channel_dim=input_data_format)
     if width == height:
         return image
     elif width > height:
@@ -637,7 +640,11 @@ class LlavaImageProcessor(BaseImageProcessor):
 
             elif aspect_ratio_setting == "pad":
                 # pad image to square
-                image = expand_to_square(image, tuple(int(x * 255) for x in self.image_mean))
+                image = expand_to_square(
+                    image,
+                    background_color=tuple(int(x * 255) for x in self.image_mean),
+                    input_data_format=input_data_format,
+                )
                 # preprocess image
                 pixel_values = self._preprocess(
                     image,
