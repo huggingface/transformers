@@ -26,7 +26,6 @@ from ...image_transforms import (
     pad,
     resize,
     to_channel_dimension_format,
-    to_pil_image,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -90,7 +89,7 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
     return best_fit
 
 
-def divide_to_patches(image: np.array, patch_size: int) -> List[np.array]:
+def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
 
@@ -99,20 +98,18 @@ def divide_to_patches(image: np.array, patch_size: int) -> List[np.array]:
             The input image.
         patch_size (`int`):
             The size of each patch.
+        input_data_format (`ChannelDimension` or `str`):
+            The channel dimension format of the input image.
 
     Returns:
         list: A list of np.array representing the patches.
     """
     patches = []
-    height, width = get_image_size(image)
-    image = to_pil_image(image)
+    height, width, _ = image.shape if input_data_format == ChannelDimension.LAST else image.shape[1:]
     for i in range(0, height, patch_size):
         for j in range(0, width, patch_size):
-            box = (j, i, j + patch_size, i + patch_size)
-            patch = image.crop(box)
+            patch = image[i : i + patch_size, j : j + patch_size]
             patches.append(patch)
-
-    patches = [to_numpy_array(patch) for patch in patches]
 
     return patches
 
@@ -126,15 +123,13 @@ def expand_to_square(image: np.array, background_color) -> np.array:
     if width == height:
         return image
     elif width > height:
-        image = to_pil_image(image)
-        result = Image.new(image.mode, (width, width), background_color)
-        result.paste(image, (0, (width - height) // 2))
-        return to_numpy_array(result)
+        result = np.ones((width, width, image.shape[2]), dtype=image.dtype) * background_color
+        result[(width - height) // 2 : (width - height) // 2 + height, :] = image
+        return result
     else:
-        image = to_pil_image(image)
-        result = Image.new(image.mode, (height, height), background_color)
-        result.paste(image, ((height - width) // 2, 0))
-        return to_numpy_array(result)
+        result = np.ones((height, height, image.shape[2]), dtype=image.dtype) * background_color
+        result[:, (height - width) // 2 : (height - width) // 2 + width] = image
+        return result
 
 
 class LlavaImageProcessor(BaseImageProcessor):
@@ -429,7 +424,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         return padded_image
 
     def get_image_patches(
-        self, image: np.array, grid_pinpoints, size: tuple, resample, input_data_format
+        self, image: np.array, grid_pinpoints, size: tuple, patch_size, resample, input_data_format
     ) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -441,6 +436,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 A string representation of a list of possible resolutions.
             size (`tuple`):
                 Size to resize the original image to.
+            patch_size (`int`):
+                Size of the patches to divide the image into.
             resample (`PILImageResampling`):
                 Resampling filter to use if resizing the image.
             input_data_format (`ChannelDimension` or `str`):
@@ -461,7 +458,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         )
         padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=input_data_format)
 
-        patches = divide_to_patches(padded_image, patch_size=self.crop_size["height"])
+        patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
 
         # make sure that all patches use the input data format
         patches = [to_channel_dimension_format(patch, channel_dim=input_data_format) for patch in patches]
@@ -615,6 +612,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                     image,
                     image_grid_pinpoints,
                     size=(size["shortest_edge"], size["shortest_edge"]),
+                    patch_size=crop_size["height"],
                     resample=resample,
                     input_data_format=input_data_format,
                 )
