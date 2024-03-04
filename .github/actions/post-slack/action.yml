@@ -29,7 +29,7 @@ runs:
         # For posting a rich message using Block Kit
         payload: |
           {
-            "text": ${{ inputs.title }},
+            "text": "${{ inputs.title }}",
             "blocks": [
               {
                 "type": "header",
