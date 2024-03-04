@@ -139,11 +139,17 @@ class LlamaRotaryEmbedding(nn.Module):
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+        if device_type == "mps":
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+        else:
+            with torch.autocast(device_type=device_type, enabled=False):
+                freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+                emb = torch.cat((freqs, freqs), dim=-1)
+                cos = emb.cos()
+                sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
