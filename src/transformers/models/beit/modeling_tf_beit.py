@@ -701,8 +701,9 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
 
         self.config = config
         self.add_pooling_layer = add_pooling_layer
-
+        # breakpoint()
         self.embeddings = TFBeitEmbeddings(config, name="embeddings")
+
         self.encoder = TFBeitEncoder(
             config,
             window_size=self.embeddings.patch_embeddings.patch_shape,

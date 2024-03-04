@@ -20,7 +20,7 @@ from __future__ import annotations
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -56,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecVisionConfig"
-_IMAGE_PROCESSOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base"
@@ -73,7 +72,6 @@ TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModelOutputWithPooling with Beit->Data2VecVision
 class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
     Class for outputs of [`TFData2VecVisionModel`].
@@ -87,32 +85,34 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             will be returned.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
-            the initial embedding outputs.
+            `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitDropPath with Beit->Data2VecVision
 class TFData2VecVisionDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path: float, **kwargs):
+    def __init__(self, drop_path, **kwargs):
         super().__init__(**kwargs)
         self.drop_path = drop_path
 
-    def call(self, x: tf.Tensor, training=None):
+    def call(self, x, training=None):
         if training:
             keep_prob = 1 - self.drop_path
             shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
@@ -122,10 +122,10 @@ class TFData2VecVisionDropPath(keras.layers.Layer):
         return x
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitEmbeddings with Beit->Data2VecVision
-class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
+class TFData2VecVisionEmbeddings(keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+
     """
 
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
@@ -136,9 +136,9 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         self.num_patches = self.patch_embeddings.num_patches
         self.config = config
 
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         self.cls_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
             initializer=tf.random_normal_initializer(stddev=self.config.initializer_range),
@@ -153,7 +153,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
                 name="mask_token",
             )
         else:
-            self.use_mask_token = None
+            self.mask_token = None
 
         if self.config.use_absolute_position_embeddings:
             self.position_embeddings = self.add_weight(
@@ -165,9 +165,14 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         else:
             self.position_embeddings = None
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embeddings", None) is not None:
+            with tf.name_scope(self.patch_embeddings.name):
+                self.patch_embeddings.build(None)
 
-    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor, bool_masked_pos: tf.Tensor | None = None) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, projection_dim = shape_list(embeddings)
 
@@ -189,8 +194,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPatchEmbeddings with Beit->Data2VecVision
-class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
+class TFData2VecVisionPatchEmbeddings(keras.layers.Layer):
     """
     Image to Patch Embedding.
     """
@@ -212,7 +216,7 @@ class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
         self.patch_shape = patch_shape
         self.num_channels = num_channels
 
-        self.projection = tf.keras.layers.Conv2D(
+        self.projection = keras.layers.Conv2D(
             filters=hidden_size,
             kernel_size=patch_size,
             strides=patch_size,
@@ -237,7 +241,7 @@ class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
                     f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
 
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
@@ -250,9 +254,16 @@ class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
 
         return tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, None, self.num_channels])
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitSelfAttention with Beit->Data2VecVision
-class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
+
+class TFData2VecVisionSelfAttention(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
 
@@ -267,23 +278,19 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
-            units=self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="query",
+        self.query = keras.layers.Dense(
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="key",
             use_bias=False,
         )
-        self.value = tf.keras.layers.Dense(
-            units=self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="value",
+        self.value = keras.layers.Dense(
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         if window_size:
             self.relative_position_bias = TFData2VecVisionRelativePositionBias(
@@ -291,13 +298,11 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
             )
         else:
             self.relative_position_bias = None
+        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(
-            tensor=tensor,
-            shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size),
-        )
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
@@ -354,39 +359,55 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+        if getattr(self, "relative_position_bias", None) is not None:
+            with tf.name_scope(self.relative_position_bias.name):
+                self.relative_position_bias.build(None)
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitSelfOutput with Beit->Data2VecVision
-class TFData2VecVisionSelfOutput(tf.keras.layers.Layer):
+
+class TFData2VecVisionSelfOutput(keras.layers.Layer):
     """
-    The residual connection is defined in TFData2VecVisionLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    The residual connection is defined in TFData2VecVisionLayer instead of here (as is the case with other models), due
+    to the layernorm applied before each block.
     """
 
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
-    def call(
-        self,
-        hidden_states: tf.Tensor,
-        input_tensor: tf.Tensor,
-        gamma=None,
-        training: bool = False,
-    ) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, gamma=None, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitAttention with Beit->Data2VecVision
-class TFData2VecVisionAttention(tf.keras.layers.Layer):
+
+class TFData2VecVisionAttention(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
 
@@ -418,8 +439,19 @@ class TFData2VecVisionAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitIntermediate with Beit->Data2VecVision
+
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->Data2VecVision
 class TFData2VecVisionIntermediate(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
@@ -449,17 +481,15 @@ class TFData2VecVisionIntermediate(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitOutput with Beit->Data2VecVision
-class TFData2VecVisionOutput(tf.keras.layers.Layer):
+class TFData2VecVisionOutput(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -467,17 +497,20 @@ class TFData2VecVisionOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision,beit->data2vec
-class TFData2VecVisionLayer(tf.keras.layers.Layer):
+
+class TFData2VecVisionLayer(keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(
-        self,
-        config: Data2VecVisionConfig,
-        window_size: Optional[tuple] = None,
-        drop_path_rate: float = 0.0,
-        **kwargs,
+        self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0, **kwargs
     ):
         super().__init__(**kwargs)
         self.config = config
@@ -486,22 +519,18 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         self.intermediate = TFData2VecVisionIntermediate(config, name="intermediate")
         self.data2vec_output = TFData2VecVisionOutput(config, name="output")
 
-        self.layernorm_before = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_before"
-        )
-        self.layernorm_after = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_after"
-        )
+        self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
+        self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
         # Using `layers.Activation` instead of `tf.identity` to better control `training`
         # behaviour.
         self.drop_path = (
             TFData2VecVisionDropPath(drop_path_rate, name="drop_path")
             if drop_path_rate > 0.0
-            else tf.keras.layers.Activation("linear", name="drop_path")
+            else keras.layers.Activation("linear", name="drop_path")
         )
         self.init_values = config.layer_scale_init_value
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         if self.init_values > 0:
             self.lambda_1 = self.add_weight(
                 shape=(self.config.hidden_size),
@@ -520,7 +549,27 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         else:
             self.lambda_1, self.lambda_2 = None, None
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "data2vec_output", None) is not None:
+            with tf.name_scope(self.data2vec_output.name):
+                self.data2vec_output.build(None)
+        if getattr(self, "layernorm_before", None) is not None:
+            with tf.name_scope(self.layernorm_before.name):
+                self.layernorm_before.build([None, None, self.config.hidden_size])
+        if getattr(self, "layernorm_after", None) is not None:
+            with tf.name_scope(self.layernorm_after.name):
+                self.layernorm_after.build([None, None, self.config.hidden_size])
+        if getattr(self, "drop_path", None) is not None:
+            with tf.name_scope(self.drop_path.name):
+                self.drop_path.build(None)
 
     def call(
         self,
@@ -565,8 +614,9 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitRelativePositionBias with Beit->Data2VecVision
-class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
+# Taken and modified from here:
+# https://github.com/leondgarse/keras_cv_attention_models/blob/main/keras_cv_attention_models/beit/beit.py#L28
+class TFData2VecVisionRelativePositionBias(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: tuple, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
@@ -584,7 +634,7 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
             initializer="zeros",
             trainable=True,
             name="relative_position_bias_table",
-        )  # [2*Window_height-1 * 2*Window_width-1, nH]
+        )  # [2*Wh-1 * 2*Ww-1, nH]
         # cls to token & token 2 cls & cls to cls
 
         super().build(input_shape)
@@ -592,23 +642,17 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
     def get_position_index(self):
         # get pair-wise relative position index for each token inside the window
         xx, yy = tf.meshgrid(range(self.window_size[0]), range(self.window_size[1]))
-        coords = tf.stack([yy, xx], axis=0)  # [2, Window_height, Window_width]
-        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Window_height*Window_width]
+        coords = tf.stack([yy, xx], axis=0)  # [2, Wh, Ww]
+        coords_flatten = tf.reshape(coords, [2, -1])  # [2, Wh*Ww]
 
-        relative_coords = (
-            coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        )  # [2, Window_height*Window_width, Window_height*Window_width]
-        relative_coords = tf.transpose(
-            relative_coords, perm=[1, 2, 0]
-        )  # [Window_height*Window_width, Window_height*Window_width, 2]
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # [2, Wh*Ww, Wh*Ww]
+        relative_coords = tf.transpose(relative_coords, perm=[1, 2, 0])  # [Wh*Ww, Wh*Ww, 2]
 
         xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (2 * self.window_size[1] - 1)
         yy = relative_coords[:, :, 1] + self.window_size[1] - 1
         relative_coords = tf.stack([xx, yy], axis=-1)
 
-        relative_position_index = tf.reduce_sum(
-            relative_coords, axis=-1
-        )  # [Window_height*Window_width, Window_height*Window_width]
+        relative_position_index = tf.reduce_sum(relative_coords, axis=-1)  # [Wh*Ww, Wh*Ww]
 
         top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
             self.num_relative_distance - 3
@@ -620,9 +664,7 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
 
         left_corner = tf.concat([corner, left], axis=0)
         relative_position_index = tf.concat([top, relative_position_index], axis=0)
-        relative_position_index = tf.concat(
-            [left_corner, relative_position_index], axis=1
-        )  # [Window_height*Window_width + 1, Window_height*Window_width + 1]
+        relative_position_index = tf.concat([left_corner, relative_position_index], axis=1)  # [Wh*Ww + 1, Wh*Ww + 1]
         return relative_position_index
 
     def call(self, inputs=None) -> tf.Tensor:
@@ -630,8 +672,7 @@ class TFData2VecVisionRelativePositionBias(tf.keras.layers.Layer):
         return tf.transpose(relative_position_bias, [2, 0, 1])
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitEncoder with Beit->Data2VecVision
-class TFData2VecVisionEncoder(tf.keras.layers.Layer):
+class TFData2VecVisionEncoder(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -657,7 +698,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        head_mask: Optional[tf.Tensor] = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -676,12 +717,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
             relative_position_bias = (
                 self.relative_position_bias(0.0) if self.relative_position_bias is not None else None
             )
-            layer_outputs = layer_module(
-                hidden_states,
-                layer_head_mask,
-                output_attentions,
-                relative_position_bias,
-            )
+            layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, relative_position_bias)
 
             hidden_states = layer_outputs[0]
 
@@ -700,10 +736,21 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
             attentions=all_self_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "relative_position_bias", None) is not None:
+            with tf.name_scope(self.relative_position_bias.name):
+                self.relative_position_bias.build(None)
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitMainLayer with Beit->Data2VecVision
-class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
+class TFData2VecVisionMainLayer(keras.layers.Layer):
     config_class = Data2VecVisionConfig
 
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = True, **kwargs):
@@ -714,21 +761,19 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFData2VecVisionEmbeddings(config, name="embeddings")
         self.encoder = TFData2VecVisionEncoder(
-            config,
-            window_size=self.embeddings.patch_embeddings.patch_shape,
-            name="encoder",
+            config, window_size=self.embeddings.patch_embeddings.patch_shape, name="encoder"
         )
         self.layernorm = (
             tf.identity
             if config.use_mean_pooling
-            else tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+            else keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         )
 
         # We are setting the `data_format` like so because from here on we will revert to the
         # NCHW output format
         self.pooler = TFData2VecVisionPooler(config, name="pooler") if add_pooling_layer else None
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -741,9 +786,9 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -794,16 +839,34 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            if hasattr(self.layernorm, "name"):
+                with tf.name_scope(self.layernorm.name):
+                    self.layernorm.build((None, self.config.hidden_size))
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPooler with Beit->Data2VecVision
-class TFData2VecVisionPooler(tf.keras.layers.Layer):
+
+class TFData2VecVisionPooler(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.layernorm = (
-            tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+            keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
             if config.use_mean_pooling
             else None
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         if self.layernorm is not None:
@@ -816,8 +879,16 @@ class TFData2VecVisionPooler(tf.keras.layers.Layer):
 
         return pooled_output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layernorm", None) is not None:
+            if hasattr(self.layernorm, "name"):
+                with tf.name_scope(self.layernorm.name):
+                    self.layernorm.build((None, self.config.hidden_size))
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision, beit->data2vec_vision
+
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -829,47 +900,13 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     main_input_name = "pixel_values"
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network. Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Args:
-        Method used for serving the model.
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
-
 
 DATA2VEC_VISION_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.).
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -939,13 +976,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
-    def __init__(
-        self,
-        config: Data2VecVisionConfig,
-        add_pooling_layer: bool = False,
-        *inputs,
-        **kwargs,
-    ):
+    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
@@ -959,7 +990,6 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFData2VecVisionModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -976,6 +1006,10 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple, TFData2VecVisionModelOutputWithPooling]:
+        r"""
+        bool_masked_pos (`tf.Tensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         outputs = self.data2vec_vision(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -1004,7 +1038,6 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1013,23 +1046,29 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=True, name="data2vec_vision")
 
         # Classifier head
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, tuple]:
         r"""
@@ -1037,30 +1076,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        Returns:
-        Examples:
-        ```python
-        >>> from transformers import AutoImageProcessor, TFData2VecVisionForImageClassification
-        >>> import tensorflow as tf
-        >>> from datasets import load_dataset
-
-        >>> dataset = load_dataset("huggingface/cats-image")
-        >>> image = dataset["test"]["image"][0]
-
-        >>> image_processor = AutoImageProcessor.from_pretrained(
-        ...     "microsoft/data2vec_vision-base-patch16-224-pt22k-ft22k", from_pt=True
-        ... )
-        >>> model = TFData2VecVisionForImageClassification.from_pretrained(
-        ...     "microsoft/data2vec_vision-base-patch16-224-pt22k-ft22k", from_pt=True
-        ... )
-
-        >>> inputs = image_processor(image, return_tensors="tf")
-        >>> logits = model(**inputs).logits
-
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
-        >>> print(model.config.id2label[predicted_label])
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.data2vec_vision(
@@ -1073,9 +1089,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
         logits = self.classifier(pooled_output)
-
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:
@@ -1089,23 +1103,29 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "data2vec_vision", None) is not None:
+            with tf.name_scope(self.data2vec_vision.name):
+                self.data2vec_vision.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
-
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitConvModule with Beit->Data2VecVision
-class TFData2VecVisionConvModule(tf.keras.layers.Layer):
+class TFData2VecVisionConvModule(keras.layers.Layer):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
-    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU). Based on
-    OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
     def __init__(
         self,
+        in_channels: int,
         out_channels: int,
         kernel_size: Union[int, Tuple[int, int]],
         padding: str = "valid",
@@ -1114,7 +1134,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.conv = tf.keras.layers.Conv2D(
+        self.conv = keras.layers.Conv2D(
             filters=out_channels,
             kernel_size=kernel_size,
             padding=padding,
@@ -1122,8 +1142,10 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
+        self.bn = keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
         self.activation = tf.nn.relu
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, input: tf.Tensor) -> tf.Tensor:
         output = self.conv(input)
@@ -1131,114 +1153,169 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
         output = self.activation(output)
         return output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build([None, None, None, self.in_channels])
+        if getattr(self, "bn", None) is not None:
+            with tf.name_scope(self.bn.name):
+                self.bn.build((None, None, None, self.out_channels))
 
-# Copied from:
-# https://gist.github.com/Rocketknight1/43abbe6e73f1008e6e459486e01e0ceb
-class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
-    def __init__(self, output_dim, mode="dense", **kwargs):
+
+class TFAdaptiveAvgPool2D(keras.layers.Layer):
+    def __init__(self, output_dims: Tuple[int, int], input_ordering: str = "NHWC", **kwargs):
         super().__init__(**kwargs)
-        self.output_dim = output_dim
-        self.mode = mode
-        self.map = None
+        self.output_dims = output_dims
+        self.input_ordering = input_ordering
+        if input_ordering not in ("NCHW", "NHWC"):
+            raise ValueError("Unrecognized input_ordering, should be 'NCHW' or 'NHWC'!")
+        self.h_axis = input_ordering.index("H")
+        self.w_axis = input_ordering.index("W")
 
-    def build(self, input_shape):
-        super().build(input_shape)
-        """We pre-compute the sparse matrix for the build() step once. The below code comes
-        from https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work/63603993#63603993."""
-
-        def get_kernels(ind, outd) -> List:
-            """Returns a List [(kernel_offset_start,kernel_length)] defining all the pooling kernels for a 1-D adaptive
-            pooling layer that takes an input of dimension `ind` and yields an output of dimension `outd`
-            """
-
-            def start_index(a, b, c):
-                return math.floor((float(a) * float(c)) / b)
-
-            def end_index(a, b, c):
-                return math.ceil((float(a + 1) * float(c)) / b)
-
-            results = []
-            for ow in range(outd):
-                start = start_index(ow, outd, ind)
-                end = end_index(ow, outd, ind)
-                sz = end - start
-                results.append((start, sz))
-            return results
-
-        in_dim = int(input_shape[-1])
-        kernels = get_kernels(in_dim, self.output_dim)
-        sparse_map = np.zeros((in_dim, self.output_dim), dtype=np.float32)
-        for i, kernel in enumerate(kernels):
-            sparse_map[kernel[0] : kernel[0] + kernel[1], i] = 1 / kernel[1]
-        if self.mode == "dense":
-            self.map = tf.constant(sparse_map)
+    def pseudo_1d_pool(self, inputs: tf.Tensor, h_pooling: bool):
+        # Figure out which axis we're pooling on
+        if h_pooling:
+            axis = self.h_axis
+            output_dim = self.output_dims[0]
         else:
-            self.map = tf.sparse.from_dense(sparse_map)
+            axis = self.w_axis
+            output_dim = self.output_dims[1]
+        input_dim = inputs.shape[axis]
 
-    def call(self, inputs):
-        if self.mode == "dense":
-            return inputs @ self.map
+        # Figure out the potential pooling windows
+        # This is the key idea - the torch op always uses only two
+        # consecutive pooling window sizes, like 3 and 4. Therefore,
+        # if we pool with both possible sizes, we simply need to gather
+        # the 'correct' pool at each position to reimplement the torch op.
+        small_window = math.ceil(input_dim / output_dim)
+        big_window = small_window + 1
+        if h_pooling:
+            output_dim = self.output_dims[0]
+            small_window_shape = (small_window, 1)
+            big_window_shape = (big_window, 1)
         else:
-            input_dims = inputs.shape
-            input_matrix = tf.reshape(inputs, (-1, input_dims[-1]))
-            out = tf.sparse.sparse_dense_matmul(input_matrix, self.map)
-            return tf.reshape(out, input_dims[:-1].as_list() + [-1])
+            output_dim = self.output_dims[1]
+            small_window_shape = (1, small_window)
+            big_window_shape = (1, big_window)
 
-    def get_config(self):
-        config = super().get_config()
-        config.update({"output_dim": self.output_dim, "mode": self.mode})
-        return config
+        # For resizes to 1, or integer resizes, we can take quick shortcuts
+        if output_dim == input_dim:
+            return inputs
+        elif output_dim == 1:
+            return tf.reduce_mean(inputs, axis=axis, keepdims=True)
+        elif input_dim % output_dim == 0:
+            return tf.nn.avg_pool2d(
+                inputs,
+                ksize=small_window_shape,
+                strides=small_window_shape,
+                padding="VALID",
+                data_format=self.input_ordering,
+            )
+        # When upscaling by an integer factor we can also take a quick shortcut
+        elif output_dim > input_dim and output_dim % input_dim == 0:
+            return tf.repeat(inputs, repeats=output_dim // input_dim, axis=axis)
+
+        # For non-integer resizes, we pool with both possible window sizes and concatenate them
+        if output_dim < input_dim:
+            small_pool = tf.nn.avg_pool2d(
+                inputs, ksize=small_window_shape, strides=1, padding="VALID", data_format=self.input_ordering
+            )
+            big_pool = tf.nn.avg_pool2d(
+                inputs, ksize=big_window_shape, strides=1, padding="VALID", data_format=self.input_ordering
+            )
+            both_pool = tf.concat([small_pool, big_pool], axis=axis)
+        else:
+            # When we're actually upscaling instead, then we build the pools a bit differently
+            small_pool = inputs
+            big_pool = tf.nn.avg_pool2d(
+                inputs, ksize=big_window_shape, strides=1, padding="VALID", data_format=self.input_ordering
+            )
+            both_pool = tf.concat([small_pool, big_pool], axis=axis)
+
+        # We compute vectors of the start and end positions for each pooling window
+        # Each (start, end) pair here corresponds to a single output position
+        window_starts = tf.math.floor((tf.range(output_dim, dtype=tf.float32) * input_dim) / output_dim)
+        window_starts = tf.cast(window_starts, tf.int64)
+        window_ends = tf.math.ceil((tf.range(1, output_dim + 1, dtype=tf.float32) * input_dim) / output_dim)
+        window_ends = tf.cast(window_ends, tf.int64)
+
+        # pool_selector is a boolean array of shape (output_dim,) where 1 indicates that output position
+        # has a big receptive field and 0 indicates that that output position has a small receptive field
+        pool_selector = tf.cast(window_ends - window_starts - small_window, tf.bool)
+
+        # Since we concatenated the small and big pools, we need to do a bit of
+        # pointer arithmetic to get the indices of the big pools
+        small_indices = window_starts
+        big_indices = window_starts + small_pool.shape[axis]
+
+        # Finally, we use the pool_selector to generate a list of indices, one per output position
+        gather_indices = tf.where(pool_selector, big_indices, small_indices)
+
+        # Gathering from those indices yields the final, correct pooling
+        return tf.gather(both_pool, gather_indices, axis=axis)
+
+    def call(self, inputs: tf.Tensor):
+        if self.input_ordering == "NHWC":
+            input_shape = inputs.shape[1:3]
+        else:
+            input_shape = inputs.shape[2:]
+
+        # We break the task down into each possible case
+        # Firstly, if we're resizing down to 1, it's just tf.reduce_mean
+        if self.output_dims[0] == self.output_dims[1] == 1:
+            if self.input_ordering == "NHWC":
+                reduce_dims = [1, 2]
+            else:
+                reduce_dims = [2, 3]
+            return tf.reduce_mean(inputs, axis=reduce_dims, keepdims=True)
+        # Secondly, if we're resizing by an integer factor on both dimensions, we can take a quick shortcut
+        elif input_shape[0] % self.output_dims[0] == 0 and input_shape[1] % self.output_dims[1] == 0:
+            h_resize = int(input_shape[0] // self.output_dims[0])
+            w_resize = int(input_shape[1] // self.output_dims[1])
+            return tf.nn.avg_pool2d(
+                inputs,
+                ksize=(h_resize, w_resize),
+                strides=(h_resize, w_resize),
+                padding="VALID",
+                data_format=self.input_ordering,
+            )
+        else:
+            # Finally, if we can't take the shortcut, we do a 1D pool on each axis. pseudo_1d_pool will take a shortcut
+            # for dimensions where an integer resize is possible. It can also handle upscaling.
+            h_pooled = self.pseudo_1d_pool(inputs, h_pooling=True)
+            return self.pseudo_1d_pool(h_pooled, h_pooling=False)
 
 
-class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
-    def __init__(self, output_shape, mode="dense", **kwargs):
-        super().__init__(**kwargs)
-        self.mode = mode
-        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode, name="h_pool")
-        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode, name="w_pool")
-
-    def call(self, inputs):
-        # Rearrange from batch_size, height, width, channels -> batch_size, channels, height, width
-        inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
-        # Perform W-pooling
-        inputs = self.w_pool(inputs)
-        # Rearrange from batch_size, channels, height, width -> batch_size, channels, width, height
-        inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
-        # Perform H-pooling
-        inputs = self.h_pool(inputs)
-        # Rearrange from batch_size, channels, width, height -> batch_size, height, width, channels
-        inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
-        return inputs
-
-    def get_config(self):
-        config = super().get_config()
-        config.update({"mode": self.mode})
-        return config
-
-
-class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
+class TFData2VecVisionPyramidPoolingModule(keras.layers.Layer):
     """
-    Args:
     Pyramid Pooling Module (PPM) used in PSPNet.
-        pool_scales (tuple[int]):
-            Pooling scales used in Pooling Pyramid Module.
-        channels (int):
-            Channels after modules, before conv_seg.
+
+    Args:
+        pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
+            Module.
+        channels (int): Channels after modules, before conv_seg.
+
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], channels: int, **kwargs) -> None:
+    def __init__(self, pool_scales: Tuple[int, ...], in_channels: int, out_channels: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.pool_scales = pool_scales
-        self.channels = channels
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
         self.layer_list = []
         for idx, pool_scale in enumerate(pool_scales):
             pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
             self.layer_list.append(
                 [
-                    TFAdaptiveAvgPool2D(output_shape=pool_scale),
-                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
+                    TFAdaptiveAvgPool2D(output_dims=pool_scale),
+                    TFData2VecVisionConvModule(
+                        in_channels=in_channels, out_channels=self.out_channels, kernel_size=1, name=f"{idx}.1"
+                    ),
                 ]
             )
 
@@ -1255,13 +1332,19 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs
 
+    def build(self, input_shape=None):
+        for layer in self.layer_list:
+            for layer_module in layer:
+                with tf.name_scope(layer_module.name):
+                    layer_module.build(None)
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitUperHead with Beit->Data2VecVision
-class TFData2VecVisionUperHead(tf.keras.layers.Layer):
+
+class TFData2VecVisionUperHead(keras.layers.Layer):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221). Based on OpenMMLab's implementation, found in
-    https://github.com/open-mmlab/mmsegmentation.
+    [UPerNet](https://arxiv.org/abs/1807.10221).
+
+    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
     def __init__(self, config: Data2VecVisionConfig, **kwargs) -> None:
@@ -1270,17 +1353,28 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
         self.channels = config.hidden_size
-        self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
+        self.classifier = keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
 
         # PSP Module
-        self.psp_modules = TFData2VecVisionPyramidPoolingModule(self.pool_scales, self.channels, name="psp_modules")
-        self.bottleneck = TFData2VecVisionConvModule(self.channels, kernel_size=3, padding="same", name="bottleneck")
+        self.psp_modules = TFData2VecVisionPyramidPoolingModule(
+            self.pool_scales, self.in_channels[-1], self.channels, name="psp_modules"
+        )
+        self.bottleneck = TFData2VecVisionConvModule(
+            self.in_channels[-1] + len(self.pool_scales) * self.channels,
+            self.channels,
+            kernel_size=3,
+            padding="same",
+            name="bottleneck",
+        )
         # FPN Module
         self.lateral_convs = []
         self.fpn_convs = []
-        for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
-            l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}")
+        for idx, in_channels in enumerate(self.in_channels[:-1]):  # skip the top layer
+            l_conv = TFData2VecVisionConvModule(
+                in_channels, out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}"
+            )
             fpn_conv = TFData2VecVisionConvModule(
+                in_channels=self.channels,
                 out_channels=self.channels,
                 kernel_size=3,
                 padding="same",
@@ -1290,6 +1384,7 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
             self.fpn_convs.append(fpn_conv)
 
         self.fpn_bottleneck = TFData2VecVisionConvModule(
+            in_channels=len(self.in_channels) * self.channels,
             out_channels=self.channels,
             kernel_size=3,
             padding="same",
@@ -1330,19 +1425,41 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
 
         return output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, None, self.channels])
+        if getattr(self, "psp_modules", None) is not None:
+            with tf.name_scope(self.psp_modules.name):
+                self.psp_modules.build(None)
+        if getattr(self, "bottleneck", None) is not None:
+            with tf.name_scope(self.bottleneck.name):
+                self.bottleneck.build(None)
+        if getattr(self, "fpn_bottleneck", None) is not None:
+            with tf.name_scope(self.fpn_bottleneck.name):
+                self.fpn_bottleneck.build(None)
+        for layer in self.lateral_convs:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.fpn_convs:
+            with tf.name_scope(layer.name):
+                layer.build(None)
 
-class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
+
+class TFData2VecVisionFCNHead(keras.layers.Layer):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
 
     Args:
-        config (Data2VecVisionConfig):
-            Configuration.
-        kernel_size (int):
-            The kernel size for convs in the head. Default: 3.
-        dilation (int):
-            The dilation rate for convs in the head. Default: 1.
+        config (Data2VecVisionConfig): Configuration.
+        kernel_size (int): The kernel size for convs in the head. Default: 3.
+        dilation (int): The dilation rate for convs in the head. Default: 1.
+
+
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1364,6 +1481,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
+                in_channels=self.in_channels,
                 out_channels=self.channels,
                 kernel_size=kernel_size,
                 padding="same",
@@ -1374,6 +1492,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         for i in range(self.num_convs - 1):
             convs.append(
                 TFData2VecVisionConvModule(
+                    in_channels=self.channels,
                     out_channels=self.channels,
                     kernel_size=kernel_size,
                     padding="same",
@@ -1387,10 +1506,14 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
             self.convs = convs
         if self.concat_input:
             self.conv_cat = TFData2VecVisionConvModule(
-                out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
+                self.in_channels + self.channels,
+                out_channels=self.channels,
+                kernel_size=kernel_size,
+                padding="same",
+                name="conv_cat",
             )
 
-        self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
+        self.classifier = keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
 
     def call(self, encoder_hidden_states: tf.Tensor) -> tf.Tensor:
         # just take the relevant feature maps
@@ -1403,6 +1526,17 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         output = self.classifier(output)
         return output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, None, self.channels])
+        if getattr(self, "conv_cat", None) is not None:
+            with tf.name_scope(self.conv_cat.name):
+                self.conv_cat.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1411,7 +1545,6 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
-    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1419,15 +1552,15 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
 
         # FPNs
         self.fpn1 = [
-            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
-            tf.keras.layers.BatchNormalization(name="fpn1.1", momentum=0.9, epsilon=1e-5),
-            tf.keras.layers.Activation("gelu"),
-            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
+            keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
+            keras.layers.BatchNormalization(name="fpn1.1", momentum=0.9, epsilon=1e-5),
+            keras.layers.Activation("gelu"),
+            keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
         ]
-        self.fpn2 = [tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2.0")]
+        self.fpn2 = [keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2.0")]
 
         self.fpn3 = tf.identity
-        self.fpn4 = tf.keras.layers.MaxPool2D(pool_size=2, strides=2)
+        self.fpn4 = keras.layers.MaxPool2D(pool_size=2, strides=2)
 
         # Semantic segmentation head(s)
         self.decode_head = TFData2VecVisionUperHead(config, name="decode_head")
@@ -1446,7 +1579,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         if auxiliary_logits is not None:
             upsampled_auxiliary_logits = tf.image.resize(auxiliary_logits, size=label_interp_shape, method="bilinear")
         # compute weighted loss
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
+        loss_fct = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
 
         # Copied from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
         # Utility to mask the index to ignore during computing the loss.
@@ -1480,20 +1613,23 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
         Returns:
+
         Examples:
+
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFData2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, TFData2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-        >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained(
-        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k"
-        ... )
-        >>> inputs = image_processor(images=image, return_tensors="tf")
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/data2vec-vision-base")
+        >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits

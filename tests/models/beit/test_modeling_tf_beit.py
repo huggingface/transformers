@@ -40,6 +40,7 @@ if is_tf_available():
         TFBeitForSemanticSegmentation,
         TFBeitModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.beit.modeling_tf_beit import TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -392,7 +393,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
                         key: val for key, val in prepared_for_class.items() if key not in label_names
                     }
                     self.assertGreater(len(inputs_minus_labels), 0)
-                    model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+                    model.compile(optimizer=keras.optimizers.SGD(0.0), run_eagerly=True)
 
                     # Make sure the model fits without crashing regardless of where we pass the labels
                     history1 = model.fit(
