@@ -52,6 +52,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GraphormerConfig": ["spatial_pos_max"],
     # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
+    "CodeReviewerConfig": ["feed_forward_proj"],
     # used internally in the configuration class file
     # `tokenizer_class` get default value `T5Tokenizer` intentionally
     "MT5Config": ["feed_forward_proj", "tokenizer_class"],
