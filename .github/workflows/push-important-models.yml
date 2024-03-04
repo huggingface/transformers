@@ -77,7 +77,7 @@ jobs:
         uses: ./.github/actions/post-slack
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
-          title: FA2 tests - ${{ matrix.model-name }}
+          title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
           status: ${{ steps.run_fa2_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
@@ -91,6 +91,6 @@ jobs:
         uses: ./.github/actions/post-slack
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
-          title: Integration tests - ${{ matrix.model-name }}
+          title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
           status: ${{ steps.run_integration_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}

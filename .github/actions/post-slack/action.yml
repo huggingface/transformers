@@ -35,20 +35,14 @@ runs:
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "🤗 Results of the tests."
+                    "text": ${{ inputs.title }}
                 }
               },
               {
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "Result: ${{
-                    if(eq(inputs.status, 'success')) {
-                      '🟢'
-                    } else {
-                      '🔴'
-                    }
-                  }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  "text": "Result: ${{ inputs.status }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                 }
               }
             ]
