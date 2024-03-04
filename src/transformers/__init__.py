@@ -5514,7 +5514,7 @@ if TYPE_CHECKING:
     from .models.qwen2 import (
         QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Qwen2Config,
-        Qwen2Tokenizer,
+        Qwen2Tokenizer
     )
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
