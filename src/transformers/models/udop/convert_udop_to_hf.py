@@ -109,6 +109,9 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     model = UdopForConditionalGeneration(config)
     model.eval()
 
+    # rename keys
+    state_dict = {k.replace("cell2dembedding", "cell_2d_embedding"): v for k, v in state_dict.items()}
+
     # load weights
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)

@@ -38,7 +38,7 @@ class UdopConfig(PretrainedConfig):
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 33201):
-            Vocabulary size of the Udop model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the UDOP model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`UdopForConditionalGeneration`].
         d_model (`int`, *optional*, defaults to 1024):
             Size of the encoder layers and the pooler layer.

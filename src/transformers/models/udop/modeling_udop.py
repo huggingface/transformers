@@ -79,6 +79,12 @@ UDOP_INPUTS_DOCSTRING = r"""
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
             [What are input IDs?](../glossary#input-ids)
 
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
@@ -87,12 +93,6 @@ UDOP_INPUTS_DOCSTRING = r"""
 
             Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
             token. See `pixel_values` for `patch_sequence_length`.
-
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
 
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
@@ -178,6 +178,24 @@ UDOP_ENCODER_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
+
+        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
+            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
+            config.patch_size) * (width / config.patch_size))`.
+
+        visual_bbox (`torch.LongTensor` of shape `(batch_size, patch_sequence_length, 4)`, *optional*):
+            Bounding boxes of each patch in the image. If not provided, bounding boxes are created in the model.
+
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -258,7 +276,10 @@ def get_visual_bbox(image_size=224, patch_size=16):
             visual_bbox_y[1:].repeat(image_feature_pool_shape[1], 1).transpose(0, 1),
         ],
         dim=-1,
-    ).view(-1, 4)
+    )
+
+    visual_bbox_input = visual_bbox_input.view(-1, 4)
+
     return visual_bbox_input
 
 
@@ -1277,7 +1298,7 @@ class UdopStack(UdopPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         if not self.is_decoder:
-            self.cell2dembedding = UdopCellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
+            self.cell_2d_embedding = UdopCellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
@@ -1307,22 +1328,21 @@ class UdopStack(UdopPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        bbox=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
         pixel_values=None,
+        visual_bbox=None,
+        image_embeddings=None,
+        position_bias=None,
         head_mask=None,
+        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cross_attn_head_mask=None,
-        position_bias=None,
-        image_embeddings=None,
-        bbox=None,
-        visual_bbox=None,
-        num_patches=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1365,8 +1385,7 @@ class UdopStack(UdopPreTrainedModel):
 
         if image_embeddings is not None:
             # combine visual and OCR text embeddings
-            if num_patches is None:
-                num_patches = self.config.image_size // self.config.patch_size
+            num_patches = self.config.image_size // self.config.patch_size
             inputs_embeds, bbox, attention_mask = combine_image_text_embeddings(
                 image_embeddings,
                 inputs_embeds,
@@ -1381,7 +1400,7 @@ class UdopStack(UdopPreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
 
         if not self.is_decoder and bbox is not None:
-            inputs_embeds += self.cell2dembedding(bbox)
+            inputs_embeds += self.cell_2d_embedding(bbox)
 
         batch_size, seq_length = input_shape
 
@@ -1553,8 +1572,8 @@ class UdopModel(UdopPreTrainedModel):
     def forward(
         self,
         input_ids: Tensor = None,
-        bbox: Dict[str, Any] = None,
         attention_mask: Tensor = None,
+        bbox: Dict[str, Any] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
         decoder_input_ids: Optional[Tensor] = None,
@@ -1606,10 +1625,10 @@ class UdopModel(UdopPreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
-                bbox=bbox,
-                visual_bbox=visual_bbox,
-                pixel_values=pixel_values,
                 attention_mask=attention_mask,
+                bbox=bbox,
+                pixel_values=pixel_values,
+                visual_bbox=visual_bbox,
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
@@ -1722,8 +1741,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     def forward(
         self,
         input_ids: Tensor = None,
-        bbox: Dict[str, Any] = None,
         attention_mask: Tensor = None,
+        bbox: Dict[str, Any] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Dict[str, Any] = None,
         decoder_input_ids: Optional[Tensor] = None,
