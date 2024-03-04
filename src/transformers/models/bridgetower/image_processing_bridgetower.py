@@ -32,6 +32,7 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
@@ -204,6 +205,24 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "do_center_crop",
+            "crop_size",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
@@ -464,6 +483,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not is_batched(images):
             images = [images]

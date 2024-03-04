@@ -24,8 +24,7 @@ import numpy as np
 import requests
 
 import transformers
-from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
-from transformers.models.auto import get_values
+from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -52,6 +51,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import CLIPSegForImageSegmentation, CLIPSegModel, CLIPSegTextModel, CLIPSegVisionModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.clipseg.modeling_clipseg import CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -751,7 +751,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
 
             print("Model class:", model_class)

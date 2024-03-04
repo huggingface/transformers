@@ -31,6 +31,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
@@ -164,6 +165,23 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
         self.tesseract_config = tesseract_config
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "apply_ocr",
+            "ocr_lang",
+            "tesseract_config",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -297,6 +315,8 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
         images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

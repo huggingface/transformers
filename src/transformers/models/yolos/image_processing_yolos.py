@@ -47,6 +47,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
@@ -750,6 +751,26 @@ class YolosImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self._valid_processor_keys = [
+            "images",
+            "annotations",
+            "return_segmentation_masks",
+            "masks_path",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_convert_annotations",
+            "do_pad",
+            "format",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->Yolos
@@ -1074,7 +1095,14 @@ class YolosImageProcessor(BaseImageProcessor):
             ]
             data["pixel_mask"] = masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in padded_annotations
+            ]
+
+        return encoded_inputs
 
     def preprocess(
         self,
@@ -1185,6 +1213,7 @@ class YolosImageProcessor(BaseImageProcessor):
         )
         do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
 
@@ -1292,7 +1321,7 @@ class YolosImageProcessor(BaseImageProcessor):
 
         if do_convert_annotations and annotations is not None:
             annotations = [
-                self.normalize_annotation(annotation, get_image_size(image))
+                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
                 for annotation, image in zip(annotations, images)
             ]
 
