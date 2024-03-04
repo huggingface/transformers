@@ -80,7 +80,6 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
-    AcceleratorConfig,
     DistributedTensorGatherer,
     IterableDatasetShard,
     LabelSmoother,
@@ -2081,7 +2080,8 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
-        train_loss = self._total_loss_scalar / self.state.global_step
+        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
+        train_loss = self._total_loss_scalar / effective_global_step
 
         metrics = speed_metrics(
             "train",
@@ -4116,21 +4116,10 @@ class Trainer:
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
-        accelerator_kwargs = {}
-        if self.args.accelerator_config is not None:
-            accelerator_kwargs = self.args.accelerator_config
-            # dict and AcceleratorConfigs are parseable, json files are not
-            if isinstance(accelerator_kwargs, AcceleratorConfig):
-                accelerator_kwargs = accelerator_kwargs.to_dict()
-            elif isinstance(accelerator_kwargs, dict):
-                # Some values may need to go through non-accelerate aligned defaults
-                # and we need to run the `__post_init__` to set them
-                accelerator_kwargs = AcceleratorConfig(**accelerator_kwargs).to_dict()
-
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
-            **accelerator_kwargs,
+            **self.args.accelerator_config.to_dict(),
         )
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics

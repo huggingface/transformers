@@ -426,7 +426,6 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1))
         self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1))
 
-    @slow
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
