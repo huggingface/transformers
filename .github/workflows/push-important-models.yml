@@ -79,6 +79,7 @@ jobs:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: FA2 tests - ${{ matrix.model-name }}
           status: ${{ steps.run_fa2_tests.conclusion}}
+          slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
       - name: Run integration tests
         id: run_integration_tests
@@ -92,3 +93,4 @@ jobs:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: Integration tests - ${{ matrix.model-name }}
           status: ${{ steps.run_integration_tests.conclusion}}
+          slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
