@@ -35,7 +35,7 @@ runs:
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "🤗 Results of the ${{ inputs.title }} tests.",
+                    "text": "🤗 Results of the ${{ toJSON(inputs.title) }} tests.",
                 }
               },
               {
