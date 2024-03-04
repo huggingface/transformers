@@ -295,6 +295,19 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
             )
 
+        segmentation_with_opts = image_processor.post_process_instance_segmentation(
+            outputs,
+            threshold=0,
+            target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
+            task_type="panoptic",
+        )
+        self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
+        for el in segmentation_with_opts:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(el["segmentation"].shape, (1, 4))
+
     def test_post_process_panoptic_segmentation(self):
         image_processor = self.image_processing_class(
             num_labels=self.image_processor_tester.num_classes,

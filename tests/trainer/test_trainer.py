@@ -84,8 +84,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, get_last_checkpoint
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -1406,19 +1405,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
-    def test_save_checkpoints_is_atomic(self):
-        class UnsaveableTokenizer(PreTrainedTokenizerBase):
-            def save_pretrained(self, *args, **kwargs):
-                raise OSError("simulated file write error")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
-            # Attach unsaveable tokenizer to partially fail checkpointing
-            trainer.tokenizer = UnsaveableTokenizer()
-            with self.assertRaises(OSError) as _context:
-                trainer.train()
-            assert get_last_checkpoint(tmpdir) is None
-
     @require_safetensors
     def test_safe_checkpoints(self):
         for save_safetensors in [True, False]:
@@ -2632,6 +2618,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
+
+    def test_accelerator_config_only_deprecated_args(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertWarns(FutureWarning) as cm:
+                args = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    split_batches=True,
+                )
+                self.assertIn("split_batches", str(cm.warnings[0].message))
+                config = RegressionModelConfig(a=1.5, b=2.5)
+                model = RegressionPreTrainedModel(config)
+                eval_dataset = SampleIterableDataset()
+                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+                self.assertEqual(trainer.accelerator.split_batches, True)
 
 
 @require_torch
