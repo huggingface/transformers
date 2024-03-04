@@ -223,7 +223,7 @@ if __name__ == "__main__":
         default="sam_vit_h_4b8939",
         choices=choices,
         type=str,
-        help="Path to hf config.json of model to convert",
+        help="Name of the original model to convert",
     )
     parser.add_argument(
         "--checkpoint_path",
