@@ -583,7 +583,7 @@ class CacheIntegrationTest(unittest.TestCase):
             device_map="auto",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
-        )
+        ).to(torch_device)
 
         inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
         gen_out_ref = model.generate(
