@@ -1,0 +1,47 @@
+name: Send message to slack
+
+on:
+  workflow_call:
+    inputs:
+      slack_channel:
+        required: true
+        type: string
+      title:
+        required: true
+        type: string
+      status:
+        require: true
+        type: string
+
+jobs:
+  send_slack:
+    - name: Post results Slack channel
+      id: post-slack
+      uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+      with:
+        # Slack channel id, channel name, or user id to post message.
+        # See also: https://api.slack.com/methods/chat.postMessage#channels
+        channel-id: ${{ inputs.slack_channel }}
+        # For posting a rich message using Block Kit
+        payload: |
+          {
+            "text": "Slow integration tests on ${{ inputs.title }}",
+            "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                      "type": "plain_text",
+                      "text": "🤗 Results of the ${{ inputs.title }} tests.",
+                  },
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Result: ${{ inputs.status == 'success' ? 🟢 : 🔴 }} ${{ inputs.status }} \n\n Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
+              }
+            ]
+          }
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

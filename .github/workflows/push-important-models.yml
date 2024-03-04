@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ add-new-push-test-workflow ]
 
 env:
   RUN_SLOW: "yes"
@@ -66,59 +66,26 @@ jobs:
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
-          pytest -m "flash_attn_test" tests/${{ matrix.model-name }}/test_modeling_*
-      - name: Post results Slack channel
+          pytest -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+      - name: Post to Slack
         if: always()
-        id: post-slack-fa2
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        uses: ./.github/workflows/send-slack.yml
         with:
-          # Slack channel id, channel name, or user id to post message.
-          # See also: https://api.slack.com/methods/chat.postMessage#channels
-          channel-id: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
-          # For posting a rich message using Block Kit
-          payload: |
-            {
-              "text": "Slow FA 2 tests on ${{ matrix.model-name }} result: ${{ steps.run_fa2_tests.conclusion }}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "FA2 tests for ${{ matrix.model-name }}: ${{ steps.run_fa2_tests.conclusion }}\n\n Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+          slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
+          title: FA2 tests - ${{ matrix.model-name }}
+          status: ${{ steps.run_fa2_tests.conclusion}}
+        secrets: inherit
 
       - name: Run integration tests
         id: run_integration_tests
         if: always()
         run:
           pytest -k "IntegrationTest" tests/${{ matrix.model-name }}/test_modeling_*
-      - name: Post results Slack channel
+      - name: Post to Slack
         if: always()
-        id: post-slack-integration-tests
-        #uses: slackapi/slack-github-action@v1.25.0
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        uses: ./.github/workflows/send-slack.yml
         with:
-          # Slack channel id, channel name, or user id to post message.
-          # See also: https://api.slack.com/methods/chat.postMessage#channels
-          channel-id: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
-          # For posting a rich message using Block Kit
-          payload: |
-            {
-              "text": "Slow integration tests on ${{ matrix.model-name }} result: ${{ steps.run_integration_tests.conclusion }}\n\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "Integration tests on ${{ matrix.model-name }}: ${{ steps.run_integration_tests.conclusion}}\n\n Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+          slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
+          title: Integration tests - ${{ matrix.model-name }}
+          status: ${{ steps.run_integration_tests.conclusion}}
+        secrets: inherit
