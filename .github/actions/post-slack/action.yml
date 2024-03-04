@@ -51,8 +51,8 @@ runs:
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "Check Commit results", "emoji": True},
-                    "url": f"${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
-                },
+                    "url": "${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+                }
               },
               {
                 "type": "section",
@@ -60,8 +60,8 @@ runs:
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
-                    "url": f"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                },
+                    "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
               }
             ]
           }
