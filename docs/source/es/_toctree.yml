@@ -55,6 +55,7 @@
   - local: custom_models
     title: Compartir modelos personalizados
   - local: run_scripts
+    title: Entrenamiento con scripts
   - local: trainer
     title: Entrenador
   - local: sagemaker
