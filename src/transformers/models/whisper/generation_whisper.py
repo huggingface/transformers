@@ -699,7 +699,7 @@ class WhisperGenerationMixin:
                 synced_gpus=synced_gpus,
                 return_token_timestamps=return_token_timestamps,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
-                kwargs={k: v for k, v in kwargs.items()},
+                kwargs=dict(kwargs),
             )
 
             # 6.9 In every generated sequence, split by timestamp tokens and extract segments
