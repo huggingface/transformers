@@ -58,7 +58,7 @@ class MambaConfig(PretrainedConfig):
             The id of the end of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer as
             GPTNeoX.
         expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
-        conv_kernel (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
         use_conv_bias (`bool`, *optional*, defaults to `True`):
