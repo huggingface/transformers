@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_timm,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     require_vision,
     slow,
     torch_device,
