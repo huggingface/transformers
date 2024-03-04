@@ -76,7 +76,7 @@ class LlavaVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "batch_size": 14,
+            "batch_size": 12,
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
@@ -107,7 +107,7 @@ class LlavaVisionText2TextModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
 
-        self.batch_size = 14
+        self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
         self.encoder_seq_length = 231

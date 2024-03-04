@@ -61,7 +61,7 @@ class Blip2VisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         image_size=30,
         patch_size=2,
         num_channels=3,
@@ -225,7 +225,7 @@ class Blip2QFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -301,7 +301,7 @@ class Blip2TextModelDecoderOnlyTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         seq_length=7,
         is_training=True,
         use_labels=False,
@@ -513,7 +513,7 @@ class Blip2TextModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=14,
+        batch_size=12,
         encoder_seq_length=7,
         decoder_seq_length=9,
         # For common tests

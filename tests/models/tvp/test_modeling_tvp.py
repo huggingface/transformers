@@ -47,7 +47,7 @@ class TVPModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=1,
         seq_length=2,
         alpha=1.0,
         beta=0.1,

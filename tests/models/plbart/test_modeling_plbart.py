@@ -84,7 +84,7 @@ class PLBartModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_labels=False,
@@ -474,7 +474,7 @@ class PLBartStandaloneDecoderModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=14,
+        batch_size=13,
         d_model=16,
         decoder_seq_length=7,
         is_training=True,

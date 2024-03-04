@@ -58,7 +58,7 @@ class TvltModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         image_size=32,
         spectrogram_length=32,
         frequency_length=16,

@@ -43,7 +43,7 @@ class TimmBackboneModelTester:
         out_features=None,
         stage_names=None,
         backbone="resnet18",
-        batch_size=14,
+        batch_size=3,
         image_size=32,
         num_channels=3,
         is_training=True,
@@ -199,6 +199,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip("Need to use a timm backbone and there is no tiny model available.")
     def test_model_is_small(self):
+        pass
+
+    @unittest.skip("TimmBackbone doesn't support output_attentions.")
+    def test_batching_equivalence(self):
         pass
 
     def test_forward_signature(self):

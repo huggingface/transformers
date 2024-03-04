@@ -190,7 +190,7 @@ class WhisperModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         seq_length=60,
         is_training=True,
         use_labels=False,
@@ -2576,7 +2576,7 @@ class WhisperEncoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         seq_length=60,
         is_training=True,
         use_labels=True,
@@ -2947,7 +2947,7 @@ class WhisperStandaloneDecoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         is_training=True,
         use_labels=False,
         vocab_size=200,

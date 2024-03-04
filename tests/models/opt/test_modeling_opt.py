@@ -64,7 +64,7 @@ class OPTModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_labels=False,

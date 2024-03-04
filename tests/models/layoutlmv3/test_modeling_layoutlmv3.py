@@ -52,7 +52,7 @@ class LayoutLMv3ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         num_channels=3,
         image_size=4,
         patch_size=2,

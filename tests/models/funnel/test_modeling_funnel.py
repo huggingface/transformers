@@ -47,7 +47,7 @@ class FunnelModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -490,7 +490,7 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
 @require_tokenizers
 class FunnelModelIntegrationTest(unittest.TestCase):
     def test_inference_tiny_model(self):
-        batch_size = 14
+        batch_size = 13
         sequence_length = 7
         input_ids = torch.arange(0, batch_size * sequence_length).long().reshape(batch_size, sequence_length)
         lengths = [0, 1, 2, 3, 4, 5, 6, 4, 1, 3, 5, 0, 1]

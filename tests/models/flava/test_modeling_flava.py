@@ -77,7 +77,7 @@ class FlavaImageModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -344,7 +344,7 @@ class FlavaTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -507,7 +507,7 @@ class FlavaMultimodalModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         seq_length=44,
         use_input_mask=True,
         hidden_size=32,
@@ -671,7 +671,7 @@ class FlavaImageCodebookTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         image_size=112,
         num_channels=3,
         hidden_size=32,

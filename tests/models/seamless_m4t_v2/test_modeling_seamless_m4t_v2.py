@@ -58,7 +58,7 @@ class SeamlessM4Tv2ModelTester:
         self,
         parent,
         input_modality="speech",
-        batch_size=14,
+        batch_size=2,
         seq_length=4,
         is_training=True,
         use_input_mask=True,

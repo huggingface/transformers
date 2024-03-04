@@ -62,7 +62,7 @@ class OneFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         is_training=True,
         vocab_size=99,
         use_auxiliary_loss=False,

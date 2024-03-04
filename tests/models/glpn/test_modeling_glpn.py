@@ -51,7 +51,7 @@ class GLPNModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         image_size=64,
         num_channels=3,
         num_encoder_blocks=4,

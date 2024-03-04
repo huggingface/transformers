@@ -76,7 +76,7 @@ class GraphormerModelTester:
         vdim=None,
         bias=True,
         self_attention=True,
-        batch_size=14,
+        batch_size=10,
         graph_size=20,
         is_training=True,
     ):

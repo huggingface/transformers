@@ -152,7 +152,7 @@ class SamModelTester:
         global_attn_indexes=[2, 5, 8, 11],
         num_pos_feats=16,
         mlp_dim=None,
-        batch_size=14,
+        batch_size=2,
     ):
         self.parent = parent
         self.image_size = image_size

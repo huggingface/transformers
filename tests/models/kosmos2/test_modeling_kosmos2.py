@@ -55,7 +55,7 @@ class Kosmos2VisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         image_size=32,
         patch_size=4,
         num_channels=3,
@@ -119,7 +119,7 @@ class Kosmos2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         seq_length=7,
         is_training=True,
         use_input_mask=True,

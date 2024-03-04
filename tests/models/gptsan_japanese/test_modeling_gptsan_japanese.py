@@ -39,7 +39,7 @@ class GPTSanJapaneseTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=14,
+        batch_size=13,
         num_contexts=7,
         # For common tests
         is_training=True,

@@ -63,7 +63,7 @@ class OwlViTVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         image_size=32,
         patch_size=2,
         num_channels=3,
@@ -226,7 +226,7 @@ class OwlViTTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=12,
         num_queries=4,
         seq_length=16,
         is_training=True,

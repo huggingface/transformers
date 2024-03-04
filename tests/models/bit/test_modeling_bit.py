@@ -43,7 +43,7 @@ class BitModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=3,
         image_size=32,
         num_channels=3,
         embeddings_size=10,

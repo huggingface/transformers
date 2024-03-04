@@ -53,7 +53,7 @@ class IdeficsModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=1,
         seq_length=7,
         image_size=30,
         patch_size=2,

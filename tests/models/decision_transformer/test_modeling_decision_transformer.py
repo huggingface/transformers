@@ -40,7 +40,7 @@ class DecisionTransformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         seq_length=7,
         act_dim=6,
         state_dim=17,

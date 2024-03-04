@@ -80,7 +80,7 @@ class BigBirdPegasusModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=7,
         seq_length=256,
         is_training=True,
         use_labels=False,
@@ -602,7 +602,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=14,
+        batch_size=7,
         d_model=32,
         decoder_seq_length=7,
         is_training=True,

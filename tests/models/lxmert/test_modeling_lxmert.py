@@ -73,7 +73,7 @@ class LxmertModelTester:
         visual_pos_dim=4,
         visual_loss_normalizer=6.67,
         seq_length=20,
-        batch_size=14,
+        batch_size=4,
         is_training=True,
         task_matched=True,
         task_mask_lm=True,

@@ -45,7 +45,7 @@ class UnivNetModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=2,
         seq_length=7,
         in_channels=8,
         hidden_channels=8,

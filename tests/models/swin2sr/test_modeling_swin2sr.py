@@ -41,7 +41,7 @@ class Swin2SRModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         image_size=32,
         patch_size=1,
         num_channels=3,

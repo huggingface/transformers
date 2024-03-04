@@ -51,7 +51,7 @@ class TimesformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         image_size=10,
         num_channels=3,
         patch_size=2,

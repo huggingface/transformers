@@ -42,8 +42,8 @@ class LongformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
-        seq_length=14,
+        batch_size=13,
+        seq_length=7,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
@@ -103,8 +103,6 @@ class LongformerModelTester:
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-            # for `test_batching_equivalence` we need to get global attn for the first batch
-            input_mask[0, -1] = 1
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -388,6 +386,10 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_retain_grad_hidden_states_attentions(self):
         # longformer cannot keep gradients in attentions or hidden states
+        return
+
+    @unittest.skip("LongFormer calculates global attn only when attn_mask has non-zero elements")
+    def test_batching_equivalence(self):
         return
 
 

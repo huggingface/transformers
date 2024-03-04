@@ -49,7 +49,7 @@ class ConditionalDetrModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=8,
         is_training=True,
         use_labels=True,
         hidden_size=32,
