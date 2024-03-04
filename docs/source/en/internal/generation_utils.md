@@ -377,3 +377,11 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] StaticCache
     - update
     - get_seq_length
+
+[[autodoc]] PagedAttentionCache
+    - update
+    - get_seq_length
+    - reorder_cache
+    - to_legacy_cache
+    - set_batch2seq_for_prompt_sharing
+    - get_entire_context_states
