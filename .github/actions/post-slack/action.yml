@@ -42,8 +42,26 @@ runs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "Result: ${{ inputs.status }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  "text": "Result: ${{ inputs.status }}"
                 }
+              },
+              {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*For more details:*"},
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check Commit results", "emoji": True},
+                    "url": f"${{ github.event.pull_request.html_url || github.event.head_commit.url }}",
+                },
+              },
+              {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "*For more details:*"},
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                    "url": f"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                },
               }
             ]
           }
