@@ -42,13 +42,13 @@ Nella versione `v3.x`:
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 per ottenere lo stesso nella versione `v4.x`:
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased", use_fast=False)
 ```
 
 #### 2. SentencePiece è stato rimosso dalle dipendenze richieste
@@ -112,17 +112,17 @@ Per ottenere lo stesso comportamento della versione `v3.x`, specifica l'argoment
 
 Nella versione `v3.x`:
 ```bash
-model = BertModel.from_pretrained("bert-base-cased")
+model = BertModel.from_pretrained("google-bert/bert-base-cased")
 outputs = model(**inputs)
 ```
 per ottenere lo stesso nella versione `v4.x`:
 ```bash
-model = BertModel.from_pretrained("bert-base-cased")
+model = BertModel.from_pretrained("google-bert/bert-base-cased")
 outputs = model(**inputs, return_dict=False)
 ```
 o
 ```bash
-model = BertModel.from_pretrained("bert-base-cased", return_dict=False)
+model = BertModel.from_pretrained("google-bert/bert-base-cased", return_dict=False)
 outputs = model(**inputs)
 ```
 
@@ -207,7 +207,7 @@ Ecco un esempio di conversione da `pytorch-pretrained-bert`
 
 ```python
 # Carichiamo il nostro modello
-model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
+model = BertForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
 
 # Se usavi questa riga in pytorch-pretrained-bert :
 loss = model(input_ids, labels=labels)
@@ -220,7 +220,7 @@ loss = outputs[0]
 loss, logits = outputs[:2]
 
 # Ed anche agli attention weight se configuri il modello per restituirli (e anche altri output, vedi le docstring e la documentazione)
-model = BertForSequenceClassification.from_pretrained(" bert-base-uncased", output_attentions=True)
+model = BertForSequenceClassification.from_pretrained(" google-bert/bert-base-uncased", output_attentions=True)
 outputs = model(input_ids, labels=labels)
 loss, logits, attentions = outputs
 ```
@@ -239,8 +239,8 @@ Ecco un esempio:
 
 ```python
 ### Carichiamo un modello e un tokenizer
-model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+model = BertForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
+tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 ### Facciamo fare alcune cose al nostro modello e tokenizer
 # Es: aggiungiamo nuovi token al vocabolario e agli embending del nostro modello

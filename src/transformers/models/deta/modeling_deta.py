@@ -17,13 +17,17 @@
 
 import copy
 import math
+import os
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.autograd import Function
+from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -31,6 +35,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
 )
@@ -38,12 +43,94 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
+from ...utils import is_accelerate_available, is_ninja_available, is_torchvision_available, logging, requires_backends
 from ...utils.backbone_utils import load_backbone
 from .configuration_deta import DetaConfig
 
 
 logger = logging.get_logger(__name__)
+
+MultiScaleDeformableAttention = None
+
+
+# Copied from models.deformable_detr.load_cuda_kernels
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    global MultiScaleDeformableAttention
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    src_files = [
+        root / filename
+        for filename in [
+            "vision.cpp",
+            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
+            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
+        ]
+    ]
+
+    load(
+        "MultiScaleDeformableAttention",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cflags=["-DWITH_CUDA=1"],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
+
+
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
+class MultiScaleDeformableAttentionFunction(Function):
+    @staticmethod
+    def forward(
+        context,
+        value,
+        value_spatial_shapes,
+        value_level_start_index,
+        sampling_locations,
+        attention_weights,
+        im2col_step,
+    ):
+        context.im2col_step = im2col_step
+        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            context.im2col_step,
+        )
+        context.save_for_backward(
+            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
+        )
+        return output
+
+    @staticmethod
+    @once_differentiable
+    def backward(context, grad_output):
+        (
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+        ) = context.saved_tensors
+        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            grad_output,
+            context.im2col_step,
+        )
+
+        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
 if is_accelerate_available():
@@ -490,18 +577,27 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->Deta
 class DetaMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
+    def __init__(self, config: DetaConfig, num_heads: int, n_points: int):
         super().__init__()
-        if embed_dim % num_heads != 0:
+
+        kernel_loaded = MultiScaleDeformableAttention is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
+        if config.d_model % num_heads != 0:
             raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {embed_dim} and {num_heads}"
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
             )
-        dim_per_head = embed_dim // num_heads
+        dim_per_head = config.d_model // num_heads
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
@@ -512,21 +608,24 @@ class DetaMultiscaleDeformableAttention(nn.Module):
 
         self.im2col_step = 64
 
-        self.d_model = embed_dim
-        self.n_levels = n_levels
+        self.d_model = config.d_model
+        self.n_levels = config.num_feature_levels
         self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * n_points)
-        self.value_proj = nn.Linear(embed_dim, embed_dim)
-        self.output_proj = nn.Linear(embed_dim, embed_dim)
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.value_proj = nn.Linear(config.d_model, config.d_model)
+        self.output_proj = nn.Linear(config.d_model, config.d_model)
+
+        self.disable_custom_kernels = config.disable_custom_kernels
 
         self._reset_parameters()
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / self.n_heads)
+        default_dtype = torch.get_default_dtype()
+        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -598,8 +697,24 @@ class DetaMultiscaleDeformableAttention(nn.Module):
             )
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-        # PyTorch implementation (for now)
-        output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+
+        if self.disable_custom_kernels:
+            # PyTorch implementation
+            output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+        else:
+            try:
+                # custom kernel
+                output = MultiScaleDeformableAttentionFunction.apply(
+                    value,
+                    spatial_shapes,
+                    level_start_index,
+                    sampling_locations,
+                    attention_weights,
+                    self.im2col_step,
+                )
+            except Exception:
+                # PyTorch implementation
+                output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -728,9 +843,8 @@ class DetaEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = DetaMultiscaleDeformableAttention(
-            embed_dim=self.embed_dim,
+            config,
             num_heads=config.encoder_attention_heads,
-            n_levels=config.num_feature_levels,
             n_points=config.encoder_n_points,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -829,9 +943,8 @@ class DetaDecoderLayer(nn.Module):
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
         self.encoder_attn = DetaMultiscaleDeformableAttention(
-            embed_dim=self.embed_dim,
+            config,
             num_heads=config.decoder_attention_heads,
-            n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1434,15 +1547,15 @@ class DetaModel(DetaPreTrainedModel):
             param.requires_grad_(True)
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_valid_ratio
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
         valid_height = torch.sum(mask[:, :, 0], 1)
         valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio_height = valid_height.to(dtype) / height
+        valid_ratio_width = valid_width.to(dtype) / width
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.get_proposal_pos_embed
@@ -2232,9 +2345,10 @@ class DetaLoss(nn.Module):
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # Check that we have initialized the distributed state
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

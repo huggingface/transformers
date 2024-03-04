@@ -207,7 +207,7 @@ class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": DinatModel, "image-classification": DinatForImageClassification}
+        {"image-feature-extraction": DinatModel, "image-classification": DinatForImageClassification}
         if is_torch_available()
         else {}
     )

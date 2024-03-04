@@ -16,12 +16,14 @@ from typing import Dict, Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
+    AqlmConfig,
     AwqConfig,
     BitsAndBytesConfig,
     GPTQConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
 )
+from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
@@ -33,6 +35,7 @@ AUTO_QUANTIZER_MAPPING = {
     "bitsandbytes_4bit": Bnb4BitHfQuantizer,
     "bitsandbytes_8bit": Bnb8BitHfQuantizer,
     "gptq": GptqHfQuantizer,
+    "aqlm": AqlmHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -40,6 +43,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
     "gptq": GPTQConfig,
+    "aqlm": AqlmConfig,
 }
 
 
@@ -129,10 +133,13 @@ class AutoHfQuantizer:
         """
         handles situations where both quantization_config from args and quantization_config from model config are present.
         """
-        warning_msg = (
-            "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
-            " already has a `quantization_config` attribute. The `quantization_config` from the model will be prevail."
-        )
+        if quantization_config_from_args is not None:
+            warning_msg = (
+                "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
+                " already has a `quantization_config` attribute. The `quantization_config` from the model will be used."
+            )
+        else:
+            warning_msg = ""
 
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -144,5 +151,7 @@ class AutoHfQuantizer:
                 setattr(quantization_config, attr, val)
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        warnings.warn(warning_msg)
+        if warning_msg != "":
+            warnings.warn(warning_msg)
+
         return quantization_config

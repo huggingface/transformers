@@ -74,6 +74,7 @@ FSDP_MIN_VERSION = "1.12.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
@@ -135,7 +136,7 @@ if _sklearn_available:
 _smdistributed_available = importlib.util.find_spec("smdistributed") is not None
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
-_sudachipy_available = _is_package_available("sudachipy")
+_sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
 _tensorflow_probability_available = _is_package_available("tensorflow_probability")
 _tensorflow_text_available = _is_package_available("tensorflow_text")
 _tf2onnx_available = _is_package_available("tf2onnx")
@@ -144,6 +145,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
+_mlx_available = _is_package_available("mlx")
 
 
 _torch_version = "N/A"
@@ -570,6 +572,10 @@ def is_apex_available():
     return _apex_available
 
 
+def is_aqlm_available():
+    return _aqlm_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -660,14 +666,6 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-def is_flash_attn_available():
-    logger.warning(
-        "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. "
-        "Please use `is_flash_attn_2_available` instead."
-    )
-    return is_flash_attn_2_available()
-
-
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -736,6 +734,7 @@ def is_tokenizers_available():
     return _tokenizers_available
 
 
+@lru_cache
 def is_vision_available():
     _pil_available = importlib.util.find_spec("PIL") is not None
     if _pil_available:
@@ -896,6 +895,19 @@ def is_sudachi_available():
     return _sudachipy_available
 
 
+def get_sudachi_version():
+    return _sudachipy_version
+
+
+def is_sudachi_projection_available():
+    if not is_sudachi_available():
+        return False
+
+    # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
+    # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
+    return version.parse(_sudachipy_version) >= version.parse("0.6.8")
+
+
 def is_jumanpp_available():
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
 
@@ -910,6 +922,10 @@ def is_jieba_available():
 
 def is_jinja_available():
     return _jinja_available
+
+
+def is_mlx_available():
+    return _mlx_available
 
 
 # docstyle-ignore

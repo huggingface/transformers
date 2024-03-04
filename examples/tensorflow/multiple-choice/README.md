@@ -36,7 +36,7 @@ README, but for more information you can see the 'Input Datasets' section of
 ### Example command
 ```bash
 python run_swag.py \
- --model_name_or_path distilbert-base-cased \
+ --model_name_or_path distilbert/distilbert-base-cased \
  --output_dir output \
  --do_eval \
  --do_train
