@@ -24,7 +24,7 @@ from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_AGENT_SYSTEM_PROMPT
+from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 import re
 
@@ -187,8 +187,8 @@ class FinalAnswerTool(Tool):
         pass
 
 
-def format_prompt(toolbox, prompt_template,function_template):
-    tool_descriptions = "\n".join([get_tool_description_with_args(tool, function_template) for tool in toolbox.values()])
+def format_prompt(toolbox, prompt_template,tool_description_template):
+    tool_descriptions = "\n".join([get_tool_description_with_args(tool, tool_description_template) for tool in toolbox.values()])
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     if "<<tool_names>>" in prompt:
         tool_names = [f"'{tool_name}'" for tool_name in toolbox.keys()]
@@ -207,8 +207,8 @@ class Agent:
     def __init__(
             self, 
             llm_callable,  
-            system_prompt=DEFAULT_AGENT_SYSTEM_PROMPT, # TODO write default agent prompt
-            function_template=None,
+            system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, # TODO write default agent prompt
+            tool_description_template=None,
             additional_args={},
             max_iterations=1,
             tool_parser=parse_json_tool_call,
@@ -218,7 +218,7 @@ class Agent:
         self.agent_name = self.__class__.__name__
         self.llm_callable = llm_callable
         self.prompt_template = system_prompt
-        self.function_template = function_template if function_template else self.default_function_template
+        self.tool_description_template = tool_description_template if tool_description_template else self.default_tool_description_template
         self.additional_args = additional_args
         self.max_iterations = max_iterations
         self.log = lambda x: print(to_text(x))
@@ -230,8 +230,8 @@ class Agent:
         else:
             self._toolbox = {tool.name: tool for tool in toolbox}
 
-        self.system_prompt = format_prompt(self.toolbox, self.prompt_template, function_template)
-        self.system_message = self.create_system_message(self.prompt_template, self.function_template)
+        self.system_prompt = format_prompt(self.toolbox, self.prompt_template, self.tool_description_template)
+        self.system_message = self.create_system_message()
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -239,14 +239,14 @@ class Agent:
         return self._toolbox
     
     @property
-    def default_function_template(self)-> str:
+    def default_tool_description_template(self)-> str:
         """
         This template is taking can desbribe a tool as it is expected by the model
         """
         logger.warning_once(
             "\nNo function template is defined for this tokenizer - using a default function template " #TODO change message
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.function_template` to an appropriate template. "
+            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return OPENAI_TOOL_DESCRIPTION_TEMPLATE
     
@@ -255,12 +255,12 @@ class Agent:
 
     def create_system_message(self):
         """
-        Create system message from 'prompt_template' and 'function_template' which defines
+        Create system message from 'prompt_template' and 'tool_description_template' which defines
         agent's behaviour and provides tools.
 
         Args:
             prompt_template (`str`): Prompt template for the system message.
-            function_template (`str`): Template for the tool description. 
+            tool_description_template (`str`): Template for the tool description. 
         """
         
         return {
@@ -339,26 +339,26 @@ class CodeAgent(Agent):
             self, 
             llm_callable, 
             system_prompt=DEFAULT_CODE_SYSTEM_PROMPT, 
-            function_template=None,
+            tool_description_template=None,
             **kwargs
         ):
         
         super().__init__(
             llm_callable, 
             system_prompt=system_prompt,
-            function_template=function_template if function_template else self.default_function_template,
+            tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             **kwargs
         )
     
     @property
-    def default_function_template(self)-> str:
+    def default_tool_description_template(self)-> str:
         """
         This template is taking can desbribe a tool as it is expected by the model
         """
         logger.warning_once(
             "\nNo function template is defined for this tokenizer - using a default function template "
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.function_template` to an appropriate template. "
+            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
     
@@ -429,7 +429,7 @@ class ReactAgent(Agent):
             self, 
             llm_callable, 
             system_prompt=DEFAULT_REACT_SYSTEM_PROMPT, 
-            function_template=None,
+            tool_description_template=None,
             max_iterations=5,
             **kwargs
         ):
@@ -437,7 +437,7 @@ class ReactAgent(Agent):
         super().__init__(
             llm_callable, 
             system_prompt=system_prompt,
-            function_template=function_template if function_template else self.default_function_template,
+            tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             max_iterations=max_iterations,
             **kwargs
         )
@@ -445,14 +445,14 @@ class ReactAgent(Agent):
         self._toolbox["final_answer"] = FinalAnswerTool()
 
     @property
-    def default_function_template(self)-> str:
+    def default_tool_description_template(self)-> str:
         """
         This template is taking can desbribe a tool as it is expected by the model
         """
         logger.warning_once(
             "\nNo function template is defined for this tokenizer - using a default function template "
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.function_template` to an appropriate template. "
+            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
     
