@@ -974,8 +974,7 @@ class GemmaModel(GemmaPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
 
         causal_mask = (
-            (self.causal_mask[None, None, :, :].to(dtype=dtype) * min_dtype)
-            .to(dtype=dtype, device=device)
+            (self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype)
             .expand(batch_size, 1, -1, -1)
         )
         if attention_mask is not None and attention_mask.dim() == 2:
