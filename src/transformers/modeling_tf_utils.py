@@ -785,7 +785,8 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
 def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
-    Loads a shard from a sharded checkpoint file. Handles the missing keys and unexpected keys.
+    Loads a shard from a sharded checkpoint file. Can be either H5 or Safetensors.
+    Handles missing keys and unexpected keys.
 
     Args:
         model (`keras.models.Model`): Model in which the weights are loaded
@@ -869,6 +870,61 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                 "If you tried to load a TF model from a sharded checkpoint, you should try converting the model "
                 "by loading it in pytorch and saving it localy. A convertion script should be realeased soon."
             )
+
+
+def load_tf_sharded_weights_from_safetensors(
+    model, shard_files, ignore_mismatched_sizes=False, strict=False, _prefix=None
+):
+    """
+    This is the same as `load_tf_weights_from_safetensors` but for a sharded TF-format safetensors checkpoint.
+    Detect missing and unexpected layers and load the TF weights from the shard file accordingly to their names and
+    shapes.
+
+    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+    loaded in the model.
+
+    Args:
+        model (`keras.models.Model`): The model in which to load the checkpoint.
+        shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
+        ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):
+            Whether or not to ignore the mismatch between the sizes
+        strict (`bool`, *optional*, defaults to `True`):
+            Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+
+    Returns:
+        Three lists, one for the missing layers, another one for the unexpected layers, and a last one for the
+        mismatched layers.
+    """
+
+    # Load the index
+    unexpected_keys = set()
+    all_missing_keys = []
+    mismatched_keys = set()
+
+    for shard_file in shard_files:
+        missing_layers, unexpected_layers, mismatched_layers = load_tf_weights_from_safetensors(
+            model,
+            shard_file,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            _prefix=_prefix,
+        )
+        all_missing_keys.append(set(missing_layers))
+        unexpected_keys.update(unexpected_layers)
+        mismatched_keys.update(mismatched_layers)
+        gc.collect()
+    missing_keys = set.intersection(*all_missing_keys)
+
+    if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
+        error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
+        if len(missing_keys) > 0:
+            str_missing_keys = ",".join([f'"{k}"' for k in missing_keys])
+            error_message += f"\nMissing key(s): {str_missing_keys}."
+        if len(unexpected_keys) > 0:
+            str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
+            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+        raise RuntimeError(error_message)
+
+    return missing_keys, unexpected_keys, mismatched_keys
 
 
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
@@ -2455,7 +2511,9 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             for shard_file, shard in shards.items():
                 if safe_serialization:
                     shard_state_dict = {strip_model_name_and_prefix(w.name): w.value() for w in shard}
-                    safe_save_file(shard_state_dict, os.path.join(save_directory, shard_file), metadata={"format": "tf"})
+                    safe_save_file(
+                        shard_state_dict, os.path.join(save_directory, shard_file), metadata={"format": "tf"}
+                    )
                 else:
                     with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
                         layers = []
@@ -2951,19 +3009,24 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
             if is_sharded:
-                breakpoint()
-                # TODO Matt: I think this path is for sharded TF weights only. We might need an extra
-                #            conditional for TF-format safetensors here
                 for file in resolved_archive_file:
                     os.path.isfile(file), f"Error retrieving files {file}"
-
-                missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights(
-                    model,
-                    resolved_archive_file,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
-                    _prefix=load_weight_prefix,
-                )
+                if filename == SAFE_WEIGHTS_INDEX_NAME:
+                    missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights_from_safetensors(
+                        model,
+                        resolved_archive_file,
+                        ignore_mismatched_sizes=ignore_mismatched_sizes,
+                        _prefix=load_weight_prefix,
+                    )
+                else:
+                    missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights(
+                        model,
+                        resolved_archive_file,
+                        ignore_mismatched_sizes=ignore_mismatched_sizes,
+                        _prefix=load_weight_prefix,
+                    )
             else:
+                # Handles both H5 and safetensors
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
                     model,
                     resolved_archive_file,
