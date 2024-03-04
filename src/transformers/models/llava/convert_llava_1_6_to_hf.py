@@ -148,7 +148,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         dim=0,
     )
 
-    device = "cuda:3"
+    device = "cuda:2"
     model.to(device)
 
     # prepare inputs

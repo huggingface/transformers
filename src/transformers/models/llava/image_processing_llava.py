@@ -42,7 +42,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -50,9 +50,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
-if is_torch_available():
-    pass
 
 
 def select_best_resolution(original_size: tuple, possible_resolutions: list) -> tuple:
@@ -371,9 +368,9 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return images
 
-    def resize_for_patching(self, image: np.array, target_resolution: tuple) -> np.array:
+    def _resize_for_patching(self, image: np.array, target_resolution: tuple, resample) -> np.array:
         """
-        Resize and pad an image to a target resolution while maintaining aspect ratio.
+        Resizes an image to a target resolution while maintaining aspect ratio.
 
         Args:
             image (np.array):
@@ -398,11 +395,15 @@ class LlavaImageProcessor(BaseImageProcessor):
             new_width = min(math.ceil(original_width * scale_h), target_width)
 
         # Resize the image
-        resized_image = resize(image, (new_height, new_width), resample=PILImageResampling.BICUBIC)
+        resized_image = resize(image, (new_height, new_width), resample=resample)
 
         return resized_image
 
-    def pad_for_patching(self, image: np.array, target_resolution: tuple) -> np.array:
+    def _pad_for_patching(self, image: np.array, target_resolution: tuple) -> np.array:
+        """
+        Pad an image to a target resolution while maintaining aspect ratio.
+        """
+
         original_height, original_width = get_image_size(image)
         target_height, target_width = target_resolution
 
@@ -447,8 +448,8 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         image_size = get_image_size(image)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
-        resized_image = self.resize_for_patching(image, best_resolution)
-        padded_image = self.pad_for_patching(resized_image, best_resolution)
+        resized_image = self._resize_for_patching(image, best_resolution, resample=self.resample)
+        padded_image = self._pad_for_patching(resized_image, best_resolution)
 
         patches = divide_to_patches(padded_image, patch_size=self.crop_size["height"])
 
@@ -458,7 +459,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         resized_original_image = resize(
             image,
             size=size,
-            resample=PILImageResampling.BICUBIC,
+            resample=self.resample,
         )
 
         image_patches = [resized_original_image] + patches
@@ -603,7 +604,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 image_patches = self.get_image_patches(
                     image,
                     image_grid_pinpoints,
-                    size=(self.size["shortest_edge"], self.size["shortest_edge"]),
+                    size=(size["shortest_edge"], size["shortest_edge"]),
                     input_data_format=input_data_format,
                 )
 
