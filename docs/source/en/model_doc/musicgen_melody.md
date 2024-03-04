@@ -88,8 +88,8 @@ You can then use the following snippet to generate music:
 ```python
 >>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 
->>> processor = AutoProcessor.from_pretrained("ylacombe/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody")
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
+>>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
 >>> inputs = processor(
 ...     audio=wav,
@@ -106,8 +106,8 @@ You can also pass the audio signal directly without using Demucs, although the q
 ```python
 >>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 
->>> processor = AutoProcessor.from_pretrained("ylacombe/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody")
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
+>>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
 >>> inputs = processor(
 ...     audio=sample["array"],
@@ -145,8 +145,8 @@ The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prom
 ```python
 >>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 
->>> processor = AutoProcessor.from_pretrained("ylacombe/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody")
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
+>>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
 >>> inputs = processor(
 ...     text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
@@ -165,8 +165,8 @@ You can also generate in batch:
 >>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
 >>> from datasets import load_dataset
 
->>> processor = AutoProcessor.from_pretrained("ylacombe/musicgen-melody")
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody")
+>>> processor = AutoProcessor.from_pretrained("facebook/musicgen-melody")
+>>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
 >>> # take the first quarter of the audio sample
 >>> sample_1 = sample["array"][: len(sample["array"]) // 4]
@@ -191,8 +191,8 @@ The inputs for unconditional (or 'null') generation can be obtained through the 
 ```python
 >>> from transformers import MusicgenMelodyForConditionalGeneration, MusicgenMelodyProcessor
 
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody")
->>> unconditional_inputs = MusicgenMelodyProcessor.from_pretrained("ylacombe/musicgen-melody").get_unconditional_inputs(num_samples=1)
+>>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
+>>> unconditional_inputs = MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody").get_unconditional_inputs(num_samples=1)
 
 >>> audio_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=256)
 ```
@@ -204,7 +204,7 @@ The default parameters that control the generation process, such as sampling, gu
 ```python
 >>> from transformers import MusicgenMelodyForConditionalGeneration
 
->>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody")
+>>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
 >>> # inspect the default generation config
 >>> model.generation_config
@@ -231,11 +231,11 @@ Thus, the MusicGen model can either be used as a standalone decoder model, corre
 >>> from transformers import AutoConfig, MusicgenMelodyForCausalLM, MusicgenMelodyForConditionalGeneration
 
 >>> # Option 1: get decoder config and pass to `.from_pretrained`
->>> decoder_config = AutoConfig.from_pretrained("ylacombe/musicgen-melody").decoder
->>> decoder = MusicgenMelodyForCausalLM.from_pretrained("ylacombe/musicgen-melody", **decoder_config)
+>>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-melody").decoder
+>>> decoder = MusicgenMelodyForCausalLM.from_pretrained("facebook/musicgen-melody", **decoder_config)
 
 >>> # Option 2: load the entire composite model, but only return the decoder
->>> decoder = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").decoder
+>>> decoder = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody").decoder
 ```
 
 Since the text encoder and audio encoder models are frozen during training, the MusicGen decoder [`MusicgenMelodyForCausalLM`] can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can be combined with the frozen text encoder and audio encoder to recover the composite [`MusicgenMelodyForConditionalGeneration`] model.

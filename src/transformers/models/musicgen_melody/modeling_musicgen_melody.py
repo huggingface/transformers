@@ -51,10 +51,10 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MusicgenMelodyConfig"
-_CHECKPOINT_FOR_DOC = "ylacombe/musicgen-melody"
+_CHECKPOINT_FOR_DOC = "facebook/musicgen-melody"
 
 MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ylacombe/musicgen-melody",
+    "facebook/musicgen-melody",
     # See all Musicgen Melody models at https://huggingface.co/models?filter=musicgen_melody
 ]
 

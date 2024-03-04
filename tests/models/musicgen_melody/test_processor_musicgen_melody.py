@@ -54,7 +54,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 class MusicgenMelodyProcessorTest(unittest.TestCase):
     def setUp(self):
         # Ignore copy
-        self.checkpoint = "ylacombe/musicgen-melody"
+        self.checkpoint = "facebook/musicgen-melody"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
