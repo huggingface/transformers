@@ -16,13 +16,15 @@
 
 import math
 import unittest
+from typing import Dict, List, Tuple
 from unittest.util import safe_repr
-from typing import Tuple, List, Dict
+
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 from transformers.models.mamba.modeling_mamba import MambaCache
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -346,8 +348,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             model = MambaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-
-
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -357,7 +357,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, MambaCache): # MODIFIED PART START
+                    if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
@@ -403,7 +403,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
 
 
 @require_torch

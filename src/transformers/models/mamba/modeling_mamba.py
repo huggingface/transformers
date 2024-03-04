@@ -56,7 +56,9 @@ else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
 selective_state_update = None
-is_fast_path_available = all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn))
+is_fast_path_available = all(
+    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+)
 
 _CHECKPOINT_FOR_DOC = "ArthurZ/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
