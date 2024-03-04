@@ -2327,13 +2327,14 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            batch_size, num_channels, height, width = pixel_values.shape
+            batch_size, num_images, num_channels, height, width = pixel_values.shape
+            # batch_size, num_images, height, width = pixel_values.shape
             # FIXME - is this needed?
-            # pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
+            pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
             # FIXME - check the old dimensions here - are there more dimensions than h,w? Why num_images than num_channels?
             # batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
             # pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-            pixel_values = pixel_values.view(batch_size * num_channels, *pixel_values.shape[2:])
+            pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
             # Remove padding images - padding images are full 0.
             nb_values_per_image = pixel_values.shape[1:].numel()
@@ -2350,7 +2351,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             else:
                 # Remove padding images from the mask
                 pixel_attention_mask = pixel_attention_mask.view(
-                    batch_size * num_channels, *pixel_attention_mask.shape[2:]
+                    batch_size * num_images, *pixel_attention_mask.shape[2:]
                 )
                 pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
 
