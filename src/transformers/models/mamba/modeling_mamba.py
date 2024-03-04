@@ -55,9 +55,8 @@ else:
     )
     causal_conv1d_update, causal_conv1d_fn = None, None
 
-is_fast_path_available = (
-    any((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update)) is not None
-)
+selective_state_update = None
+is_fast_path_available = all((selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn))
 
 _CHECKPOINT_FOR_DOC = "ArthurZ/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
@@ -125,7 +124,7 @@ class MambaMixer(nn.Module):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        if self.training and cache_params is None or False:  # Doesn't support outputting the states -> used for training
+        if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             contextualized_states = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
