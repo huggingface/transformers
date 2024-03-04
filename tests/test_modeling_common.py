@@ -3431,8 +3431,6 @@ class ModelTesterMixin:
                 if not has_sdpa and model_sdpa.config.model_type != "falcon":
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
-                torch.manual_seed(2)
-
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 8 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
                 fail_cases = []
