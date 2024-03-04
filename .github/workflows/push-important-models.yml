@@ -69,7 +69,7 @@ jobs:
           pytest -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post to Slack
         if: always()
-        uses: ./.github/workflows/send-slack.yml
+        uses: ./.github/actions/post-slack
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: FA2 tests - ${{ matrix.model-name }}
@@ -82,7 +82,7 @@ jobs:
           pytest -k "IntegrationTest" tests/${{ matrix.model-name }}/test_modeling_*
       - name: Post to Slack
         if: always()
-        uses: ./.github/workflows/send-slack.yml
+        uses: ./.github/actions/post-slack
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: Integration tests - ${{ matrix.model-name }}
