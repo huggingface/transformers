@@ -69,20 +69,6 @@ class QuantoHfQuantizer(HfQuantizer):
                     )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            # TODO: Discuss if we should do that for quanto. I think that we should probably not do that and let the user cast the torch_dtype by themselves.
-            # since in this case, quanto can also work on cpu.
-            # If a user have both a cpu and cuda and he wants to play with quanto on cpu, he will have a specify manually torch_dtype to torch.float32.
-            if torch.cuda.is_available():
-                torch_dtype = torch.float16
-                logger.info(
-                    "CUDA available. Assuming Quanto inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
-                )
-            else:
-                torch_dtype = torch.float32
-                logger.info(
-                    "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `torch_dtype` manually."
-                )
         return torch_dtype
 
     def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str, Any]) -> Dict[str, Any]:
