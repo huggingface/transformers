@@ -85,7 +85,7 @@ The `generate()` method can be used to generate text using GPT2 model.
 
 ## Using Flash Attention 2
 
-Flash Attention 2 is an faster, optimized version of the model.
+Flash Attention 2 is a faster, optimized version of the attention scores computation which relies on `cuda` kernels.
 
 ### Installation 
 
