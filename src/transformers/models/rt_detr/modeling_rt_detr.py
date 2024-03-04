@@ -339,7 +339,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     init_reference_points: Optional[Tuple[torch.FloatTensor]] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
-    enc_topk_logits: Optional[torch.FloatTensor] = None    
+    enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     dn_meta: Optional[Dict] = None

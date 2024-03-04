@@ -377,7 +377,11 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.decoder_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.decoder_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
+                [
+                    self.model_tester.decoder_attention_heads,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_queries,
+                ],
             )
 
             # cross attentions
