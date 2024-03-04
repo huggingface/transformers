@@ -1,7 +1,7 @@
 name: Send message to slack
 
 description: 'Send resuls on slack'
-author: 'Hugeging Face'
+author: 'Hugging Face'
 inputs:
   slack_channel:
     required: true
@@ -12,9 +12,11 @@ inputs:
   status:
     required: true
     type: string
+  slack_token:
+    required: true
+    type: string
 
 runs:
-  runs-on: "cpu"
   steps:
     - name: Post results Slack channel
       id: post-slack
@@ -39,10 +41,10 @@ runs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "Result: ${{ inputs.status == 'success' ? 🟢 : 🔴 }} ${{ inputs.status }} \n\n Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  "text": "Result: ${{ inputs.status == 'success' ? '🟢' : '🔴' }} ${{ inputs.status }} \n\n Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} \n\n Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                 }
               }
             ]
           }
       env:
-        SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+        SLACK_BOT_TOKEN: ${{ inputs.slack_token }}
