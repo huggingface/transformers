@@ -1461,7 +1461,9 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Push a model on `main`
         initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
 
-        initial_model = BertModel.from_pretrained(self.repo_name, token=self.token)
+        # Download the model that doesn't have safetensors
+        BertModel.from_pretrained(self.repo_name, token=self.token)
+
         for thread in threading.enumerate():
             if thread.name == "Thread-autoconversion":
                 thread.join(timeout=10)
@@ -1479,6 +1481,21 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
             self.assertTrue(bot_opened_pr)
             self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
+    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
+        spawn_conversion_mock.side_effect = HTTPError()
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
+        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch
