@@ -17,44 +17,22 @@ import torch
 from huggingface_hub import hf_hub_download
 
 from transformers import (
-    AddedToken,
     AutoConfig,
     AutoTokenizer,
-    CLIPImageProcessor,
     Idefics2Config,
+    AutoProcessor,
+    AutoModelForCausalLM,
     Idefics2ForConditionalGeneration,
-    LlavaProcessor,
 )
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/idefics2/convert_idefics2_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/idefics2-v1.5-7b-conv --old_state_dict_id liuhaotian/idefics2-v1.5-7b
-
-Example for creating the old state dict file with Python:
-
-    import torch
-    from idefics2.model.language_model.idefics2_llama import Idefics2LlamaForCausalLM
-
-    # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = Idefics2LlamaForCausalLM.from_pretrained("liuhaotian/idefics2-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
-
-    # load vision tower
-    model.get_vision_tower().load_model()
-
-    # Save state dict
-    torch.save(model.state_dict(), "tmp/hf_models/idefics2-v1.5-7b/model_state_dict.bin")
+    python transformers/src/transformers/models/idefics2/convert_idefics2_weights_to_hf.py --original_model_id HuggingFaceM4/idefics2 --output_hub_path org/idefics2
 """
 
+
 KEYS_TO_MODIFY_MAPPING = {
-    "model.vision_tower.": "",
-    "model.mm_projector": "multi_modal_projector",
-    "model": "model.model",
-    "vision_model.model": "vision_model",
-    "lm_head": "language_model.lm_head",
-    "model.model": "language_model.model",
-    "multi_modal_projector.0": "multi_modal_projector.linear_1",
-    "multi_modal_projector.2": "multi_modal_projector.linear_2",
+    "lm_head.weight": "lm_head.linear.weight",
 }
 
 
@@ -71,52 +49,22 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
-def convert_idefics2_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
-    torch.set_default_dtype(torch.float16)
-    text_config = AutoConfig.from_pretrained(text_model_id)
+def convert_idefics2_hub_to_hf(original_model_id, output_hub_path):
+    original_model = AutoModelForCausalLM.from_pretrained(original_model_id, trust_remote_code=True)
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
-
-    image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
-
-    processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-    config = Idefics2Config(text_config=text_config)
-    config.pad_token_id = 32001
-
-    with torch.device("meta"):
-        model = Idefics2ForConditionalGeneration(config)
-
-    # Pad to 64 for performance reasons
-    pad_shape = 64
-
-    state_dict_path = hf_hub_download(old_state_dict_id, "model_state_dict.bin")
-
-    state_dict = torch.load(state_dict_path, map_location="cpu")
+    state_dict = original_model.state_dict()
     state_dict = convert_state_dict_to_hf(state_dict)
+
+    config = AutoConfig.from_pretrained(original_model_id)
+
+    model = Idefics2ForConditionalGeneration(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
 
-    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    n = pre_expansion_embeddings.size()[0]
-    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    model.save_pretrained(output_hub_path)
+    # processor.save_pretrained(output_hub_path)
 
-    # We add an image token so we resize the model
-    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
-    model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
-        dim=0,
-    )
-    model.language_model.lm_head.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
-        dim=0,
-    )
-
-    model.push_to_hub(output_hub_path)
-    processor.push_to_hub(output_hub_path)
+    # model.push_to_hub(output_hub_path)
+    # processor.push_to_hub(output_hub_path)
 
 
 def main():
@@ -125,25 +73,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--text_model_id",
+        "--original_model_id",
         help="Hub location of the text model",
-    )
-    parser.add_argument(
-        "--vision_model_id",
-        help="Hub location of the vision model",
     )
     parser.add_argument(
         "--output_hub_path",
         help="Location on the hub of the converted model",
     )
-    parser.add_argument(
-        "--old_state_dict_id",
-        help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
-    )
     args = parser.parse_args()
-    convert_idefics2_llama_to_hf(
-        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
-    )
+    convert_idefics2_hub_to_hf(args.original_model_id, args.output_hub_path)
 
 
 if __name__ == "__main__":
