@@ -401,6 +401,14 @@ class GenerationConfig(PushToHubMixin):
     def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
+
+        Arg:
+            assistant_model (`PreTrainedModel`, *optional*):
+                The assistant model to be used for assisted generation. If set, the generation mode will be
+                assisted generation.
+
+        Returns:
+            `GenerationMode`: The generation mode triggered by the instance.
         """
         if self.constraints is not None or self.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
@@ -441,8 +449,12 @@ class GenerationConfig(PushToHubMixin):
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
         of parameterization that can be detected as incorrect from the configuration instance alone.
 
-        Note that some parameters are best validated at generate runtime, as they may depend on other inputs and/or the
-        model, such as parameters related to the generation length.
+        Note that some parameters not validated here are best validated at generate runtime, as they may depend on
+        other inputs and/or the model, such as parameters related to the generation length.
+
+        Arg:
+            is_init (`bool`, *optional*, defaults to `False`):
+                Whether the validation is performed during the initialization of the instance.
         """
 
         # Validation of individual attributes
