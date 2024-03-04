@@ -49,7 +49,7 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError(
                 f"`image_processor` has to be of type `CLIPImageProcessor` or `LlavaImageProcessor`, but is {type(image_processor)}"
             )
-        
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
