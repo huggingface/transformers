@@ -367,7 +367,7 @@ def shard_checkpoint(
         # check: https://github.com/huggingface/transformers/pull/24416 for more details
         if isinstance(weight, str):
             continue
-        elif weight.__class__.__name__ in ["QTensor"]:
+        elif weight.__class__.__name__ in ["QTensor", "QBitsTensor"]:
             # Okay if storage_id is not accurate. This is only useful for safetensors saving and it doesn't yet with quanto tensors
             # We will remove these conditions one when quanto is compatible with safetensors
             storage_id = id(weight)
