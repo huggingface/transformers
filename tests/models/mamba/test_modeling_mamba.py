@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import math
 import unittest
 from unittest.util import safe_repr
 
@@ -189,7 +190,7 @@ class MambaModelTester:
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], inference_params=outputs.inference_params)
+        outputs = model(input_ids[:, -1:], cache_params=outputs.cache_params)
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
@@ -277,7 +278,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
+        blacklist_non_batched_params = ["cache_params"]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
@@ -314,26 +315,29 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             for name, param in model.named_parameters():
-                if "A" in name:
+                if "dt_proj.bias" in name:
+                    dt = torch.exp(
+                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                        + math.log(config.time_step_min)
+                    ).clamp(min=config.time_step_floor)
+                    inv_dt = dt + torch.log(-torch.expm1(-dt))
                     if param.requires_grad:
-                        self.assertTrue(param.data.max().item() == 3.0)
-                        self.assertTrue(param.data.min().item() == -5.0)
-                elif "B" in name:
+                        self.assertTrue(param.data.max().item() <= inv_dt[1])
+                        self.assertTrue(param.data.min().item() >= inv_dt[0])
+                elif "A_log" in name:
+                    A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
+                    self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
 
-        # TODO handle initialization scheme!
-
-    @unittest.skip("Mamba does not use attention equivalent test should be `test_ssm_outputs`")
+    @unittest.skip("Mamba does not use attention")
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the attention outputs of Mamba are different from other models
         it has a shape `batch_size, seq_len, hidden_size`.
         """
-        pass
-
-    def test_ssm_outputs(self):
         pass
 
     @slow

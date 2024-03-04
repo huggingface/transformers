@@ -120,11 +120,11 @@ class MambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.intermediate_size))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
-    def cuda_kernels_forward(self, hidden_states: torch.Tensor, inference_params=None):
+    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params=None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        if self.training and inference_params is None:  # Doesn't support outputting the states -> used for training
+        if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             contextualized_states = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
@@ -146,19 +146,21 @@ class MambaMixer(nn.Module):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if inference_params is not None and inference_params.seqlen_offset > 0:
+            if cache_params is not None and cache_params.seqlen_offset > 0:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    inference_params.conv_states[self.layer_idx],
+                    cache_params.conv_states[self.layer_idx],
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
                 )
                 hidden_states = hidden_states.unsqueeze(-1)
             else:
-                inference_params.conv_states[self.layer_idx] = nn.functional.pad(
-                    hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                )
+                if cache_params is not None:
+                    conv_states = nn.functional.pad(
+                        hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
+                    )
+                    cache_params.conv_states[self.layer_idx].copy_(conv_states)
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
@@ -174,9 +176,9 @@ class MambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if inference_params is not None and inference_params.seqlen_offset > 0:
+            if cache_params is not None and cache_params.seqlen_offset > 0:
                 scan_outputs = selective_state_update(
-                    inference_params.ssm_states[self.layer_idx],
+                    cache_params.ssm_states[self.layer_idx],
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -201,34 +203,38 @@ class MambaMixer(nn.Module):
                     return_last_state=True,
                 )
                 if ssm_state is not None:
-                    inference_params.ssm_states[self.layer_idx] = ssm_state
+                    cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
-        # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
+            # 4. Final linear projection
+            contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, inference_params=None):
-        _, seq_len, _ = input_states.shape
+    def slow_forward(self, input_states, cache_params=None):
+        batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2 * intermediate_size, seq_len]
         hidden_states, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
-        if inference_params.seqlen_offset > 0:
-            conv_state = inference_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
-            conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
-            conv_state[:, :, -1] = hidden_states[:, :, 0]
-            inference_params.conv_states[self.layer_idx].copy_(conv_state)
+        if cache_params is not None:
+            ssm_state = cache_params.ssm_states[self.layer_idx]
+            if cache_params.seqlen_offset > 0:
+                conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
+                conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
+                conv_state[:, :, -1] = hidden_states[:, :, 0]
+                cache_params.conv_states[self.layer_idx].copy_(conv_state)
 
-            bias = getattr(self.conv1d, "bias", 0.0)
-            hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias).to(dtype)
-            hidden_states = hidden_states.unsqueeze(-1)                                 # [batch, intermediate_size, 1] : decoding
+                bias = getattr(self.conv1d, "bias", 0.0)
+                hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias).to(dtype)
+                hidden_states = hidden_states.unsqueeze(-1)                             # [batch, intermediate_size, 1] : decoding
+            else:
+                conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
+                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
         else:
-            inference_params.conv_states[self.layer_idx] = nn.functional.pad(
-                hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
-            ).to(inference_params.dtype)
+            ssm_state = torch.zeros((batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype)
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
 
         # 3. State Space Model sequence transformation
@@ -247,7 +253,6 @@ class MambaMixer(nn.Module):
         deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        ssm_state = inference_params.ssm_states[self.layer_idx]
         scan_outputs = []
         for i in range(seq_len):
             ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediade_size, ssm_state]
@@ -257,16 +262,18 @@ class MambaMixer(nn.Module):
         scan_output = scan_output + (hidden_states * self.D[None, :, None])
         scan_output = (scan_output * self.act(gate))
 
-        inference_params.ssm_states[self.layer_idx].copy_(ssm_state)
+        if cache_params is not None:
+            cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))             # [batch, seq_len, hidden_size]
         return contextualized_states
     # fmt: on
 
-    def forward(self, hidden_states, inference_params=None):
+    def forward(self, hidden_states, cache_params=None):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, inference_params)
-        return self.slow_forward(hidden_states, inference_params)
+            return self.cuda_kernels_forward(hidden_states, cache_params)
+        return self.slow_forward(hidden_states, cache_params)
 
 
 class MambaCache:
@@ -313,13 +320,13 @@ class MambaBlock(nn.Module):
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = MambaMixer(config, layer_idx=layer_idx)
 
-    def forward(self, hidden_states, inference_params=None):
+    def forward(self, hidden_states, cache_params=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-        if self.residual_in_fp32 or True:
+        if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(hidden_states, inference_params=inference_params)
+        hidden_states = self.mixer(hidden_states, cache_params=cache_params)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -391,7 +398,7 @@ class MambaOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        inference_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+        cache_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
 
@@ -404,7 +411,7 @@ class MambaOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    inference_params: Optional[List[torch.FloatTensor]] = None
+    cache_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -418,7 +425,7 @@ class MambaCausalLMOutput(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        inference_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+        cache_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -430,7 +437,7 @@ class MambaCausalLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    inference_params: Optional[List[torch.FloatTensor]] = None
+    cache_params: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -455,7 +462,7 @@ MAMBA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            If `inference_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
+            If `cache_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -466,11 +473,11 @@ MAMBA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        inference_params (`MambaCache`, *optional*):
+        cache_params (`MambaCache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
-            If set to `True`, the `inference_params` is returned and can be used to quickly generate the next logits.
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -511,7 +518,7 @@ class MambaModel(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
-        inference_params: Optional[List[torch.FloatTensor]] = None,
+        cache_params: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -531,33 +538,28 @@ class MambaModel(MambaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if inference_params is None:
-            inference_params = MambaCache(
-                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
-
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`"
-                )
                 use_cache = False
+
+        if cache_params is None and use_cache:
+            cache_params = MambaCache(
+                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    mixer_block.__call__, hidden_states, inference_params
-                )
+                hidden_states = self._gradient_checkpointing_func(mixer_block.__call__, hidden_states, cache_params)
             else:
-                hidden_states = mixer_block(hidden_states, inference_params=inference_params)
+                hidden_states = mixer_block(hidden_states, cache_params=cache_params)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         if use_cache:
-            inference_params.seqlen_offset += inputs_embeds.shape[1]
+            cache_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.norm_f(hidden_states)
 
@@ -565,11 +567,11 @@ class MambaModel(MambaPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, inference_params, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
 
         return MambaOutput(
             last_hidden_state=hidden_states,
-            inference_params=inference_params if use_cache else None,
+            cache_params=cache_params if use_cache else None,
             hidden_states=all_hidden_states,
         )
 
@@ -606,22 +608,22 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def _update_model_kwargs_for_generation(
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
-        model_kwargs["inference_params"] = outputs["inference_params"]
+        model_kwargs["cache_params"] = outputs["cache_params"]
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, inference_params=None, inputs_embeds=None, attention_mask=None, **kwargs
+        self, input_ids, cache_params=None, inputs_embeds=None, attention_mask=None, **kwargs
     ):
         # only last token for inputs_ids if the state is passed along.
-        if inference_params is not None:
+        if cache_params is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        if inputs_embeds is not None and inference_params is None:
+        if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs["inference_params"] = inference_params
+        model_inputs["cache_params"] = cache_params
         return model_inputs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)
@@ -634,7 +636,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        inference_params: Optional[torch.FloatTensor] = None,
+        cache_params: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -650,7 +652,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
 
         mamba_outputs = self.backbone(
             input_ids,
-            inference_params=inference_params,
+            cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -677,6 +679,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return MambaCausalLMOutput(
             loss=loss,
             logits=logits,
-            inference_params=mamba_outputs.inference_params,
+            cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
         )
