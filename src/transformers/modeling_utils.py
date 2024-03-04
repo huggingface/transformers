@@ -2267,7 +2267,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         quantization_serializable = (
             hf_quantizer is not None
             and isinstance(hf_quantizer, HfQuantizer)
-            and hf_quantizer.is_serializable(safe_serialization=safe_serialization)
+            and (hf_quantizer.is_safe_serializable if safe_serialization else hf_quantizer.is_serializable)
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:

@@ -176,7 +176,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             # 4bit loading. Collecting components for restoring quantized weight
             # This can be expanded to make a universal call for any quantized weight loading
 
-            if not self.is_serializable():
+            if not self.is_serializable:
                 raise ValueError(
                     "Detected int4 weights but the version of bitsandbytes is not compatible with int4 serialization. "
                     "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
@@ -290,10 +290,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_after_weight_loading with 8bit->4bit
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_4bit = True
-        model.is_4bit_serializable = self.is_serializable()
+        model.is_4bit_serializable = self.is_serializable
         return model
 
-    def is_serializable(self, **kwargs):
+    @property
+    def is_serializable(self):
         _is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
 
         if not _is_4bit_serializable:

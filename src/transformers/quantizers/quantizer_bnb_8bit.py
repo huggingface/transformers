@@ -184,7 +184,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
 
         new_value = param_value.to("cpu")
-        if self.pre_quantized and not self.is_serializable():
+        if self.pre_quantized and not self.is_serializable:
             raise ValueError(
                 "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
@@ -206,7 +206,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True
-        model.is_8bit_serializable = self.is_serializable()
+        model.is_8bit_serializable = self.is_serializable
         return model
 
     def _process_model_before_weight_loading(
@@ -250,7 +250,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def is_serializable(self, **kwargs):
+    @property
+    def is_serializable(self):
         _bnb_supports_8bit_serialization = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
             "0.37.2"
         )
