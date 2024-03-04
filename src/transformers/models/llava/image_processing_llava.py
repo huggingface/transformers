@@ -427,7 +427,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         return padded_image
 
     def get_image_patches(
-        self, image: np.array, grid_pinpoints, size: tuple, patch_size, resample, input_data_format
+        self, image: np.array, grid_pinpoints, size: tuple, patch_size, resample, data_format, input_data_format
     ) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -443,6 +443,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 Size of the patches to divide the image into.
             resample (`PILImageResampling`):
                 Resampling filter to use if resizing the image.
+            data_format (`ChannelDimension` or `str`):
+                The channel dimension format for the output image.
             input_data_format (`ChannelDimension` or `str`):
                 The channel dimension format of the input image.
 
@@ -464,12 +466,17 @@ class LlavaImageProcessor(BaseImageProcessor):
         patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
 
         # make sure that all patches use the input data format
-        patches = [to_channel_dimension_format(patch, channel_dim=input_data_format) for patch in patches]
+        patches = [
+            to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
+            for patch in patches
+        ]
 
         resized_original_image = resize(
             image,
             size=size,
             resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
         )
 
         image_patches = [resized_original_image] + patches
@@ -611,12 +618,14 @@ class LlavaImageProcessor(BaseImageProcessor):
         for image in images:
             if aspect_ratio_setting == "anyres":
                 # convert image into a list of patches
+                # we intentially use the same data format as the input data format
                 image_patches = self.get_image_patches(
                     image,
                     image_grid_pinpoints,
                     size=(size["shortest_edge"], size["shortest_edge"]),
                     patch_size=crop_size["height"],
                     resample=resample,
+                    data_format=input_data_format,
                     input_data_format=input_data_format,
                 )
 
