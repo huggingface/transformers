@@ -50,22 +50,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/acc
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
 
-# Add bitsandbytes for mixed int8 testing
-RUN python3 -m pip install --no-cache-dir bitsandbytes
-
-# Add auto-gptq for gtpq quantization testing
-RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
-
-# Add einops for additional model testing
-RUN python3 -m pip install --no-cache-dir einops
-
-# Add aqlm for quantization testing
-RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.1
-
-# Add autoawq for quantization testing
-RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.0/autoawq-0.2.0+cu118-cp38-cp38-linux_x86_64.whl
-
-# For bettertransformer + gptq
+# For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
