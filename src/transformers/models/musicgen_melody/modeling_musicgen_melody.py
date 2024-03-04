@@ -1713,6 +1713,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         >>> logits = model(**inputs, decoder_input_ids=decoder_input_ids).logits
         >>> logits.shape  # (bsz * num_codebooks, encoder_len + tgt_len, vocab_size)
+        torch.Size([8, 249, 2048])
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
