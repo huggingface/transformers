@@ -29,13 +29,13 @@ runs:
         # For posting a rich message using Block Kit
         payload: |
           {
-            "text": "Slow integration tests on",
+            "text": ${{ inputs.title }},
             "blocks": [
               {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": ${{ inputs.title }}
+                    "text": "${{ inputs.title }}"
                 }
               },
               {
