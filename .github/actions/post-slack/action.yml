@@ -29,43 +29,23 @@ runs:
         # For posting a rich message using Block Kit
         payload: |
           {
-            "text": "Slow integration tests on ${{ toJson(inputs.title) }}",
+            "text": """Slow integration tests on ${{ toJson(inputs.title) }}""",
             "blocks": [
               {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "🤗 Results of the ${{ toJSON(inputs.title) }} tests."
+                    "text": """🤗 Results of the ${{ toJSON(inputs.title) }} tests."""
                 }
               },
               {
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "Result: ${{ inputs.status }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  "text": """Result: ${{ inputs.status }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"""
                 }
               }
             ]
           }
       env:
         SLACK_BOT_TOKEN: ${{ inputs.slack_token }}
-
-# {
-#     "text": "Slow integration tests on "FA2 tests - models/llama"",
-#     "blocks": [
-#       {
-#         "type": "header",
-#         "text": {
-#             "type": "plain_text",
-#             "text": "🤗 Results of the "FA2 tests - models/llama" tests."
-#         }
-#       },
-#       {
-#         "type": "section",
-#         "text": {
-#           "type": "mrkdwn",
-#           "text": "Result: success Commit: https://github.com/huggingface/transformers/commit/510ac070f7a74d93e0cd34233e59d7d60dbd39a0 Action URL: https://github.com/huggingface/transformers/actions/runs/8136052993"
-#         }
-#       }
-#     ]
-#   }
