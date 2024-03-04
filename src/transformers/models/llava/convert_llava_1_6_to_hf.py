@@ -166,7 +166,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # verify inputs
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
-        # replace -200 by 32000 (ask Arthur)
+        # replace -200 by 32000 (since we use token ID = 32000 for the image token)
         original_input_ids[original_input_ids == -200] = 32000
         print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
 

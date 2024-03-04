@@ -366,7 +366,9 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return images
 
-    def _resize_for_patching(self, image: np.array, target_resolution: tuple, resample, input_data_format) -> np.array:
+    def _resize_for_patching(
+        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+    ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
 
@@ -401,7 +403,9 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return resized_image
 
-    def _pad_for_patching(self, image: np.array, target_resolution: tuple, input_data_format) -> np.array:
+    def _pad_for_patching(
+        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+    ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
@@ -427,7 +431,14 @@ class LlavaImageProcessor(BaseImageProcessor):
         return padded_image
 
     def get_image_patches(
-        self, image: np.array, grid_pinpoints, size: tuple, patch_size, resample, data_format, input_data_format
+        self,
+        image: np.array,
+        grid_pinpoints,
+        size: tuple,
+        patch_size: int,
+        resample: PILImageResampling,
+        data_format: ChannelDimension,
+        input_data_format: ChannelDimension,
     ) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
