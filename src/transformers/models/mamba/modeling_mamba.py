@@ -91,7 +91,7 @@ class MambaMixer(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.time_step_rank = config.time_step_rank
         self.layer_idx = layer_idx
-
+        self.use_conv_bias = config.use_conv_bias
         self.conv1d = nn.Conv1d(
             in_channels=self.intermediate_size,
             out_channels=self.intermediate_size,
@@ -119,20 +119,21 @@ class MambaMixer(nn.Module):
         self.A_log = nn.Parameter(torch.log(A))
         self.D = nn.Parameter(torch.ones(self.intermediate_size))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.use_bias = config.use_bias
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params=None):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
+        if self.training and cache_params is None or False:  # Doesn't support outputting the states -> used for training
             contextualized_states = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
-                self.conv1d.bias,
+                self.conv1d.bias if self.use_conv_bias else None,
                 self.x_proj.weight,
                 self.dt_proj.weight,
                 self.out_proj.weight,
-                self.out_proj.bias,
+                self.out_proj.bias.float() if self.use_bias else None,
                 -torch.exp(self.A_log.float()),
                 None,  # input-dependent B
                 None,  # input-dependent C
@@ -202,7 +203,7 @@ class MambaMixer(nn.Module):
                     delta_softplus=True,
                     return_last_state=True,
                 )
-                if ssm_state is not None:
+                if ssm_state is not None and cache_params is not None:
                     cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
             # 4. Final linear projection
@@ -225,10 +226,10 @@ class MambaMixer(nn.Module):
                 conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
                 conv_state[:, :, -1] = hidden_states[:, :, 0]
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
-
-                bias = getattr(self.conv1d, "bias", 0.0)
-                hidden_states = self.act(torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1) + bias).to(dtype)
-                hidden_states = hidden_states.unsqueeze(-1)                             # [batch, intermediate_size, 1] : decoding
+                hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
+                if self.use_conv_bias:
+                    hidden_states += self.conv1d.bias
+                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)        # [batch, intermediate_size, 1] : decoding
             else:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
@@ -538,9 +539,8 @@ class MambaModel(MambaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                use_cache = False
+        if self.gradient_checkpointing and self.training and use_cache:
+            use_cache = False
 
         if cache_params is None and use_cache:
             cache_params = MambaCache(
