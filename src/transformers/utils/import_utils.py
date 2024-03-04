@@ -145,6 +145,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
+_mlx_available = _is_package_available("mlx")
 
 
 _torch_version = "N/A"
@@ -921,6 +922,10 @@ def is_jieba_available():
 
 def is_jinja_available():
     return _jinja_available
+
+
+def is_mlx_available():
+    return _mlx_available
 
 
 # docstyle-ignore
