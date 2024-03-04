@@ -41,7 +41,13 @@ from transformers.testing_utils import (  # noqa: F401
     require_torch,
     slow,
 )
-from transformers.utils import SAFE_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, TF2_WEIGHTS_NAME, logging
+from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    TF2_WEIGHTS_INDEX_NAME,
+    TF2_WEIGHTS_NAME,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -445,6 +451,22 @@ class TFModelUtilsTest(unittest.TestCase):
             for p1, p2 in zip(model.weights, new_model.weights):
                 self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    @require_safetensors
+    def test_safetensors_sharded_save_and_load(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="150kB")
+            # No tf_model.h5 file, only a model.safetensors
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
     @is_pt_tf_cross_test
     def test_safetensors_save_and_load_pt_to_tf(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -512,9 +534,8 @@ class TFModelUtilsTest(unittest.TestCase):
 
     @require_safetensors
     def test_safetensors_tf_from_sharded_h5_with_sharded_safetensors_hub(self):
-        # This should not raise even if there are two types of sharded weights
-        # This should discard the safetensors weights in favor of the .h5 sharded weights
-        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded")
+        # Confirm that we can correctly load the safetensors weights from a sharded hub repo even when TF weights present
+        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded", use_safetensors=True)
 
     @require_safetensors
     def test_safetensors_load_from_local(self):
