@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 import h5py
 import numpy as np
 import tensorflow as tf
-from huggingface_hub import Repository, list_repo_files
 from packaging.version import parse
 
 from . import DataCollatorWithPadding, DefaultDataCollator
@@ -1356,55 +1355,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         with open(extra_data_path, "wb") as f:
             pickle.dump(extra_data, f)
 
-    def load_repo_checkpoint(self, repo_path_or_name):
-        """
-        Loads a saved checkpoint (model weights and optimizer state) from a repo. Returns the current epoch count when
-        the checkpoint was made.
-
-        Args:
-            repo_path_or_name (`str`):
-                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
-                the repository will have the name of that local folder).
-
-        Returns:
-            `dict`: A dictionary of extra metadata from the checkpoint, most commonly an "epoch" count.
-        """
-        if getattr(self, "optimizer", None) is None:
-            raise RuntimeError(
-                "Checkpoint loading failed as no optimizer is attached to the model. "
-                "This is most likely caused by the model not being compiled."
-            )
-        if os.path.isdir(repo_path_or_name):
-            local_dir = repo_path_or_name
-        else:
-            # If this isn't a local path, check that the remote repo exists and has a checkpoint in it
-            repo_files = list_repo_files(repo_path_or_name)
-            for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
-                if file not in repo_files:
-                    raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
-            repo = Repository(repo_path_or_name.split("/")[-1], clone_from=repo_path_or_name)
-            local_dir = repo.local_dir
-
-        # Now make sure the repo actually has a checkpoint in it.
-        checkpoint_dir = os.path.join(local_dir, "checkpoint")
-        weights_file = os.path.join(checkpoint_dir, "weights.h5")
-        if not os.path.isfile(weights_file):
-            raise FileNotFoundError(f"Could not find checkpoint file weights.h5 in repo {repo_path_or_name}!")
-        extra_data_file = os.path.join(checkpoint_dir, "extra_data.pickle")
-        if not os.path.isfile(extra_data_file):
-            raise FileNotFoundError(f"Could not find checkpoint file extra_data.pickle in repo {repo_path_or_name}!")
-
-        # Assuming the repo is real and we got a checkpoint, load the weights and the optimizer state into the model.
-        # The optimizer state includes the iteration count, so learning rate schedules should resume as normal too.
-        self.load_weights(weights_file)
-        with open(extra_data_file, "rb") as f:
-            extra_data = pickle.load(f)
-        self.optimizer.set_weights(extra_data["optimizer_state"])
-
-        # Finally, return the epoch number from the checkpoint. This isn't a property of the model, so we can't
-        # set it directly, but the user can pass it to fit().
-        return {"epoch": extra_data["epoch"]}
-
     def prepare_tf_dataset(
         self,
         dataset: "datasets.Dataset",  # noqa:F821
@@ -2543,8 +2493,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch state_dict save file* (e.g, `./pt_model/pytorch_model.bin`). In this
@@ -2642,11 +2590,11 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         >>> from transformers import BertConfig, TFBertModel
 
         >>> # Download model and configuration from huggingface.co and cache.
-        >>> model = TFBertModel.from_pretrained("bert-base-uncased")
+        >>> model = TFBertModel.from_pretrained("google-bert/bert-base-uncased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
         >>> model = TFBertModel.from_pretrained("./test/saved_model/")
         >>> # Update configuration during loading.
-        >>> model = TFBertModel.from_pretrained("bert-base-uncased", output_attentions=True)
+        >>> model = TFBertModel.from_pretrained("google-bert/bert-base-uncased", output_attentions=True)
         >>> assert model.config.output_attentions == True
         >>> # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
         >>> config = BertConfig.from_json_file("./pt_model/my_pt_model_config.json")
@@ -3125,7 +3073,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         ```python
         from transformers import TFAutoModel
 
-        model = TFAutoModel.from_pretrained("bert-base-cased")
+        model = TFAutoModel.from_pretrained("google-bert/bert-base-cased")
 
         # Push the model to your namespace with the name "my-finetuned-bert".
         model.push_to_hub("my-finetuned-bert")

@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [OPUS Books](https://huggingface.co/datasets/opus_books) データセットの英語-フランス語サブセットの [T5](https://huggingface.co/t5-small) を微調整して、英語のテキストを次の形式に翻訳します。フランス語。
+1. [OPUS Books](https://huggingface.co/datasets/opus_books) データセットの英語-フランス語サブセットの [T5](https://huggingface.co/google-t5/t5-small) を微調整して、英語のテキストを次の形式に翻訳します。フランス語。
 2. 微調整されたモデルを推論に使用します。
 
 <Tip>
@@ -88,7 +88,7 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 

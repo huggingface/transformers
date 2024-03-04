@@ -279,7 +279,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):
-        model = OpenAIGPTLMHeadModel.from_pretrained("openai-gpt")
+        model = OpenAIGPTLMHeadModel.from_pretrained("openai-community/openai-gpt")
         model.to(torch_device)
         input_ids = torch.tensor([[481, 4735, 544]], dtype=torch.long, device=torch_device)  # the president is
         expected_output_ids = [

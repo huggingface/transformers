@@ -22,7 +22,7 @@ use a sparse version of the attention matrix to speed up training.
 
 ## LSH attention
 
-[Reformer](#reformer) uses LSH attention. In the softmax(QK^t), only the biggest elements (in the softmax
+[Reformer](model_doc/reformer) uses LSH attention. In the softmax(QK^t), only the biggest elements (in the softmax
 dimension) of the matrix QK^t are going to give useful contributions. So for each query q in Q, we can consider only
 the keys k in K that are close to q. A hash function is used to determine if q and k are close. The attention mask is
 modified to mask the current token (except at the first position), because it will give a query and a key equal (so
@@ -31,7 +31,7 @@ very similar to each other). Since the hash can be a bit random, several hash fu
 
 ## Local attention
 
-[Longformer](#longformer) uses local attention: often, the local context (e.g., what are the two tokens to the
+[Longformer](model_doc/longformer) uses local attention: often, the local context (e.g., what are the two tokens to the
 left and right?) is enough to take action for a given token. Also, by stacking attention layers that have a small
 window, the last layer will have a receptive field of more than just the tokens in the window, allowing them to build a
 representation of the whole sentence.
@@ -51,7 +51,7 @@ length.
 
 ### Axial positional encodings
 
-[Reformer](#reformer) uses axial positional encodings: in traditional transformer models, the positional encoding
+[Reformer](model_doc/reformer) uses axial positional encodings: in traditional transformer models, the positional encoding
 E is a matrix of size \\(l\\) by \\(d\\), \\(l\\) being the sequence length and \\(d\\) the dimension of the
 hidden state. If you have very long texts, this matrix can be huge and take way too much space on the GPU. To alleviate
 that, axial positional encodings consist of factorizing that big matrix E in two smaller matrices E1 and E2, with

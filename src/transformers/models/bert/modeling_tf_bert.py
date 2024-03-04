@@ -67,7 +67,7 @@ from .configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
 
 # TokenClassification docstring
@@ -90,19 +90,19 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bert-base-uncased",
-    "bert-large-uncased",
-    "bert-base-cased",
-    "bert-large-cased",
-    "bert-base-multilingual-uncased",
-    "bert-base-multilingual-cased",
-    "bert-base-chinese",
-    "bert-base-german-cased",
-    "bert-large-uncased-whole-word-masking",
-    "bert-large-cased-whole-word-masking",
-    "bert-large-uncased-whole-word-masking-finetuned-squad",
-    "bert-large-cased-whole-word-masking-finetuned-squad",
-    "bert-base-cased-finetuned-mrpc",
+    "google-bert/bert-base-uncased",
+    "google-bert/bert-large-uncased",
+    "google-bert/bert-base-cased",
+    "google-bert/bert-large-cased",
+    "google-bert/bert-base-multilingual-uncased",
+    "google-bert/bert-base-multilingual-cased",
+    "google-bert/bert-base-chinese",
+    "google-bert/bert-base-german-cased",
+    "google-bert/bert-large-uncased-whole-word-masking",
+    "google-bert/bert-large-cased-whole-word-masking",
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad",
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
+    "google-bert/bert-base-cased-finetuned-mrpc",
     "cl-tohoku/bert-base-japanese",
     "cl-tohoku/bert-base-japanese-whole-word-masking",
     "cl-tohoku/bert-base-japanese-char",
@@ -1327,8 +1327,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFBertForPreTraining
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        >>> model = TFBertForPreTraining.from_pretrained("google-bert/bert-base-uncased")
         >>> input_ids = tokenizer("Hello, my dog is cute", add_special_tokens=True, return_tensors="tf")
         >>> # Batch size 1
 
@@ -1657,8 +1657,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFBertForNextSentencePrediction
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = TFBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        >>> model = TFBertForNextSentencePrediction.from_pretrained("google-bert/bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."

@@ -682,7 +682,7 @@ model.save_pretrained("/path/to/converted/checkpoint/folder")
 **7. Implementieren Sie den Vorwärtspass**
 
 Nachdem es Ihnen gelungen ist, die trainierten Gewichte korrekt in die 🤗 Transformers-Implementierung zu laden, sollten Sie nun dafür sorgen
-sicherstellen, dass der Forward Pass korrekt implementiert ist. In [Machen Sie sich mit dem ursprünglichen Repository vertraut](#34-run-a-pretrained-checkpoint-using-the-original-repository) haben Sie bereits ein Skript erstellt, das einen Forward Pass
+sicherstellen, dass der Forward Pass korrekt implementiert ist. In [Machen Sie sich mit dem ursprünglichen Repository vertraut](#3-4-führen-sie-einen-pre-training-checkpoint-mit-dem-original-repository-durch) haben Sie bereits ein Skript erstellt, das einen Forward Pass
 Durchlauf des Modells unter Verwendung des Original-Repositorys durchführt. Jetzt sollten Sie ein analoges Skript schreiben, das die 🤗 Transformers
 Implementierung anstelle der Originalimplementierung verwenden. Es sollte wie folgt aussehen:
 

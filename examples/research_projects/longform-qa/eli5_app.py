@@ -36,7 +36,7 @@ def load_models():
         _ = s2s_model.eval()
     else:
         s2s_tokenizer, s2s_model = make_qa_s2s_model(
-            model_name="t5-small", from_file="seq2seq_models/eli5_t5_model_1024_4.pth", device="cuda:0"
+            model_name="google-t5/t5-small", from_file="seq2seq_models/eli5_t5_model_1024_4.pth", device="cuda:0"
         )
     return (qar_tokenizer, qar_model, s2s_tokenizer, s2s_model)
 

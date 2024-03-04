@@ -39,11 +39,11 @@ from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
+_CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "transfo-xl-wt103",
+    "transfo-xl/transfo-xl-wt103",
     # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
 ]
 

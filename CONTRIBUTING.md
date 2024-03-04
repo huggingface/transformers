@@ -102,7 +102,7 @@ We have added [templates](https://github.com/huggingface/transformers/tree/main/
 
 ## Do you want to implement a new model?
 
-New models are constantly released and if you want to implement a new model, please provide the following information
+New models are constantly released and if you want to implement a new model, please provide the following information:
 
 * A short description of the model and a link to the paper.
 * Link to the implementation if it is open-sourced.
@@ -129,7 +129,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -305,7 +305,7 @@ the [tests](https://github.com/huggingface/transformers/tree/main/tests) folder 
 [examples](https://github.com/huggingface/transformers/tree/main/examples) folder.
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
-repository, specify a *path to a subfolder or a test file* to run the test.
+repository, specify a *path to a subfolder or a test file* to run the test:
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
@@ -377,7 +377,7 @@ One way to run the `make` command on Windows is with MSYS2:
 3. Run in the shell: `pacman -Syu` and install `make` with `pacman -S make`.
 4. Add `C:\msys64\usr\bin` to your PATH environment variable.
 
-You can now use `make` from any terminal (Powershell, cmd.exe, etc.)! 🎉
+You can now use `make` from any terminal (PowerShell, cmd.exe, etc.)! 🎉
 
 ### Sync a forked repository with upstream main (the Hugging Face repository)
 
@@ -386,9 +386,9 @@ When updating the main branch of a forked repository, please follow these steps 
 1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead, merge directly into the forked main.
 2. If a PR is absolutely necessary, use the following steps after checking out your branch:
 
-```bash
-git checkout -b your-branch-for-syncing
-git pull --squash --no-commit upstream main
-git commit -m '<your message without GitHub references>'
-git push --set-upstream origin your-branch-for-syncing
-```
+   ```bash
+   git checkout -b your-branch-for-syncing
+   git pull --squash --no-commit upstream main
+   git commit -m '<your message without GitHub references>'
+   git push --set-upstream origin your-branch-for-syncing
+   ```

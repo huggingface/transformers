@@ -70,6 +70,8 @@ if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
+    from .trainer_pt_utils import AcceleratorConfig
+
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
@@ -155,6 +157,9 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
+    RMSPROP_BNB = "rmsprop_bnb"
+    RMSPROP_8BIT = "rmsprop_bnb_8bit"
+    RMSPROP_32BIT = "rmsprop_bnb_32bit"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -487,6 +492,32 @@ class TrainingArguments:
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
+
+        accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
+            Config to be used with the internal `Accelerator` implementation. The value is either a location of
+            accelerator json config file (e.g., `accelerator_config.json`), an already loaded json file as `dict`,
+            or an instance of [`~trainer_pt_utils.AcceleratorConfig`].
+
+            A list of config and its options:
+                - split_batches (`bool`, *optional*, defaults to `False`):
+                    Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
+                    `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
+                    round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
+                    in your script multiplied by the number of processes.
+                - dispatch_batches (`bool`, *optional*):
+                    If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
+                    and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
+                    underlying dataset is an `IterableDataset`, `False` otherwise.
+                - even_batches (`bool`, *optional*, defaults to `True`):
+                    If set to `True`, in cases where the total batch size across all processes does not exactly divide the
+                    dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
+                    all workers.
+                - use_seedable_sampler (`bool`, *optional*, defaults to `True`):
+                    Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
+                    training results are fully reproducable using a different sampling technique. While seed-to-seed results
+                    may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+                    also be ran with [`~utils.set_seed`] for the best results.
+
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1066,7 +1097,7 @@ class TrainingArguments:
         },
     )
     # Do not touch this type annotation or it will stop working in CLI
-    fsdp_config: Optional[str] = field(
+    fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1081,6 +1112,16 @@ class TrainingArguments:
             "help": (
                 "This parameter is deprecated. Transformer layer class name (case-sensitive) to wrap, e.g,"
                 " `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed)."
+            )
+        },
+    )
+    # Do not touch this type annotation or it will stop working in CLI
+    accelerator_config: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Config to be used with the internal Accelerator object initializtion. The value is either a "
+                "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
     )
@@ -1282,20 +1323,12 @@ class TrainingArguments:
 
     dispatch_batches: Optional[bool] = field(
         default=None,
-        metadata={
-            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
-            "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
-            "underlying dataset is an `IterableDataset`, `False` otherwise."
-        },
+        metadata={"help": "Deprecated. Pass {'dispatch_batches':VALUE} to `accelerator_config`."},
     )
 
     split_batches: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
-            "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
-            "round multiple of the number of processes you are using (such as GPUs)."
-        },
+        default=None,
+        metadata={"help": "Deprecated. Pass {'split_batches':True} to `accelerator_config`."},
     )
 
     include_tokens_per_second: Optional[bool] = field(
@@ -1310,7 +1343,7 @@ class TrainingArguments:
         },
     )
 
-    neftune_noise_alpha: float = field(
+    neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
@@ -1654,6 +1687,7 @@ class TrainingArguments:
         ):
             raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
         self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
+        self.fsdp_config["xla_fsdp_v2"] = self.fsdp_config.get("xla_fsdp_v2", False)
         self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
             if len(self.fsdp) > 0:
@@ -1701,6 +1735,30 @@ class TrainingArguments:
             os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
+
+        if is_accelerate_available():
+            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
+                if self.accelerator_config is None:
+                    self.accelerator_config = AcceleratorConfig()
+                elif isinstance(self.accelerator_config, dict):
+                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
+                else:
+                    self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+            if self.dispatch_batches is not None:
+                warnings.warn(
+                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
+                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
+                    FutureWarning,
+                )
+                self.accelerator_config.dispatch_batches = self.dispatch_batches
+
+            if self.split_batches is not None:
+                warnings.warn(
+                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
+                    " `--accelerator_config {'split_batches':VALUE} instead",
+                    FutureWarning,
+                )
+                self.accelerator_config.split_batches = self.split_batches
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -2156,6 +2214,9 @@ class TrainingArguments:
                 d[k] = [x.value for x in v]
             if k.endswith("_token"):
                 d[k] = f"<{k.upper()}>"
+            # Handle the accelerator_config if passed
+            if is_accelerate_available() and isinstance(v, AcceleratorConfig):
+                d[k] = v.to_dict()
         return d
 
     def to_json_string(self):

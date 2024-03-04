@@ -1070,6 +1070,7 @@ MODELS_NOT_IN_README = [
     "VisionTextDualEncoder",
     "CLIPVisionModel",
     "SiglipVisionModel",
+    "ChineseCLIPVisionModel",
 ]
 
 # Template for new entries to add in the main README when we have missing models.

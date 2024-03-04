@@ -40,7 +40,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] trainer_pt_utils.DistributedTensorGatherer
 
-## Distributed Evaluation
+## Trainer Argument Parser
 
 [[autodoc]] HfArgumentParser
 

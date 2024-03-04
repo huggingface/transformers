@@ -216,7 +216,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets

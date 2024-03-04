@@ -1373,7 +1373,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         inputs = new_tokenizer(text, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        expected_result = (  # original expected result "this is the" seems contradicts to roberta-based tokenizer
+        expected_result = (  # original expected result "this is the" seems contradicts to FacebookAI/roberta-based tokenizer
             "thisisthe"
         )
 

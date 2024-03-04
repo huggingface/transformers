@@ -45,7 +45,7 @@ Carica un tokenizer preaddestrato con [`AutoTokenizer.from_pretrained`]:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 ```
 
 Poi inserisci le tue frasi nel tokenizer:

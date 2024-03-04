@@ -128,7 +128,7 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="camembert-base",
+            model_name="almanach/camembert-base",
             revision="3a0641d9a1aeb7e848a74299e7e4c4bca216b4cf",
             sequences=sequences,
         )

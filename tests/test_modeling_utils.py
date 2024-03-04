@@ -709,7 +709,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
-        mname = "bert-base-cased"
+        mname = "google-bert/bert-base-cased"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
@@ -753,9 +753,9 @@ class ModelUtilsTest(TestCasePlus):
         for i in range(12):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2", device_map=device_map)
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", device_map=device_map)
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
         output = model.generate(inputs["input_ids"].to(0))
 
@@ -1165,7 +1165,7 @@ class ModelUtilsTest(TestCasePlus):
     @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
-        model_ids = ["gpt2"]
+        model_ids = ["openai-community/gpt2"]
 
         for model_id in model_ids:
             model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path=model_id)
@@ -1246,7 +1246,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.equal(p1, p2))
 
     def test_modifying_model_config_causes_warning_saving_generation_config(self):
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         model.config.top_k = 1
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
@@ -1514,7 +1514,7 @@ class ModelPushToHubTester(unittest.TestCase):
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
->>> config = AutoConfig.from_pretrained("bert-base-uncased")
+>>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
         commit_details = model.push_to_hub(

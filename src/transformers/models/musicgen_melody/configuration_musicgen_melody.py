@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ylacombe/musicgen-melody": "https://huggingface.co/ylacombe/musicgen-melody/resolve/main/config.json",
+    "facebook/musicgen-melody": "https://huggingface.co/facebook/musicgen-melody/resolve/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`MusicgenMelodyDecoder`]. It is used to instantiate a
     Musicgen Melody decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
-    [ylacombe/musicgen-melody](https://huggingface.co/ylacombe/musicgen-melody) architecture.
+    [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -142,7 +142,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
     Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder and Musicgen Melody decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
-    [ylacombe/musicgen-melody](https://huggingface.co/ylacombe/musicgen-melody) architecture.
+    [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -181,7 +181,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ...     text_encoder_config, audio_encoder_config, decoder_config
     ... )
 
-    >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the ylacombe/musicgen-melody style configuration
+    >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the facebook/musicgen-melody style configuration
     >>> model = MusicgenMelodyForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

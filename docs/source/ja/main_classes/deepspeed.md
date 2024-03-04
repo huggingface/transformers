@@ -187,7 +187,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 ```bash
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path t5-small --per_device_train_batch_size 1 \
+--model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
 --output_dir output_dir --overwrite_output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
@@ -210,7 +210,7 @@ DeepSpeed 関連の引数が 2 つありますが、簡単にするためであ�
 ```bash
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path t5-small --per_device_train_batch_size 1 \
+--model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
 --output_dir output_dir --overwrite_output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
@@ -1748,7 +1748,7 @@ from transformers import T5ForConditionalGeneration, T5Config
 import deepspeed
 
 with deepspeed.zero.Init():
-    config = T5Config.from_pretrained("t5-small")
+    config = T5Config.from_pretrained("google-t5/t5-small")
     model = T5ForConditionalGeneration(config)
 ```
 
@@ -1764,7 +1764,7 @@ with deepspeed.zero.Init():
 from transformers import AutoModel, Trainer, TrainingArguments
 
 training_args = TrainingArguments(..., deepspeed=ds_config)
-model = AutoModel.from_pretrained("t5-small")
+model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
@@ -1822,7 +1822,7 @@ ZeRO-3 のみがパラメーターのシャーディングを実行するのに�
 ```bash
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path t5-small --output_dir output_dir \
+--model_name_or_path google-t5/t5-small --output_dir output_dir \
 --do_eval --max_eval_samples 50 --warmup_steps 50  \
 --max_source_length 128 --val_max_target_length 128 \
 --overwrite_output_dir --per_device_eval_batch_size 4 \
@@ -2022,7 +2022,7 @@ import deepspeed
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-model = AutoModel.from_pretrained("gpt2")
+model = AutoModel.from_pretrained("openai-community/gpt2")
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
@@ -2037,7 +2037,7 @@ import deepspeed
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-config = AutoConfig.from_pretrained("gpt2")
+config = AutoConfig.from_pretrained("openai-community/gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
@@ -2202,7 +2202,7 @@ print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 
 それを`t0.py`として保存して実行しましょう。
 
-```
+```bash
 $ deepspeed --num_gpus 2 t0.py
 rank0:
    in=Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy
@@ -2226,13 +2226,13 @@ DeepSpeed 統合を含む PR を送信する場合は、CircleCI PR CI セット
 
 DeepSpeed テストを実行するには、少なくとも以下を実行してください。
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
 ```
 
 モデリングまたは pytorch サンプル コードのいずれかを変更した場合は、Model Zoo テストも実行します。以下はすべての DeepSpeed テストを実行します。
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed
 ```
 

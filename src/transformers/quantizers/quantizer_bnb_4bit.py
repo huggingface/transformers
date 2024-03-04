@@ -121,7 +121,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Params4bit):
             # Add here check for loaded components' dtypes once serialization is implemented
             return True
         elif isinstance(module, bnb.nn.Linear4bit) and tensor_name == "bias":
@@ -204,7 +204,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         else:
             new_value = param_value.to("cpu")
 
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
             if issubclass(module.source_cls, Conv1D):
                 new_value = new_value.T
@@ -289,7 +289,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_after_weight_loading with 8bit->4bit
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model._is_quantized_training_enabled = self.is_trainable
         model.is_loaded_in_4bit = True
         model.is_4bit_serializable = self.is_serializable
         return model

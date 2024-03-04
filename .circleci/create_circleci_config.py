@@ -52,7 +52,7 @@ class CircleCIJob:
     name: str
     additional_env: Dict[str, Any] = None
     cache_name: str = None
-    cache_version: str = "0.8"
+    cache_version: str = "0.8.2"
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
@@ -128,22 +128,6 @@ class CircleCIJob:
         steps.extend([{"run": l} for l in self.install_steps])
         steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
         steps.extend([{"run": "pip install pytest-subtests"}])
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.cache/pip"],
-                }
-            }
-        )
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.pyenv/versions/"],
-                }
-            }
-        )
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
@@ -264,6 +248,25 @@ class CircleCIJob:
 
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
+
+        # save cache at the end: so pytest step runs before cache saving and we can see results earlier
+        steps.append(
+            {
+                "save_cache": {
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                    "paths": ["~/.cache/pip"],
+                }
+            }
+        )
+        steps.append(
+            {
+                "save_cache": {
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                    "paths": ["~/.pyenv/versions/"],
+                }
+            }
+        )
+
         job["steps"] = steps
         return job
 

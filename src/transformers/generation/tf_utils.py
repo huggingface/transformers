@@ -511,8 +511,8 @@ class TFGenerationMixin:
         >>> from transformers import GPT2Tokenizer, TFAutoModelForCausalLM
         >>> import numpy as np
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         >>> tokenizer.pad_token_id = tokenizer.eos_token_id
         >>> inputs = tokenizer(["Today is"], return_tensors="tf")
 
@@ -736,7 +736,6 @@ class TFGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
-        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
@@ -1583,8 +1582,8 @@ class TFGenerationMixin:
         ...     TFMinLengthLogitsProcessor,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
@@ -1857,8 +1856,8 @@ class TFGenerationMixin:
         ...     TFTemperatureLogitsWarper,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = TFAutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
         >>> model.generation_config.pad_token_id = model.generation_config.eos_token_id
@@ -2180,8 +2179,8 @@ class TFGenerationMixin:
         ... )
         >>> import tensorflow as tf
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         >>> encoder_input_str = "translate English to German: How old are you?"
         >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="tf").input_ids

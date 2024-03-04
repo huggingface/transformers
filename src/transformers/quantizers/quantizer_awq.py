@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 from typing import TYPE_CHECKING
+
+from packaging import version
 
 from .base import HfQuantizer
 
@@ -105,6 +108,6 @@ class AwqQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # AWQ does not support neither QAT (Quantization Aware Training or PEFT yet.)
-        # TODO: if this is supported in the future, do a version check here.
-        return False
+        # AWQ supports PEFT fine-tuning from version 0.2.0
+        MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
+        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)

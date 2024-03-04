@@ -64,12 +64,12 @@ logger = logging.get_logger(__name__)
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
 TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlm-roberta-base",
-    "xlm-roberta-large",
+    "FacebookAI/xlm-roberta-base",
+    "FacebookAI/xlm-roberta-large",
     "joeddav/xlm-roberta-large-xnli",
     "cardiffnlp/twitter-xlm-roberta-base-sentiment",
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta

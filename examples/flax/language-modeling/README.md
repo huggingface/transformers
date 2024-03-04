@@ -28,7 +28,7 @@ way which enables simple and efficient model parallelism.
 In the following, we demonstrate how to train a bi-directional transformer model 
 using masked language modeling objective as introduced in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
 More specifically, we demonstrate how JAX/Flax can be leveraged 
-to pre-train [**`roberta-base`**](https://huggingface.co/roberta-base)
+to pre-train [**`FacebookAI/roberta-base`**](https://huggingface.co/FacebookAI/roberta-base)
 in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
@@ -76,13 +76,13 @@ tokenizer.save("./norwegian-roberta-base/tokenizer.json")
 ### Create configuration
 
 Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**roberta-base**`](https://huggingface.co/roberta-base)
+as loading and storing [`**FacebookAI/roberta-base**`](https://huggingface.co/FacebookAI/roberta-base)
 in the local model folder:
 
 ```python
 from transformers import RobertaConfig
 
-config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
+config = RobertaConfig.from_pretrained("FacebookAI/roberta-base", vocab_size=50265)
 config.save_pretrained("./norwegian-roberta-base")
 ```
 
@@ -129,8 +129,8 @@ look at [this](https://colab.research.google.com/github/huggingface/notebooks/bl
 
 In the following, we demonstrate how to train an auto-regressive causal transformer model 
 in JAX/Flax.
-More specifically, we pretrain a randomly initialized [**`gpt2`**](https://huggingface.co/gpt2) model in Norwegian on a single TPUv3-8.
-to pre-train 124M [**`gpt2`**](https://huggingface.co/gpt2)
+More specifically, we pretrain a randomly initialized [**`openai-community/gpt2`**](https://huggingface.co/openai-community/gpt2) model in Norwegian on a single TPUv3-8.
+to pre-train 124M [**`openai-community/gpt2`**](https://huggingface.co/openai-community/gpt2)
 in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
@@ -179,13 +179,13 @@ tokenizer.save("./norwegian-gpt2/tokenizer.json")
 ### Create configuration
 
 Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**gpt2**`](https://huggingface.co/gpt2)
+as loading and storing [`**openai-community/gpt2**`](https://huggingface.co/openai-community/gpt2)
 in the local model folder:
 
 ```python
 from transformers import GPT2Config
 
-config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
+config = GPT2Config.from_pretrained("openai-community/gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
 config.save_pretrained("./norwegian-gpt2")
 ```
 
@@ -199,7 +199,7 @@ Finally, we can run the example script to pretrain the model:
 ```bash
 python run_clm_flax.py \
     --output_dir="./norwegian-gpt2" \
-    --model_type="gpt2" \
+    --model_type="openai-community/gpt2" \
     --config_name="./norwegian-gpt2" \
     --tokenizer_name="./norwegian-gpt2" \
     --dataset_name="oscar" \

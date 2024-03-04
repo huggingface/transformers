@@ -26,7 +26,7 @@ require a good contextual understanding of an entire sequence. BERT is an exampl
 
 This guide will show you how to:
 
-1. Finetune [DistilRoBERTa](https://huggingface.co/distilroberta-base) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
+1. Finetune [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -105,7 +105,7 @@ For masked language modeling, the next step is to load a DistilRoBERTa tokenizer
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilroberta-base")
 ```
 
 You'll notice from the example above, the `text` field is actually nested inside `answers`. This means you'll need to extract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process#flatten) method:
@@ -226,7 +226,7 @@ You're ready to start training your model now! Load DistilRoBERTa with [`AutoMod
 ```py
 >>> from transformers import AutoModelForMaskedLM
 
->>> model = AutoModelForMaskedLM.from_pretrained("distilroberta-base")
+>>> model = AutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
 ```
 
 At this point, only three steps remain:
@@ -291,7 +291,7 @@ Then you can load DistilRoBERTa with [`TFAutoModelForMaskedLM`]:
 ```py
 >>> from transformers import TFAutoModelForMaskedLM
 
->>> model = TFAutoModelForMaskedLM.from_pretrained("distilroberta-base")
+>>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:

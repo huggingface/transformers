@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import io
 import json
 import os
 import warnings
@@ -20,7 +19,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import model_info
-from numpy import isin
 
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -446,7 +444,8 @@ NO_TOKENIZER_TASKS = set()
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
 # see if the model defines such objects or not.
-MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
+MULTI_MODEL_AUDIO_CONFIGS = {"SpeechEncoderDecoderConfig"}
+MULTI_MODEL_VISION_CONFIGS = {"VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -529,7 +528,7 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"translation"`
             - `"translation_xx_to_yy"`
             - `"video-classification"`
-            - `"visual-question-answering"`
+            - `"visual-question-answering"` (alias `"vqa"` available)
             - `"zero-shot-classification"`
             - `"zero-shot-image-classification"`
             - `"zero-shot-object-detection"`
@@ -714,12 +713,12 @@ def pipeline(
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
     >>> oracle = pipeline(
-    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="google-bert/bert-base-cased"
     ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
     >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
     if model_kwargs is None:
@@ -893,6 +892,8 @@ def pipeline(
                 'You cannot use both `pipeline(... torch_dtype=..., model_kwargs={"torch_dtype":...})` as those'
                 " arguments might conflict, use only one.)"
             )
+        if isinstance(torch_dtype, str) and hasattr(torch, torch_dtype):
+            torch_dtype = getattr(torch, torch_dtype)
         model_kwargs["torch_dtype"] = torch_dtype
 
     model_name = model if isinstance(model, str) else None
@@ -930,7 +931,10 @@ def pipeline(
         and not load_tokenizer
         and normalized_task not in NO_TOKENIZER_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+        and (
+            model_config.__class__.__name__ in MULTI_MODEL_AUDIO_CONFIGS
+            or model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
+        )
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
@@ -941,8 +945,7 @@ def pipeline(
         and not load_image_processor
         and normalized_task not in NO_IMAGE_PROCESSOR_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
-        and normalized_task != "automatic-speech-recognition"
+        and model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
@@ -953,7 +956,7 @@ def pipeline(
         and not load_feature_extractor
         and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+        and model_config.__class__.__name__ in MULTI_MODEL_AUDIO_CONFIGS
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be

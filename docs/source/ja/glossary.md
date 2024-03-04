@@ -33,7 +33,7 @@ rendered properly in your Markdown viewer.
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence_a = "This is a short sequence."
 >>> sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
@@ -147,7 +147,7 @@ The encoded versions have different lengths:
 ### feed forward chunking
 
 トランスフォーマー内の各残差注意ブロックでは、通常、自己注意層の後に2つのフィードフォワード層が続きます。
-フィードフォワード層の中間埋め込みサイズは、モデルの隠れたサイズよりも大きいことがよくあります（たとえば、`bert-base-uncased`の場合）。
+フィードフォワード層の中間埋め込みサイズは、モデルの隠れたサイズよりも大きいことがよくあります（たとえば、`google-bert/bert-base-uncased`の場合）。
 
 入力サイズが `[batch_size、sequence_length]` の場合、中間フィードフォワード埋め込み `[batch_size、sequence_length、config.intermediate_size]` を保存するために必要なメモリは、メモリの大部分を占めることがあります。[Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451)の著者は、計算が `sequence_length` 次元に依存しないため、両方のフィードフォワード層の出力埋め込み `[batch_size、config.hidden_size]_0、...、[batch_size、config.hidden_size]_n` を個別に計算し、後で `[batch_size、sequence_length、config.hidden_size]` に連結することは数学的に等価であると気付きました。これにより、増加した計算時間とメモリ使用量のトレードオフが生じますが、数学的に等価な結果が得られます。
 
@@ -167,7 +167,7 @@ The encoded versions have different lengths:
 
   * [`GPT2ForSequenceClassification`] は、ベースの[`GPT2Model`]の上にあるシーケンス分類ヘッド（線形層）です。
   * [`ViTForImageClassification`] は、ベースの[`ViTModel`]の`CLS`トークンの最終隠れた状態の上にある画像分類ヘッド（線形層）です。
-  * [`Wav2Vec2ForCTC`] は、[CTC](#connectionist-temporal-classification-(CTC))を持つベースの[`Wav2Vec2Model`]の言語モデリングヘッドです。
+  * [`Wav2Vec2ForCTC`] は、[CTC](#connectionist-temporal-classification-ctc)を持つベースの[`Wav2Vec2Model`]の言語モデリングヘッドです。
 
 ## I
 
@@ -191,7 +191,7 @@ The encoded versions have different lengths:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
@@ -328,7 +328,7 @@ The encoded versions have different lengths:
 
 ### pretrained model
 
-あるデータ（たとえば、Wikipedia全体など）で事前に学習されたモデルです。事前学習の方法には、自己教師ありの目的が含まれ、テキストを読み取り、次の単語を予測しようとするもの（[因果言語モデリング](#因果言語モデリング)を参照）や、一部の単語をマスクし、それらを予測しようとするもの（[マスク言語モデリング](#マスク言語モデリング-mlm)を参照）があります。
+あるデータ（たとえば、Wikipedia全体など）で事前に学習されたモデルです。事前学習の方法には、自己教師ありの目的が含まれ、テキストを読み取り、次の単語を予測しようとするもの（[因果言語モデリング](#causal-language-modeling)を参照）や、一部の単語をマスクし、それらを予測しようとするもの（[マスク言語モデリング](#masked-language-modeling-mlm)を参照）があります。
 
 音声とビジョンモデルには独自の事前学習の目的があります。たとえば、Wav2Vec2は音声モデルで、モデルに対して「真の」音声表現を偽の音声表現のセットから識別する必要がある対比的なタスクで事前学習されています。一方、BEiTはビジョンモデルで、一部の画像パッチをマスクし、モデルにマスクされたパッチを予測させるタスク（マスク言語モデリングの目的と似ています）で事前学習されています。
 
@@ -354,13 +354,13 @@ The encoded versions have different lengths:
 
 ### self-supervised learning 
 
-モデルがラベルのないデータから自分自身の学習目標を作成する機械学習技術のカテゴリです。これは[教師なし学習](#教師なし学習)や[教師あり学習](#教師あり学習)とは異なり、学習プロセスはユーザーからは明示的には監督されていない点が異なります。
+モデルがラベルのないデータから自分自身の学習目標を作成する機械学習技術のカテゴリです。これは[教師なし学習](#unsupervised-learning)や[教師あり学習](#supervised-learning)とは異なり、学習プロセスはユーザーからは明示的には監督されていない点が異なります。
 
-自己教師あり学習の1つの例は[マスク言語モデリング](#マスク言語モデリング-mlm)で、モデルには一部のトークンが削除された文が与えられ、欠落したトークンを予測するように学習します。
+自己教師あり学習の1つの例は[マスク言語モデリング](#masked-language-modeling-mlm)で、モデルには一部のトークンが削除された文が与えられ、欠落したトークンを予測するように学習します。
 
 ### semi-supervised learning
 
-ラベル付きデータの少量とラベルのないデータの大量を組み合わせてモデルの精度を向上させる広範な機械学習トレーニング技術のカテゴリです。[教師あり学習](#教師あり学習)や[教師なし学習](#教師なし学習)とは異なり、半教師あり学習のアプローチの1つは「セルフトレーニング」であり、モデルはラベル付きデータでトレーニングされ、次にラベルのないデータで予測を行います。モデルが最も自信を持って予測する部分がラベル付きデータセットに追加され、モデルの再トレーニングに使用されます。
+ラベル付きデータの少量とラベルのないデータの大量を組み合わせてモデルの精度を向上させる広範な機械学習トレーニング技術のカテゴリです。[教師あり学習](#supervised-learning)や[教師なし学習](#unsupervised-learning)とは異なり、半教師あり学習のアプローチの1つは「セルフトレーニング」であり、モデルはラベル付きデータでトレーニングされ、次にラベルのないデータで予測を行います。モデルが最も自信を持って予測する部分がラベル付きデータセットに追加され、モデルの再トレーニングに使用されます。
 
 ### sequence-to-sequence (seq2seq)
 
@@ -368,7 +368,7 @@ The encoded versions have different lengths:
 
 ### stride
 
-[畳み込み](#畳み込み)または[プーリング](#プーリング)において、ストライドはカーネルが行列上で移動する距離を指します。ストライドが1の場合、カーネルは1ピクセルずつ移動し、ストライドが2の場合、カーネルは2ピクセルずつ移動します。
+[畳み込み](#convolution)または[プーリング](#pooling)において、ストライドはカーネルが行列上で移動する距離を指します。ストライドが1の場合、カーネルは1ピクセルずつ移動し、ストライドが2の場合、カーネルは2ピクセルずつ移動します。
 
 ### supervised learning
 
@@ -400,7 +400,7 @@ The encoded versions have different lengths:
 ```python
 >>> from transformers import BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
 

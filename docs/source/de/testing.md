@@ -945,7 +945,7 @@ from transformers.testing_utils import slow
 def test_integration_foo():
 ```
 
-Sobald ein Test als `@langsam` markiert ist, setzen Sie die Umgebungsvariable `RUN_SLOW=1`, um solche Tests auszuführen, z.B:
+Sobald ein Test als `@slow` markiert ist, setzen Sie die Umgebungsvariable `RUN_SLOW=1`, um solche Tests auszuführen, z.B:
 
 ```bash
 RUN_SLOW=1 pytest tests
@@ -978,8 +978,8 @@ Ansatz zu verfeinern, sollten wir Ausnahmen einführen:
   wird in den folgenden Abschnitten erläutert.
 - Alle Tests, die ein Training durchführen müssen, das nicht speziell auf Schnelligkeit optimiert ist, sollten auf langsam gesetzt werden.
 - Wir können Ausnahmen einführen, wenn einige dieser Tests, die nicht langsam sein sollten, unerträglich langsam sind, und sie auf
-  `@langsam`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
-  als `@langsam` markiert sind.
+  `@slow`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
+  als `@slow` markiert sind.
 - Wenn ein Test in weniger als 1 Sekunde auf CI abgeschlossen wird (einschließlich eventueller Downloads), sollte es sich trotzdem um einen normalen Test handeln.
 
 Insgesamt müssen alle nicht langsamen Tests die verschiedenen Interna abdecken und dabei schnell bleiben. Zum Beispiel,

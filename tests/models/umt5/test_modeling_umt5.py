@@ -603,7 +603,7 @@ class UMT5EncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return UMT5Config.from_pretrained("t5-base")
+        return UMT5Config.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
