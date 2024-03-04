@@ -16,7 +16,6 @@
 # limitations under the License.
 """Convert PvtV2 checkpoints from the original library."""
 
-
 import argparse
 from pathlib import Path
 
