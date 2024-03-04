@@ -54,6 +54,12 @@ class RTDetrConfig(PretrainedConfig):
             Type of the backbone based on timm.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weight for backbone model.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        dilation (`bool`, *optional*, defaults to `False`):
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+            `use_timm_backbone` = `True`.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):

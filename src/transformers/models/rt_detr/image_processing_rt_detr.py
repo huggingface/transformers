@@ -470,7 +470,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
     Constructs a RTDETR image processor.
 
     Args:
-        format (`str`, *optional*, defaults to `"coco_detection"`):
+        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
@@ -486,20 +486,21 @@ class RTDetrImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to self.do_normalize):
+            Whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        do_convert_annotations (`bool`, *optional*, defaults to `False`):
             Controls whether to convert the annotations to the format expected by the DETR model. Converts the
             bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
             Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
+        do_pad (`bool`, *optional*, defaults to `False`):
             Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
             method. If `True` will pad the images in the batch to the largest height and width in the batch.
             Padding will be applied to the bottom and right of the image with zeros.
