@@ -706,7 +706,7 @@ class ModelTesterMixin:
             # models operating on continuous spaces have higher abs difference than LMs
             # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
             if "input_ids" not in batched_input:
-                return lambda tensor1, tensor2: (1.0 - F.cosine_similarity(tensor1.float(), tensor2.float()).max())
+                return lambda tensor1, tensor2: (1.0 - F.cosine_similarity(tensor1.float(), tensor2.float(), dim=0).max())
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
         def recursive_check(batched_object, single_row_object, model_name, key):
@@ -776,9 +776,13 @@ class ModelTesterMixin:
                 model_batched_output = model(**batched_input_prepared)
                 model_row_output = model(**single_row_input)
 
-            if not isinstance(model_batched_output, torch.Tensor):
-                for key in model_batched_output:
-                    recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+            if isinstance(model_batched_output, torch.Tensor):
+                print(model_row_output.shape, model_batched_output.shape)
+                model_batched_output = {"model_output": model_batched_output}
+                model_row_output = {"model_output": model_row_output}
+
+            for key in model_batched_output:
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
