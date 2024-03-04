@@ -368,7 +368,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return images
 
-    def _resize_for_patching(self, image: np.array, target_resolution: tuple, resample) -> np.array:
+    def _resize_for_patching(self, image: np.array, target_resolution: tuple, resample, input_data_format) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
 
@@ -377,11 +377,15 @@ class LlavaImageProcessor(BaseImageProcessor):
                 The input image.
             target_resolution (tuple):
                 The target resolution (height, width) of the image.
+            resample (`PILImageResampling`):
+                Resampling filter to use if resizing the image.
+            input_data_format (`ChannelDimension` or `str`):
+                The channel dimension format of the input image.
 
         Returns:
             np.array: The resized and padded image.
         """
-        original_height, original_width = get_image_size(image)
+        original_height, original_width = get_image_size(image, channel_dim=input_data_format)
         target_height, target_width = target_resolution
 
         scale_w = target_width / original_width
@@ -395,16 +399,16 @@ class LlavaImageProcessor(BaseImageProcessor):
             new_width = min(math.ceil(original_width * scale_h), target_width)
 
         # Resize the image
-        resized_image = resize(image, (new_height, new_width), resample=resample)
+        resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
 
         return resized_image
 
-    def _pad_for_patching(self, image: np.array, target_resolution: tuple) -> np.array:
+    def _pad_for_patching(self, image: np.array, target_resolution: tuple, input_data_format) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
 
-        original_height, original_width = get_image_size(image)
+        original_height, original_width = get_image_size(image, channel_dim=input_data_format)
         target_height, target_width = target_resolution
 
         scale_w = target_width / original_width
@@ -424,7 +428,9 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return padded_image
 
-    def get_image_patches(self, image: np.array, grid_pinpoints, size: tuple, input_data_format) -> List[np.array]:
+    def get_image_patches(
+        self, image: np.array, grid_pinpoints, size: tuple, resample, input_data_format
+    ) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -435,6 +441,8 @@ class LlavaImageProcessor(BaseImageProcessor):
                 A string representation of a list of possible resolutions.
             size (`tuple`):
                 Size to resize the original image to.
+            resample (`PILImageResampling`):
+                Resampling filter to use if resizing the image.
             input_data_format (`ChannelDimension` or `str`):
                 The channel dimension format of the input image.
 
@@ -446,10 +454,12 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         possible_resolutions = grid_pinpoints
 
-        image_size = get_image_size(image)
+        image_size = get_image_size(image, channel_dim=input_data_format)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
-        resized_image = self._resize_for_patching(image, best_resolution, resample=self.resample)
-        padded_image = self._pad_for_patching(resized_image, best_resolution)
+        resized_image = self._resize_for_patching(
+            image, best_resolution, resample=resample, input_data_format=input_data_format
+        )
+        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=input_data_format)
 
         patches = divide_to_patches(padded_image, patch_size=self.crop_size["height"])
 
@@ -459,7 +469,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         resized_original_image = resize(
             image,
             size=size,
-            resample=self.resample,
+            resample=resample,
         )
 
         image_patches = [resized_original_image] + patches
@@ -597,7 +607,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
 
         new_images = []
-        image_sizes = [get_image_size(image) for image in images]
+        image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             if aspect_ratio_setting == "anyres":
                 # convert image into a list of patches
@@ -605,6 +615,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                     image,
                     image_grid_pinpoints,
                     size=(size["shortest_edge"], size["shortest_edge"]),
+                    resample=resample,
                     input_data_format=input_data_format,
                 )
 
