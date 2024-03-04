@@ -3,6 +3,7 @@ from typing import Union
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
+
 if is_vision_available():
     from PIL import Image
 

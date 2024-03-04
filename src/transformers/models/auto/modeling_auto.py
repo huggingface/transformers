@@ -26,6 +26,7 @@ from .auto_factory import (
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
+
 logger = logging.get_logger(__name__)
 
 MODEL_MAPPING_NAMES = OrderedDict(

@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
+
 if is_torch_available():
     import torch
 
@@ -60,9 +61,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         )
         examples = [
             {
-                "image": Image.open(
-                    "./tests/fixtures/tests_samples/COCO/000000039769.png"
-                ),
+                "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "question": "How many cats are there?",
             },
             {
@@ -91,9 +90,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
 
-        outputs = vqa_pipeline(
-            image=image, question="How many cats are there?", top_k=2
-        )
+        outputs = vqa_pipeline(image=image, question="How many cats are there?", top_k=2)
         self.assertEqual(
             outputs,
             [
@@ -141,9 +138,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             model_kwargs={"torch_dtype": torch.float16},
             device=torch_device,
         )
-        self.assertEqual(
-            vqa_pipeline.model.device, torch.device("{}:0".format(torch_device))
-        )
+        self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
         self.assertEqual(vqa_pipeline.model.vision_model.dtype, torch.float16)
 
@@ -176,9 +171,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        vqa_pipeline = pipeline(
-            "visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa"
-        )
+        vqa_pipeline = pipeline("visual-question-answering", model="dandelin/vilt-b32-finetuned-vqa")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "How many cats are there?"
 
@@ -216,9 +209,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             model_kwargs={"torch_dtype": torch.float16},
             device=torch_device,
         )
-        self.assertEqual(
-            vqa_pipeline.model.device, torch.device("{}:0".format(torch_device))
-        )
+        self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
 
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"

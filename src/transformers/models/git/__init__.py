@@ -21,6 +21,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitVisionConfig"],
     "processing_git": ["GitProcessor"],

@@ -17,6 +17,7 @@ from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_git import GitTokenizer
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
