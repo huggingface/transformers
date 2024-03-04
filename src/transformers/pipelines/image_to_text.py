@@ -137,10 +137,13 @@ class ImageToTextPipeline(Pipeline):
 
             model_type = self.model.config.model_type
 
-            if model_type == "git":
+            if model_type in ["git", "llava"]:
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
-                input_ids = [self.tokenizer.cls_token_id] + input_ids
+                if model_type == "git":
+                    input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
+                    input_ids = [self.tokenizer.cls_token_id] + input_ids
+                else:
+                    input_ids = self.tokenizer(text=prompt).input_ids
                 input_ids = torch.tensor(input_ids).unsqueeze(0)
                 model_inputs.update({"input_ids": input_ids})
 
