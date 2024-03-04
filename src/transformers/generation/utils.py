@@ -2792,6 +2792,8 @@ class GenerationMixin:
                     GenerateDecoderOnlyOutput(
                         #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
                         sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
+                        scores=next_token_scores,
+                        logits=next_token_logits,
                     )
                 )
 
@@ -4619,7 +4621,13 @@ class GenerationMixin:
             # 4.1. Get the valid continuation, after the matching tokens
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
             if streamer is not None:
-                streamer.put(valid_tokens.cpu())
+                #streamer.put(valid_tokens.cpu())
+                output_stub = GenerateDecoderOnlyOutput(
+                    sequences=valid_tokens,
+                    scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)), # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
+                    logits=next_token_logits,
+                )
+                streamer.put(output_stub)
             new_cur_len = input_ids.shape[-1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
@@ -4628,6 +4636,10 @@ class GenerationMixin:
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
+            ### dmarx
+            # NTS: make sure .update_candidate_stragety() isn't mutating its inputs.
+            # otw we need to move the streamer.put() further down
+            ### /dmarx
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need

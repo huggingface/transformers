@@ -218,6 +218,73 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         self.assertTrue(n_times_scores_extended>1) # make sure we're not just comparing to the final output tensor
 
 
+    def test_mulitnomial_outputs_match(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10,
+                             'return_dict_in_generate': True,
+                             'output_scores': True,
+                             'output_logits': True,
+                             ### this is the only thing that's changing relative to the greedy test. TODO: use fixtures.
+                             "do_sample": True,
+                             "num_beams": 1,
+                             }
+        baseline_kwargs = copy.deepcopy(generation_kwargs)
+        test_kwargs = copy.deepcopy(generation_kwargs)
+
+        seed = random.randint(0, int(1e9))
+        torch.manual_seed(seed)
+        baseline_outputs = model.generate(**baseline_kwargs)
+
+        streamer = OutputIteratorStreamer()
+        test_kwargs['streamer'] = streamer
+        torch.manual_seed(seed)
+        thread = Thread(target=model.generate, kwargs=test_kwargs)
+        thread.start() # does this not need to be closed?
+
+        stream_ids = torch.Tensor()
+        stream_scores = torch.Tensor()
+        n_times_scores_extended = 0
+        for answer in streamer:
+            if isinstance(answer, list):
+                for output_object in answer:
+
+                    new_ids = output_object.sequences.cpu()
+                    if new_ids.ndim == 1:
+                        new_ids = new_ids.unsqueeze(0)
+                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+
+                    # We don't get scores back from the prompt
+                    if output_object.scores is not None:
+                        new_scores = output_object.scores.cpu()
+                        if new_scores.ndim == 1:
+                            new_scores = new_scores.unsqueeze(0)
+                        stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
+                        n_times_scores_extended +=1
+
+            # Boy do I need to DRY this
+            else:
+                new_ids = answer.sequences.cpu()
+                if new_ids.ndim == 1:
+                    new_ids = new_ids.unsqueeze(0)
+                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+
+                if output_object.scores is not None:
+                    new_scores = output_object.scores.cpu()
+                    if new_scores.ndim == 1:
+                        new_scores = new_scores.unsqueeze(0)
+                    stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
+                    n_times_scores_extended += 1
+
+        greedy_ids = baseline_outputs.sequences
+        self.assertEqual(greedy_ids.shape, stream_ids.shape)
+        self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
+        self.assertTrue(n_times_scores_extended>1) # make sure we're not just comparing to the final output tensor
+
+
+
     def test_contrastive_ids_match(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         model.config.eos_token_id = -1
