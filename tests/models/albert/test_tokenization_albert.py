@@ -127,6 +127,6 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="albert-base-v2",
+            model_name="albert/albert-base-v2",
             revision="6b6560eaf5ff2e250b00c50f380c5389a9c2d82e",
         )

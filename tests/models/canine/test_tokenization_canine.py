@@ -82,7 +82,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
-    # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
+    # cannot use default save_and_load_tokenizer test method because tokenizer has no vocab
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()

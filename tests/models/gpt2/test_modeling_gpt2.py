@@ -98,7 +98,7 @@ class GPT2ModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GPT2Config.from_pretrained("gpt2")
+        return GPT2Config.from_pretrained("openai-community/gpt2")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -582,9 +582,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_batch_generation(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
 
@@ -641,9 +641,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
+        model = GPT2DoubleHeadsModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
 
@@ -722,7 +722,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = GPT2LMHeadModel.from_pretrained(
-            "gpt2",
+            "openai-community/gpt2",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -759,8 +759,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt2_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -787,8 +787,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt2_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -833,8 +833,8 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("gpt2-large")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(torch_device)
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
         input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt2_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)

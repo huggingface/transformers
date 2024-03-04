@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드는 다음과 같은 방법들을 보여줍니다.
 
-1. 추출적 질의 응답을 하기 위해 [SQuAD](https://huggingface.co/datasets/squad) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert-base-uncased) 미세 조정하기
+1. 추출적 질의 응답을 하기 위해 [SQuAD](https://huggingface.co/datasets/squad) 데이터 세트에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) 미세 조정하기
 2. 추론에 미세 조정된 모델 사용하기
 
 <Tip>
@@ -99,7 +99,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 질의 응답 태스크와 관련해서 특히 유의해야할 몇 가지 전처리 단계가 있습니다:
@@ -203,7 +203,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 
->>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 이제 세 단계만 남았습니다:
@@ -268,7 +268,7 @@ TensorFlow를 이용한 모델을 미세 조정하려면 옵티마이저 함수,
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
->>> model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
+>>> model = TFAutoModelForQuestionAnswering("distilbert/distilbert-base-uncased")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용해서 데이터 세트를 `tf.data.Dataset` 형식으로 변환합니다:

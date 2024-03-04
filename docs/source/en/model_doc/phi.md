@@ -27,8 +27,8 @@ The Phi-1.5 model was proposed in [Textbooks Are All You Need II: phi-1.5 techni
 In Phi-1 and Phi-1.5 papers, the authors showed how important the quality of the data is in training relative to the model size.
 They selected high quality "textbook" data alongside with synthetically generated data for training their small sized Transformer
 based model Phi-1 with 1.3B parameters. Despite this small scale, phi-1 attains pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP.
-They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable 
-to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability 
+They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable
+to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability
 to “think step by step” or perform some rudimentary in-context learning.
 With these two experiments the authors successfully showed the huge impact of quality of training data when training machine learning models.
 
@@ -84,8 +84,8 @@ Phi-2 has been integrated in the development version (4.37.0.dev) of `transforme
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("phi-2")
->>> tokenizer = AutoTokenizer.from_pretrained("phi-2")
+>>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
+>>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
 
 >>> inputs = tokenizer('Can you help me write a formal email to a potential business partner proposing a joint venture?', return_tensors="pt", return_attention_mask=False)
 

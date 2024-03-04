@@ -99,7 +99,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue.py
-            --model_name_or_path distilbert-base-uncased
+            --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
@@ -127,7 +127,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm.py
-            --model_name_or_path distilgpt2
+            --model_name_or_path distilbert/distilgpt2
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --do_train
@@ -160,7 +160,7 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_clm.py
             --model_type gpt2
-            --tokenizer_name gpt2
+            --tokenizer_name openai-community/gpt2
             --train_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
             --config_overrides n_embd=10,n_head=2
@@ -181,7 +181,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_mlm.py
-            --model_name_or_path distilroberta-base
+            --model_name_or_path distilbert/distilroberta-base
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
@@ -207,7 +207,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_ner.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
@@ -235,7 +235,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -260,7 +260,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_seq2seq_qa.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --context_column context
             --question_column question
             --answer_column answers
@@ -289,7 +289,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_swag.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
             --output_dir {tmp_dir}
@@ -327,7 +327,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_summarization.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}

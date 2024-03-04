@@ -38,6 +38,7 @@ class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
     AWQ = "awq"
+    AQLM = "aqlm"
 
 
 class AWQLinearVersion(str, Enum):
@@ -125,6 +126,11 @@ class QuantizationConfigMixin:
         """
         return copy.deepcopy(self.__dict__)
 
+    def __iter__(self):
+        """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
+        for attr, value in copy.deepcopy(self.__dict__).items():
+            yield attr, value
+
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
@@ -145,6 +151,28 @@ class QuantizationConfigMixin:
         else:
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+    def update(self, **kwargs):
+        """
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        returning all the unused kwargs.
+
+        Args:
+            kwargs (`Dict[str, Any]`):
+                Dictionary of attributes to tentatively update this class.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+        """
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+
+        # Remove all the attributes that were updated, without modifying the input dict
+        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        return unused_kwargs
 
 
 @dataclass
@@ -212,8 +240,12 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
-        self.load_in_8bit = load_in_8bit
-        self.load_in_4bit = load_in_4bit
+
+        if load_in_4bit and load_in_8bit:
+            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
+
+        self._load_in_8bit = load_in_8bit
+        self._load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
         self.llm_int8_skip_modules = llm_int8_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
@@ -231,6 +263,26 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
         self.post_init()
+
+    @property
+    def load_in_4bit(self):
+        return self._load_in_4bit
+
+    @load_in_4bit.setter
+    def load_in_4bit(self, value: bool):
+        if self.load_in_8bit and value:
+            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
+        self._load_in_4bit = value
+
+    @property
+    def load_in_8bit(self):
+        return self._load_in_8bit
+
+    @load_in_8bit.setter
+    def load_in_8bit(self, value: bool):
+        if self.load_in_4bit and value:
+            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
+        self._load_in_8bit = value
 
     def post_init(self):
         r"""
@@ -290,6 +342,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
+        output["load_in_4bit"] = self.load_in_4bit
+        output["load_in_8bit"] = self.load_in_8bit
 
         return output
 
@@ -338,8 +392,6 @@ class GPTQConfig(QuantizationConfigMixin):
             The tokenizer used to process the dataset. You can pass either:
                 - A custom tokenizer object.
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                    Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                    user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
         dataset (`Union[List[str]]`, *optional*):
@@ -677,3 +729,63 @@ class AwqConfig(QuantizationConfigMixin):
         loading_attibutes = ["do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
+
+
+@dataclass
+class AqlmConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `aqlm` parameters.
+
+    Args:
+        in_group_size (`int`, *optional*, defaults to 8):
+            The group size along the input dimension.
+        out_group_size (`int`, *optional*, defaults to 1):
+            The group size along the output dimension. It's recommended to always use 1.
+        num_codebooks (`int`, *optional*, defaults to 1):
+            Number of codebooks for the Additive Quantization procedure.
+        nbits_per_codebook (`int`, *optional*, defaults to 16):
+            Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
+        linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*):
+            List of full paths of `nn.Linear` weight parameters that shall not be quantized.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        in_group_size: int = 8,
+        out_group_size: int = 1,
+        num_codebooks: int = 1,
+        nbits_per_codebook: int = 16,
+        linear_weights_not_to_quantize: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.AQLM
+        self.in_group_size = in_group_size
+        self.out_group_size = out_group_size
+        self.num_codebooks = num_codebooks
+        self.nbits_per_codebook = nbits_per_codebook
+        self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if not isinstance(self.in_group_size, int):
+            raise ValueError("in_group_size must be a float")
+        if not isinstance(self.out_group_size, int):
+            raise ValueError("out_group_size must be a float")
+        if not isinstance(self.num_codebooks, int):
+            raise ValueError("num_codebooks must be a float")
+        if not isinstance(self.nbits_per_codebook, int):
+            raise ValueError("nbits_per_codebook must be a float")
+
+        if self.linear_weights_not_to_quantize is not None and not isinstance(
+            self.linear_weights_not_to_quantize, list
+        ):
+            raise ValueError("linear_weights_not_to_quantize must be a list of strings")
+
+        if self.linear_weights_not_to_quantize is None:
+            self.linear_weights_not_to_quantize = []

@@ -186,7 +186,7 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+        tokenizer = XLNetTokenizer.from_pretrained("xlnet/xlnet-base-cased")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
@@ -203,6 +203,6 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="xlnet-base-cased",
+            model_name="xlnet/xlnet-base-cased",
             revision="c841166438c31ec7ca9a106dee7bb312b73ae511",
         )

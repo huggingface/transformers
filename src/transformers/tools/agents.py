@@ -315,6 +315,13 @@ class Agent:
         self.chat_state = {}
         self.cached_tools = None
 
+    def clean_code_for_run(self, result):
+        """
+        Override this method if you want to change the way the code is
+        cleaned for the `run` method.
+        """
+        return clean_code_for_run(result)
+
     def run(self, task, *, return_code=False, remote=False, **kwargs):
         """
         Sends a request to the agent.
@@ -339,7 +346,7 @@ class Agent:
         """
         prompt = self.format_prompt(task)
         result = self.generate_one(prompt, stop=["Task:"])
-        explanation, code = clean_code_for_run(result)
+        explanation, code = self.clean_code_for_run(result)
 
         self.log(f"==Explanation from the agent==\n{explanation}")
 

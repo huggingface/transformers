@@ -258,7 +258,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     @slow
-    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_sequence_builders with bert-base-uncased->google/mobilebert-uncased
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_sequence_builders with google-bert/bert-base-uncased->google/mobilebert-uncased
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("google/mobilebert-uncased")
 

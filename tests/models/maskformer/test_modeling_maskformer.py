@@ -102,6 +102,7 @@ class MaskFormerModelTester:
                 hidden_size=32,
                 num_heads=[1, 1, 2, 2],
             ),
+            backbone=None,
             decoder_config=DetrConfig(
                 decoder_ffn_dim=64,
                 decoder_layers=self.num_hidden_layers,
@@ -196,7 +197,7 @@ class MaskFormerModelTester:
 class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}
+        {"image-feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}
         if is_torch_available()
         else {}
     )

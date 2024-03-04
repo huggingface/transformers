@@ -256,7 +256,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     def get_base_args(self, output_dir, num_epochs, logging_steps):
         return f"""
-            --model_name_or_path bert-base-cased
+            --model_name_or_path google-bert/bert-base-cased
             --task_name mrpc
             --output_dir {output_dir}
             --overwrite_output_dir

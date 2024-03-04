@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 [`AutoConfig`]、[`AutoModel`]、[`AutoTokenizer`]のいずれかをインスタンス化すると、関連するアーキテクチャのクラスが直接作成されます。例えば、
 
 ```python
-model = AutoModel.from_pretrained("bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
 これは[`BertModel`]のインスタンスであるモデルを作成します。

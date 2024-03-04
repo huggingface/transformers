@@ -79,7 +79,7 @@ python scripts/pretokenizing.py \
 Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
 ```bash
 python scripts/bpe_training.py \
-    --base_tokenizer gpt2 \
+    --base_tokenizer openai-community/gpt2 \
     --dataset_name codeparrot/codeparrot-clean-train
 ```
 
@@ -90,12 +90,12 @@ The models are randomly initialized and trained from scratch. To initialize a ne
 
 ```bash
 python scripts/initialize_model.py \
---config_name gpt2-large \
+--config_name openai-community/gpt2-large \
 --tokenizer_name codeparrot/codeparrot \
 --model_name codeparrot \
 --push_to_hub True
 ```
-This will initialize a new model with the architecture and configuration of `gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the hub.
+This will initialize a new model with the architecture and configuration of `openai-community/gpt2-large` and use the tokenizer to appropriately size the input embeddings. Finally, the initilaized model is pushed the hub.
 
 We can either pass the name of a text dataset or a pretokenized dataset which speeds up training a bit.
 Now that the tokenizer and model are also ready we can start training the model. The main training script is built with `accelerate` to scale across a wide range of platforms and infrastructure scales. We train two models with [110M](https://huggingface.co/codeparrot/codeparrot-small/) and [1.5B](https://huggingface.co/codeparrot/codeparrot/) parameters for 25-30B tokens on a 16xA100 (40GB) machine which takes 1 day and 1 week, respectively.

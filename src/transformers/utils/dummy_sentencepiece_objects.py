@@ -79,6 +79,13 @@ class FNetTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class GemmaTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class GPTSw3Tokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
@@ -178,6 +185,13 @@ class RemBertTokenizer(metaclass=DummyObject):
 
 
 class SeamlessM4TTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
+class SiglipTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

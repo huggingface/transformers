@@ -25,7 +25,13 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPoolingAndNoAttention,
     TFSequenceClassifierOutput,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    keras,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_regnet import RegNetConfig
@@ -50,7 +56,7 @@ TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFRegNetConvLayer(tf.keras.layers.Layer):
+class TFRegNetConvLayer(keras.layers.Layer):
     def __init__(
         self,
         in_channels: int,
@@ -64,8 +70,8 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         # The padding and conv has been verified in
         # https://colab.research.google.com/gist/sayakpaul/854bc10eeaf21c9ee2119e0b9f3841a7/scratchpad.ipynb
-        self.padding = tf.keras.layers.ZeroPadding2D(padding=kernel_size // 2)
-        self.convolution = tf.keras.layers.Conv2D(
+        self.padding = keras.layers.ZeroPadding2D(padding=kernel_size // 2)
+        self.convolution = keras.layers.Conv2D(
             filters=out_channels,
             kernel_size=kernel_size,
             strides=stride,
@@ -74,7 +80,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
             use_bias=False,
             name="convolution",
         )
-        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.normalization = keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.identity
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -97,7 +103,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
                 self.normalization.build([None, None, None, self.out_channels])
 
 
-class TFRegNetEmbeddings(tf.keras.layers.Layer):
+class TFRegNetEmbeddings(keras.layers.Layer):
     """
     RegNet Embeddings (stem) composed of a single aggressive convolution.
     """
@@ -121,7 +127,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
@@ -137,7 +143,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
                 self.embedder.build(None)
 
 
-class TFRegNetShortCut(tf.keras.layers.Layer):
+class TFRegNetShortCut(keras.layers.Layer):
     """
     RegNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -145,10 +151,10 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs):
         super().__init__(**kwargs)
-        self.convolution = tf.keras.layers.Conv2D(
+        self.convolution = keras.layers.Conv2D(
             filters=out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
-        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.normalization = keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.in_channels = in_channels
         self.out_channels = out_channels
 
@@ -167,17 +173,17 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
                 self.normalization.build([None, None, None, self.out_channels])
 
 
-class TFRegNetSELayer(tf.keras.layers.Layer):
+class TFRegNetSELayer(keras.layers.Layer):
     """
     Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507).
     """
 
     def __init__(self, in_channels: int, reduced_channels: int, **kwargs):
         super().__init__(**kwargs)
-        self.pooler = tf.keras.layers.GlobalAveragePooling2D(keepdims=True, name="pooler")
+        self.pooler = keras.layers.GlobalAveragePooling2D(keepdims=True, name="pooler")
         self.attention = [
-            tf.keras.layers.Conv2D(filters=reduced_channels, kernel_size=1, activation="relu", name="attention.0"),
-            tf.keras.layers.Conv2D(filters=in_channels, kernel_size=1, activation="sigmoid", name="attention.2"),
+            keras.layers.Conv2D(filters=reduced_channels, kernel_size=1, activation="relu", name="attention.0"),
+            keras.layers.Conv2D(filters=in_channels, kernel_size=1, activation="sigmoid", name="attention.2"),
         ]
         self.in_channels = in_channels
         self.reduced_channels = reduced_channels
@@ -204,7 +210,7 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
                 self.attention[1].build([None, None, None, self.reduced_channels])
 
 
-class TFRegNetXLayer(tf.keras.layers.Layer):
+class TFRegNetXLayer(keras.layers.Layer):
     """
     RegNet's layer composed by three `3x3` convolutions, same as a ResNet bottleneck layer with reduction = 1.
     """
@@ -216,7 +222,7 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
         self.shortcut = (
             TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
-            else tf.keras.layers.Activation("linear", name="shortcut")
+            else keras.layers.Activation("linear", name="shortcut")
         )
         # `self.layers` instead of `self.layer` because that is a reserved argument.
         self.layers = [
@@ -250,7 +256,7 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFRegNetYLayer(tf.keras.layers.Layer):
+class TFRegNetYLayer(keras.layers.Layer):
     """
     RegNet's Y layer: an X layer with Squeeze and Excitation.
     """
@@ -262,7 +268,7 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         self.shortcut = (
             TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
-            else tf.keras.layers.Activation("linear", name="shortcut")
+            else keras.layers.Activation("linear", name="shortcut")
         )
         self.layers = [
             TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
@@ -296,7 +302,7 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFRegNetStage(tf.keras.layers.Layer):
+class TFRegNetStage(keras.layers.Layer):
     """
     A RegNet stage composed by stacked layers.
     """
@@ -328,7 +334,7 @@ class TFRegNetStage(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFRegNetEncoder(tf.keras.layers.Layer):
+class TFRegNetEncoder(keras.layers.Layer):
     def __init__(self, config: RegNetConfig, **kwargs):
         super().__init__(**kwargs)
         self.stages = []
@@ -376,7 +382,7 @@ class TFRegNetEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFRegNetMainLayer(tf.keras.layers.Layer):
+class TFRegNetMainLayer(keras.layers.Layer):
     config_class = RegNetConfig
 
     def __init__(self, config, **kwargs):
@@ -384,7 +390,7 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embedder = TFRegNetEmbeddings(config, name="embedder")
         self.encoder = TFRegNetEncoder(config, name="encoder")
-        self.pooler = tf.keras.layers.GlobalAveragePooling2D(keepdims=True, name="pooler")
+        self.pooler = keras.layers.GlobalAveragePooling2D(keepdims=True, name="pooler")
 
     @unpack_inputs
     def call(
@@ -457,7 +463,7 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
 
 REGNET_START_DOCSTRING = r"""
     This model is a Tensorflow
-    [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
+    [keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
     regular Tensorflow Module and refer to the Tensorflow documentation for all matter related to general usage and
     behavior.
 
@@ -548,8 +554,8 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
         self.regnet = TFRegNetMainLayer(config, name="regnet")
         # classification head
         self.classifier = [
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(config.num_labels, name="classifier.1") if config.num_labels > 0 else tf.identity,
+            keras.layers.Flatten(),
+            keras.layers.Dense(config.num_labels, name="classifier.1") if config.num_labels > 0 else tf.identity,
         ]
 
     @unpack_inputs

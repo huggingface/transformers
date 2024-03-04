@@ -51,7 +51,7 @@ log_levels = {
 
 _default_log_level = logging.WARNING
 
-_tqdm_active = True
+_tqdm_active = not hf_hub_utils.are_progress_bars_disabled()
 
 
 def _get_default_logging_level():

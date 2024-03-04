@@ -21,10 +21,9 @@ import re
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs
+from ...modeling_tf_utils import TFPreTrainedModel, keras, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -159,7 +158,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 # Copied from transformers.models.clip.modeling_tf_clip.contrastive_loss
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
-        tf.keras.metrics.sparse_categorical_crossentropy(
+        keras.metrics.sparse_categorical_crossentropy(
             y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
         )
     )
@@ -217,8 +216,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
 
-        self.visual_projection = Dense(self.projection_dim, use_bias=False, name="visual_projection")
-        self.text_projection = Dense(self.projection_dim, use_bias=False, name="text_projection")
+        self.visual_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="visual_projection")
+        self.text_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="text_projection")
         self.logit_scale = None
         self.config = config
 
@@ -227,7 +226,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             return
         self.built = True
         # Build in the build() method to make sure the names are right
-        initializer = tf.keras.initializers.Constant(self.config.logit_scale_init_value)
+        initializer = keras.initializers.Constant(self.config.logit_scale_init_value)
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
 
         if getattr(self, "visual_projection", None) is not None:
@@ -375,11 +374,11 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         ...     AutoTokenizer,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
         >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
         >>> model = TFVisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
         ... )
 
         >>> # contrastive training
@@ -478,8 +477,6 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -489,8 +486,6 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -516,7 +511,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
         >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
         >>> model = TFVisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")

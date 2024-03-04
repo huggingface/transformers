@@ -46,6 +46,8 @@ KEYS_TO_MODIFY_MAPPING = {
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key, value in state_dict.items():
+        if key.endswith(".inv_freq"):
+            continue
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
@@ -97,8 +99,6 @@ def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path
         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
         dim=0,
     )
-    model.config.vocab_size = model.config.vocab_size + pad_shape
-    model.config.text_config.vocab_size = model.config.text_config.vocab_size + pad_shape
 
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)

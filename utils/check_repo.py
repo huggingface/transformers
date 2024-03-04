@@ -308,6 +308,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
+    "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
 ]
@@ -731,6 +732,8 @@ def check_all_auto_object_names_being_defined():
                         # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
                         # module, if it's a private model defined in this file.
                         if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
+                            continue
+                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
                             continue
                         failures.append(
                             f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."

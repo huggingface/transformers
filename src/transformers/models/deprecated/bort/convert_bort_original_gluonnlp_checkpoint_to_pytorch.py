@@ -277,7 +277,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
     hf_bort_model.half()
 
     # Compare output of both models
-    tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+    tokenizer = RobertaTokenizer.from_pretrained("FacebookAI/roberta-base")
 
     input_ids = tokenizer.encode_plus(SAMPLE_TEXT)["input_ids"]
 

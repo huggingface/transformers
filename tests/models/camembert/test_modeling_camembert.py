@@ -31,7 +31,7 @@ if is_torch_available():
 class CamembertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
-        model = CamembertModel.from_pretrained("camembert-base")
+        model = CamembertModel.from_pretrained("almanach/camembert-base")
         model.to(torch_device)
 
         input_ids = torch.tensor(

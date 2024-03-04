@@ -64,7 +64,7 @@ if is_tf_available():
         TFPreTrainedModel,
         TFRagModel,
     )
-    from transformers.modeling_tf_utils import tf_shard_checkpoint, unpack_inputs
+    from transformers.modeling_tf_utils import keras, tf_shard_checkpoint, unpack_inputs
     from transformers.tf_utils import stable_softmax
 
     tf.config.experimental.enable_tensor_float_32_execution(False)
@@ -282,12 +282,12 @@ class TFModelUtilsTest(unittest.TestCase):
 
     def test_shard_checkpoint(self):
         # This is the model we will use, total size 340,000 bytes.
-        model = tf.keras.Sequential(
+        model = keras.Sequential(
             [
-                tf.keras.layers.Dense(200, use_bias=False),  # size 80,000
-                tf.keras.layers.Dense(200, use_bias=False),  # size 160,000
-                tf.keras.layers.Dense(100, use_bias=False),  # size 80,000
-                tf.keras.layers.Dense(50, use_bias=False),  # size 20,000
+                keras.layers.Dense(200, use_bias=False),  # size 80,000
+                keras.layers.Dense(200, use_bias=False),  # size 160,000
+                keras.layers.Dense(100, use_bias=False),  # size 80,000
+                keras.layers.Dense(50, use_bias=False),  # size 20,000
             ]
         )
         inputs = tf.zeros((1, 100), dtype=tf.float32)
@@ -429,13 +429,13 @@ class TFModelUtilsTest(unittest.TestCase):
         # Using default signature (default behavior) overrides 'serving_default'
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
-            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            model_loaded = keras.models.load_model(f"{tmp_dir}/saved_model/1")
             self.assertTrue("serving_default" in list(model_loaded.signatures.keys()))
 
         # Providing custom signature function
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, saved_model=True, signatures={"custom_signature": serving_fn})
-            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            model_loaded = keras.models.load_model(f"{tmp_dir}/saved_model/1")
             self.assertTrue("custom_signature" in list(model_loaded.signatures.keys()))
 
         # Providing multiple custom signature function
@@ -445,7 +445,7 @@ class TFModelUtilsTest(unittest.TestCase):
                 saved_model=True,
                 signatures={"custom_signature_1": serving_fn, "custom_signature_2": serving_fn},
             )
-            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            model_loaded = keras.models.load_model(f"{tmp_dir}/saved_model/1")
             self.assertTrue("custom_signature_1" in list(model_loaded.signatures.keys()))
             self.assertTrue("custom_signature_2" in list(model_loaded.signatures.keys()))
 
