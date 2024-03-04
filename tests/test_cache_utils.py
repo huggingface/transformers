@@ -265,6 +265,7 @@ class CacheTest(unittest.TestCase):
 
 
 @require_torch
+@slow
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
