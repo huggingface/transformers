@@ -42,12 +42,12 @@ runs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "Result: ${{ inputs.status }}"
+                  "text": "Tests results: ${{ inputs.status }}"
                 }
               },
               {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": "*For more details:*"},
+                "text": {"type": "mrkdwn", "text": "*Click the button for more details about the commit*"},
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "Check Commit results"},
@@ -56,7 +56,7 @@ runs:
               },
               {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": "*For more details:*"},
+                "text": {"type": "mrkdwn", "text": "*Click here for more details about the action ran*"},
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "Check Action results"},
