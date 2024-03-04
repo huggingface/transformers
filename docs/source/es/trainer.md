@@ -67,7 +67,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Pase `training_args` al [`Trainer`] con un modelo, un conjunto de datos o algo para preprocesar el conjunto de datos con (dependiendo en el tipo de datos pueda ser un tokenizer, extractor de caracteristicas o procesor del imagen), un recopilador de datos y una función para calcular las métricas que desea rastrear durante el entrenamiento.
+Pase `training_args` al [`Trainer`] con un modelo, un conjunto de datos o algo para preprocesar el conjunto de datos (dependiendo en el tipo de datos pueda ser un tokenizer, extractor de caracteristicas o procesor del imagen), un recopilador de datos y una función para calcular las métricas que desea rastrear durante el entrenamiento.
 
 Finalmente, llame [`~Trainer.train`] para empezar entrenamiento!
 
@@ -184,7 +184,7 @@ Comprueba el API referencia [logging](./main_classes/logging) para mas informaci
 
 </Tip>
 
-El [`Trainer`] está configurado a `logging.INFO` de forma predeterminada el cual informa errores, advertencias y otra información basica. Un [`Trainer`] réplica - en entornos distributos - está configurado a `logging.WARNING` el cual solamente informa errores y advertencias. Puedes cambiar el nivel de logging con los parametros [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) y [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) parametros en [`TrainingArguments`].
+El [`Trainer`] está configurado a `logging.INFO` de forma predeterminada el cual informa errores, advertencias y otra información basica. Un [`Trainer`] réplica - en entornos distributos - está configurado a `logging.WARNING` el cual solamente informa errores y advertencias. Puedes cambiar el nivel de logging con los parametros [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) y [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) en [`TrainingArguments`].
 
 Para configurar el nivel de registro para cada nodo, usa el parámetro [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) para determinar si deseas utilizar el nivel de registro en cada nodo o solo en el nodo principal.
 
