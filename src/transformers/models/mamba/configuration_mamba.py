@@ -83,7 +83,6 @@ class MambaConfig(PretrainedConfig):
             Minimum clamping value of the `dt_proj.bias` layer initialization.
         rescale_prenorm_residual (`bool`, *optional*, defaults to `False`):
             Whether or not to rescale `out_proj` weights when initializing.
-
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
 
