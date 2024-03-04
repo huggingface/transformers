@@ -34,7 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
+from ..utils import ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -45,7 +45,7 @@ from .candidate_generator import (
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
-from .configuration_utils import GenerationConfig
+from .configuration_utils import GenerationConfig, GenerationMode
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -323,23 +323,6 @@ ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, Contrasti
 GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
 GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
-
-
-class GenerationMode(ExplicitEnum):
-    """
-    Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
-    """
-
-    # Non-beam methods
-    CONTRASTIVE_SEARCH = "contrastive_search"
-    GREEDY_SEARCH = "greedy_search"
-    SAMPLE = "sample"
-    ASSISTED_GENERATION = "assisted_generation"
-    # Beam methods
-    BEAM_SEARCH = "beam_search"
-    BEAM_SAMPLE = "beam_sample"
-    CONSTRAINED_BEAM_SEARCH = "constrained_beam_search"
-    GROUP_BEAM_SEARCH = "group_beam_search"
 
 
 class GenerationMixin:
@@ -761,46 +744,6 @@ class GenerationMixin:
         if generation_config.renormalize_logits is True:
             warpers.append(LogitNormalization())
         return warpers
-
-    def _get_generation_mode(
-        self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
-    ) -> GenerationMode:
-        """
-        Returns the generation mode triggered by a [`GenerationConfig`] instance.
-        """
-        if generation_config.constraints is not None or generation_config.force_words_ids is not None:
-            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
-        elif generation_config.num_beams == 1:
-            if generation_config.do_sample is False:
-                if (
-                    generation_config.top_k is not None
-                    and generation_config.top_k > 1
-                    and generation_config.penalty_alpha is not None
-                    and generation_config.penalty_alpha > 0
-                ):
-                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
-                else:
-                    generation_mode = GenerationMode.GREEDY_SEARCH
-            else:
-                generation_mode = GenerationMode.SAMPLE
-        else:
-            if generation_config.num_beam_groups > 1:
-                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
-            elif generation_config.do_sample is True:
-                generation_mode = GenerationMode.BEAM_SAMPLE
-            else:
-                generation_mode = GenerationMode.BEAM_SEARCH
-
-        # Assisted generation may extend some generation modes
-        if assistant_model is not None or generation_config.prompt_lookup_num_tokens is not None:
-            if generation_mode in ("greedy_search", "sample"):
-                generation_mode = GenerationMode.ASSISTED_GENERATION
-            else:
-                raise ValueError(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
-                    "is only supported with Greedy Search and Sample."
-                )
-        return generation_mode
 
     def _get_logits_processor(
         self,
@@ -1471,7 +1414,7 @@ class GenerationMixin:
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
-        generation_mode = self._get_generation_mode(generation_config, assistant_model)
+        generation_mode = generation_config.get_generation_mode(assistant_model)
 
         if streamer is not None and (generation_config.num_beams > 1):
             raise ValueError(
