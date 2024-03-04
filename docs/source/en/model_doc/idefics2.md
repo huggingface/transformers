@@ -29,8 +29,8 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
+The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
 
 
 ## Idefics2Config
