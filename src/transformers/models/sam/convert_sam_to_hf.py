@@ -240,6 +240,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if "slimsam" not in args.model_name:
+    if "slimsam" in args.model_name:
+        checkpoint_path = args.checkpoint_path
+        if checkpoint_path is None:
+            raise ValueError("You need to provide a checkpoint path for SlimSAM models.")
+    else:
         checkpoint_path = hf_hub_download("ybelkada/segment-anything", f"checkpoints/{args.model_name}.pth")
+
     convert_sam_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
