@@ -1409,22 +1409,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         self.audio_encoder = audio_encoder
         self.decoder = decoder
 
-        if self.text_encoder.config.to_dict() != self.config.text_encoder.to_dict():
-            logger.warning(
-                f"Config of the text_encoder: {self.text_encoder.__class__} is overwritten by shared text_encoder config:"
-                f" {self.config.text_encoder}"
-            )
-        if self.audio_encoder.config.to_dict() != self.config.audio_encoder.to_dict():
-            logger.warning(
-                f"Config of the audio_encoder: {self.audio_encoder.__class__} is overwritten by shared audio_encoder config:"
-                f" {self.config.audio_encoder}"
-            )
-        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
-            logger.warning(
-                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
-                f" {self.config.decoder}"
-            )
-
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
         self.text_encoder.config = self.config.text_encoder
