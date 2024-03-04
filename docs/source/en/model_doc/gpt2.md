@@ -62,7 +62,7 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 ## Usage example
 
-The `generate()` method can be used to generate text using GPT Neo model.
+The `generate()` method can be used to generate text using GPT2 model.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
