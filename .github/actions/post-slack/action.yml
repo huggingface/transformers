@@ -31,12 +31,12 @@ runs:
           {
             "text": "Slow integration tests on ${{ inputs.title }}",
             "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                      "type": "plain_text",
-                      "text": "🤗 Results of the ${{ inputs.title }} tests.",
-                  }
+              {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🤗 Results of the ${{ inputs.title }} tests.",
+                }
               },
               {
                 "type": "section",
