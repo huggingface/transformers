@@ -443,7 +443,9 @@ class TFModelUtilsTest(unittest.TestCase):
             model.save_pretrained(tmp_dir, safe_serialization=True)
             # No tf_model.h5 file, only a model.safetensors
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
 
             new_model = TFBertModel.from_pretrained(tmp_dir)
 
@@ -456,10 +458,11 @@ class TFModelUtilsTest(unittest.TestCase):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="150kB")
-            # No tf_model.h5 file, only a model.safetensors
+            # No tf weights or index file, only a safetensors index
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
 
             new_model = TFBertModel.from_pretrained(tmp_dir)
 
