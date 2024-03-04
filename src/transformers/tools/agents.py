@@ -18,7 +18,7 @@ import importlib.util
 import json
 from dataclasses import dataclass
 from typing import Dict, Union, List
-
+import copy
 import requests
 from huggingface_hub import hf_hub_download, list_spaces
 
@@ -26,7 +26,7 @@ from ..utils import is_offline_mode, is_openai_available, is_torch_available, lo
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_AGENT_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
-
+import re
 
 logger = logging.get_logger(__name__)
 
@@ -165,6 +165,9 @@ def clean_code_for_run(code):
 def parse_json_tool_call(json_blob: str):
     json_blob = json_blob.strip().replace("```json", "").replace("```", "").replace('\\', "")
     try:
+        first_accolade_index =  json_blob.find("{")
+        last_accolade_index = [a.start() for a in list(re.finditer('}', json_blob))][-1]
+        json_blob = json_blob[first_accolade_index:last_accolade_index+1]
         json_blob = json.loads(json_blob)
     except Exception as e:
         raise ValueError(f"The JSON blob you used is invalid: due to the following error: {e}. Try to correct its formatting.")
@@ -269,7 +272,7 @@ class Agent:
             prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
         
         system_message = {
-            "role": "system",
+            "role": "user", # TODO: change to system if supported
             "content": prompt,
         }
 
@@ -290,7 +293,8 @@ class Agent:
         if message["role"] not in ("user", "assistant", "system"):
             raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
         
-        if len(self.messages) > 0 and self.messages[-1]["role"] == message["role"]:
+        if len(self.messages) > 0 and self.messages[-1]["role"] == message["role"]: #NOTE: this was breaking the LLM calls: given several successive runs, it would concatenate all the Task into the system message, thus breaking it.
+            self.messages[-1] = copy.copy(self.messages[-1])
             self.messages[-1]["content"] += "\n" + message["content"]
         else:
             self.messages.append(message)
@@ -339,7 +343,7 @@ class Agent:
             else:
                 observation = self.toolbox[tool_name](**arguments)
             observation_message = {
-                "role": "assistant",
+                "role": "user", # NOTE: this is to solve the error: 'Last message must be a Human message'
                 "content": "Observation: " + observation.strip()
             }
             self.log(observation_message)
@@ -368,9 +372,9 @@ class Agent:
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        self.memory = []
+        self.messages = []
         self.add_message(self.system_message)
-        
+
         self.task = task
         task_message = {
             "role": "user",
@@ -458,7 +462,10 @@ class CodeAgent(Agent):
         self.log("=====Output message of the LLM:=====")
         self.log(result_message)
 
-        self.add_message(result_message)
+        self.add_message({
+            "role": "assistant",
+            "content": result_message
+        })
         result = result_message["content"]
 
         # Parse
@@ -522,25 +529,28 @@ class ReactAgent(Agent):
         Runs agent step with the current prompt (task + state)
         """
         self.log("=====Calling LLM with these messages:=====")
-        self.log(self.messages)
+        print(':::::\n::::::'.join([str(i) for i in self.messages]))
 
-        result_message = self.llm_callable(self.messages, stop=["Task:"])
+        llm_output = self.llm_callable(self.messages, stop=["Observation:"])
         self.log("=====Output message of the LLM:=====")
-        self.log(result_message)
+        self.log(llm_output)
 
+        result_message = {
+            "role": "assistant",
+            "content": llm_output
+        }
         self.add_message(result_message)
 
         # Parse
-        result = result_message["content"]
         action = self.parse_action(
-            llm_output=result,
+            llm_output=llm_output,
             split_token="Action:"
         )
 
         try:
             tool_name, arguments = self.tool_parser(action)
         except Exception as e:
-            raise RuntimeError(f"Error in json parsing: {e}.")
+            raise RuntimeError(f"Could not parse the given action: {e}.")
     
         # Execute
         if tool_name == "final_answer":
