@@ -23,11 +23,11 @@ Este es el comienzo de nuestros experimentos con TorchScript y todavía estamos 
 
 De acuerdo con la documentación de TorchScript: 
 
-> TorchScript es una manera de crear modelos serializables y optimizables a partir del código PyTorch.
+> "TorchScript es una manera de crear modelos serializables y optimizables a partir del código PyTorch."
 
-Hay dos módulos de PyTorch, [JIT y TRACE](https://hf.co/docs/accelerate), que permiten a los desarrolladores exportar sus modelos para ser reusados en otros programas, como los programas de C++ orientados a la eficiencia.
+Hay dos módulos de PyTorch, [JIT y TRACE](https://pytorch.org/docs/stable/jit.html), que permiten a los desarrolladores exportar sus modelos para ser reusados en otros programas, como los programas de C++ orientados a la eficiencia.
 
-Nosotros proveemos una interface que te permite exportar los modelos Transformes a TorchScript para que puedan ser reusados en un entorno diferente al de los programas Python basados en PyTorch. Aquí explicamos como exportar y usar nuestros modelos utilizando TorchScript.
+Nosotros proveemos una interface que te permite exportar los modelos 🤗Transformers a TorchScript para que puedan ser reusados en un entorno diferente al de los programas Python basados en PyTorch. Aquí explicamos como exportar y usar nuestros modelos utilizando TorchScript.
 
 Exportar un modelo requiere de dos cosas:
 
@@ -38,7 +38,7 @@ Estas necesidades implican varias cosas de las que los desarrolladores deben ten
 
 ## Bandera TorchScript y pesos atados.
 
-La bandera `torchscript` es necesaria porque la mayoría de los modelos de lenguaje de Transformers tienen pesos atados entre su `capa de incrustación` (`Embedding`) y su `capa de decodificación` (`Decoding`). TorchScript no te permite exportar modelos que tienen pesos atados, por lo que es necesario desatar y clonar los pesos de antemano.
+La bandera `torchscript` es necesaria porque la mayoría de los modelos de lenguaje de 🤗Transformers tienen pesos atados entre su `capa de incrustación` (`Embedding`) y su `capa de decodificación` (`Decoding`). TorchScript no te permite exportar modelos que tienen pesos atados, por lo que es necesario desatar y clonar los pesos de antemano.
 
 Los modelos instanciados con la bandera `torchscript` tienen su `capa de incrustación` (`Embedding`) y su `capa de decodificación` (`Decoding`) separadas, lo que significa que no deben ser entrenados más adelante. Entrenar desincronizaría las dos capas, lo que llevaría a resultados inesperados.
 
@@ -61,7 +61,7 @@ Ten cuidado con el número total de operaciones realizadas en cada entrada y sig
 
 Esta sección demuestra cómo guardar y cargar modelos, así como cómo usar la traza para la inferencia.
 
-Guardando un modelo
+### Guardando un modelo
 
 Para exportar un `BertModel` con TorchScript, instancia `BertModel` a partir de la clase `BertConfig` y luego guárdalo en disco bajo el nombre de archivo `traced_bert.pt`:
 
@@ -130,7 +130,7 @@ traced_model(tokens_tensor, segments_tensors)
 ```
 ## Despliega modelos TorchScript de Hugging Face en AWS con el Neuron SDK
 
-AWS introdujo la familia de instancias Amazon EC2 Inf1 para inferencia de aprendizaje automático de alto rendimiento y bajo costo en la nube. Las instancias Inf1 están alimentadas por el chip AWS Inferentia, un acelerador de hardware personalizado que se especializa en cargas de trabajo de inferencia de aprendizaje profundo. [AWS Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) es el SDK para Inferentia que admite el trazado y la optimización de modelos de transformers para implementación en Inf1. El SDK Neuron proporciona:
+AWS introdujo la familia de instancias [Amazon EC2 Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) para inferencia de aprendizaje automático de alto rendimiento y bajo costo en la nube. Las instancias Inf1 están alimentadas por el chip AWS Inferentia, un acelerador de hardware personalizado que se especializa en cargas de trabajo de inferencia de aprendizaje profundo. [AWS Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/#) es el SDK para Inferentia que admite el trazado y la optimización de modelos de transformers para implementación en Inf1. El SDK Neuron proporciona:
 
 1. Una API fácil de usar con un solo cambio de línea de código para trazar y optimizar un modelo TorchScript para inferencia en la nube.
 

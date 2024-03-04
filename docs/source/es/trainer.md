@@ -14,11 +14,12 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Entrenador
+# El Trainer 
 
 El [`Trainer`] es un bucle completo de entrenamiento y evaluación para modelos de PyTorch implementado en la biblioteca Transformers. Solo necesitas pasarle las piezas necesarias para el entrenamiento (modelo, tokenizador, conjunto de datos, función de evaluación, hiperparámetros de entrenamiento, etc.), y la clase [`Trainer`] se encarga del resto. Esto facilita comenzar a entrenar más rápido sin tener que escribir manualmente tu propio bucle de entrenamiento. Pero al mismo tiempo, [`Trainer`] es muy personalizable y ofrece una gran cantidad de opciones de entrenamiento para que puedas adaptarlo a tus necesidades exactas de entrenamiento.
 
 <Tip>
+
 Además de la clase [`Trainer`], Transformers también proporciona una clase [`Seq2SeqTrainer`] para tareas de secuencia a secuencia como traducción o resumen. También está la clase [~trl.SFTTrainer] de la biblioteca [TRL](https://hf.co/docs/trl) que envuelve la clase [`Trainer`] y está optimizada para entrenar modelos de lenguaje como Llama-2 y Mistral con técnicas autoregresivas. [`~trl.SFTTrainer`] también admite funciones como el empaquetado de secuencias, LoRA, cuantización y DeepSpeed para escalar eficientemente a cualquier tamaño de modelo.
 
 <br>
@@ -40,10 +41,10 @@ Esta guía proporciona una visión general de la clase [`Trainer`].
 ## Uso básico
 
 [`Trainer`] incluye todo el código que encontrarías en un bucle de entrenamiento básico:
-1.- Realiza un paso de entrenamiento para calcular la pérdida
-2.- Calcula los gradientes con el método [~accelerate.Accelerator.backward]
-3.- Actualiza los pesos basados en los gradientes
-4.- Repite este proceso hasta alcanzar un número predeterminado de épocas
+1.  Realiza un paso de entrenamiento para calcular la pérdida
+2.  Calcula los gradientes con el método [~accelerate.Accelerator.backward]
+3.  Actualiza los pesos basados en los gradientes
+4.  Repite este proceso hasta alcanzar un número predeterminado de épocas
 
 La clase [`Trainer`] abstrae todo este código para que no tengas que preocuparte por escribir manualmente un bucle de entrenamiento cada vez o si estás empezando con PyTorch y el entrenamiento. Solo necesitas proporcionar los componentes esenciales requeridos para el entrenamiento, como un modelo y un conjunto de datos, y la clase [`Trainer`] maneja todo lo demás.
 
@@ -66,7 +67,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Pasalo `training_args` al [`Trainer`] con un modelo, un conjunto de datos o algo para preprocesar el conjunto de datos con (dependiendo en el tipo de datos pueda ser un tokenizer, extractor de caracteristicas o procesor del imagen), un intercolador de datos y una función para computar las metricas deseadas que tener en mente durante el entrenamiento.
+Pase `training_args` al [`Trainer`] con un modelo, un conjunto de datos o algo para preprocesar el conjunto de datos con (dependiendo en el tipo de datos pueda ser un tokenizer, extractor de caracteristicas o procesor del imagen), un recopilador de datos y una función para calcular las métricas que desea rastrear durante el entrenamiento.
 
 Finalmente, llame [`~Trainer.train`] para empezar entrenamiento!
 
@@ -102,7 +103,7 @@ Puedes guardar tus puntos de control (por defecto, el estado del optimizador no 
 
 * hub_strategy="checkpoint" envía el último punto de control a una subcarpeta llamada "last-checkpoint" desde la cual puedes reanudar el entrenamiento.
 
-* hug_strategy="all_checkpoints" envía todos los puntos de control al directorio definido en `output_dir` (verás un punto de control por carpeta en tu repositorio de modelos).
+* hub_strategy="all_checkpoints" envía todos los puntos de control al directorio definido en `output_dir` (verás un punto de control por carpeta en tu repositorio de modelos).
 
 Cuando reanudas el entrenamiento desde un punto de control, el [`Trainer`] intenta mantener los estados de los generadores de números aleatorios (RNG) de Python, NumPy y PyTorch iguales a como estaban cuando se guardó el punto de control. Pero debido a que PyTorch tiene varias configuraciones predeterminadas no determinísticas, no se garantiza que los estados de RNG sean los mismos. Si deseas habilitar la plena determinismo, echa un vistazo a la guía ["Controlling sources of randomness"](https://pytorch.org/docs/stable/notes/randomness#controlling-sources-of-randomness) para aprender qué puedes habilitar para hacer que tu entrenamiento sea completamente determinista. Sin embargo, ten en cuenta que al hacer ciertas configuraciones deterministas, el entrenamiento puede ser más lento.
 
@@ -113,9 +114,9 @@ Si bien la clase [`Trainer`] está diseñada para ser accesible y fácil de usar
 * [~Trainer.get_train_dataloader] crea un entrenamiento de DataLoader
 * [~Trainer.get_eval_dataloader] crea una evaluación DataLoader
 * [~Trainer.get_test_dataloader] crea una prueba de DataLoader
-* [~Trainer.log] anota información de los objetos varios que observa el entrenamiento
-* [~Trainer.create_optimizer_and_scheduler] crea an optimizer y rate scheduler de aprendizaje si no lo pasaron en __init__; estos pueden ser personalizados independientes con [~Trainer.create_optimizer] y [~Trainer.create_scheduler] respectivamente
-* [~Trainer.compute_loss] computa el perdido en lote con las aportes del entrenamiento
+* [~Trainer.log] anota la información de los objetos varios que observa el entrenamiento
+* [~Trainer.create_optimizer_and_scheduler] crea un optimizador y la tasa programada de aprendizaje si no lo pasaron en __init__; estos pueden ser personalizados independientes con [~Trainer.create_optimizer] y [~Trainer.create_scheduler] respectivamente
+* [~Trainer.compute_loss] computa la pérdida en lote con las aportes del entrenamiento
 * [~Trainer.training_step] realiza el paso del entrenamiento
 * [~Trainer.prediction_step] realiza la predicción y paso de prueba
 * [~Trainer.evaluate] evalua el modelo y da las metricas evaluativas
@@ -183,7 +184,7 @@ Comprueba el API referencia [logging](./main_classes/logging) para mas informaci
 
 </Tip>
 
-El [`Trainer`] está configurado a `logging.INFO` por predetermindao cual informa errores, advertencias y otra información basica. Un [`Trainer`] réplica - en entornos distributos - está configurado a `logging.WARNING` cual solamente informa errores y advertencias. Puedes cambiar el nivel de logging con [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) y [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) parametros en [`TrainingArguments`].
+El [`Trainer`] está configurado a `logging.INFO` de forma predeterminada el cual informa errores, advertencias y otra información basica. Un [`Trainer`] réplica - en entornos distributos - está configurado a `logging.WARNING` el cual solamente informa errores y advertencias. Puedes cambiar el nivel de logging con los parametros [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) y [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) parametros en [`TrainingArguments`].
 
 Para configurar el nivel de registro para cada nodo, usa el parámetro [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) para determinar si deseas utilizar el nivel de registro en cada nodo o solo en el nodo principal.
 
@@ -211,12 +212,17 @@ transformers.utils.logging.set_verbosity(log_level)
 
 trainer = Trainer(...)
 ```
+<hfoptions id="logging">
+<hfoption id="single node">
 
 Usa diferentes combinaciones de `log_level` y `log_level_replica` para configurar qué se registra en cada uno de los nodos.
 
 ```bash
 my_app.py ... --log_level warning --log_level_replica error
 ```
+
+</hfoption>
+<hfoption id="multi-node">
 
 Agrega el parámetro `log_on_each_node 0` para entornos multi-nodo.
 
@@ -226,6 +232,9 @@ my_app.py ... --log_level warning --log_level_replica error --log_on_each_node 0
 # set to only report errors
 my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 ```
+
+</hfoption>
+</hfoptions>
 
 ## NEFTune
 
