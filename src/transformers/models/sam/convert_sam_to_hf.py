@@ -133,14 +133,7 @@ def replace_keys(state_dict):
     return model_state_dict
 
 
-def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
-    if model_name == "slimsam-50-uniform":
-        checkpoint_path = "/Users/nielsrogge/Documents/SlimSAM/SlimSAM-50-uniform.pth"
-    elif model_name == "slimsam-77-uniform":
-        checkpoint_path = "/Users/nielsrogge/Documents/SlimSAM/SlimSAM-77-uniform.pth"
-    else:
-        checkpoint_path = hf_hub_download("ybelkada/segment-anything", f"checkpoints/{model_name}.pth")
-
+def convert_sam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
     config = get_config(model_name)
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
@@ -177,11 +170,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
             output = hf_model(**inputs)
             scores = output.iou_scores.squeeze()
 
-        print(scores)
-        pass
-
     elif model_name == "sam_vit_h_4b8939":
-
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(device)
@@ -189,8 +178,6 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         with torch.no_grad():
             output = hf_model(**inputs)
         scores = output.iou_scores.squeeze()
-
-        print("Scores:", scores)
 
         assert scores[-1].item() == 0.9712603092193604
 
@@ -238,6 +225,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf config.json of model to convert",
     )
+    parser.add_argument(
+        "--checkpoint_path",
+        type=str,
+        required=False,
+        help="Path to the original checkpoint",
+    )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--push_to_hub",
@@ -247,4 +240,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    convert_sam_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    if "slimsam" not in args.model_name:
+        checkpoint_path = hf_hub_download("ybelkada/segment-anything", f"checkpoints/{args.model_name}.pth")
+    convert_sam_checkpoint(args.model_name, checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
