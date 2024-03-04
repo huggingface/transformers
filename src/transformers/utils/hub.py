@@ -368,7 +368,7 @@ def cached_file(
             if _raise_exceptions_for_missing_entries:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-                    f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+                    f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
                 )
             else:
                 return None
