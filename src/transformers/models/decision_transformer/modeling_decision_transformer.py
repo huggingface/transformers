@@ -572,18 +572,19 @@ class DecisionTransformerGPT2MLP(nn.Module):
         return hidden_states
 
 
-DECISIONTRANSFORMERGPT2_ATTENTION_CLASSES = {
+DECISION_TRANSFORMER_GPT2_ATTENTION_CLASSES = {
     "eager": DecisionTransformerGPT2Attention,
+    "flash_attention_2": DecisionTransformerGPT2FlashAttention2,
 }
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->DecisionTransformerGPT2, DecisionTransformerGPT2_ATTENTION_CLASSES->DECISIONTRANSFORMERGPT2_ATTENTION_CLASSES
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->DecisionTransformerGPT2, DecisionTransformerGPT2_ATTENTION_CLASSES->DECISION_TRANSFORMER_GPT2_ATTENTION_CLASSES
 class DecisionTransformerGPT2Block(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
-        attention_class = DECISIONTRANSFORMERGPT2_ATTENTION_CLASSES[config._attn_implementation]
+        attention_class = DECISION_TRANSFORMER_GPT2_ATTENTION_CLASSES[config._attn_implementation]
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = attention_class(config=config, layer_idx=layer_idx)
