@@ -346,6 +346,7 @@ class TFModelUtilsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, ref_model.weights):
                     assert np.allclose(p1.numpy(), p2.numpy())
 
+    @require_safetensors
     def test_checkpoint_sharding_local(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -365,6 +366,57 @@ class TFModelUtilsTest(unittest.TestCase):
                 # Check there is an index but no regular weight file
                 self.assertTrue(os.path.isfile(index_file))
                 self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+
+                # Check a file is bigger than max_size only when it has a single weight
+                for shard_file, size in shard_to_size.items():
+                    if max_size.endswith("kiB"):
+                        max_size_int = int(max_size[:-3]) * 2**10
+                    else:
+                        max_size_int = int(max_size[:-2]) * 10**3
+                    # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
+                    # the size asked for (since we count parameters)
+                    if size >= max_size_int + 50000:
+                        with h5py.File(shard_file, "r") as state_file:
+                            self.assertEqual(len(state_file), 1)
+
+                # Check the index and the shard files found match
+                with open(index_file, "r", encoding="utf-8") as f:
+                    index = json.loads(f.read())
+
+                all_shards = set(index["weight_map"].values())
+                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".h5")}
+                self.assertSetEqual(all_shards, shards_found)
+
+                # Finally, check the model can be reloaded
+                new_model = TFBertModel.from_pretrained(tmp_dir)
+
+                model.build_in_name_scope()
+                new_model.build_in_name_scope()
+
+                for p1, p2 in zip(model.weights, new_model.weights):
+                    self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    def test_safetensors_checkpoint_sharding_local(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
+            for max_size in ["150kB", "150kiB", "200kB", "200kiB"]:
+                model.save_pretrained(tmp_dir, max_shard_size=max_size, use_safetensors=True)
+
+                # Get each shard file and its size
+                shard_to_size = {}
+                for shard in os.listdir(tmp_dir):
+                    if shard.endswith(".h5"):
+                        shard_file = os.path.join(tmp_dir, shard)
+                        shard_to_size[shard_file] = os.path.getsize(shard_file)
+
+                index_file = os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)
+                # Check there is an index but no regular weight file
+                self.assertTrue(os.path.isfile(index_file))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
 
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
