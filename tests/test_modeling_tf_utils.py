@@ -537,6 +537,21 @@ class TFModelUtilsTest(unittest.TestCase):
             for p1, p2 in zip(model.weights, new_model.weights):
                 self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    @is_pt_tf_cross_test
+    def test_sharded_safetensors_save_and_load_pt_to_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pt_model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="150kB")
+            # Check we have a safetensors shard index file
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
     @require_safetensors
     def test_safetensors_load_from_hub(self):
         tf_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
