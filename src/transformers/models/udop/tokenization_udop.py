@@ -244,6 +244,9 @@ class UdopTokenizer(PreTrainedTokenizer):
             ```
             Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
             more details.
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
 
 
     Attributes:
@@ -270,6 +273,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=True,
+        add_prefix_space=True,
         **kwargs,
     ) -> None:
         eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
@@ -278,6 +282,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
 
         self.legacy = legacy
+        self.add_prefix_space = add_prefix_space
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         self.vocab_file = vocab_file
@@ -303,6 +308,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -429,7 +435,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -437,7 +443,11 @@ class UdopTokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        text = text.replace(SPIECE_UNDERLINE, " ")
+        if self.add_prefix_space:
+            text = SPIECE_UNDERLINE + text
+
+        tokens = super().tokenize(text, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
@@ -474,9 +484,11 @@ class UdopTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
+            tokens[0] = tokens[0][1:]
+
         current_sub_tokens = []
-        # since we manually add the prefix space, we have to remove it
-        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:

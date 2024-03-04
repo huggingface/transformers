@@ -286,6 +286,14 @@ def combine_image_text_embeddings(
     image_size=224,
     patch_size=16,
 ):
+    """
+    Combine the image and text embeddings for the input to the encoder/decoder of UDOP.
+
+    First, the image embeddings are created by checking for each visual patch if it is inside the bounding box of a
+    token. If it is, the visual patch is combined with the token embedding. Then, the visual bounding boxes are combined
+    with the text bounding boxes. Finally, the visual bounding boxes are combined with the text attention mask.
+    """
+
     sequence_length = num_patches
     ocr_points_x = torch.clip(
         torch.floor((bbox[:, :, 0] + bbox[:, :, 2]) / 2.0 * sequence_length).long(), 0, sequence_length - 1
