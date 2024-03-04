@@ -34,7 +34,7 @@ class LlavaProcessor(ProcessorMixin):
     [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor ([`CLIPImageProcessor` or `LlavaImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -45,6 +45,11 @@ class LlavaProcessor(ProcessorMixin):
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):
+        if image_processor.__class__.__name__ not in ["CLIPImageProcessor", "LlavaImageProcessor"]:
+            raise ValueError(
+                f"`image_processor` has to be of type `CLIPImageProcessor` or `LlavaImageProcessor`, but is {type(image_processor)}"
+            )
+        
         super().__init__(image_processor, tokenizer)
 
     def __call__(
