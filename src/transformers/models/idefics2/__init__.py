@@ -13,10 +13,19 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {"configuration_idefics2": ["IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Idefics2Config"]}
+
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_idefics2"] = ["Idefics2ImageProcessor"]
 
 
 try:
@@ -34,6 +43,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_idefics2 import IDEFICS2_PRETRAINED_CONFIG_ARCHIVE_MAP, Idefics2Config
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_idefics2 import Idefics2ImageProcessor
 
     try:
         if not is_torch_available():

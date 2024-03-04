@@ -48,3 +48,8 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Idefics2ForConditionalGeneration
     - forward
+
+
+## Idefics2ImageProcessor
+[[autodoc]] Idefics2ImageProcessor
+    - preprocess

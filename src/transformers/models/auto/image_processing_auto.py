@@ -70,7 +70,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("idefics", "IdeficsImageProcessor"),
-        ("idefics2", "CLIPImageProcessor"),
+        ("idefics2", "Idefics2ImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("instructblip", "BlipImageProcessor"),
         ("kosmos-2", "CLIPImageProcessor"),
