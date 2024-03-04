@@ -22,7 +22,6 @@ from unittest.util import safe_repr
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.models.mamba.modeling_mamba import MambaCache
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -39,6 +38,8 @@ if is_torch_available():
         MambaForCausalLM,
         MambaModel,
     )
+    from transformers.models.mamba.modeling_mamba import MambaCache
+
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
