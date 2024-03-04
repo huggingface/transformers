@@ -17,6 +17,7 @@ inputs:
     type: string
 
 runs:
+  using: "composite"
   steps:
     - name: Post results Slack channel
       id: post-slack
