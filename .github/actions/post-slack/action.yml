@@ -50,7 +50,7 @@ runs:
                 "text": {"type": "mrkdwn", "text": "*For more details:*"},
                 "accessory": {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Commit results", "emoji": True},
+                    "text": {"type": "plain_text", "text": "Check Commit results", "emoji": "TRUE"},
                     "url": "${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
                 }
               },
@@ -59,7 +59,7 @@ runs:
                 "text": {"type": "mrkdwn", "text": "*For more details:*"},
                 "accessory": {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": "TRUE"},
                     "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                 }
               }
