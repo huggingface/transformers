@@ -2226,8 +2226,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = RTDetrImageProcessor.from_pretrained(_CHECKPOINT_FOR_DOC)
-        >>> model = RTDetrForObjectDetection.from_pretrained(_CHECKPOINT_FOR_DOC)
+        >>> image_processor = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
+        >>> model = RTDetrForObjectDetection.from_pretrained("sbchoi/rtdetr_r50vd")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
