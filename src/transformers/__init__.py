@@ -554,6 +554,10 @@ _import_structure = {
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
     ],
+    "models.palma": [
+        "PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PalmaConfig",
+    ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -2513,6 +2517,14 @@ else:
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
             "LlavaProcessor",
+        ]
+    )
+    _import_structure["models.palma"].extend(
+        [
+            "PALMA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PalmaForConditionalGeneration",
+            "PalmaPreTrainedModel",
+            "PalmaProcessor",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5337,6 +5349,10 @@ if TYPE_CHECKING:
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
     )
+    from .models.palma import (
+        PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PalmaConfig,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -7094,6 +7110,12 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
             LlavaProcessor,
+        )
+        from .models.palma import (
+            PALMA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PalmaForConditionalGeneration,
+            PalmaPreTrainedModel,
+            PalmaProcessor,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

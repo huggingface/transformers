@@ -123,6 +123,7 @@ from . import (
     lilt,
     llama,
     llava,
+    palma,
     longformer,
     longt5,
     luke,
