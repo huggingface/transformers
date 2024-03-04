@@ -108,6 +108,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("timesformer", "VideoMAEImageProcessor"),
         ("tvlt", "TvltImageProcessor"),
         ("tvp", "TvpImageProcessor"),
+        ("udop", "LayoutLMv3ImageProcessor"),
         ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),

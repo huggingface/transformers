@@ -219,6 +219,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
         ("tvp", "TvpModel"),
+        ("udop", "UdopModel"),
         ("umt5", "UMT5Model"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
