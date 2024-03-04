@@ -1128,11 +1128,11 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 class MusicgenMelodyIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody").to(torch_device)
+        return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
 
     @cached_property
     def processor(self):
-        return MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody")
+        return MusicgenMelodyProcessor.from_pretrained("ylacombe/musicgen-melody")
 
     @slow
     def test_logits_text_prompt(self):
@@ -1385,13 +1385,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-stereo-melody").to(
+        return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-stereo-melody").to(
             torch_device
         )
 
     @cached_property
     def processor(self):
-        return MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-stereo-melody")
+        return MusicgenMelodyProcessor.from_pretrained("ylacombe/musicgen-stereo-melody")
 
     @slow
     def test_generate_unconditional_greedy(self):
