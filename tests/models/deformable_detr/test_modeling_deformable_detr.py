@@ -591,6 +591,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         output = model(**inputs)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    @require_torch_bf16
     def create_and_check_model_bf16_forward(self):
         model_class = DeformableDetrForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
