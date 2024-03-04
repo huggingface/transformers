@@ -231,43 +231,6 @@ class LlavaImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
-    def resize_and_pad_image(self, image: np.array, target_resolution: tuple) -> np.array:
-        """
-        Resize and pad an image to a target resolution while maintaining aspect ratio.
-
-        Args:
-            image (np.array):
-                The input image.
-            target_resolution (tuple):
-                The target resolution (height, width) of the image.
-
-        Returns:
-            np.array: The resized and padded image.
-        """
-        original_height, original_width = get_image_size(image)
-        target_height, target_width = target_resolution
-
-        scale_w = target_width / original_width
-        scale_h = target_height / original_height
-
-        if scale_w < scale_h:
-            new_width = target_width
-            new_height = min(math.ceil(original_height * scale_w), target_height)
-        else:
-            new_height = target_height
-            new_width = min(math.ceil(original_width * scale_h), target_width)
-
-        # Resize the image
-        resized_image = resize(image, (new_height, new_width), resample=PILImageResampling.BICUBIC)
-
-        # Pad the image
-        paste_x = (target_width - new_width) // 2
-        paste_y = (target_height - new_height) // 2
-
-        padded_image = pad(resized_image, padding=((paste_y, paste_y), (paste_x, paste_x)))
-
-        return padded_image
-
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize with CLIP->LLaVa
     def resize(
         self,
@@ -408,6 +371,58 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         return images
 
+    def resize_for_patching(self, image: np.array, target_resolution: tuple) -> np.array:
+        """
+        Resize and pad an image to a target resolution while maintaining aspect ratio.
+
+        Args:
+            image (np.array):
+                The input image.
+            target_resolution (tuple):
+                The target resolution (height, width) of the image.
+
+        Returns:
+            np.array: The resized and padded image.
+        """
+        original_height, original_width = get_image_size(image)
+        target_height, target_width = target_resolution
+
+        scale_w = target_width / original_width
+        scale_h = target_height / original_height
+
+        if scale_w < scale_h:
+            new_width = target_width
+            new_height = min(math.ceil(original_height * scale_w), target_height)
+        else:
+            new_height = target_height
+            new_width = min(math.ceil(original_width * scale_h), target_width)
+
+        # Resize the image
+        resized_image = resize(image, (new_height, new_width), resample=PILImageResampling.BICUBIC)
+
+        return resized_image
+
+    def pad_for_patching(self, image: np.array, target_resolution: tuple) -> np.array:
+        original_height, original_width = get_image_size(image)
+        target_height, target_width = target_resolution
+
+        scale_w = target_width / original_width
+        scale_h = target_height / original_height
+
+        if scale_w < scale_h:
+            new_width = target_width
+            new_height = min(math.ceil(original_height * scale_w), target_height)
+        else:
+            new_height = target_height
+            new_width = min(math.ceil(original_width * scale_h), target_width)
+
+        paste_x = (target_width - new_width) // 2
+        paste_y = (target_height - new_height) // 2
+
+        padded_image = pad(image, padding=((paste_y, paste_y), (paste_x, paste_x)))
+
+        return padded_image
+
     def get_image_patches(self, image: np.array, grid_pinpoints, size: tuple, input_data_format) -> List[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -432,7 +447,8 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         image_size = get_image_size(image)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
-        padded_image = self.resize_and_pad_image(image, best_resolution)
+        resized_image = self.resize_for_patching(image, best_resolution)
+        padded_image = self.pad_for_patching(resized_image, best_resolution)
 
         patches = divide_to_patches(padded_image, patch_size=self.crop_size["height"])
 
