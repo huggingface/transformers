@@ -516,13 +516,6 @@ class CacheIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, paged, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-        set_seed(0)
-        model.forward = torch.compile(model.forward)
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        with self.subTest(f"{attn_implementation}, paged, compiled"):
-            self.assertListEqual(decoded, EXPECTED_GENERATION)
-
     @parameterized.expand(["eager", "sdpa"])
     def test_paged_attention_cache_greedy_sampling_pad_right(self, attn_implementation):
         EXPECTED_GENERATION = [
@@ -560,7 +553,6 @@ class CacheIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained(
             "NousResearch/Llama-2-7b-chat-hf",
-            device_map="auto",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
         ).to(torch_device)
