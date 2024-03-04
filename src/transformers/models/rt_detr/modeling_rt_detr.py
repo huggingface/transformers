@@ -278,8 +278,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -308,11 +306,19 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
+        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the encoder.
+        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the encoder.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the first stage.
+        dn_meta (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
@@ -321,7 +327,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    init_reference_points: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
@@ -329,11 +334,12 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    enc_topk_bboxes: Optional[torch.FloatTensor] = None
-    enc_topk_logits: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    init_reference_points: Optional[Tuple[torch.FloatTensor]] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None    
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     dn_meta: Optional[Dict] = None
@@ -1822,7 +1828,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 for value in [enc_topk_bboxes, enc_topk_logits, enc_outputs_class, enc_outputs_coord_logits]
                 if value is not None
             )
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            dn_outputs = tuple(value for value in [dn_meta] if value is not None)
+            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs + dn_outputs
 
             return tuple_outputs
 
@@ -2272,10 +2279,10 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        dn_meta = outputs.dn_meta
+        dn_meta = outputs.dn_meta if return_dict else outputs[-1]
 
-        outputs_class = outputs.intermediate_logits
-        outputs_coord = outputs.intermediate_reference_points
+        outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
+        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
 
         if self.training and dn_meta is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
@@ -2336,11 +2343,12 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             intermediate_reference_points=outputs.intermediate_reference_points,
             intermediate_logits=outputs.intermediate_logits,
             decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.attentions,
+            decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.last_hidden_state,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.attentions,
+            encoder_attentions=outputs.encoder_attentions,
+            init_reference_points=outputs.init_reference_points,
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_topk_logits=outputs.enc_topk_logits,
             enc_outputs_class=outputs.enc_outputs_class,

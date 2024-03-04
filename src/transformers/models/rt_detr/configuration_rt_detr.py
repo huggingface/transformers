@@ -23,7 +23,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "rafaelpadilla/porting_rt_detr": "https://huggingface.co/rafaelpadilla/porting_rt_detr/raw/main/config.json",
+    "sbchoi/rtdetr_r50vd": "https://huggingface.co/sbchoi/rtdetr_r50vd/blob/main/config.json",
 }
 
 
@@ -317,7 +317,6 @@ class RTDetrConfig(PretrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
-        self.is_encoder_decoder = is_encoder_decoder
         # Loss
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma
@@ -331,7 +330,7 @@ class RTDetrConfig(PretrainedConfig):
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
         self.eos_coefficient = eos_coefficient
-        super().__init__(**kwargs)
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def num_attention_heads(self) -> int:

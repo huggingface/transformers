@@ -93,7 +93,6 @@ class RTDetrModelTester:
         eval_idx=-1,
         disable_custom_kernels=True,
         with_box_refine=True,
-        is_encoder_decoder=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -141,7 +140,6 @@ class RTDetrModelTester:
         self.eval_idx = eval_idx
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
-        self.is_encoder_decoder = is_encoder_decoder
 
         self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
 
@@ -220,7 +218,6 @@ class RTDetrModelTester:
             eval_idx=self.eval_idx,
             disable_custom_kernels=self.disable_custom_kernels,
             with_box_refine=self.with_box_refine,
-            is_encoder_decoder=self.is_encoder_decoder,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -363,7 +360,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 14
+            correct_outlen = 13
 
             # loss is at first position
             if "labels" in inputs_dict:
@@ -380,7 +377,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.decoder_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
+                [self.model_tester.decoder_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
             )
 
             # cross attentions
@@ -390,7 +387,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
                 [
-                    self.model_tester.num_attention_heads,
+                    self.model_tester.decoder_attention_heads,
                     self.model_tester.num_feature_levels,
                     self.model_tester.decoder_n_points,
                 ],
@@ -419,9 +416,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [
-                    self.model_tester.num_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.decoder_n_points,
+                    self.model_tester.encoder_attention_heads,
+                    self.model_tester.encoder_seq_length,
+                    self.model_tester.encoder_seq_length,
                 ],
             )
 
