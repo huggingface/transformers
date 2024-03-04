@@ -130,8 +130,6 @@ class QuantoQuantizationTest(unittest.TestCase):
 
     input_text = "Hello my name is"
     EXPECTED_OUTPUTS = "Hello my name is John, I am a professional photographer and I"
-    EXPECTED_OUTPUTS_CPU = EXPECTED_OUTPUTS
-    EXPECTED_OUTPUTS_CUDA = EXPECTED_OUTPUTS
 
     def setUp(self):
         """
@@ -165,8 +163,7 @@ class QuantoQuantizationTest(unittest.TestCase):
             model.to(device)
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
-        EXPECTED_OUTPUTS = self.EXPECTED_OUTPUTS_CPU if device == "cpu" else self.EXPECTED_OUTPUTS_CUDA
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), EXPECTED_OUTPUTS)
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_generate_quality_cpu(self):
         """
@@ -395,20 +392,17 @@ class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
-    EXPECTED_OUTPUTS_CPU = "Hello my name is John, I am a young man from the Philippines"
-    EXPECTED_OUTPUTS_CUDA = "Hello my name is _ _ _ _ _ _ _ _ _ _"
+    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
-    EXPECTED_OUTPUTS_CUDA = "Hello my name is S.I.R.R.R."
-    EXPECTED_OUTPUTS_CPU = "Hello my name is John.\nI am the man who has been in"
+    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
-    EXPECTED_OUTPUTS_CPU = "Hello my name is John, I am a young man from the Philippines"
-    EXPECTED_OUTPUTS_CUDA = "Hello my name is _ _ _ _ _ _ _ _ _ _"
+    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
     weights = "int4"
 
 
