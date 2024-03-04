@@ -29,20 +29,20 @@ runs:
         # For posting a rich message using Block Kit
         payload: |
           {
-            "text": """Slow integration tests on ${{ toJson(inputs.title) }}""",
+            "text": "Slow integration tests on",
             "blocks": [
               {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": """🤗 Results of the ${{ toJSON(inputs.title) }} tests."""
+                    "text": "🤗 Results of the tests."
                 }
               },
               {
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": """Result: ${{ inputs.status }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"""
+                  "text": "Result: ${{ inputs.status }} Commit: ${{ github.event.pull_request.html_url || github.event.head_commit.url }} Action URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                 }
               }
             ]
