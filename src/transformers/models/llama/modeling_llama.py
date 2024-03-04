@@ -1085,7 +1085,7 @@ class LlamaModel(LlamaPreTrainedModel):
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
         causal_mask = (
-            (min_dtype * self.causal_mask[None, None, :, :].to(dtype=dtype))
+            (self.causal_mask[None, None, :, :].to(dtype=dtype) * min_dtype)
             .to(dtype=dtype, device=device)
             .expand(batch_size, 1, -1, -1)
         )
