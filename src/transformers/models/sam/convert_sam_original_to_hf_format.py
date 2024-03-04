@@ -181,7 +181,6 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         pass
 
     elif model_name == "sam_vit_h_4b8939":
-        # assert scores[-1].item() == 0.579890251159668
 
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
