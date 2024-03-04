@@ -59,9 +59,8 @@ class MixtralConfig(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
-            The maximum sequence length that this model might ever be used with. Mixtral's sliding window attention
-            allows sequence of up to 4096*32 tokens.
+        max_position_embeddings (`int`, *optional*, defaults to `32768`):
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -80,7 +79,7 @@ class MixtralConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*):
-            Sliding window attention window size. If not specified, will default to `4096`.
+            Sliding window attention window size. If not specified, will default to `None`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
@@ -91,7 +90,7 @@ class MixtralConfig(PretrainedConfig):
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.02):
             The aux loss factor for the total loss.
 
     ```python
@@ -119,7 +118,7 @@ class MixtralConfig(PretrainedConfig):
         num_attention_heads=32,
         num_key_value_heads=8,
         hidden_act="silu",
-        max_position_embeddings=4096 * 32,
+        max_position_embeddings=32768,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
@@ -133,7 +132,7 @@ class MixtralConfig(PretrainedConfig):
         num_experts_per_tok=2,
         num_local_experts=8,
         output_router_logits=False,
-        router_aux_loss_coef=0.001,
+        router_aux_loss_coef=0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
