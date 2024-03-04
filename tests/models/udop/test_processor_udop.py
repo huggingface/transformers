@@ -152,8 +152,7 @@ class UdopProcessorTest(unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        # add extra args
-        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+        inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 

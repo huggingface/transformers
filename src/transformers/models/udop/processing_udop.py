@@ -78,7 +78,6 @@ class UdopProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
     ) -> BatchEncoding:
         """
         This method first forwards the `images` argument to [`~UdopImageProcessor.__call__`]. In case
@@ -126,7 +125,6 @@ class UdopProcessor(ProcessorMixin):
                 return_length=return_length,
                 verbose=verbose,
                 return_tensors=return_tensors,
-                **kwargs,
             )
 
         else:
@@ -159,7 +157,6 @@ class UdopProcessor(ProcessorMixin):
                 return_length=return_length,
                 verbose=verbose,
                 return_tensors=return_tensors,
-                **kwargs,
             )
 
             # add pixel values
