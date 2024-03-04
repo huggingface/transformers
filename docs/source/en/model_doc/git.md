@@ -68,6 +68,16 @@ The resource should ideally demonstrate something new instead of duplicating an 
 [[autodoc]] GitProcessor
     - __call__
 
+## GitTokenizer
+
+[[autodoc]] GitTokenizer
+    - __call__
+
+## GitTokenizerFast
+
+[[autodoc]] GitTokenizerFast
+    - __call__
+
 ## GitModel
 
 [[autodoc]] GitModel
