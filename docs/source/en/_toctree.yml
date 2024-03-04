@@ -772,6 +772,8 @@
         title: TVLT
       - local: model_doc/tvp
         title: TVP
+      - local: model_doc/udop
+        title: UDOP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava

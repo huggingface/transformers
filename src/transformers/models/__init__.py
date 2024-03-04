@@ -221,6 +221,7 @@ from . import (
     trocr,
     tvlt,
     tvp,
+    udop,
     umt5,
     unispeech,
     unispeech_sat,
