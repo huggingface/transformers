@@ -69,13 +69,21 @@ class MambaConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`.
-        time_step_rank (`int`, *optional*, defaults to `"auto"`): rank fo the discretization projection matrix.
-        time_step_scale (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
-        time_step_min (`<fill_type>`, *optional*, defaults to 0.001): <fill_docstring>
-        time_step_max (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
-        time_step_init_scheme (`<fill_type>`, *optional*, defaults to `"random"`): <fill_docstring>
-        time_step_floor (`<fill_type>`, *optional*, defaults to 0.0001): <fill_docstring>
-        rescale_prenorm_residual (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        time_step_rank (`int`, *optional*, defaults to `"auto"`):
+            Rank of the the discretization projection matrix.
+        time_step_scale (`float`, *optional*, defaults to 1.0):
+            Scale used used to scale `dt_proj.bias`.
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj.bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj.bias`.
+        time_step_init_scheme (`float`, *optional*, defaults to `"random"`):
+            Init scheme used for `dt_proj.weight`. Should be one of `["random","uniform"]`
+        time_step_floor (`float`, *optional*, defaults to 0.0001):
+            Minimum clamping value of the `dt_proj.bias` layer initialization.
+        rescale_prenorm_residual (`bool`, *optional*, defaults to `False`):
+            Whether or not to rescale `out_proj` weights when initializing.
+
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the cache should be used.
 
