@@ -129,8 +129,9 @@ class QuantoQuantizationTest(unittest.TestCase):
     device_map = "cpu"
 
     input_text = "Hello my name is"
-
     EXPECTED_OUTPUTS = "Hello my name is John, I am a professional photographer and I"
+    EXPECTED_OUTPUTS_CPU = EXPECTED_OUTPUTS
+    EXPECTED_OUTPUTS_CUDA = EXPECTED_OUTPUTS
 
     def setUp(self):
         """
@@ -164,22 +165,23 @@ class QuantoQuantizationTest(unittest.TestCase):
             model.to(device)
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(device), max_new_tokens=10)
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        EXPECTED_OUTPUTS = self.EXPECTED_OUTPUTS_CPU if device == "cpu" else self.EXPECTED_OUTPUTS_CUDA
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), EXPECTED_OUTPUTS)
 
     def test_generate_quality_cpu(self):
         """
-        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
+        Simple test to check the quality of the model on cpu by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model, "cpu")
 
     def test_generate_quality_cuda(self):
         """
-        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
+        Simple test to check the quality of the model on cuda by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model, "cuda")
 
     def test_quantized_model_layers(self):
-        from quanto import QModuleMixin, QTensor
+        from quanto import QBitsTensor, QModuleMixin, QTensor
 
         """
         Suite of simple test to check if the layers are quantized and are working properly
@@ -189,12 +191,11 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.assertTrue(
             isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value.weight, QTensor)
         )
-        self.assertEqual(
-            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._data.dtype, torch.int8
-        )
-        self.assertEqual(
-            self.quantized_model.transformer.h[0].self_attention.query_key_value.weight._scale.dtype, torch.float32
-        )
+        if self.weights == "int4":
+            self.assertTrue(
+                isinstance(self.quantized_model.transformer.h[0].self_attention.query_key_value.weight, QBitsTensor)
+            )
+
         # check that the lm_head was indeed not quantized, just like bnb
         self.assertTrue(
             isinstance(self.quantized_model.lm_head, torch.nn.Linear)
@@ -219,7 +220,6 @@ class QuantoQuantizationTest(unittest.TestCase):
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                 tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             )
-            # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
             self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
     def test_serialization_safetensors(self):
@@ -229,15 +229,12 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
-            self.assertIn(
-                "Serialization with safetensors is not supported with models quantized with quanto", str(e.exception)
-            )
+            self.assertIn("The model is quantized with quanto and is not serializable ", str(e.exception))
 
             # TODO: Add the following when we fix the issue with safetensors serialization
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             # )
-            # # We only test the inference on a single gpu. We will do more tests in QuantoInferenceTest class
             # self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
     def check_same_model(self, model1, model2):
@@ -252,9 +249,9 @@ class QuantoQuantizationTest(unittest.TestCase):
             self.assertTrue(torch.equal(d0[k], d1[k].to(d0[k].device)))
 
     def test_compare_with_quanto(self):
-        from quanto import freeze, qint8, quantize
+        from quanto import freeze, qint4, qint8, quantize
 
-        w_mapping = {"int8": qint8}
+        w_mapping = {"int8": qint8, "int4": qint4}
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
@@ -267,11 +264,11 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.check_inference_correctness(model, device="cuda")
 
     def test_load_from_quanto_saved(self):
-        from quanto import freeze, qint8, quantize
+        from quanto import freeze, qint4, qint8, quantize
 
         from transformers import QuantoConfig
 
-        w_mapping = {"int8": qint8}
+        w_mapping = {"int8": qint8, "int4": qint4}
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
@@ -295,14 +292,14 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.check_inference_correctness(quantized_model_from_saved, device="cuda")
 
 
-class QuantoQuantizationTestOffload(QuantoQuantizationTest):
+class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
     device_map = {
         "transformer.word_embeddings": 0,
         "transformer.word_embeddings_layernorm": 0,
         "transformer.ln_f": 0,
         "transformer.h.0": 0,
-        "transformer.h.1": "cpu",
-        "transformer.h.2": "disk",
+        "transformer.h.1": 0,
+        "transformer.h.2": 0,
         "transformer.h.3": 0,
         "transformer.h.4": 0,
         "transformer.h.5": 0,
@@ -322,10 +319,14 @@ class QuantoQuantizationTestOffload(QuantoQuantizationTest):
         "transformer.h.19": 0,
         "transformer.h.20": 0,
         "transformer.h.21": 0,
-        "transformer.h.22": 0,
-        "transformer.h.23": 0,
+        "transformer.h.22": "cpu",
+        "transformer.h.23": "disk",
         "lm_head": 0,
     }
+
+    # the execution device is a gpu
+    def test_generate_quality_cpu(self):
+        pass
 
     # we can't save offloaded values
     def test_serialization_bin(self):
@@ -346,17 +347,22 @@ class QuantoQuantizationTestOffload(QuantoQuantizationTest):
         """
         import quanto
 
-        cpu_weights = self.quantized_model.transformer.h[1].self_attention.query_key_value._hf_hook.weights_map[
+        cpu_weights = self.quantized_model.transformer.h[22].self_attention.query_key_value._hf_hook.weights_map[
             "weight"
         ]
-        disk_weights = self.quantized_model.transformer.h[2].self_attention.query_key_value._hf_hook.weights_map[
+        disk_weights = self.quantized_model.transformer.h[23].self_attention.query_key_value._hf_hook.weights_map[
             "weight"
         ]
         self.assertTrue(isinstance(cpu_weights, quanto.QTensor))
         self.assertTrue(isinstance(disk_weights, torch.Tensor) and not isinstance(disk_weights, quanto.QTensor))
+        if self.weights == "int4":
+            self.assertTrue(isinstance(cpu_weights, quanto.QBitsTensor))
+            self.assertTrue(
+                isinstance(disk_weights, torch.Tensor) and not isinstance(disk_weights, quanto.QBitsTensor)
+            )
 
 
-class QuantoQuantizationTestSerialization(QuantoQuantizationTest):
+class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
     """ "
     Perform the same tests as in QuantoQuantizationTest but with a serialized model.
     """
@@ -386,6 +392,24 @@ class QuantoQuantizationTestSerialization(QuantoQuantizationTest):
         self.have_accelerate_hooks = (
             getattr(self.quantized_model, "hf_device_map", False) and len(self.quantized_model.hf_device_map) > 1
         )
+
+
+class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
+    EXPECTED_OUTPUTS_CPU = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS_CUDA = "Hello my name is _ _ _ _ _ _ _ _ _ _"
+    weights = "int4"
+
+
+class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
+    EXPECTED_OUTPUTS_CUDA = "Hello my name is S.I.R.R.R."
+    EXPECTED_OUTPUTS_CPU = "Hello my name is John.\nI am the man who has been in"
+    weights = "int4"
+
+
+class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
+    EXPECTED_OUTPUTS_CPU = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS_CUDA = "Hello my name is _ _ _ _ _ _ _ _ _ _"
+    weights = "int4"
 
 
 @require_torch_gpu

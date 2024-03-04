@@ -369,7 +369,7 @@ def shard_checkpoint(
             continue
         elif weight.__class__.__name__ in ["QTensor", "QBitsTensor"]:
             # Okay if storage_id is not accurate. This is only useful for safetensors saving and it doesn't yet with quanto tensors
-            # We will remove these conditions one when quanto is compatible with safetensors
+            # We will remove these conditions once when quanto is compatible with safetensors
             storage_id = id(weight)
         else:
             storage_id = id_tensor_storage(weight)
@@ -380,7 +380,7 @@ def shard_checkpoint(
             sharded_state_dicts[block_id][key] = weight
             continue
 
-        if weight.__class__.__name__ in ["QTensor"]:
+        if weight.__class__.__name__ in ["QTensor", "QBitsTensor"]:
             # we don't add the scales/zero-point since these are negligeable
             weight_size = weight._data.numel() * dtype_byte_size(weight._data.dtype)
         else:
