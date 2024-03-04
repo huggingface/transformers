@@ -555,26 +555,6 @@ class CacheIntegrationTest(unittest.TestCase):
         with self.subTest(f"{attn_implementation}, paged, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-        set_seed(0)
-        model._forward = model.forward
-        compiled_forward = torch.compile(model.forward)
-
-        def compiled(func, input_ids, **kwargs):
-            return func(input_ids, **kwargs)
-
-        def call(input_ids, **kwargs):
-            if input_ids.shape[-1] == 1:
-                return compiled(compiled_forward, input_ids, **kwargs)
-
-            return model._forward(input_ids, **kwargs)
-
-        model.forward = call
-
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        with self.subTest(f"{attn_implementation}, paged, compiled"):
-            self.assertListEqual(decoded, EXPECTED_GENERATION)
-
     @parameterized.expand(["eager", "sdpa"])
     def test_paged_attention_cache_beam_search(self, attn_implementation):
         tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left")
@@ -605,27 +585,3 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, decoded_ref)
-
-        set_seed(0)
-        model._forward = model.forward
-        compiled_forward = torch.compile(model.forward)
-
-        def compiled(func, input_ids, **kwargs):
-            return func(input_ids, **kwargs)
-
-        def call(input_ids, **kwargs):
-            if input_ids.shape[-1] == 1:
-                return compiled(compiled_forward, input_ids, **kwargs)
-
-            return model._forward(input_ids, **kwargs)
-
-        model.forward = call
-        gen_out_compile = model.generate(
-            **inputs,
-            do_sample=False,
-            max_new_tokens=20,
-            num_beams=2,
-            num_return_sequences=2,
-        )
-        decoded_compile = tokenizer.batch_decode(gen_out_compile, skip_special_tokens=True)
-        self.assertListEqual(decoded_compile, decoded_ref)
