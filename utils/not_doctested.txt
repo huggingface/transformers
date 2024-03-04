@@ -784,7 +784,7 @@ src/transformers/models/rwkv/configuration_rwkv.py
 src/transformers/models/rwkv/convert_rwkv_checkpoint_to_hf.py
 src/transformers/models/rwkv/modeling_rwkv.py
 src/transformers/models/sam/configuration_sam.py
-src/transformers/models/sam/convert_sam_original_to_hf_format.py
+src/transformers/models/sam/convert_sam_to_hf.py
 src/transformers/models/sam/image_processing_sam.py
 src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
