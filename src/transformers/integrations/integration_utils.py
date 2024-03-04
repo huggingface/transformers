@@ -1262,7 +1262,7 @@ class NeptuneCallback(TrainerCallback):
         try:
             run_params = additional_neptune_kwargs.copy()
             run_params.update(self._init_run_kwargs)
-            self._run = init_run(**self._init_run_kwargs, **run_params)
+            self._run = init_run(**run_params)
             self._run_id = self._run["sys/id"].fetch()
         except (NeptuneMissingProjectNameException, NeptuneMissingApiTokenException) as e:
             raise NeptuneMissingConfiguration() from e
