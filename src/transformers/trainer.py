@@ -2013,7 +2013,7 @@ class Trainer:
                         ):
                             grad_norm = model.get_global_grad_norm()
                             # In some cases the grad norm may not return a float
-                            if isinstance(grad_norm, torch.Tensor):
+                            if hasattr(grad_norm, "item"):
                                 grad_norm = grad_norm.item()
                         else:
                             grad_norm = _grad_norm.item() if _grad_norm is not None else None
