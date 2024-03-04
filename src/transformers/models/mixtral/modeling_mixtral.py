@@ -123,8 +123,8 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, 2, num_experts))
-            .reshape(-1, 2, num_experts)
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .reshape(-1, top_k, num_experts)
             .to(compute_device)
         )
 
