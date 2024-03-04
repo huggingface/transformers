@@ -3231,12 +3231,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             **has_file_kwargs,
                         }
                         if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                            cls._auto_conversion = Thread(
+                            logging.set_verbosity_debug()
+                            Thread(
                                 target=auto_conversion,
                                 args=(pretrained_model_name_or_path,),
                                 kwargs=cached_file_kwargs,
-                            )
-                            cls._auto_conversion.start()
+                                name="Thread-autoconversion",
+                            ).start()
                     else:
                         # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
                         # We try those to give a helpful error message.

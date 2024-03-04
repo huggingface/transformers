@@ -20,6 +20,7 @@ import os
 import os.path
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -1461,7 +1462,9 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
 
         initial_model = BertModel.from_pretrained(self.repo_name, token=self.token)
-        BertModel._auto_conversion.join()
+        for thread in threading.enumerate():
+            if thread.name == "Thread-autoconversion":
+                thread.join(timeout=10)
 
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
