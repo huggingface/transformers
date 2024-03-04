@@ -412,6 +412,12 @@ def spectrogram(
     if np.iscomplexobj(waveform):
         raise ValueError("Complex-valued input waveforms are not currently supported")
 
+    if power is None and mel_filters is not None:
+        raise ValueError(
+            "You have provided `mel_filters` but `power` is `None`. Mel spectrogram computation is not yet supported for complex-valued spectrogram."
+            "Specify `power` to fix this issue."
+        )
+
     # center pad the waveform
     if center:
         padding = [(int(frame_length // 2), int(frame_length // 2))]
