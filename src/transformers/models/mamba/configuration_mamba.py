@@ -67,7 +67,7 @@ class MambaConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.1):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        residual_in_fp32 (`bool`, *optional*, defaults to `False`):
+        residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`.
         time_step_rank (`int`, *optional*, defaults to `"auto"`): rank fo the discretization projection matrix.
         time_step_scale (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
