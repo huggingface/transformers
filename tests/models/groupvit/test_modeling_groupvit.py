@@ -507,6 +507,7 @@ class GroupViTModelTester:
         self.parent = parent
         self.text_model_tester = GroupViTTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = GroupViTVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):

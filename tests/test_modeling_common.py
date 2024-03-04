@@ -760,22 +760,7 @@ class ModelTesterMixin:
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
 
-            # We can't infer batch size from input shape, inputs can have multiple vectors for each batch,
-            # so we try to get it from model_tester first. Some composite models, e.g. Owlv2ModelTest,
-            # do not indicate batch size in model testers, but rather in the parent's tester, then we
-            # try to get parent tester's batch size
-            tester_attributes = [i for i in self.model_tester.__dict__.keys() if i[:1] != "_"]
-            model_testers_parents = [attr for attr in tester_attributes if "model_tester" in attr]
-            if model_testers_parents:
-                batch_size = getattr(self.model_tester, model_testers_parents[0]).batch_size
-            elif hasattr(self.model_tester, "batch_size"):
-                batch_size = self.model_tester.batch_size
-            else:
-                main_input_name = (
-                    model.main_input_name[0] if isinstance(model.main_input_name, list) else model.main_input_name
-                )
-                batch_size = batched_input_prepared[main_input_name].shape[0]
-
+            batch_size = self.model_tester.batch_size
             single_row_input = {}
             for key, value in batched_input_prepared.items():
                 if "head_mask" in key:
