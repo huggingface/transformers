@@ -1445,8 +1445,8 @@ class WhisperGenerationMixin:
             logits_processor = (
                 [forced_tokens_proc] if logits_processor is None else logits_processor + [forced_tokens_proc]
             )
-            generation_config.forced_decoder_ids = None
 
+        generation_config.forced_decoder_ids = None
         return logits_processor
 
     @staticmethod
