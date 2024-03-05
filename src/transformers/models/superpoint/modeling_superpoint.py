@@ -497,7 +497,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
             return tuple(
-                v for v in [keypoints, scores, descriptors, mask, last_hidden_state, hidden_states] if v is not None
+                v for v in [last_hidden_state, keypoints, scores, descriptors, mask, hidden_states] if v is not None
             )
 
         return ImagePointDescriptionOutput(
