@@ -108,6 +108,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         input_ids, scores = self._get_tensors(5)
         input_ids[:2, -1] = 0
+        input_ids[2, -1] = 1
         self.assertListEqual(criteria(input_ids, scores).tolist(), [True, True, False])
 
         input_ids, scores = self._get_tensors(5)
