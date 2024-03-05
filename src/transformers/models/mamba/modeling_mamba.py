@@ -336,7 +336,7 @@ class MambaPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MambaConfig
-    base_model_prefix = "mamba"
+    base_model_prefix = "backbone"
     _no_split_modules = ["MambaBlock"]
     supports_gradient_checkpointing = True
 

@@ -89,7 +89,7 @@ class MambaModelTester:
         self.tie_word_embeddings = tie_word_embeddings
 
     def get_large_model_config(self):
-        return MambaConfig.from_pretrained("ArthurZ/mamba-130m")
+        return MambaConfig.from_pretrained("hf-internal-testing/mamba-2.8b")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -344,9 +344,8 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MambaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = MambaModel.from_pretrained("hf-internal-testing/mamba-130m")
+        self.assertIsNotNone(model)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

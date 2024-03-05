@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -16,15 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Mamba
 
-# Mamba
-
-# Mamba
-
 ## Overview
 
 The Mamba model was proposed in [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://arxiv.org/abs/2312.00752) by Albert Gu and Tri Dao.
 
-This model is a new paradigm architecture based on `state-space-models`. You can read more about the intuition behind these [here](blog).
+This model is a new paradigm architecture based on `state-space-models`. You can read more about the intuition behind these [here](https://srush.github.io/annotated-s4/).
 
 The abstract from the paper is the following:
 
@@ -32,7 +28,11 @@ The abstract from the paper is the following:
 
 Tips:
 
-- in order to run the fast version of the model you should install `causal_conv1d` and `mamba`
+- Mamba is a new `state space model` architecture that rivals the classic Transformers. It is based on the line of progress on structured state space models, with an efficient hardware-aware design and implementation in the spirit of [FlashAttention](https://github.com/Dao-AILab/flash-attention).
+- Mamba stacks `mixer` layers, which are the equivalent of `Attention` layers. The core logic of `mamba` is held in the `MambaMixer` class.
+- Two implementation cohabit: one is optimized and uses fast cuda kernels, while the other one is naive but can run on any device!
+- The current implementation leverages the original cuda kernels: the equivalent of flash attention for Mamba are hosted in the [`mamba-ssm`](https://github.com/state-spaces/mamba) and the [`causal_conv1d`](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports them!
+- Contributions to make the naive path faster are welcome 🤗
 
 This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/state-spaces/mamba).
