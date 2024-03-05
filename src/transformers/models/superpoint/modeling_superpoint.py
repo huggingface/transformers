@@ -501,10 +501,10 @@ class SuperPointModel(SuperPointPreTrainedModel):
             )
 
         return ImagePointDescriptionOutput(
+            last_hidden_state=last_hidden_state,
             keypoints=keypoints,
             scores=scores,
             descriptors=descriptors,
             mask=mask,
-            last_hidden_state=last_hidden_state,
             hidden_states=hidden_states,
         )
