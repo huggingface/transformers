@@ -15,10 +15,10 @@ rendered properly in your Markdown viewer.
 
 # 如何创建自定义流水线？
 
-在本指南中，我们将演示如何创建一个自定义流水线并在 [Hub](https://hf.co/models) 进行分享，或将其添加到 🤗 Transformers 库中。
+在本指南中，我们将演示如何创建一个自定义流水线并分享到 [Hub](https://hf.co/models)，或将其添加到 🤗 Transformers 库中。
 
 首先，你需要决定流水线将能够接受的原始条目。它可以是字符串、原始字节、字典或任何看起来最可能是期望的输入。
-尽量保持这些输入尽可能纯粹的 Python，因为这样可以更容易地实现兼容性（甚至通过 JSON 在其他语言之间）。
+尽量保持输入为纯 Python 语言，因为这样可以更容易地实现兼容性（甚至通过 JSON 在其他语言之间）。
 这些将是流水线 (`preprocess`) 的 `inputs`。
 
 然后定义 `outputs`。与 `inputs` 相同的策略。越简单越好。这些将是 `postprocess` 方法的输出。
@@ -51,7 +51,7 @@ class MyPipeline(Pipeline):
         return best_class
 ```
 
-这种分解的结构是为了支持相对无缝地在 CPU/GPU 上进行支持，同时支持在不同线程上在 CPU 上进行预处理/后处理。
+这种分解的结构旨在为 CPU/GPU 提供相对无缝的支持，同时支持在不同线程上对 CPU 进行预处理/后处理。
 
 `preprocess` 将接受最初定义的输入，并将其转换为可供模型输入的内容。它可能包含更多信息，通常是一个 `Dict`。
 
@@ -99,7 +99,7 @@ def _sanitize_parameters(self, **kwargs):
     return preprocess_kwargs, {}, postprocess_kwargs
 ```
 
-尽量保持输入/输出非常简单，最好是可 JSON 序列化的，因为这样可以使流水线的使用非常简单，而不需要用户了解新的对象类型。
+尽量保持简单输入/输出，最好是可 JSON 序列化的，因为这样可以使流水线的使用非常简单，而不需要用户了解新的对象类型。
 通常也相对常见地支持许多不同类型的参数以便使用（例如音频文件，可以是文件名、URL 或纯字节）。
 
 ## 将其添加到支持的任务列表中
@@ -131,7 +131,7 @@ PIPELINE_REGISTRY.register_pipeline(
 ## 在 Hub 上分享你的流水线
 
 要在 Hub 上分享你的自定义流水线，你只需要将 `Pipeline` 子类的自定义代码保存在一个 Python 文件中。
-例如，假设我们想要为句对分类使用一个自定义流水线，如下所示：
+例如，假设我们想使用一个自定义流水线进行句对分类，如下所示：
 
 ```py
 import numpy as np
@@ -169,7 +169,7 @@ class PairClassificationPipeline(Pipeline):
         return {"label": label, "score": score, "logits": logits}
 ```
 
-这个实现是框架无关的，适用于 PyTorch 和 TensorFlow 模型。如果我们将其保存在一个名为
+这个实现与框架无关，适用于 PyTorch 和 TensorFlow 模型。如果我们将其保存在一个名为
 `pair_classification.py` 的文件中，然后我们可以像这样导入并注册它：
 
 ```py
