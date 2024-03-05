@@ -389,3 +389,6 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are going to the same party. It is a small party, in a small']
 ```
+
+Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
+to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
