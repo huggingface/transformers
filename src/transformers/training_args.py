@@ -39,7 +39,6 @@ from .utils import (
     ACCELERATE_MIN_VERSION,
     ExplicitEnum,
     cached_property,
-    get_torch_version,
     is_accelerate_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -66,6 +65,8 @@ trainer_log_levels = dict(**log_levels, passive=-1)
 if is_torch_available():
     import torch
     import torch.distributed as dist
+
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
@@ -1025,12 +1026,12 @@ class TrainingArguments:
         },
     )
     dataloader_prefetch_factor: Optional[int] = field(
-        default=None if is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.0.0") else 2,
+        default=None if not is_torch_available() or is_torch_greater_or_equal_than_2_0 else 2,
         metadata={
             "help": (
                 "Number of batches loaded in advance by each worker. "
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
-                "Default is None for PyTorch >= 2.0.0 and otherwise 2."
+                "Default is 2 for PyTorch < 2.0.0 and otherwise None."
             )
         },
     )
@@ -1807,6 +1808,16 @@ class TrainingArguments:
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
+
+        if (
+            (not is_torch_available() or is_torch_greater_or_equal_than_2_0)
+            and self.dataloader_num_workers == 0
+            and self.dataloader_prefetch_factor is not None
+        ):
+            raise ValueError(
+                "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
+                " when --dataloader_num_workers > 1."
+            )
 
         if self.push_to_hub_token is not None:
             warnings.warn(
