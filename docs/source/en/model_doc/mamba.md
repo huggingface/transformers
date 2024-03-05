@@ -34,7 +34,7 @@ Tips:
 
 - in order to run the fast version of the model you should install `causal_conv1d` and `mamba`
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/ArthurZ).
+This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/state-spaces/mamba).
 
 

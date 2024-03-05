@@ -62,14 +62,7 @@ is_fast_path_available = all(
 _CHECKPOINT_FOR_DOC = "ArthurZ/mamba-130m"
 _CONFIG_FOR_DOC = "MambaConfig"
 
-MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ArthurZ/mamba-130m",
-    "state-spaces/mamba-370m",
-    "state-spaces/mamba-790m",
-    "state-spaces/mamba-1.4b",
-    "state-spaces/mamba-2.8b",
-    "state-spaces/mamba-2.8b-slimpj",
-]  # See all Mamba models at https://huggingface.co/models?filter=mamba
+MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = []  # See all Mamba models at https://huggingface.co/models?filter=mamba
 
 
 class MambaMixer(nn.Module):
@@ -231,11 +224,17 @@ class MambaMixer(nn.Module):
                     hidden_states += self.conv1d.bias
                 hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)        # [batch, intermediate_size, 1] : decoding
             else:
-                conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
+                conv_state = nn.functional.pad(
+                    hidden_states, 
+                    (self.conv_kernel_size - hidden_states.shape[-1], 0)
+                )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
         else:
-            ssm_state = torch.zeros((batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype)
+            ssm_state = torch.zeros(
+                (batch_size, self.intermediate_size, self.ssm_state_size), 
+                device=hidden_states.device, dtype=dtype
+            )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
 
         # 3. State Space Model sequence transformation
