@@ -2011,7 +2011,7 @@ class Trainer:
                             is_accelerate_available()
                             and self.accelerator.distributed_type == DistributedType.DEEPSPEED
                         ):
-                            grad_norm = model.get_global_grad_norm()
+                            grad_norm = model.get_global_grad_norm().item()
                         else:
                             grad_norm = _grad_norm.item() if _grad_norm is not None else None
 
