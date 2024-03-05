@@ -191,7 +191,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
             # SuperPoint's feature maps are of shape (batch_size, num_channels, width, height)
             for i, conv_layer_size in enumerate(self.model_tester.encoder_hidden_sizes[:-1]):
