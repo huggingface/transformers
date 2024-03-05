@@ -1025,7 +1025,7 @@ class TrainingArguments:
         },
     )
     dataloader_prefetch_factor: Optional[int] = field(
-        default=None if version.parse(get_torch_version()) >= version.parse("2.0.0") else 2,
+        default=None if is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.0.0") else 2,
         metadata={
             "help": (
                 "Number of batches loaded in advance by each worker. "
