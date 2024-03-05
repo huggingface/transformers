@@ -95,8 +95,8 @@ class SuperPointModelTester:
             (
                 self.batch_size,
                 self.encoder_hidden_sizes[-1],
-                self.image_width // 8,
                 self.image_height // 8,
+                self.image_width // 8,
             ),
         )
 
