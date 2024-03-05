@@ -1706,7 +1706,7 @@ class CodeReviewerForConditionalGeneration(CodeReviewerPreTrainedModel):
         >>> # inference
         >>> input_ids = tokenizer(
         ...     "@@ -11,6 +11,8 @@\n \n         invoiceDtoCopy.setState(InvoiceState.OPEN);\n         _invoiceAggregateRepository.updateInvoiceState(invoiceCopy, InvoiceState.OPEN);\n+        _erpIntegrationService.createAndSendInvoiceEvent(invoiceCopy);\n+\n       }\n     }\n \n"
-        ... ).input_ids  # Batch size 1
+        ... , return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # <msg>Please remove this extra line
