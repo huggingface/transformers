@@ -149,7 +149,7 @@ class IdeficsProcessor(ProcessorMixin):
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
-        padding: Union[bool, str, PaddingStrategy] = 'longest',
+        padding: Union[bool, str, PaddingStrategy] = "longest",
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         transform: Callable = None,
@@ -353,7 +353,7 @@ class IdeficsProcessor(ProcessorMixin):
 
             if len(current_images) > 0:
                 padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
-                padded_image_tensor[:current_images.size(0)] = current_images
+                padded_image_tensor[: current_images.size(0)] = current_images
             else:
                 padded_image_tensor = torch.zeros(max_num_images, *self.default_image_dims)
 
