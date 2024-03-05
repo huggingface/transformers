@@ -712,7 +712,7 @@ class ModelTesterMixin:
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
         def recursive_check(batched_object, single_row_object, model_name, key):
-            if isinstance(batched_object, (List, Tuple)):
+            if isinstance(batched_object, (list, tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
                     recursive_check(batched_object_value, single_row_object_value, model_name, key)
             elif isinstance(batched_object, Dict):
