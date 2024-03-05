@@ -18,7 +18,6 @@
 import unittest
 
 from transformers import SegformerConfig, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -30,11 +29,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         SegformerForImageClassification,
         SegformerForSemanticSegmentation,
         SegformerModel,
     )
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.segformer.modeling_segformer import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -324,7 +323,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
 
             model = model_class(config)

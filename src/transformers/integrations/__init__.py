@@ -18,7 +18,11 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
-    "awq": ["fuse_awq_modules", "replace_with_awq_linear"],
+    "awq": [
+        "fuse_awq_modules",
+        "post_init_awq_exllama_modules",
+        "replace_with_awq_linear",
+    ],
     "bitsandbytes": [
         "get_keys_to_not_convert",
         "replace_8bit_linear",
@@ -82,7 +86,11 @@ _import_structure = {
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
-    from .awq import fuse_awq_modules, replace_with_awq_linear
+    from .awq import (
+        fuse_awq_modules,
+        post_init_awq_exllama_modules,
+        replace_with_awq_linear,
+    )
     from .bitsandbytes import (
         get_keys_to_not_convert,
         replace_8bit_linear,
