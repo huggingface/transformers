@@ -27,7 +27,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.models.udop.tokenization_udop import UdopTokenizer
+from transformers import UdopTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
@@ -94,8 +94,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return questions, words, boxes
 
     def setUp(self):
-        super().setUp()
-
         # We have a SentencePiece fixture for testing
         tokenizer = UdopTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
