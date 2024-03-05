@@ -2255,7 +2255,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected couch with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
+        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
         Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
         Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
         Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
