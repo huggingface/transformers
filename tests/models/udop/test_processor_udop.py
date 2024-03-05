@@ -22,7 +22,7 @@ from typing import List
 import numpy as np
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.udop import UdopTokenizer, UdopTokenizerFast
+from transformers import UdopTokenizer, UdopTokenizerFast
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
@@ -39,7 +39,6 @@ if is_torch_available():
 
 if is_pytesseract_available():
     from PIL import Image
-
     from transformers import LayoutLMv3ImageProcessor, UdopProcessor
 
 
