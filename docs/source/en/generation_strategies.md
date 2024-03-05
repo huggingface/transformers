@@ -178,7 +178,7 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 
 The `generate()` method supports caching keys and values to enhance efficiency and avoid re-computations. However the key and value
 cache can occupy a large portion of memory, becoming a bottleneck for long-context generation, especially for Large Language Models.
-Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed. 
+Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
 
 KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
 (https://arxiv.org/abs/2402.02750) and currently supports `quanto` and `HQQ` as backends. For more information on the inner workings see the paper.
@@ -213,11 +213,11 @@ I like rock music because it's loud and energetic. I like to listen to it when I
 
 ## Watermarking
 
-The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green". 
+The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green".
 When generating the "green" will have a small 'bias' value added to their logits, thus having a higher chance to be generated.
 The watermarked text can be detected by calculating the proportion of "green" tokens in the text and estimating how likely it is
-statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper 
-["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on 
+statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper
+["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on
 the inner functioning of watermarking, it is recommended to refer to the paper.
 
 The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
@@ -484,3 +484,47 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 
 Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
 to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
+### DoLa Decoding
+
+**D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
+hallucinations of LLMs, as described in this paper [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://openreview.net/pdf?id=Th6NyL07na).
+DoLa is achieved by contrasting the differences in logits obtained from final
+layers versus earlier layers, thus amplify the factual knowledge localized to particular part of transformer layers.
+To activate DoLa decoding, set the `dola_layers` argument when calling the `model.generate` function.
+`dola_layers` can be set to a string or a list of integers. If set to a string, it can be one of `low`, `high`.
+If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model.
+See the following example for DoLa decoding with the 32-layer LLaMA-7B model.
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+>>> import torch
+
+>>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+>>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
+>>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+>>> model.to(device)
+>>> set_seed(42)
+
+>>> text = "On what date was the Declaration of Independence officially signed?"
+>>> inputs = tokenizer(text, return_tensors="pt").to(device)
+
+# Vanilla greddy decoding
+>>> vanilla_output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+>>> tokenizer.batch_decode(vanilla_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
+
+# DoLa decoding with contrasting lower part of layers (layers 0,2,...,14)
+>>> dola_low_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='low')
+>>> tokenizer.batch_decode(dola_low_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
+
+# DoLa decoding with contrasting higher part of layers (layers 16,18,...,30)
+>>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high')
+>>> tokenizer.batch_decode(dola_high_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nJuly 4, 1776, when the Continental Congress voted to separate from Great Britain. The 56 delegates to the Continental Congress signed the Declaration on August 2, 1776.']
+
+# DoLa decoding with contrasting specific layers (layers 28 and 30)
+>>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30])
+>>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
+```
