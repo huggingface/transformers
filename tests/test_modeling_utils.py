@@ -27,7 +27,6 @@ from pathlib import Path
 
 import requests
 from huggingface_hub import HfApi, HfFolder, delete_repo
-from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
 
