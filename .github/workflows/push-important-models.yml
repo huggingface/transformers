@@ -35,7 +35,6 @@ jobs:
                 model_path="${file#*models/}"
                 model_path="models/${model_path%%/*}"
                 if grep -qFx "$model_path" utils/important_models.txt; then
-                    echo "$model_path was changed"
                     # Append the file to the matrix string
                     model_arrays+=("$model_path")
                 fi
