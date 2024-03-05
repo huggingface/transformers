@@ -81,9 +81,11 @@ class OutputStreamer(BaseStreamer):
         When the buffer is ready, flush it and do something with the values it was holding
         """
         if len(self.cache) > 1:
-            values = self.cache[:]
+            values = self.cache[:] # gives us a list.... : TODO: iterate over items instead of... this.
+        elif len(self.cache) == 1:
+            values = self.cache[0] # gives us an item.
         else:
-            values = self.cache[0]
+            raise ValueError("on_ready() called on an empty buffer. This should not happen. Report this error.")
         self.cache = []
         return self.process_outgoing_values(values)
 
@@ -140,7 +142,8 @@ class OutputIteratorStreamer(OutputStreamer):
             return value
 
     def end(self):
-        self.on_ready() # flush the cache if there's anything in it
+        if self.cache:
+            self.on_ready() # flush the cache if there's anything in it
         self.queue.put(self.stop_signal)
 
 
