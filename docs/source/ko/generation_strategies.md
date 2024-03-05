@@ -72,11 +72,11 @@ GenerationConfig {
 
 ## 모델에 사용자 정의 디코딩 전략 저장[[save-a-custom-decoding-strategy-with-your-model]]
 
-특정 생성 구성을 가진 미세 조정된 모델을 공유하고자 할 때, 다음 단계를 따를 수 있습니다:
+특정 생성 설정을 가진 미세 조정된 모델을 공유하고자 할 때, 다음 단계를 따를 수 있습니다:
 * [`GenerationConfig`] 클래스 인스턴스를 생성합니다.
 * 디코딩 전략 파라미터를 설정합니다.
-* 생성 구성을 [`GenerationConfig.save_pretrained`]를 사용하여 저장하며, `config_file_name` 인자는 비워둡니다.
-* 모델의 저장소에 구성을 업로드하기 위해 `push_to_hub`를 `True`로 설정합니다.
+* 생성 설정을 [`GenerationConfig.save_pretrained`]를 사용하여 저장하며, `config_file_name` 인자는 비워둡니다.
+* 모델의 저장소에 설정을 업로드하기 위해 `push_to_hub`를 `True`로 설정합니다.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, GenerationConfig
@@ -88,7 +88,7 @@ GenerationConfig {
 >>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)  # doctest: +SKIP
 ```
 
-단일 디렉토리에 여러 생성 구성을 저장할 수 있으며, 이때 [`GenerationConfig.save_pretrained`]의 `config_file_name` 인자를 사용합니다. 나중에 [`GenerationConfig.from_pretrained`]로 이들을 인스턴스화할 수 있습니다. 이는 단일 모델에 대해 여러 생성 구성을 저장하고 싶을 때 유용합니다(예: 샘플링을 이용한 창의적 텍스트 생성을 위한 하나, 빔 탐색을 이용한 요약을 위한 다른 하나 등). 모델에 구성 파일을 추가하기 위해 적절한 Hub 권한을 가지고 있어야 합니다.
+단일 디렉토리에 여러 생성 설정을 저장할 수 있으며, 이때 [`GenerationConfig.save_pretrained`]의 `config_file_name` 인자를 사용합니다. 나중에 [`GenerationConfig.from_pretrained`]로 이들을 인스턴스화할 수 있습니다. 이는 단일 모델에 대해 여러 생성 설정을 저장하고 싶을 때 유용합니다(예: 샘플링을 이용한 창의적 텍스트 생성을 위한 하나, 빔 탐색을 이용한 요약을 위한 다른 하나 등). 모델에 설정 파일을 추가하기 위해 적절한 Hub 권한을 가지고 있어야 합니다.
 
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
@@ -289,7 +289,7 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 culture, and they allow us to design the'
 ```
 
-이 가이드에서는 다양한 디코딩 전략을 가능하게 하는 주요 매개변수를 보여줍니다. [`generate`] 메서드에 대한 고급 매개변수가 존재하므로 [`generate`] 메서드의 동작을 더욱 세부적으로 제어할 수 있습니다. 사용 가능한 매개변수의 전체 목록은 [API 설명서](./main_classes/text_generation.md)를 참조하세요.
+이 가이드에서는 다양한 디코딩 전략을 가능하게 하는 주요 매개변수를 보여줍니다. [`generate`] 메서드에 대한 고급 매개변수가 존재하므로 [`generate`] 메서드의 동작을 더욱 세부적으로 제어할 수 있습니다. 사용 가능한 매개변수의 전체 목록은 [API 문서](./main_classes/text_generation.md)를 참조하세요.
 
 ### 추론 디코딩(Speculative Decoding)[[speculative-decoding]]
 
