@@ -715,7 +715,7 @@ class ModelTesterMixin:
             if isinstance(batched_object, (list, tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
                     recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            elif isinstance(batched_object, Dict):
+            elif isinstance(batched_object, dict):
                 for batched_object_value, single_row_object_value in zip(
                     batched_object.values(), single_row_object.values()
                 ):
