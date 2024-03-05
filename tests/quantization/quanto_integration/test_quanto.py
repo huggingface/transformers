@@ -76,7 +76,7 @@ class QuantoTestIntegration(unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly when using weight + activation quantization
         """
 
-        # Try with weight + activatioin quantization
+        # Try with weight + activation quantization
         quantization_config = QuantoConfig(weights="int8", activations="int8")
         self.model, _ = replace_with_quanto_layers(self.model, quantization_config=quantization_config)
 
@@ -119,7 +119,7 @@ class QuantoTestIntegration(unittest.TestCase):
 @require_accelerate
 class QuantoQuantizationTest(unittest.TestCase):
     """
-    Test 8-bit weights only qunatization
+    Test 8-bit weights only quantization
     """
 
     model_name = "bigscience/bloom-560m"

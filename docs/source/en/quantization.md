@@ -69,7 +69,7 @@ quantized_model.save_pretrained(quantized_model, safe_serialization=False)
 ```
 Note that, currently, we can't save the quantized model using safetensors. So, you need to set `safe_serialization=False` or you will get an error. 
 
-Lastly, you also load any quantized model, whether it was quantized using transformers or quanto. You just need to make sure that we have a `quantization_config` attribute in the model's [config.json]. If it does not exist because you quantized it using quanto, you need to add it.
+Lastly, you can also load any quantized model, whether it was quantized using transformers or quanto. You just need to make sure that we have a `quantization_config` attribute in the model's [config.json]. If it does not exist because you quantized it using quanto directly, you need to add it.
 <!-- Add link to the colab so that they have an example of how it works -->
 
 ```py
