@@ -30,7 +30,7 @@ Tips:
 
 - Mamba is a new `state space model` architecture that rivals the classic Transformers. It is based on the line of progress on structured state space models, with an efficient hardware-aware design and implementation in the spirit of [FlashAttention](https://github.com/Dao-AILab/flash-attention).
 - Mamba stacks `mixer` layers, which are the equivalent of `Attention` layers. The core logic of `mamba` is held in the `MambaMixer` class.
-- Two implementation cohabit: one is optimized and uses fast cuda kernels, while the other one is naive but can run on any device!
+- Two implementations cohabit: one is optimized and uses fast cuda kernels, while the other one is naive but can run on any device!
 - The current implementation leverages the original cuda kernels: the equivalent of flash attention for Mamba are hosted in the [`mamba-ssm`](https://github.com/state-spaces/mamba) and the [`causal_conv1d`](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports them!
 - Contributions to make the naive path faster are welcome 🤗
 
