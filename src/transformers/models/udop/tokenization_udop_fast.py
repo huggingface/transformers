@@ -29,11 +29,6 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
-from ..udop.tokenization_udop import (
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
-    VOCAB_FILES_NAMES,
-)
 
 
 if is_sentencepiece_available():
@@ -41,6 +36,17 @@ if is_sentencepiece_available():
 else:
     UdopTokenizer = None
 
+
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/spiece.model",
+    },
+    "tokenizer_file": {
+        "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/tokenizer.json",
+    },
+}
 
 logger = logging.get_logger(__name__)
 
@@ -197,7 +203,6 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = UdopTokenizer
 
