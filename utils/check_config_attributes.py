@@ -84,6 +84,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users
     "SpeechT5HifiGanConfig": ["sampling_rate"],
+    # used internally in the configuration class file
+    "UdopConfig": ["feed_forward_proj"],
     # Actually used in the config or generation config, in that case necessary for the sub-components generation
     "SeamlessM4TConfig": [
         "max_new_tokens",

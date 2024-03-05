@@ -55,6 +55,8 @@
   - local: performance
     title: 综述
   - sections:
+    - local: fsdp
+      title: 完全分片数据并行
     - local: perf_hardware
       title: 用于训练的定制硬件
     - local: hpo_train

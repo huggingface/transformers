@@ -143,7 +143,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     Outputs of encoder-decoder generation models, when using non-beam methods.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
@@ -204,7 +204,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
-            with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True` is passed or when `config.output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
@@ -981,9 +981,9 @@ class GenerationMixin:
                 shorter if all batches finished early due to the `eos_token_id`.
             scores (`tuple(torch.FloatTensor)`):
                 Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
-                of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
-                `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with
-                each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+                of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
+                Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+                with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
                 `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
@@ -1251,12 +1251,12 @@ class GenerationMixin:
             inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
-                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                should be in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, the default will be used, which had the following loading
+                `generation_config` is not provided, the default will be used, which has the following loading
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
@@ -1265,7 +1265,7 @@ class GenerationMixin:
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complement the default stopping criteria built from arguments and a
+                Custom stopping criteria that complements the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. If your stopping criteria depends on the `scores` input, make
                 sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`. This feature is
@@ -1295,7 +1295,7 @@ class GenerationMixin:
             negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Attention_mask for `negative_prompt_ids`.
             kwargs (`Dict[str, Any]`, *optional*):
-                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+                Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
 
