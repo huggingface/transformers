@@ -381,7 +381,7 @@ def shard_checkpoint(
             continue
 
         if weight.__class__.__name__ in ["QTensor", "QBitsTensor"]:
-            # we don't add the scales/zero-point since these are negligeable
+            # we don't add the scales/zero-point because those can be negligeable + subject to changes
             weight_size = weight._data.numel() * dtype_byte_size(weight._data.dtype)
         else:
             weight_size = weight.numel() * dtype_byte_size(weight.dtype)
