@@ -31,7 +31,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
 
 
-
 if is_sentencepiece_available():
     from .tokenization_udop import UdopTokenizer
 else:

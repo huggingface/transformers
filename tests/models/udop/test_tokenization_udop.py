@@ -22,12 +22,12 @@ from typing import List
 from transformers import (
     AddedToken,
     SpecialTokensMixin,
+    UdopTokenizer,
     UdopTokenizerFast,
     is_tf_available,
     is_torch_available,
     logging,
 )
-from transformers import UdopTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
@@ -1718,9 +1718,8 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("#TODO will be removed in main")
-    def test_pretrained_model_lists (self):
+    def test_pretrained_model_lists(self):
         pass
-
 
     @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):

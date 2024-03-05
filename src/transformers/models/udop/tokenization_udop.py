@@ -157,7 +157,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-
 class UdopTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`LayoutXLMTokenizer`] and [`T5Tokenizer`]. Based on
