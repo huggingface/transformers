@@ -29,7 +29,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (
@@ -135,62 +135,6 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-def expand_inputs_for_generation(
-    input_ids,
-    expand_size=1,
-    is_encoder_decoder=False,
-    attention_mask=None,
-    encoder_outputs=None,
-    **model_kwargs,
-):
-    expanded_return_idx = (
-        torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
-    )
-    input_ids = input_ids.index_select(0, expanded_return_idx)
-    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
-    model_kwargs["image_hidden_states"] = model_kwargs.get("image_hidden_states", None)
-
-    if "token_type_ids" in model_kwargs:
-        token_type_ids = model_kwargs["token_type_ids"]
-        model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
-
-    if attention_mask is not None:
-        model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
-
-    if model_kwargs["pixel_values"] is not None:
-        model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
-
-    elif model_kwargs["image_hidden_states"] is not None:
-        model_kwargs["image_hidden_states"] = model_kwargs["image_hidden_states"].index_select(0, expanded_return_idx)
-
-    return input_ids, model_kwargs
-
-
-def update_model_kwargs_for_generation(outputs, model_kwargs):
-    # must have this key set to at least None
-    if "past_key_values" in outputs:
-        model_kwargs["past_key_values"] = outputs.past_key_values
-    else:
-        model_kwargs["past_key_values"] = None
-
-    # update token_type_ids with last value
-    if "token_type_ids" in model_kwargs:
-        token_type_ids = model_kwargs["token_type_ids"]
-        model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
-
-    # update attention masks
-    if "attention_mask" in model_kwargs:
-        attention_mask = model_kwargs["attention_mask"]
-        model_kwargs["attention_mask"] = torch.cat(
-            [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-        )
-
-    # Get the precomputed image_hidden_states
-    model_kwargs["image_hidden_states"] = outputs.image_hidden_states
-
-    return model_kwargs
 
 
 def freeze_model(model, module_exceptions=[]):
@@ -2158,7 +2102,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.image_token_id = self.config.image_token_id
 
         self.layers = nn.ModuleList(
-            [Idefics2DecoderLayer(self.config, i) for i in range(self.config.num_hidden_layers)]
+            [Idefics2DecoderLayer(self.config, layer_idx) for layer_idx in range(self.config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
         self.norm = Idefics2RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
@@ -2304,12 +2248,20 @@ class Idefics2Model(Idefics2PreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        seq_length_with_past = seq_length
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         past_key_values_length = 0
 
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -2330,7 +2282,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
             batch_size, num_images, num_channels, height, width = pixel_values.shape
             # batch_size, num_images, height, width = pixel_values.shape
             # FIXME - is this needed?
-            pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
+            # pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
+            pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
             # FIXME - check the old dimensions here - are there more dimensions than h,w? Why num_images than num_channels?
             # batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
             # pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
@@ -2375,7 +2328,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
-        if past_key_values is None:
+        if past_key_values_length == 0:
             # When we generate, we don't want to replace the potential image_token_id that we generated by images
             # that simply don't exist
             new_inp = self.inputs_merger(
@@ -2389,7 +2342,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         # something like inputs_embeds += self.token_types(token_types)
 
         # embed positions
-        if attention_mask is not None and past_key_values is not None and self._use_flash_attention_2:
+        if attention_mask is not None and use_cache and self._use_flash_attention_2:
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
@@ -2424,13 +2377,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -2438,7 +2389,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    past_key_value,
+                    past_key_values,
                     output_attentions,
                     use_cache,
                 )
@@ -2447,7 +2398,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
                     hidden_states,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
@@ -2455,7 +2406,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -2466,7 +2417,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+
         if not return_dict:
             return tuple(
                 v
@@ -2684,44 +2638,77 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
     # FIXME - double check - past vs past_key_values -- possible bug?
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
-        # only last token for inputs_ids if past is defined in kwargs
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+    ):
+        # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+                max_cache_length = past_key_values.get_max_length()
+            else:
+                cache_length = past_length = past_key_values[0][0].shape[2]
+                max_cache_length = None
 
-        pixel_values = kwargs.get("pixel_values", None)
-        image_hidden_states = kwargs.get("image_hidden_states", None)
-        use_cache = kwargs.get("use_cache", None)
-        attention_mask = kwargs.get("attention_mask", None)
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            if (
+                max_cache_length is not None
+                and attention_mask is not None
+                and cache_length + input_ids.shape[1] > max_cache_length
+            ):
+                attention_mask = attention_mask[:, -max_cache_length:]
+
         position_ids = kwargs.get("position_ids", None)
-
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "image_hidden_states": image_hidden_states,
-        }
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
 
-    # @staticmethod
-    # def _expand_inputs_for_generation(
-    #     *args,
-    #     **model_kwargs,
-    # ):
-    #     return expand_inputs_for_generation(*args, **model_kwargs)
+        image_hidden_states = kwargs.get("image_hidden_states", None)
+        if image_hidden_states is not None:
+            pixel_values = None
+        else:
+            pixel_values = kwargs.get("pixel_values", None)
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "image_hidden_states": image_hidden_states,
+            }
+        )
+        return model_inputs
 
-    # @staticmethod
-    # def _update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder):
-    #     return update_model_kwargs_for_generation(outputs, model_kwargs)
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, model_inputs, **kwargs):
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs=outputs, model_kwargs=model_kwargs, is_encoder_decoder=is_encoder_decoder, model_inputs=model_inputs, **kwargs
+        )
+        # Get the precomputed image_hidden_states
+        model_kwargs["image_hidden_states"] = outputs.image_hidden_states
+        return model_kwargs
 
     @staticmethod
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
