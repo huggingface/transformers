@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,12 +50,10 @@ class MambaConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the beginning of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer
-            as GPTNeoX.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the end of sentence token in the vocabulary. Defaults to 0 as MAMBA uses the same tokenizer as
-            GPTNeoX.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            The id of the beginning of sentence token in the vocabulary.
+        eos_token_id (`int`, *optional*, defaults to 0):
+            The id of the end of sentence token in the vocabulary.
         expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
         conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         use_bias (`bool`, *optional*, defaults to `False`):
@@ -68,9 +65,9 @@ class MambaConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.1):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
-            Whether or not residuals should be in `float32`.
-        time_step_rank (`int`, *optional*, defaults to `"auto"`):
-            Rank of the the discretization projection matrix.
+            Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
+        time_step_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
+            Rank of the the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         time_step_scale (`float`, *optional*, defaults to 1.0):
             Scale used used to scale `dt_proj.bias`.
         time_step_min (`float`, *optional*, defaults to 0.001):
@@ -112,8 +109,8 @@ class MambaConfig(PretrainedConfig):
         num_hidden_layers=32,
         layer_norm_epsilon=1e-5,
         pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
+        bos_token_id=0,
+        eos_token_id=0,
         expand=2,
         conv_kernel=4,
         use_bias=False,
