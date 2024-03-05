@@ -142,12 +142,11 @@ class EOSTokenCriteria(StoppingCriteria):
     def __init__(self, eos_token_id: Union[int, List[int]]):
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        self.eos_token_id = eos_token_id
+        self.eos_token_id = torch.tensor(eos_token_id)
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        eos_token_ids = torch.tensor(self.eos_token_id, dtype=torch.int64, device=input_ids.device)
-        is_done = (input_ids[:, -1].unsqueeze(1) == eos_token_ids).any(dim=1)
+        is_done = torch.isin(input_ids, self.eos_token_id.to(input_ids.device))[:, -1]
         return is_done
 
 

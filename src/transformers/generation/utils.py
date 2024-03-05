@@ -1542,7 +1542,6 @@ class GenerationMixin:
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1557,7 +1556,6 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1577,7 +1575,6 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1606,7 +1603,6 @@ class GenerationMixin:
                 logits_warper=logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1640,7 +1636,6 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1680,7 +1675,6 @@ class GenerationMixin:
                 logits_warper=logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1714,7 +1708,6 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1788,7 +1781,6 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
                 output_logits=generation_config.output_logits,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
@@ -1933,12 +1925,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -2400,12 +2395,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -2704,12 +2702,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -3037,12 +3038,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private and beam scorer refactored
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -3445,12 +3449,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private and beam scorer refactored
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -3806,12 +3813,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private and beam scorer refactored
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -4231,12 +4241,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private and beam scorer refactored
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -4588,12 +4601,15 @@ class GenerationMixin:
             )
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
-            eos_token_id = [
-                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            if not eos_token_id and self.generation_config.eos_token_id:
-                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+            # TODO remove when the method is totally private and beam scorer refactored
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
+            eos_token_id = (
+                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
+            )
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+            if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
