@@ -69,7 +69,7 @@ class SuperPointModelTester:
 
     def prepare_config_and_inputs(self):
         # SuperPoint expects a grayscale image as input
-        pixel_values = floats_tensor([self.batch_size, 3, self.image_width, self.image_height])
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_height, self.image_width])
         config = self.get_config()
         return config, pixel_values
 
@@ -199,8 +199,8 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
                     list(hidden_states[i].shape[-3:]),
                     [
                         conv_layer_size,
-                        self.model_tester.image_width // (2 ** (i + 1)),
                         self.model_tester.image_height // (2 ** (i + 1)),
+                        self.model_tester.image_width // (2 ** (i + 1)),
                     ],
                 )
 
