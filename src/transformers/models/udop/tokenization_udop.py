@@ -147,6 +147,17 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/spiece.model",
+    },
+    "tokenizer_file": {
+        "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/tokenizer.json",
+    },
+}
+
+
+
 class UdopTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`LayoutXLMTokenizer`] and [`T5Tokenizer`]. Based on
@@ -239,6 +250,7 @@ class UdopTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

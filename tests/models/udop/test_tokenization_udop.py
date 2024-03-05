@@ -95,6 +95,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         # We have a SentencePiece fixture for testing
+        super().setup()
         tokenizer = UdopTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
