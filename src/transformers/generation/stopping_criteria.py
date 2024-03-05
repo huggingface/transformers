@@ -2,7 +2,7 @@ import time
 import warnings
 from abc import ABC
 from copy import deepcopy
-from typing import Optional
+from typing import List, Optional, Union
 
 import torch
 
@@ -127,6 +127,28 @@ class MaxTimeCriteria(StoppingCriteria):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         is_done = time.time() - self.initial_timestamp > self.max_time
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
+
+
+class EOSTokenCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever the "end-of-sequence" token in generated.
+    By default, it uses the `EOS` token from model's generation config.
+
+    Args:
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+    """
+
+    def __init__(self, eos_token_id: Union[int, List[int]]):
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        self.eos_token_id = eos_token_id
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        eos_token_ids = torch.tensor(self.eos_token_id, dtype=torch.int64, device=input_ids.device)
+        is_done = (input_ids[:, -1].unsqueeze(1) == eos_token_ids).any(dim=1)
+        return is_done
 
 
 class StoppingCriteriaList(list):

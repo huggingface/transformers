@@ -26,6 +26,7 @@ if is_torch_available():
     import torch
 
     from transformers.generation import (
+        EOSTokenCriteria,
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,
@@ -97,6 +98,21 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         criteria = MaxTimeCriteria(max_time=0.1, initial_timestamp=time.time() - 0.2)
         self.assertTrue(all(criteria(input_ids, scores)))
+
+    def test_eos_token_criteria(self):
+        criteria = EOSTokenCriteria(eos_token_id=0)
+
+        input_ids, scores = self._get_tensors(5)
+        input_ids[:, -1] = 0
+        self.assertTrue(all(criteria(input_ids, scores)))
+
+        input_ids, scores = self._get_tensors(5)
+        input_ids[:2, -1] = 0
+        self.assertListEqual(criteria(input_ids, scores).tolist(), [True, True, False])
+
+        input_ids, scores = self._get_tensors(5)
+        input_ids[:, -1] = 1
+        self.assertListEqual(criteria(input_ids, scores).tolist(), [False, False, False])
 
     def test_validate_stopping_criteria(self):
         validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 10)

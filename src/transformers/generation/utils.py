@@ -75,6 +75,7 @@ from .logits_process import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
 )
 from .stopping_criteria import (
+    EOSTokenCriteria,
     MaxLengthCriteria,
     MaxTimeCriteria,
     StoppingCriteria,
@@ -942,6 +943,8 @@ class GenerationMixin:
             )
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
+        if generation_config.eos_token_id is not None:
+            criteria.append(EOSTokenCriteria(eos_token_id=generation_config.eos_token_id))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1922,11 +1925,24 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        sequential = sequential if sequential is not None else self.generation_config.low_memory
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        sequential = sequential if sequential is not None else self.generation_config.low_memory
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -2185,10 +2201,11 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+            for criteria in stopping_criteria:
+                if hasattr(criteria, "eos_token_id") and criteria.eos_token_id is not None:
+                    if pad_token_id is None:
+                        raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                    next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2198,15 +2215,8 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-                )
-
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
             if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
@@ -2383,9 +2393,23 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2471,10 +2495,11 @@ class GenerationMixin:
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+            for criteria in stopping_criteria:
+                if hasattr(criteria, "eos_token_id") and criteria.eos_token_id is not None:
+                    if pad_token_id is None:
+                        raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                    next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2487,14 +2512,7 @@ class GenerationMixin:
                 model_inputs=model_inputs,
             )
 
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-                )
-
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
             # stop when each sentence is finished
             if unfinished_sequences.max() == 0:
                 this_peer_finished = True
@@ -2680,10 +2698,23 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -2773,10 +2804,11 @@ class GenerationMixin:
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+            for criteria in stopping_criteria:
+                if hasattr(criteria, "eos_token_id") and criteria.eos_token_id is not None:
+                    if pad_token_id is None:
+                        raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                    next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2786,14 +2818,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-                )
-
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
             # stop when each sentence is finished
             if unfinished_sequences.max() == 0:
                 this_peer_finished = True
@@ -3007,7 +3032,21 @@ class GenerationMixin:
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
@@ -3401,7 +3440,21 @@ class GenerationMixin:
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
@@ -3748,7 +3801,21 @@ class GenerationMixin:
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
@@ -4159,7 +4226,21 @@ class GenerationMixin:
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
@@ -4502,11 +4583,23 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if eos_token_id is not None and pad_token_id is None:
-            raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+        if eos_token_id is not None:
+            warnings.warn(
+                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
+                " `stopping_criteria=StoppingCriteriaList([EOSTokenCriteria(eos_token_id=eos_token_id)])` instead.",
+                FutureWarning,
+            )
+            stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+        else:
+            eos_token_id = [
+                criteria.eos_token_id for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
+            if not eos_token_id and self.generation_config.eos_token_id:
+                stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
+                eos_token_id = self.generation_config.eos_token_id
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -4562,13 +4655,7 @@ class GenerationMixin:
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
-            last_assistant_token_is_eos = (
-                ~candidate_input_ids[:, -1]
-                .tile(eos_token_id_tensor.shape[0], 1)
-                .ne(eos_token_id_tensor.unsqueeze(1))
-                .prod(dim=0)
-                .bool()
-            )
+            last_assistant_token_is_eos = stopping_criteria[-1](candidate_input_ids, None)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -4701,17 +4788,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    input_ids[:, -1]
-                    .tile(eos_token_id_tensor.shape[0], 1)
-                    .ne(eos_token_id_tensor.unsqueeze(1))
-                    .prod(dim=0)
-                )
-
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
             # stop when each sentence is finished
             if unfinished_sequences.max() == 0:
                 this_peer_finished = True
