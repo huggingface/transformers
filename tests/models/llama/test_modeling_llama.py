@@ -302,6 +302,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_pruning = False
     fx_compatible = True
 
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
+
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
@@ -398,6 +402,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
+    @require_read_token
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
