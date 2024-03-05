@@ -46,7 +46,6 @@ if is_vision_available():
     from PIL import Image
 
 
-# Copied from tests.models.pvt.test_modeling_pvt
 class PvtV2ConfigTester(ConfigTester):
     def run_common_tests(self):
         config = self.config_class(**self.inputs_dict)
@@ -123,7 +122,6 @@ class PvtV2ModelTester(ModelTesterMixin):
             out_indices=self.out_indices,
         )
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def create_and_check_model(self, config, pixel_values, labels):
         model = PvtV2Model(config=config)
         model.to(torch_device)
@@ -131,7 +129,6 @@ class PvtV2ModelTester(ModelTesterMixin):
         result = model(pixel_values)
         self.parent.assertIsNotNone(result.last_hidden_state)
 
-    # Copied from tests.models.resnet.test_modeling_resnet
     def create_and_check_backbone(self, config, pixel_values, labels):
         model = PvtV2Backbone(config=config)
         model.to(torch_device)
@@ -179,7 +176,6 @@ class PvtV2ModelTester(ModelTesterMixin):
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -188,7 +184,6 @@ class PvtV2ModelTester(ModelTesterMixin):
 
 
 # We will verify our results on an image of cute cats
-# Copied from tests.models.pvt.test_modeling_pvt
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
@@ -209,26 +204,21 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     has_attentions = False
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def setUp(self):
         self.model_tester = PvtV2ModelTester(self)
         self.config_tester = PvtV2ConfigTester(self, config_class=PvtV2Config)
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     @unittest.skip("Pvt-V2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     @unittest.skip("Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_common_attributes(self):
         pass
@@ -244,7 +234,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # torch.utils.checkpoint.checkpoint
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -292,7 +281,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -322,7 +310,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     @slow
     def test_model_from_pretrained(self):
         for model_name in PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -375,7 +362,6 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
-    # Copied from tests.models.pvt.test_modeling_pvt
     @slow
     @require_accelerate
     @require_torch_accelerator
