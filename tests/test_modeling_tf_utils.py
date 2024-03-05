@@ -402,7 +402,7 @@ class TFModelUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
             for max_size in ["150kB", "150kiB", "200kB", "200kiB"]:
-                model.save_pretrained(tmp_dir, max_shard_size=max_size, use_safetensors=True)
+                model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=True)
 
                 # Get each shard file and its size
                 shard_to_size = {}
