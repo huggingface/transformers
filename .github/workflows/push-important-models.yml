@@ -27,9 +27,11 @@ jobs:
       - name: Run step if only the files listed above change
         if: steps.changed-files.outputs.any_changed == 'true'
         id: set-matrix
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
             model_arrays=()
-            for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            for file in "$ALL_CHANGED_FILES"; do
                 model_path="${file#*models/}"
                 model_path="models/${model_path%%/*}"
                 if grep -qFx "$model_path" utils/important_models.txt; then
