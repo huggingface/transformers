@@ -5188,10 +5188,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
-    from .models.depth_anything import (
-        DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        DepthAnythingConfig,
-    )
+    from .models.depth_anything import DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP, DepthAnythingConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
@@ -5247,11 +5244,7 @@ if TYPE_CHECKING:
         FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerWithHifiGanConfig,
     )
-    from .models.flaubert import (
-        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FlaubertConfig,
-        FlaubertTokenizer,
-    )
+    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
@@ -5316,7 +5309,10 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
-    from .models.idefics import IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP, IdeficsConfig
+    from .models.idefics import (
+        IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        IdeficsConfig,
+    )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -5364,7 +5360,10 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
-    from .models.llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig
+    from .models.llava import (
+        LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LlavaConfig,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -5530,11 +5529,7 @@ if TYPE_CHECKING:
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
-    from .models.qwen2 import (
-        QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Qwen2Config,
-        Qwen2Tokenizer,
-    )
+    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5697,7 +5692,10 @@ if TYPE_CHECKING:
         ViltImageProcessor,
         ViltProcessor,
     )
-    from .models.vipllava import VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, VipLlavaConfig
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
+    )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
         VisionTextDualEncoderConfig,
@@ -5909,12 +5907,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import (
-        AqlmConfig,
-        AwqConfig,
-        BitsAndBytesConfig,
-        GPTQConfig,
-    )
+    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -6919,7 +6912,10 @@ if TYPE_CHECKING:
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
-        from .models.fuyu import FuyuForCausalLM, FuyuPreTrainedModel
+        from .models.fuyu import (
+            FuyuForCausalLM,
+            FuyuPreTrainedModel,
+        )
         from .models.gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,

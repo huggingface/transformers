@@ -15,8 +15,6 @@
 """Tokenization classes for GIT."""
 from typing import TYPE_CHECKING, List
 
-import torch
-
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils.generic import PaddingStrategy, TensorType
 

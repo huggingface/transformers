@@ -10,9 +10,7 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import (
-        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES,
-    )
+    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
