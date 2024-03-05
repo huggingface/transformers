@@ -25,6 +25,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.utils.checkpoint import checkpoint
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -48,14 +49,6 @@ from ...utils import (
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
-try:
-    from xformers import ops as xops
-    from xformers.ops.fmha import attn_bias as xattn
-    from xformers.ops import fmha
-    #from xformers.components.positional_embedding.rotary import RotaryEmbedding
-except ImportError:
-    print('Could not import xformers! please install it https://github.com/facebookresearch/xformers    one method tested to work was to install it with "pip3 install -U xformers --index-url https://download.pytorch.org/whl/cu118"')
-    raise
 
 import torch
 
@@ -519,11 +512,12 @@ class T5Attention(nn.Module):
 
         self.pruned_heads = set()
         self.gradient_checkpointing = False
-        self.memory_efficient_attention = config.memory_efficient_attention if hasattr(config, "memory_efficient_attention") else False
+        self.memory_efficient_attention = config.memory_efficient_attention if hasattr(config, "memory_efficient_attention") else None
         #self.memory_efficient_attention = True
         #print('DEBUG DEBUG DEBUG! FORCING self.memory_efficient_attention=True for debugging !!!')
 
         self.cross_attention = cross_attention
+        self.scale = None
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -592,14 +586,12 @@ class T5Attention(nn.Module):
     
     def inject_position_embedding(self, position_ids_info_list, real_seq_length, key_length, key_states, query_states):
         position_bias = None
-        xattn_AttentionBias_forbidden = False
         B,H,M,K = query_states.shape
         for position_ids, position_embedding_name in position_ids_info_list:
             pos_emb_type = self.positional_embedding_injected_in_attention[position_embedding_name]['type']
             if pos_emb_type in [POSITION_EMBEDDING_T5_DEFAULT_RELATIVE, POSITION_EMBEDDING_T5_RELATIVE]:
                 curr_position_bias = self.compute_bias_for_relative_position_embedding_name(position_embedding_name=position_embedding_name, position_embedding_type=pos_emb_type, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=query_states.device)
                 position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)
-                xattn_AttentionBias_forbidden = True
             elif pos_emb_type == POSITION_EMBEDDING_ROTARY:
                 position_bias  = torch.zeros(
                     (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
@@ -615,7 +607,7 @@ class T5Attention(nn.Module):
                 key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
             else:
                 raise Exception(f'Encountered pos_emb_type={pos_emb_type} but the only supported options to be injected inside attention are {SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION}')
-        return position_bias, query_states, key_states, xattn_AttentionBias_forbidden
+        return position_bias, query_states, key_states
     
     def compute_bias_for_relative_position_embedding_name(self, position_embedding_name, position_embedding_type, position_ids, query_length, key_length, device=None):
         """Compute binned relative position bias"""
@@ -662,6 +654,46 @@ class T5Attention(nn.Module):
             values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length), 
         return values
 
+
+    @classmethod
+    def shape(cls, states: torch.Tensor, batch_size, n_heads, key_value_proj_dim) -> torch.Tensor:
+        """projection"""
+        return states.view(batch_size, -1, n_heads, key_value_proj_dim).transpose(1, 2)
+    
+    @classmethod
+    def unshape(cls, states: torch.Tensor, batch_size, inner_dim) -> torch.Tensor:
+        """reshape"""
+        return states.transpose(1, 2).contiguous().view(batch_size, -1, inner_dim)
+    
+    def project(self, hidden_states, proj_layer, key_value_states, past_key_value: torch.Tensor) -> torch.Tensor:
+        """projects hidden states correctly to key/query states"""
+        batch_size = hidden_states.shape[0]
+        if key_value_states is None:
+            # self-attn
+            # (batch_size, n_heads, seq_length, dim_per_head)
+            hidden_states = self.shape(proj_layer(hidden_states), batch_size=batch_size, n_heads=self.n_heads, key_value_proj_dim=self.key_value_proj_dim)
+        elif past_key_value is None:
+            # cross-attn
+            # (batch_size, n_heads, seq_length, dim_per_head)
+            hidden_states = self.shape(proj_layer(key_value_states), batch_size=batch_size, n_heads=self.n_heads, key_value_proj_dim=self.key_value_proj_dim)
+
+        if past_key_value is not None:
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, key_length, dim_per_head)
+                hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+            elif past_key_value.shape[2] != key_value_states.shape[1]:
+                # checking that the `sequence_length` of the `past_key_value` is the same as
+                # the provided `key_value_states` to support prefix tuning
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = self.shape(proj_layer(key_value_states), batch_size=batch_size, n_heads=self.n_heads, key_value_proj_dim=self.key_value_proj_dim)
+            else:
+                # cross-attn
+                hidden_states = past_key_value
+        return hidden_states
+
+
     def forward(
         self,
         hidden_states,
@@ -697,77 +729,24 @@ class T5Attention(nn.Module):
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
-        def shape(states):
-            """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # checking that the `sequence_length` of the `past_key_value` is the same as
-                    # the provided `key_value_states` to support prefix tuning
-                    # cross-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
+       
         # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = self.shape(self.q(hidden_states), batch_size=batch_size, n_heads=self.n_heads, key_value_proj_dim=self.key_value_proj_dim)  # (batch_size, n_heads, seq_length, dim_per_head)
 
         #print(f'debug query_states sum={query_states.sum()},  part={query_states[0,6:8,20:24, 20:22]}')
         
 
         # get key/value states
-        key_states = project(
+        key_states = self.project(
             hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
         )
-        value_states = project(
+        value_states = self.project(
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
         )
 
         #print(f'debug key_states sum={key_states.sum()},  part={key_states[0,6:8,20:24, 20:22]}')
         #print(f'debug value_states sum={value_states.sum()},  part={value_states[0,6:8,20:24, 20:22]}')
-
-        def _compress_to_single_unpadded_sample(tens:torch.Tensor, sizes:List[int]):
-            separated = [tens[i,:,:curr_len] for (i,curr_len) in enumerate(sizes)]
-            ans = torch.concat(separated, dim=1)[None,...]
-            return ans
-
-        def _convert_to_single_padded_tensor(tens:torch.Tensor, sizes:List[int], pad_to_size:int, pad_value:float=0.0):
-            multi = tens.split(sizes, dim=1)
-            multi = [ torch.nn.functional.pad(x, ((0,0,0,0,0,pad_to_size-curr_size))) for (x,curr_size) in zip(multi, sizes) ]
-            ans = torch.concat(multi, dim=0)
-            return ans
-
-        add_to_scores = None
-
-        ### experiments showed that when using xformers AttentionBias the training is NOT stable! 
-        xattn_AttentionBias_forbidden = torch.cuda.get_device_capability('cuda') < (8, 0)
-        xattn_AttentionBias_forbidden |= query_states.dtype not in [torch.float16, torch.bfloat16]      
-        
-        #print('DEBUG DEBUG DEBUG!!!! REMOVE!!! ALLOWING xformers AttentionBias also in unstable cases!!!\n'*3)
-        #xattn_AttentionBias_forbidden = False
+        add_to_scores = None  
 
         B,H,M,K = query_states.shape
         if position_bias is None:
@@ -778,14 +757,12 @@ class T5Attention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias, query_states, key_states, xattn_AttentionBias_forbidden_pos_emb = \
+                position_bias, query_states, key_states = \
                     self.inject_position_embedding(position_ids_info_list=position_ids_info_list,
                                              real_seq_length=real_seq_length,
                                              key_length=key_length,
                                              key_states=key_states,
-                                             query_states=query_states)
-                xattn_AttentionBias_forbidden |= xattn_AttentionBias_forbidden_pos_emb
-            
+                                             query_states=query_states)            
              
                         
             # if key and values are already calculated
@@ -794,7 +771,6 @@ class T5Attention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
-                # MICHAL see above that mask is added to position_bias. Also in length-generalization.
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
             if self.pruned_heads:
@@ -804,19 +780,9 @@ class T5Attention(nn.Module):
             else:
                 position_bias_masked = position_bias
 
-            add_to_scores = position_bias_masked            
-        else:
-            if self.memory_efficient_attention:
-                assert isinstance(position_bias, tuple)
-                position_bias, q_seqlen, kv_seqlen = position_bias
-                #position_bias was provided from outside, so it was cached from an earlier layer.
-            add_to_scores = position_bias
+            add_to_scores = position_bias_masked
             
-
-        #xattn_AttentionBias_forbidden = False
-        #print("DEBUG DEBUG DEBUG!!!! for debugging setting xattn_AttentionBias_forbidden = False")
-
-        if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
+        if self.memory_efficient_attention is None: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
             scores = torch.matmul(
                 query_states, key_states.transpose(3, 2)
@@ -836,128 +802,34 @@ class T5Attention(nn.Module):
             if layer_head_mask is not None:
                 attn_weights = attn_weights * layer_head_mask
 
-            attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+            attn_output = self.unshape(torch.matmul(attn_weights, value_states), batch_size=batch_size, inner_dim=self.inner_dim)  # (batch_size, seq_length, dim)
         
+        elif self.memory_efficient_attention in ["torch_scaled_dot_product_attention", "torch_scaled_dot_product_attention_force_flash"]:
+            scale = 1 / math.sqrt(K) if self.scale == None else self.scale
+            is_causal = self.is_decoder and not self.cross_attention
+            if self.memory_efficient_attention == "torch_scaled_dot_product_attention_force_flash":
+                with torch.backends.cuda.sdp_kernel(
+                    enable_flash=True, 
+                    enable_math=False, 
+                    enable_mem_efficient=False
+                ):
+                    attn_output = F.scaled_dot_product_attention(query_states,key_states, value_states, attn_mask=None, dropout_p=self.dropout, is_causal=is_causal, scale=scale)
+            else:
+                attn_output = F.scaled_dot_product_attention(query_states,key_states, value_states, attn_mask=add_to_scores, dropout_p=self.dropout, is_causal=is_causal, scale=scale)
 
-        attn_bias_for_xformers = None
-        
-        if self.memory_efficient_attention:
-
-            if xattn_AttentionBias_forbidden: # or (query_states.shape != key_states.shape):
-                warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
-                # if xattn_AttentionBias_forbidden:
-                #     warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
-                # elif (query_states.shape != key_states.shape):
-                #     warnings.warn('workaround for the cross-attention case - until we solve the cross-attention usage in FlashV2')
-                # else:
-                #     assert False
-
-                attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)      
-                #xattn_AttentionBias_forbidden = True
-
-                q_seqlen = None
-                kv_seqlen = None
-            else:                 
-                original_max_seq_len = mask.shape[-1] 
-
-                # if (query_states.shape != key_states.shape):
-                #     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                #     if not xattn_AttentionBias_forbidden:
-                #         if isinstance(position_bias, xattn.AttentionBias):
-                #             attn_bias_for_xformers = position_bias
-                #         else:
-                #             attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
-                # elif (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case                    
-
-                if (query_states.shape != key_states.shape):
-                    banana = 123
-                if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case                    
-                    actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                    if not xattn_AttentionBias_forbidden:                        
-                        if isinstance(position_bias, xattn.AttentionBias):
-                            attn_bias_for_xformers = position_bias                            
-                        else:                            
-
-                            if self.cross_attention:
-                                q_seqlen = [position_bias.shape[2] for _ in actual_lengths]
-                                kv_seqlen = actual_lengths                                
-                            else:
-                                q_seqlen = actual_lengths
-                                kv_seqlen = actual_lengths
-               
-                            attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=q_seqlen, kv_seqlen=kv_seqlen)
-                        if self.cross_attention:
-                            actual_lengths = [hidden_states.shape[1] for _ in actual_lengths]
-                            original_max_seq_len = hidden_states.shape[1]
-
-                elif (len(mask.shape)==4) and (mask.shape[1]==1) and (mask.shape[2]==mask.shape[3]): #causal case
-                    actual_lengths = mask.argmin(3)[:,0,:].argmax(1).tolist()
-                    q_seqlen = actual_lengths
-                    kv_seqlen  = q_seqlen
-                    if not xattn_AttentionBias_forbidden:
-                        if isinstance(position_bias, xattn.AttentionBias):
-                            attn_bias_for_xformers = position_bias
-                        else:
-                            attn_bias_for_xformers = xattn.BlockDiagonalCausalMask.from_seqlens(q_seqlen=actual_lengths)
-                    #materialized = attn_bias_for_xformers.materialize(shape=(sum(actual_lengths),sum(actual_lengths))) #for debugging
-
-                query_states = _compress_to_single_unpadded_sample(query_states, q_seqlen)
-                key_states = _compress_to_single_unpadded_sample(key_states, kv_seqlen)
-                value_states = _compress_to_single_unpadded_sample(value_states, kv_seqlen)
-
-            memory_efficient_attention_kwargs = dict(
-                query=query_states.permute(0,2,1,3), # -> BHMK -> BMHK
-                key=key_states.permute(0,2,1,3), # -> BHMK -> BMHK
-                value=value_states.permute(0,2,1,3), # -> BHMK -> BMHK
-                p=self.dropout,
-                #attn_bias=position_bias_masked.contiguous().to(query_states.dtype), #do we really need it to be contiguous on A100+mixed precision+FLASHv2??
-                attn_bias=attn_bias_for_xformers,
-                scale = 1.0,
-            )
-
-
-            #flash_not_supported_reasons =  fmha.flash.FwOp.not_supported_reasons(fmha.Inputs(**memory_efficient_attention_kwargs))           
-
-            use_op = None
-            if isinstance(attn_bias_for_xformers, xattn.AttentionBias):
-                use_op = (fmha.flash.FwOp, fmha.flash.BwOp, ) 
-
-            #use_op = None
-            #print('DEBUG DEBUG DEBUG!!!! REMOVE THIS!!!! allowing non flashv2 !!!')
-                      
-            attn_output = xops.memory_efficient_attention(
-                **memory_efficient_attention_kwargs,
-                op = use_op,
-                #op = None,  ##use this if you want xformers to automatically choose the memory efficient attention version that matches you capabilities.
-            )
-
-            if not xattn_AttentionBias_forbidden:
-                attn_output = _convert_to_single_padded_tensor(attn_output, sizes=actual_lengths, pad_to_size=original_max_seq_len)
+            attn_output = self.unshape(attn_output, batch_size=batch_size, inner_dim=self.inner_dim)  # (batch_size, seq_length, dim)
             
-           
-            # print(query_states.shape)
-            # print(attn_output.shape)
-            attn_output = attn_output.reshape(B, M, H*K)     
+        else:
+            raise Exception(f"Error unkonwn {self.memory_efficient_attention=}")     
        
         
         attn_output = self.o(attn_output)
 
         #print(f'is_decoder={self.is_decoder} cross_attention={self.cross_attention} debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
 
-        if self.cross_attention:
-            banana = 123
-
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
-
-        if isinstance(attn_bias_for_xformers, xattn.AttentionBias):
-            return_pos_bias = attn_bias_for_xformers
-        else:
-            return_pos_bias = position_bias
-
-        if self.memory_efficient_attention:
-            outputs = (attn_output, present_key_value_state, (return_pos_bias, q_seqlen, kv_seqlen))
-        else:
-            outputs = (attn_output, present_key_value_state, return_pos_bias)
+        return_pos_bias = position_bias
+        outputs = (attn_output, present_key_value_state, return_pos_bias)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -1320,6 +1192,9 @@ class T5Stack(T5PreTrainedModel):
                     injected_in_attention[position_embedding_name] = embedding_info
             else:
                 raise Exception(f'unfamiliar positional embedding type "{embedding_type}" supported options are {SUPPORTED_POS_ENC_TYPES}')
+        if len(injected_in_attention) == 0:
+            injected_in_attention = None
+        
         # print(injected_in_attention)            
         self.block = nn.ModuleList(
             [T5Block(config, positional_embedding_injected_in_attention=injected_in_attention if i==0 else None) for i in range(config.num_layers)]

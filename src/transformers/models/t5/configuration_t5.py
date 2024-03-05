@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ T5 model configuration"""
-from typing import Mapping
+from typing import Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
@@ -102,7 +102,7 @@ class T5Config(PretrainedConfig):
         eos_token_id=1,
         classifier_dropout=0.0,
         position_embedding_definitions=None,
-        memory_efficient_attention:bool=False,
+        memory_efficient_attention: Optional[str]=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -141,7 +141,7 @@ class T5Config(PretrainedConfig):
         self.position_embedding_definitions = position_embedding_definitions
         if self.position_embedding_definitions is None:
             #this configuration mimics the default T5 relative positional encoding behavior
-            self.position_embedding_definitions = dict(t5_default_relative=dict(type='t5_default_relative', config=None))            
+            self.position_embedding_definitions = dict(default=dict(type='t5_default_relative', config=None))            
         self.memory_efficient_attention = memory_efficient_attention
 
         super().__init__(
