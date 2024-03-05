@@ -163,7 +163,7 @@ def clean_code_for_run(code):
 
 
 def parse_json_tool_call(json_blob: str):
-    json_blob = json_blob.strip().replace("```json", "").replace("```", "").replace('\\', "")
+    json_blob = json_blob.replace('$ACTION_JSON_BLOB', '').replace("```json", "").replace("```", "").replace('\\', "").replace('=', '').strip()
     try:
         first_accolade_index =  json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer('}', json_blob))][-1]
