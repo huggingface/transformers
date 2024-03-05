@@ -13,14 +13,8 @@
 # limitations under the License.
 import argparse
 
-import torch
-from huggingface_hub import hf_hub_download
-
 from transformers import (
     AutoConfig,
-    AutoTokenizer,
-    Idefics2Config,
-    AutoProcessor,
     AutoModelForCausalLM,
     Idefics2ForConditionalGeneration,
 )

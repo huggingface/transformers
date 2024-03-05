@@ -14,24 +14,30 @@
 # limitations under the License.
 
 
-from typing import Tuple, Dict, Union, List, Iterable, Any, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import convert_to_rgb, resize, pad, PaddingMode, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, to_numpy_array, valid_images, make_list_of_images, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, validate_preprocess_arguments, get_image_size, is_valid_image, is_scaled_image, infer_channel_dimension_format
-
-from ...utils import TensorType, is_vision_available, logging
+from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    get_image_size,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    is_valid_image,
+    to_numpy_array,
+    valid_images,
+    validate_preprocess_arguments,
+)
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_vision_available():
-    import PIL
-
-
 
 
 def get_resize_output_image_size(image, size, input_data_format) -> Tuple[int, int]:
@@ -84,10 +90,17 @@ def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
     elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
         images = [images]
     # If it's a list of batches, it's already in the right format
-    elif isinstance(images, (list, tuple)) and len(images) > 0 and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+    elif (
+        isinstance(images, (list, tuple))
+        and len(images) > 0
+        and isinstance(images[0], (list, tuple))
+        and is_valid_image(images[0][0])
+    ):
         pass
     else:
-        raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
+        raise ValueError(
+            "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
+        )
     return images
 
 
@@ -106,7 +119,7 @@ def get_max_height_width(
     Get the maximum height and width across all images in a batch.
     """
     if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images[0][0])
+        input_data_format = infer_channel_dimension_format(images_list[0][0])
 
     image_sizes = []
     for images in images_list:
@@ -141,13 +154,23 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     Constructs a Idefics image processor.
 
     Args:
-        do_convert_rgb (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        do_resize (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        size (`Dict`, *optional*): <fill_docstring>
-        resample (`Resampling`, *optional*, defaults to `Resampling.BILINEAR`): <fill_docstring>
-        do_rescale (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        rescale_factor (`float`, *optional*, defaults to 0.0): <fill_docstring>
-        do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
+            Only has an effect if the input image is in the PIL format.
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image. The longest edge of the image is resized to  be <= `size["longest_edge"]`, with the
+            shortest edge resized to keep the input aspect ratio, with a minimum size of `size["shortest_edge"]`.
+        size (`Dict`, *optional*):
+            Controls the size of the output image. This is a dictionary containing the keys "shortest_edge" and "longest_edge".
+        resample (`Resampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Resampling filter to use when resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image. If set to `True`, the image is rescaled to have pixel values between 0 and 1.
+        rescale_factor (`float`, *optional*, defaults to `1/255`):
+            Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
+            a standard deviation of `image_std`.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
@@ -170,7 +193,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: float = 1/255,
+        rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -222,7 +245,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             raise ValueError(
                 "size must be a dictionary with keys 'shortest_edge' and 'longest_edge' or 'height' and 'width'."
             )
-        return resize(image, size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs)
+        return resize(
+            image, size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+        )
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor._pad_image
     def _pad_image(
@@ -288,7 +313,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         batch_size = len(images)
         max_num_images = max(len(images_) for images_ in images)
-        input_data_format = infer_channel_dimension_format(images[0][0]) if input_data_format is None else input_data_format
+        input_data_format = (
+            infer_channel_dimension_format(images[0][0]) if input_data_format is None else input_data_format
+        )
         data_format = input_data_format if data_format is None else data_format
 
         def empty_image(size, input_data_format):
@@ -298,7 +325,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 return np.zeros((*size, 3), dtype=np.uint8)
             raise ValueError("Invalid channel dimension format.")
 
-        padded_images_list = [[empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)]
+        padded_images_list = [
+            [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
+        ]
         padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
 
         for batch_idx in range(batch_size):
@@ -311,7 +340,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
-                padded_masks[batch_idx][sample_idx] = make_pixel_mask(image, output_size=pad_size, input_data_format=input_data_format)
+                padded_masks[batch_idx][sample_idx] = make_pixel_mask(
+                    image, output_size=pad_size, input_data_format=input_data_format
+                )
 
         padded_masks = padded_masks if return_pixel_mask else None
         return padded_images_list, padded_masks
@@ -428,22 +459,48 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images_list[0][0])
 
         if do_resize:
-            images_list = [[self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format) for image in images] for images in images_list]
+            images_list = [
+                [
+                    self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                    for image in images
+                ]
+                for images in images_list
+            ]
 
         if do_rescale:
-            images_list = [[self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format) for image in images] for images in images_list]
+            images_list = [
+                [
+                    self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                    for image in images
+                ]
+                for images in images_list
+            ]
 
         if do_normalize:
-            images_list = [[self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format) for image in images] for images in images_list]
+            images_list = [
+                [
+                    self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                    for image in images
+                ]
+                for images in images_list
+            ]
 
         pixel_attention_mask = None
         if do_pad:
-            images_list, pixel_attention_mask = self.pad(images_list, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format)
+            images_list, pixel_attention_mask = self.pad(
+                images_list, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format
+            )
 
         if data_format is not None:
-            images_list = [[to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images] for images in images_list]
+            images_list = [
+                [
+                    to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                    for image in images
+                ]
+                for images in images_list
+            ]
 
-        data = {"pixel_values": np.array(images_list) if do_pad else images_list} # Faster tensor conversion
+        data = {"pixel_values": np.array(images_list) if do_pad else images_list}  # Faster tensor conversion
         if pixel_attention_mask is not None:
             data["pixel_attention_mask"] = np.array(pixel_attention_mask) if do_pad else pixel_attention_mask
 

@@ -2523,10 +2523,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         return self.lm_head.linear
 
     def set_output_embeddings(self, new_embeddings):
-        # FIXME - check if we need to return the additional_fc as well
-        return self.lm_head.linear
-
-    def set_output_embeddings(self, new_embeddings):
         # FIXME - check if we need to return the additional_fc as well = new_embeddings
         self.lm_head.linear = new_embeddings
 
@@ -2704,7 +2700,11 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder, model_inputs, **kwargs):
         model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs=outputs, model_kwargs=model_kwargs, is_encoder_decoder=is_encoder_decoder, model_inputs=model_inputs, **kwargs
+            outputs=outputs,
+            model_kwargs=model_kwargs,
+            is_encoder_decoder=is_encoder_decoder,
+            model_inputs=model_inputs,
+            **kwargs,
         )
         # Get the precomputed image_hidden_states
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states
