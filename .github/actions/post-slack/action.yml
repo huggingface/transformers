@@ -31,7 +31,6 @@ runs:
 
     - name: Post Canceled results Slack channel
       id: post-slack
-      needs: create-message
       uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
       with:
         # Slack channel id, channel name, or user id to post message.
