@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -1090,7 +1091,11 @@ class LlamaModel(LlamaPreTrainedModel):
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if self.config._attn_implementation == "sdpa" and attention_mask is not None:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+        ):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
             is_tracing = (
                 torch.jit.is_tracing()
@@ -1098,10 +1103,10 @@ class LlamaModel(LlamaPreTrainedModel):
                 or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
             if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
                 # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == min_dtype, dim=-1, keepdim=True)).to(dtype)
+                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
@@ -1272,7 +1277,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        if getattr(self.model.layers[0].self_attn, "past_key_value", None) is not None:
+        if self.generation_config.cache_implementation == "static":
             # generation with static cache
             cache_position = kwargs.get("cache_position", None)
             if cache_position is None:
@@ -1449,6 +1454,8 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     LLAMA_START_DOCSTRING,
 )
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
+    base_model_prefix = "transformer"
+
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama
     def __init__(self, config):
         super().__init__(config)

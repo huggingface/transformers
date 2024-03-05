@@ -1453,6 +1453,7 @@ class GenerationMixin:
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
+            generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
 
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
             if generation_config.cache_implementation == "static":
