@@ -23,9 +23,9 @@ runs:
       id: create-message
       run: |
         if [ "${{ inputs.status }}" == "success" ]; then
-          echo "export STATUS_MESSAGE=🟢" >> $GITHUB_ENV
+          echo STATUS_MESSAGE=🟢 >> $GITHUB_ENV
         else
-          echo "export STATUS_MESSAGE=🔴" >> $GITHUB_ENV
+          echo STATUS_MESSAGE=🔴 >> $GITHUB_ENV
         fi
       shell: bash
 
@@ -52,7 +52,7 @@ runs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": " ${{ env.STATUS_MESSAGE }}"
+                  "text": "${{ env.STATUS_MESSAGE }}"
                 }
               },
               {
