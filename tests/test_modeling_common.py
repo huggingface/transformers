@@ -706,7 +706,9 @@ class ModelTesterMixin:
             # models operating on continuous spaces have higher abs difference than LMs
             # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
             if "input_ids" not in batched_input:
-                return lambda tensor1, tensor2: (1.0 - F.cosine_similarity(tensor1.float(), tensor2.float(), dim=0).max())
+                return lambda tensor1, tensor2: (
+                    1.0 - F.cosine_similarity(tensor1.float(), tensor2.float(), dim=0).max()
+                )
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
         def recursive_check(batched_object, single_row_object, model_name, key):
@@ -769,6 +771,9 @@ class ModelTesterMixin:
                     # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
+                elif hasattr(value, "tensor"):
+                    # only for layoutlmv2 which ises ImageList intead of pixel values (needs for torchscript)
+                    single_row_input[key] = value.tensor[:single_batch_shape]
                 else:
                     single_row_input[key] = value
 
@@ -777,7 +782,6 @@ class ModelTesterMixin:
                 model_row_output = model(**single_row_input)
 
             if isinstance(model_batched_output, torch.Tensor):
-                print(model_row_output.shape, model_batched_output.shape)
                 model_batched_output = {"model_output": model_batched_output}
                 model_row_output = {"model_output": model_row_output}
 

@@ -419,10 +419,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_is_small(self):
         pass
 
-    @unittest.skip("TODO")
-    def test_batching_equivalence(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
