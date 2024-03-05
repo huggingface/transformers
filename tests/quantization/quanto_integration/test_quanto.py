@@ -119,7 +119,7 @@ class QuantoTestIntegration(unittest.TestCase):
 @require_accelerate
 class QuantoQuantizationTest(unittest.TestCase):
     """
-    Test 8-bit weights only qunatization
+    Test 8-bit weights only quantization
     """
 
     model_name = "bigscience/bloom-560m"
