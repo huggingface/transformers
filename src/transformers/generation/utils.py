@@ -1926,10 +1926,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -2396,10 +2396,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -2703,10 +2703,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -3039,10 +3039,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private and beam scorer refactored
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -3450,10 +3450,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private and beam scorer refactored
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -3814,10 +3814,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private and beam scorer refactored
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -4242,10 +4242,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private and beam scorer refactored
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
@@ -4602,10 +4602,10 @@ class GenerationMixin:
             stopping_criteria.append(EOSTokenCriteria(eos_token_id=eos_token_id))
         else:
             # TODO remove when the method is totally private and beam scorer refactored
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever 
-            eos_token_id = (
-                [criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")]
-            )
+            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
+            eos_token_id = [
+                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
+            ]
             eos_token_id = eos_token_id[0] if eos_token_id else None
             if eos_token_id is None and self.generation_config.eos_token_id is not None:
                 eos_token_id = self.generation_config.eos_token_id
