@@ -59,16 +59,16 @@ class PalmaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PalmaForConditionalGeneration, PalmaConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import PalmaForConditionalGeneration, PalmaConfig, SiglipVisionConfig, GemmaConfig
 
-    >>> # Initializing a CLIP-vision config
-    >>> vision_config = CLIPVisionConfig()
+    >>> # Initializing a Siglip-like vision config
+    >>> vision_config = SiglipVisionConfig()
 
-    >>> # Initializing a Llama config
-    >>> text_config = LlamaConfig()
+    >>> # Initializing a Gemma config
+    >>> text_config = GemmaConfig()
 
     >>> # Initializing a Palma palma-1.5-7b style configuration
-    >>> configuration = PalmaConfig(vision_config, text_config)
+    >>> configuration = GemmaConfig(vision_config, text_config)
 
     >>> # Initializing a model from the palma-1.5-7b style configuration
     >>> model = PalmaForConditionalGeneration(configuration)
@@ -85,11 +85,15 @@ class PalmaConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        image_token_index=32000,
+        image_token_index=257152, # put dummy token index at end of vocabulary
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
-        vocab_size=32000,
+        vocab_size=257152,
+        projection_dim=2048,
+        hidden_size=2048,
+        intermediate_size=16384,
+        # FIXME how do we pass vision/text specific config keys here?
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -98,34 +102,41 @@ class PalmaConfig(PretrainedConfig):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
+        self.projection_dim = projection_dim
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
 
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
+                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
             )
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip_vision_model"](
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
                 intermediate_size=4096,
-                hidden_size=1024,
+                hidden_size=1152,
                 patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
+                image_size=224,
+                num_hidden_layers=27,
                 num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
+                vocab_size=257152,
+                projection_dim=2048,
             )
         self.vocab_size = self.vocab_size
 
         self.text_config = text_config
 
         if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
             self.vocab_size = self.text_config.vocab_size
         elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+            self.text_config = CONFIG_MAPPING["gemma"](
+                hidden_size=2048,
+                num_hidden_layers=18, # similar to gemma-2b
+                intermediate_size=16384,
+            )
 
         super().__init__(**kwargs)

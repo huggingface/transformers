@@ -32,6 +32,21 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_palma import PalmaConfig
+from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
+from ...models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
+from ...models.siglip.modeling_siglip import SiglipVisionEmbeddings, SiglipEncoder
+
 
 
 logger = logging.get_logger(__name__)
@@ -43,6 +58,76 @@ PALMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Palma models at https://huggingface.co/models?filter=palma
 ]
 
+PALMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+class PalmaSiglipVisionTransformer(nn.Module):
+    """
+    Modified version of Siglip with a linear head and no pooling, used specifically in Palma.
+    """
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = SiglipVisionEmbeddings(config)
+        self.encoder = SiglipEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        # self.head = nn.Linear(embed_dim, 2048)  # FIXME this is for loading/debugging.
+        # FIXME we should derive final concat embed dim from config
+
+    @add_start_docstrings_to_model_forward(PALMA_SIGLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=SiglipVisionConfig)
+    def forward(
+        self,
+        pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        hidden_states = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        if not return_dict: #FIXME is there a standard for a non-dict returned output? esp for non-pooled output
+            return (last_hidden_state,) + encoder_outputs[1:]
+
+        return BaseModelOutput(
+            last_hidden_state=last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @dataclass
@@ -92,15 +177,11 @@ class PalmaCausalLMOutputWithPast(ModelOutput):
 class PalmaMultiModalProjector(nn.Module):
     def __init__(self, config: PalmaConfig):
         super().__init__()
-
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
 
     def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
+        hidden_states = self.linear(image_features)
+
         return hidden_states
 
 
@@ -239,7 +320,10 @@ PALMA_INPUTS_DOCSTRING = r"""
 class PalmaForConditionalGeneration(PalmaPreTrainedModel):
     def __init__(self, config: PalmaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_model = PalmaSiglipVisionTransformer(config=config.vision_config)
+
+        # Here Moved out AutoModel since the arch is slightly different and we don't want to rewrite .head on-the-fly 
+        # AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = PalmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
@@ -278,7 +362,9 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    """
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+        # Probably not needed for Palma
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
@@ -346,7 +432,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
-
+    """
     @add_start_docstrings_to_model_forward(PALMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PalmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
