@@ -23,11 +23,12 @@ runs:
   using: "composite"
   steps:
     - name: Create content to post
+    id: create-message
     run: |
       if [ "${{ inputs.status }}" == "success" ]; then
-        echo "export STATUS_MESSAGE='🟢 Tests passed'" >> $GITHUB_ENV
+        echo "export STATUS_MESSAGE=🟢" >> $GITHUB_ENV
       else
-        echo "export STATUS_MESSAGE='🔴 Tests failed'" >> $GITHUB_ENV
+        echo "export STATUS_MESSAGE=🔴" >> $GITHUB_ENV
       fi
 
     - name: Post Success results Slack channel
