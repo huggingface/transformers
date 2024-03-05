@@ -52,7 +52,7 @@ runs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "${{ env.STATUS_MESSAGE }}"
+                  "text": " ${{ env.STATUS_MESSAGE }}"
                 }
               },
               {
