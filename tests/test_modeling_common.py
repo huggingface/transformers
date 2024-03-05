@@ -754,7 +754,6 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
-            config.output_attentions = True
 
             model_name = model_class.__name__
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
