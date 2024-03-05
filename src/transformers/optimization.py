@@ -374,7 +374,7 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     elif min_lr is not None:
         min_lr_rate = min_lr / optimizer.defaults["lr"]
     elif min_lr_rate is None:
-        raise ValueError("One of min_lr or min_lr_rate should be set")
+        raise ValueError("One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`")
 
     lr_lambda = partial(
         _get_cosine_schedule_with_warmup_lr_lambda,
