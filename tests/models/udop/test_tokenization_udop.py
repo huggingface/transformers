@@ -1717,6 +1717,11 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_alignement_methods(self):
         pass
 
+    @unittest.skip("#TODO will be removed in main")
+    def test_pretrained_model_lists (self):
+        pass
+
+
     @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         pass
