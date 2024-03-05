@@ -720,6 +720,7 @@ class ModelTesterMixin:
                     batched_object.values(), single_row_object.values()
                 ):
                     recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            # do not compare returned loss (0-dim tensor) or codebook ids (int)
             elif batched_object is None or isinstance(batched_object, int):
                 return
             elif batched_object.dim() == 0:
@@ -764,9 +765,7 @@ class ModelTesterMixin:
             batch_size = self.model_tester.batch_size
             single_row_input = {}
             for key, value in batched_input_prepared.items():
-                if "head_mask" in key:
-                    single_row_input[key] = value
-                elif isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
                     # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
