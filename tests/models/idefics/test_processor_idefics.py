@@ -151,13 +151,58 @@ class IdeficsProcessorTest(TestCasePlus):
             "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
             "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
+        predicted_attention_masks = [
+            ([1]*10)+ ([0]*9),
+            ([1]*10)+ ([0]*10),
+        ]
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
         max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
         longest = processor(prompts, padding="longest", truncation=True, max_length=30)
+        default_padding = processor(prompts, truncation=True)
+
         decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
         decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
+        decoded_default_padding = processor.tokenizer.decode(default_padding["input_ids"][-1])
+
         self.assertEqual(decoded_max_length, predicted_tokens[1])
         self.assertEqual(decoded_longest, predicted_tokens[0])
+        self.assertEqual(decoded_default_padding, predicted_tokens[0])
+        
+        self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
+        self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
+        self.assertListEqual(default_padding["attention_mask"][-1].tolist(), predicted_attention_masks[0])
+
+    def test_tokenizer_left_padding(self):
+        '''Identical to test_tokenizer_padding, but with padding_side not explicitly set.'''
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        predicted_tokens = [
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
+        ]
+        predicted_attention_masks = [
+            ([0]*9) + ([1]*10),
+            ([0]*10) + ([1]*10),
+        ]
+        prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
+        max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
+        longest = processor(prompts, padding="longest", truncation=True, max_length=30)
+        default_padding = processor(prompts, truncation=True)
+
+        decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
+        decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
+        decoded_default_padding = processor.tokenizer.decode(default_padding["input_ids"][-1])
+
+        self.assertEqual(decoded_max_length, predicted_tokens[1])
+        self.assertEqual(decoded_longest, predicted_tokens[0])
+        self.assertEqual(decoded_default_padding, predicted_tokens[0])
+
+        self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
+        self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
+        self.assertListEqual(default_padding["attention_mask"][-1].tolist(), predicted_attention_masks[0])
 
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
