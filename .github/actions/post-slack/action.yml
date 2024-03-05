@@ -23,9 +23,9 @@ runs:
       id: create-message
       run: |
         if [ "${{ inputs.status }}" == "success" ]; then
-          echo STATUS_MESSAGE=🟢 >> $GITHUB_ENV
+          echo STATUS_MESSAGE='🟢 Tests are passing!' >> $GITHUB_ENV
         else
-          echo STATUS_MESSAGE=🔴 >> $GITHUB_ENV
+          echo STATUS_MESSAGE='🔴 Tests failed! Please check the GitHub action link below' >> $GITHUB_ENV
         fi
       shell: bash
 
