@@ -81,6 +81,7 @@ class GenerationConfig(PushToHubMixin):
         - *diverse beam-search decoding* if `num_beams>1` and `num_beam_groups>1`
         - *constrained beam-search decoding* if `constraints!=None` or `force_words_ids!=None`
         - *assisted decoding* if `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
+        - *dola decoding* if `dola_layers` is passed to `.generate()`
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
@@ -305,6 +306,12 @@ class GenerationConfig(PushToHubMixin):
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
+        > Generation parameters exclusive to [dola decoding](https://arxiv.org/abs/2309.03883)
+
+        relative_top (`float`, *optional*):
+            The relative top value used in DoLa decoding. It is a float value between 0 and 1, which determines the subset of tokens to be considered in DoLa decoding.
+            See adaptive plausibility constraint in Section 2.3.
+
         > Parameters specific to the caching mechanism:
 
         cache_implementation (`str`, *optional*, default to `None`):
@@ -396,6 +403,9 @@ class GenerationConfig(PushToHubMixin):
         # Assistant generation
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
+
+        # DoLa decoding
+        self.relative_top = kwargs.pop("relative_top", 0.1)
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
