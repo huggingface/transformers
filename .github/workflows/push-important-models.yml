@@ -2,7 +2,7 @@ name: Slow tests on important models (on Push - A10)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ add-new-push-test-workflow ]
 
 env:
   RUN_SLOW: "yes"
@@ -43,10 +43,11 @@ jobs:
   test_modified_files:
     needs: get_modified_models
     name: Run slow tests on modified models
-    runs-on: [single-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    runs-on: ubuntu-latest
+    # runs-on: [single-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
+    # container:
+    #   image: huggingface/transformers-all-latest-gpu
+    #   options: --gpus all --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' }}
     strategy:
       fail-fast: false
@@ -55,14 +56,14 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
-      - name: Install locally transformers & other libs
-        run: |
-          pip uninstall transformers && pip install -e ".[testing]" 
-          MAX_JOBS=4 pip install flash-attn --no-build-isolation
-          pip install bitsandbytes
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
+      # - name: Install locally transformers & other libs
+      #   run: |
+      #     pip uninstall transformers && pip install -e ".[testing]" 
+      #     MAX_JOBS=4 pip install flash-attn --no-build-isolation
+      #     pip install bitsandbytes
+      # - name: NVIDIA-SMI
+      #   run: |
+      #     nvidia-smi
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
