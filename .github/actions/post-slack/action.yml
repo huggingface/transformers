@@ -30,6 +30,7 @@ runs:
       else
         echo "export STATUS_MESSAGE=🔴" >> $GITHUB_ENV
       fi
+    shell: bash
 
     - name: Post Success results Slack channel
       id: post-slack
