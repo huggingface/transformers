@@ -36,6 +36,7 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytes
 if is_torch_available():
     import torch
 
+
 if is_pytesseract_available():
     from PIL import Image
 
