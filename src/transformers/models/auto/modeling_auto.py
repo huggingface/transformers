@@ -552,6 +552,7 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+
 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     # Model for Causal Image Modeling mapping
     [
