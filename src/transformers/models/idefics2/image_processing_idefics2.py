@@ -332,7 +332,6 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         for batch_idx in range(batch_size):
             for sample_idx, image in enumerate(images[batch_idx]):
-                print(batch_idx, sample_idx)
                 padded_images_list[batch_idx][sample_idx] = self._pad_image(
                     image,
                     pad_size,

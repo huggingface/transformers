@@ -20,6 +20,7 @@ import numpy as np
 
 from .image_utils import (
     ChannelDimension,
+    ImageInput,
     get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
@@ -745,7 +746,19 @@ def pad(
 
 
 # TODO (Amy): Accept 1/3/4 channel numpy array as input and return np.array as default
-def convert_to_rgb(image):
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+    Args:
+        image (Image):
+            The image to convert.
+    """
+    requires_backends(convert_to_rgb, ["vision"])
+
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
     # for transparent images. The call to `alpha_composite` handles this case
     if image.mode == "RGB":
