@@ -45,10 +45,10 @@ def replace_with_quanto_layers(
             should not be passed by the user.
     """
     from accelerate import init_empty_weights
-    from quanto import QLayerNorm, QLinear, qfloat8, qfloat8_e4m3fn, qfloat8_e5m2, qint2, qint4, qint8
+    from quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
 
     w_mapping = {"float8": qfloat8, "int8": qint8, "int4": qint4, "int2": qint2}
-    a_mapping = {None: None, "int8": qint8, "fp8_e5m2": qfloat8_e5m2, "fp8_e4m3": qfloat8_e4m3fn}
+    a_mapping = {None: None, "float8": qfloat8, "int8": qint8}
 
     if modules_to_not_convert is None:
         modules_to_not_convert = []
