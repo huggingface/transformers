@@ -1387,9 +1387,9 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
+        self.query_pos_head = RTDetrMLPPredictionHead(4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
-        self.query_pos_head = None
         self.bbox_embed = None
         self.class_embed = None
 
@@ -1576,8 +1576,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             nn.init.normal_(weight_embedding)
             self.weight_embedding = nn.Parameter(weight_embedding, requires_grad=True)
 
-        self.query_pos_head = RTDetrMLPPredictionHead(4, 2 * config.d_model, config.d_model, num_layers=2)
-
         # encoder head
         self.enc_output = nn.Sequential(
             nn.Linear(config.d_model, config.d_model),
@@ -1614,7 +1612,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # decoder
         self.decoder = RTDetrDecoder(config)
-        self.decoder.query_pos_head = self.query_pos_head
 
         self.post_init()
 
@@ -2145,6 +2142,9 @@ class RTDetrLoss(nn.Module):
     RTDETR_START_DOCSTRING,
 )
 class RTDetrForObjectDetection(RTDetrPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    _tied_weights_keys = ["bbox_embed", "class_embed"]
+
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
 
