@@ -156,15 +156,19 @@ class SuperPointEncoder(nn.Module):
         self.input_dim = 1
 
         conv_blocks = []
-        conv_blocks.append(SuperPointConvBlock(self.input_dim, config.encoder_hidden_sizes[0], add_pooling=True))
+        conv_blocks.append(
+            SuperPointConvBlock(config, self.input_dim, config.encoder_hidden_sizes[0], add_pooling=True)
+        )
         for i in range(1, len(config.encoder_hidden_sizes) - 1):
             conv_blocks.append(
                 SuperPointConvBlock(
-                    config.encoder_hidden_sizes[i - 1], config.encoder_hidden_sizes[i], add_pooling=True
+                    config, config.encoder_hidden_sizes[i - 1], config.encoder_hidden_sizes[i], add_pooling=True
                 )
             )
         conv_blocks.append(
-            SuperPointConvBlock(config.encoder_hidden_sizes[-2], config.encoder_hidden_sizes[-1], add_pooling=False)
+            SuperPointConvBlock(
+                config, config.encoder_hidden_sizes[-2], config.encoder_hidden_sizes[-1], add_pooling=False
+            )
         )
         self.conv_blocks = nn.ModuleList(conv_blocks)
 
