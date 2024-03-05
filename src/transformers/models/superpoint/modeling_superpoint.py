@@ -115,7 +115,9 @@ class ImagePointDescriptionOutput(ModelOutput):
 
 
 class SuperPointConvBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, add_pooling: bool = False) -> None:
+    def __init__(
+        self, config: SuperPointConfig, in_channels: int, out_channels: int, add_pooling: bool = False
+    ) -> None:
         super().__init__()
         self.conv_a = nn.Conv2d(
             in_channels,
