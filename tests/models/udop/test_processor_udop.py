@@ -22,6 +22,8 @@ from typing import List
 import numpy as np
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
+from transformers.models.udop import UdopTokenizer, UdopTokenizerFast
+
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
@@ -34,9 +36,6 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytes
 
 if is_torch_available():
     import torch
-
-    from transformers import UdopTokenizer, UdopTokenizerFast
-
 
 if is_pytesseract_available():
     from PIL import Image
