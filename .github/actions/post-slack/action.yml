@@ -23,14 +23,14 @@ runs:
   using: "composite"
   steps:
     - name: Create content to post
-    id: create-message
-    run: |
-      if [ "${{ inputs.status }}" == "success" ]; then
-        echo "export STATUS_MESSAGE=🟢" >> $GITHUB_ENV
-      else
-        echo "export STATUS_MESSAGE=🔴" >> $GITHUB_ENV
-      fi
-    shell: bash
+      id: create-message
+      run: |
+        if [ "${{ inputs.status }}" == "success" ]; then
+          echo "export STATUS_MESSAGE=🟢" >> $GITHUB_ENV
+        else
+          echo "export STATUS_MESSAGE=🔴" >> $GITHUB_ENV
+        fi
+      shell: bash
 
     - name: Post Canceled results Slack channel
       id: post-slack
