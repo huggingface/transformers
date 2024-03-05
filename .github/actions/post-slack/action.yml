@@ -19,7 +19,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    if: ${{ inputs.status }} == 'success'
+    if: ${{ inputs.status == 'success' }}
     - name: Post Success results Slack channel
       id: post-slack
       uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
@@ -66,7 +66,7 @@ runs:
               }
             ]
           }
-    if: ${{ inputs.status }} == 'failure'
+    if: ${{ inputs.status == 'failure' }}
     - name: Post Failure results Slack channel
       id: post-slack
       uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
@@ -113,7 +113,7 @@ runs:
               }
             ]
           }
-    if: ${{ inputs.status }} == 'canceled'
+    if: ${{ inputs.status == 'canceled' }}
     - name: Post Failure results Slack channel
       id: post-slack
       uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
