@@ -21,11 +21,12 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin
 
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import Idefics2ImageProcessor
 
 
@@ -51,7 +52,7 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_convert_rgb=True,
-        do_pad=True
+        do_pad=True,
     ):
         size = size if size is not None else {"shortest_edge": 378, "longest_edge": 980}
         self.parent = parent
@@ -81,7 +82,7 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "do_pad": self.do_pad
+            "do_pad": self.do_pad,
         }
 
     def get_expected_values(self, image_inputs, batched=False):

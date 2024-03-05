@@ -16,6 +16,7 @@
 
 import gc
 import unittest
+from io import BytesIO
 
 import requests
 
@@ -23,6 +24,7 @@ from transformers import (
     AutoProcessor,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
+    Idefics2ImageProcessor,
     Idefics2Model,
     is_torch_available,
     is_vision_available,
@@ -48,8 +50,7 @@ class Idefics2VisionText2TextModelTester:
         self,
         parent,
         is_training=True,
-        # batch_size=1,  # FIXME - should be > 1 but it's not working
-        batch_size=2,  # FIXME - should be > 1 but it's not working
+        batch_size=2,
         num_images=2,
         seq_length=10,
         additional_vocab_size=0,
@@ -239,146 +240,108 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2")
+        self.image_processor = Idefics2ImageProcessor()  # FIXME - remove after updating the checkpoint
 
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
 
-    # FIXME - update all the integration tests to include the intended processing logic
     @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2", load_in_4bit=True)
-
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://idefics2-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
-
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
-
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "HuggingFaceM4/idefics2"
-
-        model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://idefics2-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
-
-        self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "HuggingFaceM4/idefics2"
-
-        model = Idefics2ForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://idefics2-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
-        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_batch(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2", load_in_4bit=True)
-        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://idefics2-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along', 'USER:  \nWhat is this?\nASSISTANT: Cats']  # fmt: skip
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched_regression(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "HuggingFaceM4/idefics2"
-
-        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
+    def test_integration_test(self):
+        torch_device = "cuda"
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            model_id, load_in_4bit=True, attn_implementation="eager"
+            "HuggingFaceM4/idefics2",
+            torch_dtype=torch.bfloat16,
         )
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+        model.to(torch_device)
 
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+        bos_token = self.processor.tokenizer.bos_token
+        bad_words_ids = self.processor.tokenizer(
+            ["<image>", "<fake_token_around_image>"], add_special_tokens=False
+        ).input_ids
+        image_seq_len = model.config.perceiver_config.resampler_n_latents
+
+        # Create text token inputs
+        image_seq = "<image>" * image_seq_len
+        inputs = self.processor.tokenizer(
+            [
+                f"{bos_token}<fake_token_around_image>{image_seq}<fake_token_around_image>In this image, we see",
+                f"{bos_token}bla bla<fake_token_around_image>{image_seq}<fake_token_around_image>{image_seq}<fake_token_around_image>",
+            ],
+            return_tensors="pt",
+            add_special_tokens=False,
+            padding=True,
+        )
+        # Create pixel inputs
+        image1 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                ).content
+            )
+        )
+        image2 = Image.open(
+            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        )
+        image3 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                ).content
+            )
+        )
+        raw_images = [
+            [image1],
+            [image2, image3],
         ]
-        image1 = Image.open(requests.get("https://idefics2-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image_inputs = self.image_processor(raw_images, return_tensors="pt")
 
-        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+        inputs["pixel_values"] = image_inputs["pixel_values"]
+        inputs["pixel_attention_mask"] = image_inputs["pixel_attention_mask"]
+        inputs.to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20)
+        generated_ids = model.generate(**inputs, bad_words_ids=bad_words_ids, max_new_tokens=10)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this serene location, one should be cautious about the weather conditions and potential', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+        # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in New York City.']
+        expected_generated_text = "In this image, we see the beautiful city skyline. The city is a"
+        self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
     @require_bitsandbytes
-    def test_idefics2_index_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
-        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
-        # more details
-        model_id = "HuggingFaceM4/idefics2"
-        model = Idefics2ForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+    def test_integration_test_4bit(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2", load_in_4bit=True)
 
-        processor = AutoProcessor.from_pretrained(model_id)
+        bos_token = self.processor.tokenizer.bos_token
+        bad_words_ids = self.processor.tokenizer(
+            ["<image>", "<fake_token_around_image>"], add_special_tokens=False
+        ).input_ids
+        image_seq_len = model.config.perceiver_config.resampler_n_latents
 
-        # Simulate a super long prompt
-        user_prompt = "Describe the image:?\n" * 200
-        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        # Create text token inputs
+        image_seq = "<image>" * image_seq_len
+        inputs = self.processor.tokenizer(
+            f"{bos_token}<fake_token_around_image>{image_seq}<fake_token_around_image>In this image, we see",
+            return_tensors="pt",
+            add_special_tokens=False,
+            padding=True,
+        )
+        # Create pixel inputs
+        image1 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                ).content
+            )
+        )
+        image_inputs = self.image_processor(image1, return_tensors="pt")
 
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs["pixel_values"] = image_inputs["pixel_values"]
+        inputs["pixel_attention_mask"] = image_inputs["pixel_attention_mask"]
 
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        generated_ids = model.generate(**inputs, bad_words_ids=bad_words_ids, max_new_tokens=10)
+        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        # Make sure that `generate` works
-        _ = model.generate(**inputs, max_new_tokens=20)
+        expected_generated_text = "In this image, we see the beautiful cityscape of New York City. The"
+        self.assertEqual(generated_texts[0], expected_generated_text)
