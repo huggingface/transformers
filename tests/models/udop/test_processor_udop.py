@@ -34,11 +34,13 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytes
 
 if is_torch_available():
     import torch
+
     from transformers import UdopTokenizer, UdopTokenizerFast
 
 
 if is_pytesseract_available():
     from PIL import Image
+
     from transformers import LayoutLMv3ImageProcessor, UdopProcessor
 
 
