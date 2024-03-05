@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Tri Dao, Albert Gu and HuggingFace Inc. team.
+# Copyright 2024 state-spaces/mamba org and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,17 +42,11 @@ if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
-    logger.warning_once(
-        "The `mamba_ssm` package is not installed in your environnement. Make sure to install it if you want to use the custom cuda kernels"
-    )
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
 if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
-    logger.warning_once(
-        "The `causal_conv1d` package is not installed in your environnement. Make sure to install it if you want to use the custom cuda kernels"
-    )
     causal_conv1d_update, causal_conv1d_fn = None, None
 
 is_fast_path_available = all(
@@ -67,13 +61,10 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = []  # See all Mamba models at https://hugg
 
 class MambaMixer(nn.Module):
     """
-    Selective layer TODO DOC DOC DOC
-        Compute ∆ A B C D, the state space parameters.
-        A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-        ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
-                                    and is why Mamba is called **selective** state spaces)
-
-        ∆, B and C are the `selective` parameters
+    Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
+    A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+    ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
+    and is why Mamba is called **selective** state spaces)
     """
 
     def __init__(self, config, layer_idx):
@@ -113,6 +104,13 @@ class MambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.intermediate_size))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
+
+        if not is_fast_path_available:
+            logger.warning_once(
+                "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
+                " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
+                " https://github.com/Dao-AILab/causal-conv1d"
+            )
 
     def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params=None):
         # 1. Gated MLP's linear projection
@@ -222,17 +220,17 @@ class MambaMixer(nn.Module):
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)        # [batch, intermediate_size, 1] : decoding
+                hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)         # [batch, intermediate_size, 1] : decoding
             else:
                 conv_state = nn.functional.pad(
-                    hidden_states, 
+                    hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
                 cache_params.conv_states[self.layer_idx].copy_(conv_state)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size), 
+                (batch_size, self.intermediate_size, self.ssm_state_size),
                 device=hidden_states.device, dtype=dtype
             )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
@@ -530,7 +528,7 @@ class MambaModel(MambaPreTrainedModel):
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )

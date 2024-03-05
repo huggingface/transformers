@@ -39,7 +39,6 @@ if is_torch_available():
         MambaModel,
     )
     from transformers.models.mamba.modeling_mamba import MambaCache
-
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
