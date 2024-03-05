@@ -47,6 +47,8 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
+```
+
 ## Starcoder2Config
 
 [[autodoc]] Starcoder2Config
