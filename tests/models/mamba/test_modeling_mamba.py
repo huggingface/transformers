@@ -34,7 +34,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
         MambaForCausalLM,
         MambaModel,
     )
