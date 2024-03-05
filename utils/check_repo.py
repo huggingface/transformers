@@ -62,6 +62,7 @@ PRIVATE_MODELS = [
     "AltRobertaModel",
     "CodeReviewerStack",
     "DPRSpanPredictor",
+    "UdopStack",
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
@@ -306,6 +307,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
+    "UdopForConditionalGeneration",
     "SeamlessM4Tv2NARTextToUnitModel",
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",

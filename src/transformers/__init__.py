@@ -810,6 +810,7 @@ _import_structure = {
         "SqueezeBertTokenizer",
     ],
     "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
+    "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -855,6 +856,11 @@ _import_structure = {
         "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvpConfig",
         "TvpProcessor",
+    ],
+    "models.udop": [
+        "UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UdopConfig",
+        "UdopProcessor",
     ],
     "models.umt5": ["UMT5Config"],
     "models.unispeech": [
@@ -1135,6 +1141,7 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
+    _import_structure["models.udop"].append("UdopTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -1214,6 +1221,7 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.udop"].append("UdopTokenizerFast")
     _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -3296,6 +3304,14 @@ else:
             "StableLmPreTrainedModel",
         ]
     )
+    _import_structure["models.starcoder2"].extend(
+        [
+            "Starcoder2ForCausalLM",
+            "Starcoder2ForSequenceClassification",
+            "Starcoder2Model",
+            "Starcoder2PreTrainedModel",
+        ]
+    )
     _import_structure["models.swiftformer"].extend(
         [
             "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3415,6 +3431,15 @@ else:
             "TvpModel",
             "TvpPreTrainedModel",
         ]
+    )
+    _import_structure["models.udop"].extend(
+        [
+            "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UdopEncoderModel",
+            "UdopForConditionalGeneration",
+            "UdopModel",
+            "UdopPreTrainedModel",
+        ],
     )
     _import_structure["models.umt5"].extend(
         [
@@ -5599,6 +5624,7 @@ if TYPE_CHECKING:
         SqueezeBertTokenizer,
     )
     from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
+    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -5645,6 +5671,7 @@ if TYPE_CHECKING:
         TvpConfig,
         TvpProcessor,
     )
+    from .models.udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig, UdopProcessor
     from .models.umt5 import UMT5Config
     from .models.unispeech import (
         UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5920,6 +5947,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
+        from .models.udop import UdopTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -5992,6 +6020,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.udop import UdopTokenizerFast
         from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -7743,6 +7772,12 @@ if TYPE_CHECKING:
             StableLmModel,
             StableLmPreTrainedModel,
         )
+        from .models.starcoder2 import (
+            Starcoder2ForCausalLM,
+            Starcoder2ForSequenceClassification,
+            Starcoder2Model,
+            Starcoder2PreTrainedModel,
+        )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwiftFormerForImageClassification,
@@ -7836,6 +7871,13 @@ if TYPE_CHECKING:
             TvpForVideoGrounding,
             TvpModel,
             TvpPreTrainedModel,
+        )
+        from .models.udop import (
+            UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UdopEncoderModel,
+            UdopForConditionalGeneration,
+            UdopModel,
+            UdopPreTrainedModel,
         )
         from .models.umt5 import (
             UMT5EncoderModel,

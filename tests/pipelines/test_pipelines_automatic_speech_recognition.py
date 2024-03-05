@@ -361,6 +361,70 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         # fmt: on
 
+    @slow
+    @require_torch
+    def test_return_timestamps_in_preprocess_longform(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+        )
+        data = load_dataset("librispeech_asr", "clean", split="test", streaming=True)
+        samples = [next(iter(data)) for _ in range(8)]
+        audio = np.concatenate([sample["audio"]["array"] for sample in samples])
+
+        res = pipe(audio)
+        expected_output = {
+            "text": " Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst "
+            "the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst "
+            "the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst "
+            "the tents. Concord returned to its place amidst the tents."
+        }
+        self.assertEqual(res, expected_output)
+        res = pipe(audio, return_timestamps=True)
+        self.assertEqual(
+            res,
+            {
+                "text": " Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents. Concord returned to its place amidst the tents.",
+                "chunks": [
+                    {"timestamp": (0.0, 3.22), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (3.22, 6.74), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (6.74, 10.26), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (10.26, 13.78), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (13.78, 17.3), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (17.3, 20.82), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (20.82, 24.34), "text": " Concord returned to its place amidst the tents."},
+                    {"timestamp": (24.34, 27.86), "text": " Concord returned to its place amidst the tents."},
+                ],
+            },
+        )
+        pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
+        res = pipe(audio, return_timestamps="word")
+
+        # fmt: off
+        self.assertEqual(
+            res["chunks"][:15],
+            [
+                {"text": " Concord", "timestamp": (0.5, 0.94)},
+                {"text": " returned", "timestamp": (0.94, 1.52)},
+                {"text": " to", "timestamp": (1.52, 1.78)},
+                {"text": " its", "timestamp": (1.78, 1.98)},
+                {"text": " place", "timestamp": (1.98, 2.16)},
+                {"text": " amidst", "timestamp": (2.16, 2.5)},
+                {"text": " the", "timestamp": (2.5, 2.9)},
+                {"text": " tents.", "timestamp": (2.9, 4.2)},
+                {"text": " Concord", "timestamp": (4.2, 4.5)},
+                {"text": " returned", "timestamp": (4.5, 5.0)},
+                {"text": " to", "timestamp": (5.0, 5.28)},
+                {"text": " its", "timestamp": (5.28, 5.48)},
+                {"text": " place", "timestamp": (5.48, 5.7)},
+                {"text": " amidst", "timestamp": (5.7, 6.02)},
+                {"text": " the", "timestamp": (6.02, 6.4)}
+
+
+            ],
+        )
+        # fmt: on
+
     @require_torch
     def test_return_timestamps_in_init(self):
         # segment-level timestamps are accepted
@@ -1157,7 +1221,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         pipe = pipeline(
             "automatic-speech-recognition",
@@ -1165,7 +1229,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer=processor.tokenizer,
             feature_extractor=processor.feature_extractor,
             max_new_tokens=128,
-            device="cuda:0",
+            device=torch_device,
         )
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
@@ -1182,7 +1246,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline(
             "automatic-speech-recognition",
             model="facebook/seamless-m4t-v2-large",
-            device="cuda:0",
+            device=torch_device,
         )
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

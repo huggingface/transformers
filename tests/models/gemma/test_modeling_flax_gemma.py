@@ -11,14 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import unittest
 
 import numpy as np
 
 from transformers import AutoTokenizer, GemmaConfig, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, require_read_token, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -205,6 +203,7 @@ class FlaxGemmaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 
 @slow
 @require_flax
+@require_read_token
 class FlaxGemmaIntegrationTest(unittest.TestCase):
     input_text = ["The capital of France is", "To play the perfect cover drive"]
     model_id = "google/gemma-2b"
