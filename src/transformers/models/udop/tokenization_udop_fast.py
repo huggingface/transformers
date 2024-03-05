@@ -38,6 +38,7 @@ else:
     UdopTokenizer = None
 
 
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -201,7 +202,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             Additional special tokens used by the tokenizer.
     """
 
-    vocab_files_names = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
+    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = UdopTokenizer
