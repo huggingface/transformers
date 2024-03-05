@@ -176,6 +176,7 @@ docs/source/en/model_doc/mpt.md
 docs/source/en/model_doc/mra.md
 docs/source/en/model_doc/mt5.md
 docs/source/en/model_doc/musicgen.md
+docs/source/en/model_doc/musicgen_melody.md
 docs/source/en/model_doc/mvp.md
 docs/source/en/model_doc/nat.md
 docs/source/en/model_doc/nezha.md
