@@ -1709,7 +1709,7 @@ class CodeReviewerForConditionalGeneration(CodeReviewerPreTrainedModel):
         ... , return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # <msg>Please remove this extra line
+        <msg>Please remove this extra line
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
