@@ -226,7 +226,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=True)
-            self.assertIn("The model is quantized with quanto and is not serializable ", str(e.exception))
+            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
 
             # TODO: Add the following when we fix the issue with safetensors serialization
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
@@ -360,7 +360,7 @@ class QuantoQuantizationOffloadTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
-    """ "
+    """
     Perform the same tests as in QuantoQuantizationTest but with a serialized model.
     """
 
@@ -389,6 +389,14 @@ class QuantoQuantizationSerializationTest(QuantoQuantizationTest):
         self.have_accelerate_hooks = (
             getattr(self.quantized_model, "hf_device_map", False) and len(self.quantized_model.hf_device_map) > 1
         )
+
+
+class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
+    """
+    Perform the same tests as in QuantoQuantizationTest but with model on cuda
+    """
+
+    device_map = "cuda:0"
 
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):

@@ -106,9 +106,6 @@ class QuantoHfQuantizer(HfQuantizer):
         """
         import quanto
 
-        if self.pre_quantized:
-            return False
-
         module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.
         if isinstance(module, quanto.QModuleMixin) and tensor_name == "weight":
