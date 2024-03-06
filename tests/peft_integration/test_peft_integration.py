@@ -19,7 +19,14 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoModelForCausalLM, OPTForCausalLM
-from transformers.testing_utils import require_peft, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_peft,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
 
@@ -335,6 +342,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.save_pretrained(tmpdirname)
 
     @require_torch_gpu
+    @require_bitsandbytes
     def test_peft_from_pretrained_kwargs(self):
         """
         Simple test that tests the basic usage of PEFT model through `from_pretrained` + additional kwargs
@@ -352,6 +360,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
     @require_torch_gpu
+    @require_bitsandbytes
     def test_peft_save_quantized(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
@@ -390,6 +399,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
     @require_torch_gpu
+    @require_bitsandbytes
     def test_peft_save_quantized_regression(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models

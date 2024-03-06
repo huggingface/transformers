@@ -204,7 +204,7 @@ class TextGenerationPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Only meaningful if
                 *return_text* is set to True.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (`str`, *optional*):
                 Prefix added to prompt.

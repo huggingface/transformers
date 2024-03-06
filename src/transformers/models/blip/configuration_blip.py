@@ -94,6 +94,10 @@ class BlipTextConfig(PretrainedConfig):
             Whether the model is used as a decoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        label_smoothing (float, *optional*):
+            A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
+            become a mixture of the original ground truth and a uniform distribution as described in
+            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
 
     Example:
 
@@ -133,6 +137,7 @@ class BlipTextConfig(PretrainedConfig):
         sep_token_id=102,
         is_decoder=True,
         use_cache=True,
+        label_smoothing=0.0,
         **kwargs,
     ):
         super().__init__(
@@ -158,6 +163,7 @@ class BlipTextConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.is_decoder = is_decoder
         self.use_cache = use_cache
+        self.label_smoothing = label_smoothing
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -298,6 +304,10 @@ class BlipConfig(PretrainedConfig):
             The inital value of the *logit_scale* paramter. Default is used as per the original BLIP implementation.
         image_text_hidden_size (`int`, *optional*, defaults to 256):
             Dimentionality of the hidden state of the image-text fusion layer.
+        label_smoothing (float, optional, *optional*, defaults to 0.0):
+            A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
+            become a mixture of the original ground truth and a uniform distribution as described in
+            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -333,6 +343,7 @@ class BlipConfig(PretrainedConfig):
         projection_dim=512,
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
+        label_smoothing=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -355,6 +366,7 @@ class BlipConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
         self.image_text_hidden_size = image_text_hidden_size
+        self.label_smoothing = label_smoothing
 
     @classmethod
     def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):

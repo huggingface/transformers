@@ -435,23 +435,6 @@ class ModelTesterMixin:
                         max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
-    def test_save_load_low_cpu_mem_usage(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            for model_class in self.all_model_classes:
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-                model_to_save = model_class(config)
-
-                model_to_save.save_pretrained(tmpdirname)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    low_cpu_mem_usage=True,
-                )
-
-                # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta. If there are
-                # any unloaded or untied parameters, then trying to move it to device=torch_device will throw an error.
-                model.to(torch_device)
-
     def test_fast_init_context_manager(self):
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
         class MyClass(PreTrainedModel):
@@ -717,7 +700,10 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if (
                 model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -971,6 +957,16 @@ class ModelTesterMixin:
                         model(input_ids, bbox)
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox), check_trace=False
+                        )  # when traced model is checked, an error is produced due to name mangling
+                    elif (
+                        "pixel_values" in inputs and "prompt_pixel_values" in inputs and "prompt_masks" in inputs
+                    ):  # SegGpt requires additional inputs
+                        pixel_values = inputs["pixel_values"]
+                        prompt_pixel_values = inputs["prompt_pixel_values"]
+                        prompt_masks = inputs["prompt_masks"]
+                        model(pixel_values, prompt_pixel_values, prompt_masks)
+                        traced_model = torch.jit.trace(
+                            model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
                     else:
                         main_input = inputs[main_input_name]
