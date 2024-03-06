@@ -23,7 +23,6 @@ import numpy as np
 
 from ...utils import is_tf_available, is_torch_available, logging
 
-
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -35,7 +34,6 @@ from tokenizers import pre_tokenizers
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_codegen import CodeGenTokenizer
-
 
 logger = logging.get_logger(__name__)
 

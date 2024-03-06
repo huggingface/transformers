@@ -25,7 +25,6 @@ import regex as re
 
 from ...utils import is_tf_available, is_torch_available, logging, to_py_obj
 
-
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
         import tensorflow as tf
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-
 
 logger = logging.get_logger(__name__)
 
