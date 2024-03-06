@@ -44,7 +44,7 @@ torch._inductor.config.triton.unique_kernel_names = True
 torch.set_printoptions(linewidth=200)  # you can better see how the mask is shaped
 
 
-class StaticCacheBenchMark(BenchMark):
+class CacheBenchMark(BenchMark):
     def __init__(
         self,
         repo_id,
@@ -128,7 +128,7 @@ class StaticCacheBenchMark(BenchMark):
         return {}
 
 
-class StaticCacheSpeedBenchMark(SpeedBenchMark, StaticCacheBenchMark):
+class CacheSpeedBenchMark(SpeedBenchMark, CacheBenchMark):
     pass
 
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     prefill_num_iter = 3
     num_iter = 16
 
-    benchmakr = StaticCacheSpeedBenchMark(repo_id=repo_id, prefill_num_iter=prefill_num_iter, num_iter=num_iter)
+    benchmakr = CacheSpeedBenchMark(repo_id=repo_id, prefill_num_iter=prefill_num_iter, num_iter=num_iter)
 
     # all_batch_size = [1, 2, 4]
     # all_max_cache_length = [4096, 2048, 1024, 512]
