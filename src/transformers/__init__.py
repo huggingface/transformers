@@ -2440,6 +2440,7 @@ else:
             "Idefics2ForConditionalGeneration",
             "Idefics2Model",
             "Idefics2PreTrainedModel",
+            "Idefics2Processor",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -7157,6 +7158,7 @@ if TYPE_CHECKING:
             Idefics2ForConditionalGeneration,
             Idefics2Model,
             Idefics2PreTrainedModel,
+            Idefics2Processor,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,

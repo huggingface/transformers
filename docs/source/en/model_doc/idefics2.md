@@ -53,3 +53,8 @@ The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefi
 ## Idefics2ImageProcessor
 [[autodoc]] Idefics2ImageProcessor
     - preprocess
+
+
+## Idefics2Processor
+[[autodoc]] Idefics2Processor
+    - __call__

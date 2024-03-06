@@ -16,13 +16,59 @@
 Processor class for IDEFICS2.
 """
 
-from ...processing_utils import ProcessorMixin
-from ...feature_extraction_utils import BatchFeature
 from typing import List, Optional, Union
 
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, is_valid_image
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils import AddedToken
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
-class IdeficsProcessor(ProcessorMixin):
+def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token):
+    """
+    Builds a string from the input prompt and image tokens.
+
+    For example, for the call:
+
+    build_string_from_input(
+        prompt=["Initial str", img1, img2, "mid str", img3],
+        image_seq_len=2,
+        bos_token="<s>",
+        image_token="<im>",
+        fake_image_token="<fake>"
+    )
+
+    The output will be:
+
+    "<s>Initial str<fake><im><im><fake><im><im><fake>mid str<fake><im><im><fake>"
+
+    Args:
+        prompt (`List[Union[str, ImageInput]]`): The input prompt.
+        image_seq_len (`int`): The length of the image sequence.
+        bos_token (`str`): The beginning of sentence token.
+        image_token (`str`): The image token.
+        fake_image_token (`str`): The fake image token.
+    """
+    s = f"{bos_token}"
+    open_image_tag = False
+    for elem in prompt:
+        if is_valid_image(elem):
+            s += f"{fake_image_token}{image_token * image_seq_len}"
+            open_image_tag = True
+        else:
+            if open_image_tag:
+                s += f"{fake_image_token}"
+                open_image_tag = False
+            s += elem
+    if open_image_tag:
+        s += f"{fake_image_token}"
+    return s
+
+
+
+class Idefics2Processor(ProcessorMixin):
     r"""
     Constructs a IDEFICS2 processor which wraps a LLama tokenizer and IDEFICS2 image processor into a single processor.
 
@@ -34,124 +80,73 @@ class IdeficsProcessor(ProcessorMixin):
             An instance of [`Idefics2ImageProcessor`]. The image processor is a required input.
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
-        image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
+        self.fake_image_token = "<fake_token_around_image>"
+        self.image_token = "<image>"
+        self.image_seq_len = image_seq_len
+
+        tokens_to_add = [
+            AddedToken(self.fake_image_token, lstrip=True, rstrip=False, normalized=False),
+            AddedToken(self.image_token, lstrip=True, rstrip=False, normalized=False)
+        ]
+        tokenizer.add_tokens(tokens_to_add)
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        prompts: Union[List[TextInput], List[List[TextInput]]] = None,
-        images: Optional[Union[ImageInput, List[ImageInput], List[List[ImageInput]]]] = None,
+        prompts: Union[List[TextInput], List[List[TextInput]]],
+        image_seq_len: Optional[int] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchEncoding:
-        """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
-        the model was trained on and prepares the image pixel values for the model to process.
+        """ """
+        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
-        Args:
-            prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
-                either a single prompt or a batched list of prompts.
-            images (`Union[ImageInput, List[ImageInput], List[List[ImageInput]]]`, *optional*):
-                either a single image or a batched list of images to process
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
-                The type of tensors to return. Can be one of:
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+        if isinstance(prompts, list) and not isinstance(prompts[0], list):
+            prompts = [prompts]
 
-        Returns:
-            a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
-            directly passed to `model.generate`
-
-        Example:
-
-        ```python
-        checkpoint = "HuggingFaceM4/idefics2"
-        processor = AutoProcessor.from_pretrained(checkpoint)
-        url = "https://hips.hearstapps.com/hmg-prod/images/cute-photos-of-cats-in-grass-1593184777.jpg"
-        img = processor.image_processor.fetch_images([url])[0]
-
-        image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
-            )
-        )
-        image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
-        )
-        image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
-            )
-        )
-        raw_images = [
-            [image1],
-            [image2, image3],
-        ]
-        prompts = [
-            "<fake_token_around_image>{image_seq}<fake_token_around_image>In this image, we see",
-            "bla bla<fake_token_around_image>{image_seq}<fake_token_around_image>{image_seq}<fake_token_around_image>",
+        # Build the string from the input prompt and image tokens
+        prompt_strings = [
+            build_string_from_input(
+                prompt=prompt,
+                image_seq_len=image_seq_len,
+                bos_token=self.tokenizer.bos_token,
+                image_token=self.image_token,
+                fake_image_token=self.fake_image_token
+            ) for prompt in prompts
         ]
 
-        inputs = processor(prompts, return_tensors="pt")
-        generated_ids = model.generate(**inputs, max_length=100)
-        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        ```
-        """
+        inputs = BatchFeature()
+        text_inputs = self.tokenizer(
+            text=prompt_strings,
+            add_special_tokens=False,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            return_tensors=return_tensors,
+        )
+        inputs.update(text_inputs)
 
-        inputs = BatchFeature({}, return_tensors=return_tensors)
-
-        if prompts is not None:
-            if isinstance(prompts, str):
-                prompts = [prompts]
-
-            # Add to BOS token to the prompts
-            prompts = [f"{self.tokenizer.bos_token}{p}" for p in prompts]
-
-            text_inputs = self.tokenizer(
-                text=prompts,
-                add_special_tokens=False,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                return_tensors=return_tensors,
-            )
-            inputs.update(text_inputs)
-
-        if images is not None:
-            image_inputs = self.image_processor(
-                images,
-                return_tensors=return_tensors,
-            )
-            inputs.update(image_inputs)
+        # Extract the images from the prompts
+        images = [
+            [elem for elem in prompt if is_valid_image(elem)] for prompt in prompts
+        ]
+        image_inputs = self.image_processor(images, return_tensors=return_tensors)
+        inputs.update(image_inputs)
 
         return inputs
 

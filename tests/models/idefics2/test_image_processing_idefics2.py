@@ -91,7 +91,8 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
         assuming do_resize is set to True with a scalar size and size_divisor.
         """
         if not batched:
-            size = self.size["shortest_edge"]
+            shortest_edge = self.size["shortest_edge"]
+            longest_edge = self.size["longest_edge"]
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
@@ -99,14 +100,14 @@ class Idefics2ImageProcessingTester(unittest.TestCase):
                 h, w = image.shape[1], image.shape[2]
 
             aspect_ratio = w / h
-            if w > h and w >= 980:
-                w = 980
+            if w > h and w >= longest_edge:
+                w = longest_edge
                 h = int(w / aspect_ratio)
-            elif h > w and h >= 980:
-                h = 980
+            elif h > w and h >= longest_edge:
+                h = longest_edge
                 w = int(h * aspect_ratio)
-            w = max(w, 378)
-            h = max(h, 378)
+            w = max(w, shortest_edge)
+            h = max(h, shortest_edge)
             expected_height = h
             expected_width = w
         else:
