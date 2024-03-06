@@ -18,7 +18,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig"],
+    "configuration_utils": ["GenerationConfig", "GenerationMode"],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -39,6 +39,11 @@ else:
         "BeamScorer",
         "BeamSearchScorer",
         "ConstrainedBeamSearchScorer",
+    ]
+    _import_structure["candidate_generator"] = [
+        "AssistedCandidateGenerator",
+        "CandidateGenerator",
+        "PromptLookupCandidateGenerator",
     ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
@@ -167,7 +172,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig
+    from .configuration_utils import GenerationConfig, GenerationMode
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -178,6 +183,7 @@ if TYPE_CHECKING:
     else:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .candidate_generator import AssistedCandidateGenerator, CandidateGenerator, PromptLookupCandidateGenerator
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,

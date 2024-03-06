@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch Gemma model. """
-
 import tempfile
 import unittest
 
@@ -24,8 +23,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_to
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -297,6 +298,10 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_headmasking = False
     test_pruning = False
 
+    # Need to remove 0.9 in `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.6]
+
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
@@ -460,9 +465,75 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Gemma flash attention does not support right padding")
 
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
+                )
+                model_sdpa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_sdpa = outputs_sdpa.hidden_states[-1]
+
+                # gemma sdpa needs a high tolerance
+                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                # gemma flash attention 2 needs a high tolerance
+                assert torch.allclose(logits_fa, logits, atol=3e-3)
+
 
 @require_torch_gpu
 @slow
+@require_read_token
 class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
@@ -533,6 +604,69 @@ class GemmaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
         )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_2b_eager(self):
+        model_id = "google/gemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I am looking for some information on the ",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+        )
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_torch_sdpa
+    def test_model_2b_sdpa(self):
+        model_id = "google/gemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+        )
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @pytest.mark.flash_attn_test
+    @require_flash_attn
+    def test_model_2b_flash_attn(self):
+        model_id = "google/gemma-2b"
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+        )
+        model.to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)

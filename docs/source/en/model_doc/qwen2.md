@@ -35,8 +35,8 @@ In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inferen
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen2/Qwen2-7B-Chat-beta", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen2/Qwen2-7B-Chat-beta")
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-7B-Chat", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-7B-Chat")
 
 >>> prompt = "Give me a short introduction to large language model."
 
