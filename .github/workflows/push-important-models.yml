@@ -28,7 +28,7 @@ jobs:
         if: steps.changed-files.outputs.any_changed == 'true'
         id: set-matrix
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          ALL_CHANGED_FILES: ${{ fromJson(steps.changed-files.outputs.all_changed_files) }}
         run: |
             model_arrays=()
             for file in "$ALL_CHANGED_FILES"; do
