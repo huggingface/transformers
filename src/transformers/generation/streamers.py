@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Optional
 
 import torch
 
-from transformers.generation.utils import GenerateDecoderOnlyOutput
+from transformers.generation.utils import (GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput)
 
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
@@ -151,7 +151,7 @@ class TokenStreamer(OutputStreamer):
     Filters the output stream on tokens to replicate legacy behavior
     """
     def _filter_func(self, value):
-        if isinstance(value, GenerateDecoderOnlyOutput): #TODO: *or* GenerateEncoderDecoderOutput
+        if isinstance(value, (GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput)):
             return value.sequences.cpu()
         else:
             return value.cpu()
