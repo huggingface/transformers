@@ -38,7 +38,6 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
-import huggingface_hub
 import urllib3
 
 from transformers import logging as transformers_logging
@@ -138,9 +137,9 @@ if is_pytest_available():
         _is_mocked,
         _patch_unwrap_mock_aware,
         get_optionflags,
-        import_path,
     )
     from _pytest.outcomes import skip
+    from _pytest.pathlib import import_path
     from pytest import DoctestItem
 else:
     Module = object
@@ -466,11 +465,11 @@ def require_read_token(fn):
     """
     A decorator that loads the HF token for tests that require to load gated models.
     """
-    token = os.getenv("HF_HUB_READ_TOKEN", None)
+    token = os.getenv("HF_HUB_READ_TOKEN")
 
     @wraps(fn)
     def _inner(*args, **kwargs):
-        with patch.object(huggingface_hub.utils._headers, "get_token", return_value=token):
+        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
             return fn(*args, **kwargs)
 
     return _inner

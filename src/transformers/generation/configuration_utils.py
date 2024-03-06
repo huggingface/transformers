@@ -18,12 +18,13 @@ import copy
 import json
 import os
 import warnings
-from typing import Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
+    ExplicitEnum,
     PushToHubMixin,
     cached_file,
     download_url,
@@ -33,8 +34,29 @@ from ..utils import (
 )
 
 
+if TYPE_CHECKING:
+    from ..modeling_utils import PreTrainedModel
+
+
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
+
+
+class GenerationMode(ExplicitEnum):
+    """
+    Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
+    """
+
+    # Non-beam methods
+    CONTRASTIVE_SEARCH = "contrastive_search"
+    GREEDY_SEARCH = "greedy_search"
+    SAMPLE = "sample"
+    ASSISTED_GENERATION = "assisted_generation"
+    # Beam methods
+    BEAM_SEARCH = "beam_search"
+    BEAM_SAMPLE = "beam_sample"
+    CONSTRAINED_BEAM_SEARCH = "constrained_beam_search"
+    GROUP_BEAM_SEARCH = "group_beam_search"
 
 
 class GenerationConfig(PushToHubMixin):
@@ -43,22 +65,22 @@ class GenerationConfig(PushToHubMixin):
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
+        - *greedy decoding* by calling [`~generation.GenerationMixin._greedy_search`] if `num_beams=1` and
             `do_sample=False`
-        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
+        - *contrastive search* by calling [`~generation.GenerationMixin._contrastive_search`] if `penalty_alpha>0.`
             and `top_k>1`
-        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
+        - *multinomial sampling* by calling [`~generation.GenerationMixin._sample`] if `num_beams=1` and
             `do_sample=True`
-        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.GenerationMixin._beam_search`] if `num_beams>1` and
             `do_sample=False`
-        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin._beam_sample`] if
             `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin._group_beam_search`], if
             `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin._constrained_beam_search`], if
             `constraints!=None` or `force_words_ids!=None`
-        - *assisted decoding* by calling [`~generation.GenerationMixin.assisted_decoding`], if
-            `assistant_model` is passed to `.generate()`
+        - *assisted decoding* by calling [`~generation.GenerationMixin._assisted_decoding`], if
+            `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
@@ -376,13 +398,65 @@ class GenerationConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
+    def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
+        """
+        Returns the generation mode triggered by the [`GenerationConfig`] instance.
+
+        Arg:
+            assistant_model (`PreTrainedModel`, *optional*):
+                The assistant model to be used for assisted generation. If set, the generation mode will be
+                assisted generation.
+
+        Returns:
+            `GenerationMode`: The generation mode triggered by the instance.
+        """
+        # TODO joao: find out a way of not depending on external fields (e.g. `assistant_model`), then make this a
+        # property and part of the `__repr__`
+        if self.constraints is not None or self.force_words_ids is not None:
+            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
+        elif self.num_beams == 1:
+            if self.do_sample is False:
+                if (
+                    self.top_k is not None
+                    and self.top_k > 1
+                    and self.penalty_alpha is not None
+                    and self.penalty_alpha > 0
+                ):
+                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
+                else:
+                    generation_mode = GenerationMode.GREEDY_SEARCH
+            else:
+                generation_mode = GenerationMode.SAMPLE
+        else:
+            if self.num_beam_groups > 1:
+                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
+            elif self.do_sample is True:
+                generation_mode = GenerationMode.BEAM_SAMPLE
+            else:
+                generation_mode = GenerationMode.BEAM_SEARCH
+
+        # Assisted generation may extend some generation modes
+        if assistant_model is not None or self.prompt_lookup_num_tokens is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.ASSISTED_GENERATION
+            else:
+                raise ValueError(
+                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
+                )
+        return generation_mode
+
     def validate(self, is_init=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
         of parameterization that can be detected as incorrect from the configuration instance alone.
 
-        Note that some parameters are best validated at generate runtime, as they may depend on other inputs and/or the
-        model, such as parameters related to the generation length.
+        Note that some parameters not validated here are best validated at generate runtime, as they may depend on
+        other inputs and/or the model, such as parameters related to the generation length.
+
+        Arg:
+            is_init (`bool`, *optional*, defaults to `False`):
+                Whether the validation is performed during the initialization of the instance.
         """
 
         # Validation of individual attributes
