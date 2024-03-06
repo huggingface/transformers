@@ -1256,7 +1256,9 @@ class GenerationMixin:
         # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled.
         if is_torchdynamo_compiling():
             model_kwargs = kwargs
-            generate_attributes_in_kwargs = [key for key in kwargs.keys() if hasattr(generation_config, key)]
+            generate_attributes_in_kwargs = [
+                key for key, value in kwargs.items() if getattr(generation_config, key, None) != value
+            ]
             if len(generate_attributes_in_kwargs) > 0:
                 raise ValueError(
                     "`torch.compile` exception: all generation configuration attributes must be passed within a "
