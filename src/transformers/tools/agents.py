@@ -18,11 +18,9 @@ import importlib.util
 import json
 from dataclasses import dataclass
 from typing import Dict, Union, List
-import copy
-import requests
 from huggingface_hub import hf_hub_download, list_spaces
 
-from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
+from ..utils import is_offline_mode, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
@@ -116,40 +114,6 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def get_tool_creation_code(code, toolbox, remote=False):
-    code_lines = ["from transformers import load_tool", ""]
-    for name, tool in toolbox.items():
-        if name not in code or isinstance(tool, Tool):
-            continue
-
-        task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-        line = f'{name} = load_tool("{task_or_repo_id}"'
-        if remote:
-            line += ", remote=True"
-        line += ")"
-        code_lines.append(line)
-
-    return "\n".join(code_lines) + "\n"
-
-
-def clean_code_for_chat(result):
-    lines = result.split("\n")
-    idx = 0
-    while idx < len(lines) and not lines[idx].lstrip().startswith("```"):
-        idx += 1
-    explanation = "\n".join(lines[:idx]).strip()
-    if idx == len(lines):
-        return explanation, None
-
-    idx += 1
-    start_idx = idx
-    while not lines[idx].lstrip().startswith("```"):
-        idx += 1
-    code = "\n".join(lines[start_idx:idx]).strip()
-
-    return explanation, code
-
-
 def clean_code_for_run(code):
     code = code.strip()
     code_lines = code.split("\n")
@@ -158,12 +122,10 @@ def clean_code_for_run(code):
     if code_lines[-1] == "```":
         code_lines = code_lines[:-1]
     code = "\n".join(code_lines)
-
     return code
 
 
 def parse_json_tool_call(json_blob: str):
-    json_blob = json_blob.replace('$ACTION_JSON_BLOB', '').replace("```json", "").replace("```", "").replace('\\', "").replace('=', '').strip()
     try:
         first_accolade_index =  json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer('}', json_blob))][-1]
@@ -231,7 +193,8 @@ class Agent:
             self._toolbox = {tool.name: tool for tool in toolbox}
 
         self.system_prompt = format_prompt(self.toolbox, self.prompt_template, self.tool_description_template)
-        self.system_message = self.create_system_message()
+        self.memory = []
+
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
@@ -251,25 +214,11 @@ class Agent:
         return OPENAI_TOOL_DESCRIPTION_TEMPLATE
     
     def show_memory(self):
-        self.log(self.messages)
-
-    def create_system_message(self):
-        """
-        Create system message from 'prompt_template' and 'tool_description_template' which defines
-        agent's behaviour and provides tools.
-
-        Args:
-            prompt_template (`str`): Prompt template for the system message.
-            tool_description_template (`str`): Template for the tool description. 
-        """
-        
-        return {
-            "role": "user", # TODO: change to system if supported
-            "content": self.system_prompt,
-        }
+        print(self.memory)
+        self.log('\n'.join(self.memory))
 
     
-    def parse_action(self, llm_output, split_token):
+    def extract_action(self, llm_output: str, split_token: str) -> str:
         """
         Parse action from the LLM output
 
@@ -280,13 +229,13 @@ class Agent:
         """
         try:
             split = llm_output.split(split_token)
-            explanation, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
+            _, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
         except Exception as e:
             self.log(e)
             raise RuntimeError(f"Error: No '{split_token}' token provided. Be sure to include an action, prefaced with '{split_token}'!")
         return action
      
-    def execute(self, tool_name, arguments):
+    def execute(self, tool_name: str, arguments: Dict[str, str]) -> None:
         """
         Execute tool with the provided input and append the result to the memory
 
@@ -305,27 +254,20 @@ class Agent:
                 observation = self.toolbox[tool_name](arguments)
             else:
                 observation = self.toolbox[tool_name](**arguments)
-            observation_message = {
-                "role": "user", # NOTE: this role is set to solve the error: 'Last message must be a Human message'
-                "content": "Observation: " + observation.strip()
-            }
+            observation_message = "Observation: " + observation.strip()
             self.log(observation_message)
-            self.add_message(observation_message)
+            self.memory.append(observation_message)
+            print("OK >WZPOKJP")
         except Exception as e:
             raise RuntimeError(
                 f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
                 f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox[tool_name])}."
             )
     
-    
     def run(self, **kwargs):
         """To be implemented in the child class"""
         pass
 
-    def parser(self,input_message):
-        pass
-        # TODO: to continue
-        
 
 class CodeAgent(Agent):
     """
@@ -391,7 +333,7 @@ class CodeAgent(Agent):
         llm_output = self.llm_callable(prompt, stop=["Task:"])
 
         # Parse
-        code_action = self.parse_action(
+        code_action = self.extract_action(
             llm_output=llm_output,
             split_token="Answer:"
         )
@@ -401,7 +343,7 @@ class CodeAgent(Agent):
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
             self.log(error_msg)
-            return str(e)
+            return error_msg
 
         # Execute
         try: 
@@ -412,7 +354,7 @@ class CodeAgent(Agent):
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
             self.log(error_msg)
-            return str(e)
+            return error_msg
 
 
 class ReactAgent(Agent):
@@ -437,7 +379,6 @@ class ReactAgent(Agent):
             max_iterations=max_iterations,
             **kwargs
         )
-        self.messages = []
         self._toolbox["final_answer"] = FinalAnswerTool()
 
     @property
@@ -452,28 +393,6 @@ class ReactAgent(Agent):
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
     
-        
-    def add_message(self, message: Dict[str, str]):
-        """
-        Append provided message to the message history of the current agent run.
-        Subsequent messages with the same role will be concatenated to a single message.
-
-        Args:
-            message (`Dict[str, str]`): Chat message with corresponding role. 
-        """
-
-        if not set(message.keys()) == {"role", "content"}:
-            raise ValueError("Message should contain only 'role' and 'content' keys!")
-        
-        if message["role"] not in ("user", "assistant", "system"):
-            raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
-        
-        if len(self.messages) > 0 and self.messages[-1]["role"] == message["role"]: #NOTE: this was breaking the LLM calls: given several successive runs, it would concatenate all the Task into the system message, thus breaking it.
-            self.messages[-1] = copy.copy(self.messages[-1])
-            self.messages[-1]["content"] += "\n" + message["content"]
-        else:
-            self.messages.append(message)
-
 
     def run(self, task):
         """
@@ -493,15 +412,11 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        self.messages = []
-        self.add_message(self.system_message)
+        self.memory = [self.system_prompt]
 
         self.task = task
-        task_message = {
-            "role": "user",
-            "content": f"Task: {self.task}"
-        }
-        self.add_message(task_message)
+        task_message = f"Task: {self.task}"
+        self.memory.append(task_message)
 
         final_answer = None
         iteration = 0
@@ -511,11 +426,8 @@ class ReactAgent(Agent):
                 final_answer = self.step()
             except Exception as e:
                 self.log(e)
-                error_message = {
-                    "role": "user",
-                    "content": str(e) + ". Now let's retry."
-                }
-                self.add_message(error_message)
+                error_message = str(e) + ". Now let's retry."
+                self.memory.append(error_message)
             finally:
                 iteration += 1
         
@@ -530,20 +442,17 @@ class ReactAgent(Agent):
         Runs agent step with the current prompt (task + state)
         """
         self.log("=====Calling LLM with these messages:=====")
-        print(':::::\n::::::'.join([str(i) for i in self.messages]))
+        memory_as_text = '\n'.join(self.memory)
+        self.log(memory_as_text)
 
-        llm_output = self.llm_callable(self.messages, stop=["Observation:"])
+        llm_output = self.llm_callable(memory_as_text, stop=["Observation:"])
         self.log("=====Output message of the LLM:=====")
         self.log(llm_output)
 
-        result_message = {
-            "role": "assistant",
-            "content": llm_output
-        }
-        self.add_message(result_message)
+        self.memory.append(llm_output)
 
         # Parse
-        action = self.parse_action(
+        action = self.extract_action(
             llm_output=llm_output,
             split_token="Action:"
         )
@@ -555,9 +464,10 @@ class ReactAgent(Agent):
     
         # Execute
         if tool_name == "final_answer":
-            if isinstance(arguments, str) or isinstance(arguments, float) or isinstance(arguments, int):
+            if isinstance(arguments, dict):
+                return arguments['answer']
+            else:
                 return arguments
-            return arguments['answer']
         else:
             self.execute(tool_name, arguments)
             return None
