@@ -56,8 +56,6 @@ PRETRAINED_INIT_CONFIGURATION = {
     "helboukkouri/character-bert-base-uncased": {"max_word_length": 50, "do_lower_case": True},
 }
 
-PAD_CHARACTER_ID = 260
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -94,7 +92,7 @@ def special_token_character_ids(index, bow_character_id, eow_character_id, pad_c
 
 class CharacterBertTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a CHARACTER_BERT tokenizer. Based on WordPiece.
+    Construct a CHARACTER_BERT tokenizer.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -149,6 +147,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         do_lower_case=True,
         do_basic_tokenize=True,
         never_split=None,
+        bow_character_id=258,
+        eow_character_id=259,
+        pad_character_id=260,
         unk_token="[UNK]",
         sep_token="[SEP]",
         pad_token="[PAD]",
@@ -185,6 +186,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
+            bow_character_id=bow_character_id,
+            eow_character_id=eow_character_id,
+            pad_character_id=pad_character_id,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -205,11 +209,11 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         self.max_word_length = max_word_length
 
         # Character delimiting the BEGINNING of a TOKEN
-        self.bow_character_id = 258
+        self.bow_character_id = bow_character_id
         # Character delimiting the END of a TOKEN
-        self.eow_character_id = 259
+        self.eow_character_id = eow_character_id
         # Pads a TOKEN up to the maximum character length
-        self.pad_character_id = PAD_CHARACTER_ID
+        self.pad_character_id = pad_character_id
 
         # Token delimiting the BEGINNING of a TEXT
         self.cls_character_ids = special_token_character_ids(

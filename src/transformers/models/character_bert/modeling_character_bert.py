@@ -49,7 +49,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_character_bert import CharacterBertConfig
-from .tokenization_character_bert import PAD_CHARACTER_ID
 
 
 logger = logging.get_logger(__name__)
@@ -200,6 +199,7 @@ class CharacterCnn(torch.nn.Module):
         self.cnn_filters = config.cnn_filters
         self.num_highway_layers = config.num_highway_layers
         self.max_word_length = config.max_word_length
+        self.pad_character_id = config.pad_character_id
         self.hidden_size = config.hidden_size
         # NOTE: this is the 256 possible utf-8 bytes + special slots for the
         # [CLS]/[SEP]/[PAD]/[MASK] characters as well as beginning/end of
@@ -220,7 +220,7 @@ class CharacterCnn(torch.nn.Module):
         weights = torch.empty((self.character_vocab_size, self.character_embeddings_dim))
         nn.init.normal_(weights)
         weights[0].fill_(0.0)  # the all zeros token is used for padding token sequences
-        weights[PAD_CHARACTER_ID + 1].fill_(0.0)  # this character id is used for padding character sequences
+        weights[self.pad_character_id + 1].fill_(0.0)  # this character id is used for padding character sequences
         self._char_embedding_weights = torch.nn.Parameter(torch.FloatTensor(weights), requires_grad=True)
 
     def _init_cnn_weights(self):
@@ -888,7 +888,7 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
             # token padding
             module._char_embedding_weights.data[0].fill_(0.0)
             # character padding
-            module._char_embedding_weights.data[PAD_CHARACTER_ID + 1].fill_(0.0)
+            module._char_embedding_weights.data[self.config.pad_character_id + 1].fill_(0.0)
         elif isinstance(module, nn.Linear) or isinstance(module, nn.Conv1d):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617

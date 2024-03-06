@@ -78,8 +78,11 @@ class CharacterBertConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
-            The padding token had a character_id vector filled with this value. This is not to be confused with
-            the id use to pad character sequences to the same token length (PAD_CHARACTER_ID + 1).
+            The padding token has a character_id vector that is filled with this value.
+            This is not to be confused with the id use to pad character sequences to the same
+            token length (i.e. pad_character_id + 1).
+        pad_character_id (`int`, *optional*, defaults to 260):
+            This is used to pad character sequences to the same token length (final value is `pad_character_id + 1`).
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
@@ -133,6 +136,7 @@ class CharacterBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        pad_character_id=260,
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
@@ -165,6 +169,7 @@ class CharacterBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.pad_character_id = pad_character_id
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
