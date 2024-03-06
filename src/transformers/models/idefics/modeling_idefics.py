@@ -48,12 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "IdeficsConfig"
 
-IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics-9b",
-    "HuggingFaceM4/idefics-80b",
-    # See all Idefics models at https://huggingface.co/models?filter=idefics
-]
-
 
 @dataclass
 class IdeficsBaseModelOutputWithPast(ModelOutput):

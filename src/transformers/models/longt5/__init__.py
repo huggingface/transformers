@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availa
 
 
 _import_structure = {
-    "configuration_longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config", "LongT5OnnxConfig"],
+    "configuration_longt5": ["LongT5Config", "LongT5OnnxConfig"],
 }
 
 try:
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_longt5"] = [
-        "LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LongT5EncoderModel",
         "LongT5ForConditionalGeneration",
         "LongT5Model",
@@ -49,7 +48,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config, LongT5OnnxConfig
+    from .configuration_longt5 import LongT5Config, LongT5OnnxConfig
 
     try:
         if not is_torch_available():
@@ -58,7 +57,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_longt5 import (
-            LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongT5EncoderModel,
             LongT5ForConditionalGeneration,
             LongT5Model,

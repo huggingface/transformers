@@ -51,16 +51,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 
-ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FacebookAI/roberta-base",
-    "FacebookAI/roberta-large",
-    "FacebookAI/roberta-large-mnli",
-    "distilbert/distilroberta-base",
-    "openai-community/roberta-base-openai-detector",
-    "openai-community/roberta-large-openai-detector",
-    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
-]
-
 
 class RobertaEmbeddings(nn.Module):
     """

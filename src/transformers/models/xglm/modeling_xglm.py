@@ -37,11 +37,6 @@ _CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
 
 
-XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xglm-564M",
-    # See all XGLM models at https://huggingface.co/models?filter=xglm
-]
-
 XGLM_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads

@@ -22,11 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/AltCLIP": "https://huggingface.co/BAAI/AltCLIP/resolve/main/config.json",
-    # See all AltCLIP models at https://huggingface.co/models?filter=altclip
-}
-
 
 class AltCLIPTextConfig(PretrainedConfig):
     r"""

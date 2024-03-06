@@ -51,11 +51,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "OneFormerConfig"
 _CHECKPOINT_FOR_DOC = "shi-labs/oneformer_ade20k_swin_tiny"
 
-ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shi-labs/oneformer_ade20k_swin_tiny",
-    # See all OneFormer models at https://huggingface.co/models?filter=oneformer
-]
-
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment

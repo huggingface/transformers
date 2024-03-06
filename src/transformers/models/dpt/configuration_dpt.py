@@ -24,11 +24,6 @@ from ..bit import BitConfig
 
 logger = logging.get_logger(__name__)
 
-DPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/dpt-large": "https://huggingface.co/Intel/dpt-large/resolve/main/config.json",
-    # See all DPT models at https://huggingface.co/models?filter=dpt
-}
-
 
 class DPTConfig(PretrainedConfig):
     r"""

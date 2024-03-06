@@ -39,12 +39,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PatchTSMixerConfig"
 
 
-PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtsmixer-etth1-pretrain",
-    # See all PatchTSMixer models at https://huggingface.co/models?filter=patchtsmixer
-]
-
-
 PATCHTSMIXER_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

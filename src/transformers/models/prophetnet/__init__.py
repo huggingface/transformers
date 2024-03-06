@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig"],
+    "configuration_prophetnet": ["ProphetNetConfig"],
     "tokenization_prophetnet": ["ProphetNetTokenizer"],
 }
 
@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_prophetnet"] = [
-        "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ProphetNetDecoder",
         "ProphetNetEncoder",
         "ProphetNetForCausalLM",
@@ -40,7 +39,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
+    from .configuration_prophetnet import ProphetNetConfig
     from .tokenization_prophetnet import ProphetNetTokenizer
 
     try:
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_prophetnet import (
-            PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,
             ProphetNetEncoder,
             ProphetNetForCausalLM,

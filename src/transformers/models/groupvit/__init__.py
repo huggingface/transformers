@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 _import_structure = {
     "configuration_groupvit": [
-        "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
         "GroupViTOnnxConfig",
         "GroupViTTextConfig",
@@ -33,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_groupvit"] = [
-        "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GroupViTModel",
         "GroupViTPreTrainedModel",
         "GroupViTTextModel",
@@ -47,7 +45,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_groupvit"] = [
-        "TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFGroupViTModel",
         "TFGroupViTPreTrainedModel",
         "TFGroupViTTextModel",
@@ -56,7 +53,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_groupvit import (
-        GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
         GroupViTOnnxConfig,
         GroupViTTextConfig,
@@ -70,7 +66,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_groupvit import (
-            GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GroupViTModel,
             GroupViTPreTrainedModel,
             GroupViTTextModel,
@@ -84,7 +79,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_groupvit import (
-            TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFGroupViTModel,
             TFGroupViTPreTrainedModel,
             TFGroupViTTextModel,

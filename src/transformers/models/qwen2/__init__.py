@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_qwen2": ["QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2Config"],
+    "configuration_qwen2": ["Qwen2Config"],
     "tokenization_qwen2": ["Qwen2Tokenizer"],
 }
 
@@ -49,7 +49,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config
+    from .configuration_qwen2 import Qwen2Config
     from .tokenization_qwen2 import Qwen2Tokenizer
 
     try:

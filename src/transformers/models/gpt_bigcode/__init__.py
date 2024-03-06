@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig"],
+    "configuration_gpt_bigcode": ["GPTBigCodeConfig"],
 }
 
 try:
@@ -32,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_gpt_bigcode"] = [
-        "GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTBigCodeForSequenceClassification",
         "GPTBigCodeForTokenClassification",
         "GPTBigCodeForCausalLM",
@@ -41,7 +40,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig
+    from .configuration_gpt_bigcode import GPTBigCodeConfig
 
     try:
         if not is_torch_available():
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gpt_bigcode import (
-            GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTBigCodeForCausalLM,
             GPTBigCodeForSequenceClassification,
             GPTBigCodeForTokenClassification,

@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_poolformer": [
-        "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "PoolFormerConfig",
         "PoolFormerOnnxConfig",
     ]
@@ -40,7 +39,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_poolformer"] = [
-        "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PoolFormerForImageClassification",
         "PoolFormerModel",
         "PoolFormerPreTrainedModel",
@@ -49,7 +47,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_poolformer import (
-        POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PoolFormerConfig,
         PoolFormerOnnxConfig,
     )
@@ -70,7 +67,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_poolformer import (
-            POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             PoolFormerForImageClassification,
             PoolFormerModel,
             PoolFormerPreTrainedModel,

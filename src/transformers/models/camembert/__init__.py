@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig", "CamembertOnnxConfig"],
+    "configuration_camembert": ["CamembertConfig", "CamembertOnnxConfig"],
 }
 
 try:
@@ -51,7 +51,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_camembert"] = [
-        "CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CamembertForCausalLM",
         "CamembertForMaskedLM",
         "CamembertForMultipleChoice",
@@ -69,7 +68,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_camembert"] = [
-        "TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFCamembertForCausalLM",
         "TFCamembertForMaskedLM",
         "TFCamembertForMultipleChoice",
@@ -82,7 +80,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig, CamembertOnnxConfig
+    from .configuration_camembert import CamembertConfig, CamembertOnnxConfig
 
     try:
         if not is_sentencepiece_available():
@@ -107,7 +105,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_camembert import (
-            CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CamembertForCausalLM,
             CamembertForMaskedLM,
             CamembertForMultipleChoice,
@@ -125,7 +122,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_camembert import (
-            TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCamembertForCausalLM,
             TFCamembertForMaskedLM,
             TFCamembertForMultipleChoice,

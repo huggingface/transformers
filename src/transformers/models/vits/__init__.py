@@ -23,10 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_vits": [
-        "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "VitsConfig",
-    ],
+    "configuration_vits": ["VitsConfig"],
     "tokenization_vits": ["VitsTokenizer"],
 }
 
@@ -37,14 +34,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vits"] = [
-        "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VitsModel",
         "VitsPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_vits import (
-        VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
     )
     from .tokenization_vits import VitsTokenizer
@@ -56,7 +51,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vits import (
-            VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitsModel,
             VitsPreTrainedModel,
         )

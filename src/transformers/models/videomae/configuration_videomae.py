@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MCG-NJU/videomae-base": "https://huggingface.co/MCG-NJU/videomae-base/resolve/main/config.json",
-}
-
 
 class VideoMAEConfig(PretrainedConfig):
     r"""

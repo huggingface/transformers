@@ -65,16 +65,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
 
-TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/electra-small-generator",
-    "google/electra-base-generator",
-    "google/electra-large-generator",
-    "google/electra-small-discriminator",
-    "google/electra-base-discriminator",
-    "google/electra-large-discriminator",
-    # See all ELECTRA models at https://huggingface.co/models?filter=electra
-]
-
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Electra
 class TFElectraSelfAttention(keras.layers.Layer):

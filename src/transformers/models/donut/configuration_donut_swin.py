@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "naver-clova-ix/donut-base": "https://huggingface.co/naver-clova-ix/donut-base/resolve/main/config.json",
-    # See all Donut models at https://huggingface.co/models?filter=donut-swin
-}
-
 
 class DonutSwinConfig(PretrainedConfig):
     r"""

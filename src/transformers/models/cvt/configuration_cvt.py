@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/cvt-13": "https://huggingface.co/microsoft/cvt-13/resolve/main/config.json",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-}
-
 
 class CvtConfig(PretrainedConfig):
     r"""

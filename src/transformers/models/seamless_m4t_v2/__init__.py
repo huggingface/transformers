@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_seamless_m4t_v2": ["SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4Tv2Config"],
+    "configuration_seamless_m4t_v2": ["SeamlessM4Tv2Config"],
 }
 
 try:
@@ -31,7 +31,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_seamless_m4t_v2"] = [
-        "SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SeamlessM4Tv2ForTextToSpeech",
         "SeamlessM4Tv2ForSpeechToSpeech",
         "SeamlessM4Tv2ForTextToText",
@@ -41,7 +40,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_seamless_m4t_v2 import SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4Tv2Config
+    from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
     try:
         if not is_torch_available():
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_seamless_m4t_v2 import (
-            SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4Tv2ForSpeechToSpeech,
             SeamlessM4Tv2ForSpeechToText,
             SeamlessM4Tv2ForTextToSpeech,

@@ -25,10 +25,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Salesforce/instruct-blip-flan-t5": "https://huggingface.co/Salesforce/instruct-blip-flan-t5/resolve/main/config.json",
-}
-
 
 class InstructBlipVisionConfig(PretrainedConfig):
     r"""

@@ -22,12 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": (
-        "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json"
-    ),
-}
-
 
 class ProphetNetConfig(PretrainedConfig):
     r"""

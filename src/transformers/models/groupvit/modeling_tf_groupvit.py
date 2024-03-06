@@ -66,11 +66,6 @@ if is_tensorflow_probability_available():
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
-TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/groupvit-gcc-yfcc",
-    # See all GroupViT models at https://huggingface.co/models?filter=groupvit
-]
-
 
 LARGE_NEGATIVE = -1e8
 

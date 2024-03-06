@@ -54,14 +54,6 @@ _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
 
 
-BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/bigbird-pegasus-large-arxiv",
-    "google/bigbird-pegasus-large-pubmed",
-    "google/bigbird-pegasus-large-bigpatent",
-    # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
-]
-
-
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.

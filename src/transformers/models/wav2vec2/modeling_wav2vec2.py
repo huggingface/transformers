@@ -89,15 +89,6 @@ _XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.98
 
 
-WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h",
-    "facebook/wav2vec2-large-960h",
-    "facebook/wav2vec2-large-960h-lv60",
-    "facebook/wav2vec2-large-960h-lv60-self",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
-]
-
-
 @dataclass
 class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     """

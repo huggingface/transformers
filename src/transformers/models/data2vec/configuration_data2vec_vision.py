@@ -25,12 +25,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-vision-base-ft": (
-        "https://huggingface.co/facebook/data2vec-vision-base-ft/resolve/main/config.json"
-    ),
-}
-
 
 class Data2VecVisionConfig(PretrainedConfig):
     r"""

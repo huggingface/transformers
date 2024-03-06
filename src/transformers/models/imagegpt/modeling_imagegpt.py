@@ -42,13 +42,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
 _CONFIG_FOR_DOC = "ImageGPTConfig"
 
-IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/imagegpt-small",
-    "openai/imagegpt-medium",
-    "openai/imagegpt-large",
-    # See all Image GPT models at https://huggingface.co/models?filter=imagegpt
-]
-
 
 def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
     """

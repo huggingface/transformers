@@ -22,7 +22,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_clvp": [
-        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ClvpConfig",
         "ClvpDecoderConfig",
         "ClvpEncoderConfig",
@@ -40,7 +39,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_clvp"] = [
-        "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClvpModelForConditionalGeneration",
         "ClvpForCausalLM",
         "ClvpModel",
@@ -52,7 +50,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_clvp import (
-        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ClvpConfig,
         ClvpDecoderConfig,
         ClvpEncoderConfig,
@@ -68,7 +65,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_clvp import (
-            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ClvpDecoder,
             ClvpEncoder,
             ClvpForCausalLM,

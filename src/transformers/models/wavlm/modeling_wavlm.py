@@ -70,13 +70,6 @@ _FRAME_EXPECTED_OUTPUT = [0, 0]
 _XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
-WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/wavlm-base",
-    "microsoft/wavlm-base-plus",
-    "microsoft/wavlm-large",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-]
-
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(

@@ -48,11 +48,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
 
-VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dandelin/vilt-b32-mlm",
-    # See all ViLT models at https://huggingface.co/models?filter=vilt
-]
-
 
 @dataclass
 class ViltForImagesAndTextClassificationOutput(ModelOutput):

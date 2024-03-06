@@ -1353,9 +1353,6 @@ class FlaxXGLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class FlaxXLMRobertaForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 

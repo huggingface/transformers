@@ -22,7 +22,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_swiftformer": [
-        "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
         "SwiftFormerOnnxConfig",
     ]
@@ -35,7 +34,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_swiftformer"] = [
-        "SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SwiftFormerForImageClassification",
         "SwiftFormerModel",
         "SwiftFormerPreTrainedModel",
@@ -43,7 +41,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_swiftformer import (
-        SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
         SwiftFormerOnnxConfig,
     )
@@ -55,7 +52,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_swiftformer import (
-            SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwiftFormerForImageClassification,
             SwiftFormerModel,
             SwiftFormerPreTrainedModel,

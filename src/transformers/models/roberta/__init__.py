@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaOnnxConfig"],
+    "configuration_roberta": ["RobertaConfig", "RobertaOnnxConfig"],
     "tokenization_roberta": ["RobertaTokenizer"],
 }
 
@@ -44,7 +44,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_roberta"] = [
-        "ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RobertaForCausalLM",
         "RobertaForMaskedLM",
         "RobertaForMultipleChoice",
@@ -62,7 +61,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_roberta"] = [
-        "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFRobertaForCausalLM",
         "TFRobertaForMaskedLM",
         "TFRobertaForMultipleChoice",
@@ -93,7 +91,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaOnnxConfig
+    from .configuration_roberta import RobertaConfig, RobertaOnnxConfig
     from .tokenization_roberta import RobertaTokenizer
 
     try:
@@ -111,7 +109,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_roberta import (
-            ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             RobertaForCausalLM,
             RobertaForMaskedLM,
             RobertaForMultipleChoice,
@@ -129,7 +126,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_roberta import (
-            TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForCausalLM,
             TFRobertaForMaskedLM,
             TFRobertaForMultipleChoice,

@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/flava-full": "https://huggingface.co/facebook/flava-full/resolve/main/config.json",
-}
-
 
 class FlavaImageConfig(PretrainedConfig):
     r"""

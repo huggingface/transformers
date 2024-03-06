@@ -18,14 +18,12 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_data2vec_audio": ["DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig"],
+    "configuration_data2vec_audio": ["Data2VecAudioConfig"],
     "configuration_data2vec_text": [
-        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecTextConfig",
         "Data2VecTextOnnxConfig",
     ],
     "configuration_data2vec_vision": [
-        "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecVisionConfig",
         "Data2VecVisionOnnxConfig",
     ],
@@ -38,7 +36,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_data2vec_audio"] = [
-        "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Data2VecAudioForAudioFrameClassification",
         "Data2VecAudioForCTC",
         "Data2VecAudioForSequenceClassification",
@@ -47,7 +44,6 @@ else:
         "Data2VecAudioPreTrainedModel",
     ]
     _import_structure["modeling_data2vec_text"] = [
-        "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Data2VecTextForCausalLM",
         "Data2VecTextForMaskedLM",
         "Data2VecTextForMultipleChoice",
@@ -58,7 +54,6 @@ else:
         "Data2VecTextPreTrainedModel",
     ]
     _import_structure["modeling_data2vec_vision"] = [
-        "DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Data2VecVisionForImageClassification",
         "Data2VecVisionForMaskedImageModeling",
         "Data2VecVisionForSemanticSegmentation",
@@ -75,14 +70,12 @@ if is_tf_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig
+    from .configuration_data2vec_audio import Data2VecAudioConfig
     from .configuration_data2vec_text import (
-        DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Data2VecTextConfig,
         Data2VecTextOnnxConfig,
     )
     from .configuration_data2vec_vision import (
-        DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Data2VecVisionConfig,
         Data2VecVisionOnnxConfig,
     )
@@ -94,7 +87,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_data2vec_audio import (
-            DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecAudioForAudioFrameClassification,
             Data2VecAudioForCTC,
             Data2VecAudioForSequenceClassification,
@@ -103,7 +95,6 @@ if TYPE_CHECKING:
             Data2VecAudioPreTrainedModel,
         )
         from .modeling_data2vec_text import (
-            DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecTextForCausalLM,
             Data2VecTextForMaskedLM,
             Data2VecTextForMultipleChoice,
@@ -114,7 +105,6 @@ if TYPE_CHECKING:
             Data2VecTextPreTrainedModel,
         )
         from .modeling_data2vec_vision import (
-            DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecVisionForImageClassification,
             Data2VecVisionForMaskedImageModeling,
             Data2VecVisionForSemanticSegmentation,

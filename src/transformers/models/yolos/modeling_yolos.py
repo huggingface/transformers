@@ -63,12 +63,6 @@ _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 3401, 384]
 
 
-YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/yolos-small",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-]
-
-
 @dataclass
 class YolosObjectDetectionOutput(ModelOutput):
     """

@@ -53,10 +53,6 @@ _CHECKPOINT_FOR_DOC = "uw-madison/mra-base-512-4"
 _CONFIG_FOR_DOC = "MraConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
-MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uw-madison/mra-base-512-4",
-    # See all Mra models at https://huggingface.co/models?filter=mra
-]
 
 mra_cuda_kernel = None
 

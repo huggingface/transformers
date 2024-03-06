@@ -25,10 +25,6 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "s-JoL/Open-Llama-V1": "https://huggingface.co/s-JoL/Open-Llama-V1/blob/main/config.json",
-}
-
 
 class OpenLlamaConfig(PretrainedConfig):
     r"""

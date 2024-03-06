@@ -55,11 +55,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
-TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-community/openai-gpt",
-    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-community/openai-gpt
-]
-
 
 class TFAttention(keras.layers.Layer):
     def __init__(self, nx, config, scale=False, **kwargs):

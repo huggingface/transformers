@@ -42,12 +42,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "squeezebert/squeezebert-uncased"
 _CONFIG_FOR_DOC = "SqueezeBertConfig"
 
-SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "squeezebert/squeezebert-uncased",
-    "squeezebert/squeezebert-mnli",
-    "squeezebert/squeezebert-mnli-headless",
-]
-
 
 class SqueezeBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""

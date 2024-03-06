@@ -38,13 +38,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaConfig"
 
-LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.5-7b-hf",
-    "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf",
-    # See all Llava models at https://huggingface.co/models?filter=llava
-]
-
 
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava

@@ -25,10 +25,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mosaicml/mpt-7b": "https://huggingface.co/mosaicml/mpt-7b/resolve/main/config.json",
-}
-
 
 class MptAttentionConfig(PretrainedConfig):
     """

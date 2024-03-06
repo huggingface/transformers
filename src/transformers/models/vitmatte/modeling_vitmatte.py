@@ -31,12 +31,6 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_vitmatte import VitMatteConfig
 
 
-VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/vitmatte-small-composition-1k",
-    # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
-]
-
-
 # General docstring
 _CONFIG_FOR_DOC = "VitMatteConfig"
 

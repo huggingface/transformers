@@ -26,7 +26,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig", "AlbertOnnxConfig"],
+    "configuration_albert": ["AlbertConfig", "AlbertOnnxConfig"],
 }
 
 try:
@@ -52,7 +52,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_albert"] = [
-        "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "AlbertForMaskedLM",
         "AlbertForMultipleChoice",
         "AlbertForPreTraining",
@@ -71,7 +70,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_albert"] = [
-        "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFAlbertForMaskedLM",
         "TFAlbertForMultipleChoice",
         "TFAlbertForPreTraining",
@@ -101,7 +99,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig, AlbertOnnxConfig
+    from .configuration_albert import AlbertConfig, AlbertOnnxConfig
 
     try:
         if not is_sentencepiece_available():
@@ -126,7 +124,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_albert import (
-            ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
             AlbertForPreTraining,
@@ -145,7 +142,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_albert import (
-            TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,
             TFAlbertForMultipleChoice,
             TFAlbertForPreTraining,

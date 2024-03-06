@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availa
 
 
 _import_structure = {
-    "configuration_mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
+    "configuration_mistral": ["MistralConfig"],
 }
 
 
@@ -48,7 +48,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
+    from .configuration_mistral import MistralConfig
 
     try:
         if not is_torch_available():

@@ -22,10 +22,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "llava-hf/llava-v1.5-7b": "https://huggingface.co/llava-hf/llava-v1.5-7b/resolve/main/config.json",
-}
-
 
 class LlavaConfig(PretrainedConfig):
     r"""

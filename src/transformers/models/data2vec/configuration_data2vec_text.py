@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-text-base": "https://huggingface.co/data2vec/resolve/main/config.json",
-}
-
 
 class Data2VecTextConfig(PretrainedConfig):
     r"""

@@ -59,12 +59,6 @@ _CONFIG_FOR_DOC = "WhisperConfig"
 _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 
 
-WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/whisper-base",
-    # See all Whisper models at https://huggingface.co/models?filter=whisper
-]
-
-
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)

@@ -37,14 +37,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "tau/splinter-base"
 _CONFIG_FOR_DOC = "SplinterConfig"
 
-SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tau/splinter-base",
-    "tau/splinter-base-qass",
-    "tau/splinter-large",
-    "tau/splinter-large-qass",
-    # See all Splinter models at https://huggingface.co/models?filter=splinter
-]
-
 
 class SplinterEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""

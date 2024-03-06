@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stabilityai/stablelm-3b-4e1t": "https://huggingface.co/stabilityai/stablelm-3b-4e1t/resolve/main/config.json",
-    # See all StableLM models at https://huggingface.co/models?filter=stablelm
-}
-
 
 class StableLmConfig(PretrainedConfig):
     r"""

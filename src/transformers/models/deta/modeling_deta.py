@@ -151,11 +151,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DetaConfig"
 _CHECKPOINT_FOR_DOC = "jozhang97/deta-swin-large-o365"
 
-DETA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "jozhang97/deta-swin-large-o365",
-    # See all DETA models at https://huggingface.co/models?filter=deta
-]
-
 
 @dataclass
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderOutput with DeformableDetr->Deta

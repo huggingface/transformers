@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config"],
+    "configuration_wav2vec2": ["Wav2Vec2Config"],
     "feature_extraction_wav2vec2": ["Wav2Vec2FeatureExtractor"],
     "processing_wav2vec2": ["Wav2Vec2Processor"],
     "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
@@ -37,7 +37,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_wav2vec2"] = [
-        "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Wav2Vec2ForAudioFrameClassification",
         "Wav2Vec2ForCTC",
         "Wav2Vec2ForMaskedLM",
@@ -55,7 +54,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_wav2vec2"] = [
-        "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFWav2Vec2ForCTC",
         "TFWav2Vec2Model",
         "TFWav2Vec2PreTrainedModel",
@@ -77,7 +75,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
+    from .configuration_wav2vec2 import Wav2Vec2Config
     from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
     from .processing_wav2vec2 import Wav2Vec2Processor
     from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2Tokenizer
@@ -89,7 +87,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_wav2vec2 import (
-            WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
@@ -107,7 +104,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_wav2vec2 import (
-            TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
             TFWav2Vec2ForSequenceClassification,
             TFWav2Vec2Model,

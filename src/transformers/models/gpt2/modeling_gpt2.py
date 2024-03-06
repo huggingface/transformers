@@ -54,15 +54,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
-GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-community/gpt2",
-    "openai-community/gpt2-medium",
-    "openai-community/gpt2-large",
-    "openai-community/gpt2-xl",
-    "distilbert/distilgpt2",
-    # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
-]
-
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""

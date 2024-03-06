@@ -64,11 +64,6 @@ except Exception:
 _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "sweetcocoa/pop2piano"
 
-POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sweetcocoa/pop2piano",
-    # See all Pop2Piano models at https://huggingface.co/models?filter=pop2piano
-]
-
 
 POP2PIANO_INPUTS_DOCSTRING = r"""
     Args:

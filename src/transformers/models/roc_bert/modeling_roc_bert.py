@@ -72,10 +72,6 @@ _QA_TARGET_START_INDEX = 14
 _QA_TARGET_END_INDEX = 15
 
 # Maske language modeling
-ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "weiweishi/roc-bert-base-zh",
-    # See all RoCBert models at https://huggingface.co/models?filter=roc_bert
-]
 
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->roc_bert

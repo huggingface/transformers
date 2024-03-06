@@ -62,11 +62,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 
-TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/rembert",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-]
-
 
 class TFRemBertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""

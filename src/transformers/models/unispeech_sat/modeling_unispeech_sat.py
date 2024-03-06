@@ -72,10 +72,6 @@ _FRAME_EXPECTED_OUTPUT = [0, 0]
 _XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
-UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
-]
-
 
 @dataclass
 class UniSpeechSatForPreTrainingOutput(ModelOutput):

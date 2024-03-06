@@ -20,11 +20,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "dg845/univnet-dev": "https://huggingface.co/dg845/univnet-dev/resolve/main/config.json",
-}
-
-
 class UnivNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UnivNetModel`]. It is used to instantiate a

@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hf-seamless-m4t-medium": "https://huggingface.co/facebook/hf-seamless-m4t-medium/resolve/main/config.json",
-    # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
-}
-
 
 class SeamlessM4TConfig(PretrainedConfig):
     r"""

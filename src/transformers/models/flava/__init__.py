@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_flava": [
-        "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FlavaConfig",
         "FlavaImageCodebookConfig",
         "FlavaImageConfig",
@@ -44,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flava"] = [
-        "FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FlavaForPreTraining",
         "FlavaImageCodebook",
         "FlavaImageModel",
@@ -56,7 +54,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_flava import (
-        FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
         FlavaImageCodebookConfig,
         FlavaImageConfig,
@@ -81,7 +78,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flava import (
-            FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlavaForPreTraining,
             FlavaImageCodebook,
             FlavaImageModel,

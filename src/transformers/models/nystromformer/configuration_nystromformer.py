@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/nystromformer-512": "https://huggingface.co/uw-madison/nystromformer-512/resolve/main/config.json",
-    # See all Nystromformer models at https://huggingface.co/models?filter=nystromformer
-}
-
 
 class NystromformerConfig(PretrainedConfig):
     r"""

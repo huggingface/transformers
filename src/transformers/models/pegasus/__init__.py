@@ -24,7 +24,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig"]}
+_import_structure = {"configuration_pegasus": ["PegasusConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -49,7 +49,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_pegasus"] = [
-        "PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PegasusForCausalLM",
         "PegasusForConditionalGeneration",
         "PegasusModel",
@@ -82,7 +81,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
+    from .configuration_pegasus import PegasusConfig
 
     try:
         if not is_sentencepiece_available():
@@ -107,7 +106,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_pegasus import (
-            PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
             PegasusModel,

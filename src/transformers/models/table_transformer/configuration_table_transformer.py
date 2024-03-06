@@ -26,12 +26,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/table-transformer-detection": (
-        "https://huggingface.co/microsoft/table-transformer-detection/resolve/main/config.json"
-    ),
-}
-
 
 class TableTransformerConfig(PretrainedConfig):
     r"""

@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig"],
+    "configuration_tapas": ["TapasConfig"],
     "tokenization_tapas": ["TapasTokenizer"],
 }
 
@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tapas"] = [
-        "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TapasForMaskedLM",
         "TapasForQuestionAnswering",
         "TapasForSequenceClassification",
@@ -44,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_tapas"] = [
-        "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFTapasForMaskedLM",
         "TFTapasForQuestionAnswering",
         "TFTapasForSequenceClassification",
@@ -54,7 +52,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
+    from .configuration_tapas import TapasConfig
     from .tokenization_tapas import TapasTokenizer
 
     try:
@@ -64,7 +62,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tapas import (
-            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TapasForMaskedLM,
             TapasForQuestionAnswering,
             TapasForSequenceClassification,
@@ -80,7 +77,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_tapas import (
-            TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFTapasForMaskedLM,
             TFTapasForQuestionAnswering,
             TFTapasForSequenceClassification,

@@ -76,8 +76,6 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "lordtt13/emo-mobilebert"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
-MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["google/mobilebert-uncased"]
-
 
 def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -685,7 +683,6 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MobileBertConfig
-    pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
 

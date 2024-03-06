@@ -27,17 +27,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/config.json"
-    ),
-    "microsoft/deberta-v2-xxlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/config.json"
-    ),
-}
-
 
 class DebertaV2Config(PretrainedConfig):
     r"""

@@ -27,7 +27,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
@@ -46,7 +46,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_gpt2"] = [
-        "GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPT2DoubleHeadsModel",
         "GPT2ForQuestionAnswering",
         "GPT2ForSequenceClassification",
@@ -64,7 +63,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_gpt2"] = [
-        "TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFGPT2DoubleHeadsModel",
         "TFGPT2ForSequenceClassification",
         "TFGPT2LMHeadModel",
@@ -90,7 +88,7 @@ else:
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2LMHeadModel", "FlaxGPT2Model", "FlaxGPT2PreTrainedModel"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
     from .tokenization_gpt2 import GPT2Tokenizer
 
     try:
@@ -108,7 +106,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gpt2 import (
-            GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
             GPT2ForQuestionAnswering,
             GPT2ForSequenceClassification,
@@ -126,7 +123,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_gpt2 import (
-            TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFGPT2DoubleHeadsModel,
             TFGPT2ForSequenceClassification,
             TFGPT2LMHeadModel,

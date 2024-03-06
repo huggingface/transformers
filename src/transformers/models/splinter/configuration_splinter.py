@@ -20,14 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/config.json",
-    "tau/splinter-base-qass": "https://huggingface.co/tau/splinter-base-qass/resolve/main/config.json",
-    "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/config.json",
-    "tau/splinter-large-qass": "https://huggingface.co/tau/splinter-large-qass/resolve/main/config.json",
-    # See all Splinter models at https://huggingface.co/models?filter=splinter
-}
-
 
 class SplinterConfig(PretrainedConfig):
     r"""

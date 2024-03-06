@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/timesformer": "https://huggingface.co/facebook/timesformer/resolve/main/config.json",
-}
-
 
 class TimesformerConfig(PretrainedConfig):
     r"""

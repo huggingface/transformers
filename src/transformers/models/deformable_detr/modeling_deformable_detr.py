@@ -152,11 +152,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DeformableDetrConfig"
 _CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
 
-DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sensetime/deformable-detr",
-    # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
-]
-
 
 @dataclass
 class DeformableDetrDecoderOutput(ModelOutput):

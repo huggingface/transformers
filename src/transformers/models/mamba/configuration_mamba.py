@@ -22,10 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "state-spaces/mamba-2.8b": "https://huggingface.co/state-spaces/mamba-2.8b/resolve/main/config.json",
-}
-
 
 class MambaConfig(PretrainedConfig):
     """

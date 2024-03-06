@@ -58,12 +58,6 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-small-imagenet1k-1-layer"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dinov2-base",
-    # See all DINOv2 models at https://huggingface.co/models?filter=dinov2
-]
-
-
 class Dinov2Embeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.

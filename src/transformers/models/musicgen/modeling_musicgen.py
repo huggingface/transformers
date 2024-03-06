@@ -56,11 +56,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MusicgenConfig"
 _CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
-MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/musicgen-small",
-    # See all Musicgen models at https://huggingface.co/models?filter=musicgen
-]
-
 
 @dataclass
 class MusicgenUnconditionalInput(ModelOutput):

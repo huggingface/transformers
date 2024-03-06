@@ -78,12 +78,6 @@ _QA_EXPECTED_LOSS = 0.59
 _QA_EXPECTED_OUTPUT = "' nice puppet'"
 
 
-BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/bart-large",
-    # see all BART models at https://huggingface.co/models?filter=bart
-]
-
-
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)

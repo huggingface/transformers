@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"]}
+_import_structure = {"configuration_fnet": ["FNetConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -47,7 +47,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_fnet"] = [
-        "FNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FNetForMaskedLM",
         "FNetForMultipleChoice",
         "FNetForNextSentencePrediction",
@@ -62,7 +61,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
+    from .configuration_fnet import FNetConfig
 
     try:
         if not is_sentencepiece_available():
@@ -87,7 +86,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_fnet import (
-            FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             FNetForMaskedLM,
             FNetForMultipleChoice,
             FNetForNextSentencePrediction,

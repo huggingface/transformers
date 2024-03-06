@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
+    "configuration_deta": ["DetaConfig"],
 }
 
 try:
@@ -36,7 +36,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_deta"] = [
-        "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DetaForObjectDetection",
         "DetaModel",
         "DetaPreTrainedModel",
@@ -44,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
+    from .configuration_deta import DetaConfig
 
     try:
         if not is_vision_available():
@@ -61,7 +60,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_deta import (
-            DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetaForObjectDetection,
             DetaModel,
             DetaPreTrainedModel,

@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMOnnxConfig"],
+    "configuration_layoutlm": ["LayoutLMConfig", "LayoutLMOnnxConfig"],
     "tokenization_layoutlm": ["LayoutLMTokenizer"],
 }
 
@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_layoutlm"] = [
-        "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LayoutLMForMaskedLM",
         "LayoutLMForSequenceClassification",
         "LayoutLMForTokenClassification",
@@ -59,7 +58,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_layoutlm"] = [
-        "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFLayoutLMForMaskedLM",
         "TFLayoutLMForSequenceClassification",
         "TFLayoutLMForTokenClassification",
@@ -71,7 +69,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMOnnxConfig
+    from .configuration_layoutlm import LayoutLMConfig, LayoutLMOnnxConfig
     from .tokenization_layoutlm import LayoutLMTokenizer
 
     try:
@@ -89,7 +87,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_layoutlm import (
-            LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
             LayoutLMForQuestionAnswering,
             LayoutLMForSequenceClassification,
@@ -104,7 +101,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_layoutlm import (
-            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
             TFLayoutLMForQuestionAnswering,
             TFLayoutLMForSequenceClassification,

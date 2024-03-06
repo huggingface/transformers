@@ -52,11 +52,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
 
-MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/markuplm-base",
-    "microsoft/markuplm-large",
-]
-
 
 class XPathEmbeddings(nn.Module):
     """Construct the embeddings from xpath tags and subscripts.
@@ -708,7 +703,6 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MarkupLMConfig
-    pretrained_model_archive_map = MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "markuplm"
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->MarkupLM

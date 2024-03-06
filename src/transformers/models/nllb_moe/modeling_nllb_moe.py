@@ -53,10 +53,6 @@ _REAL_CHECKPOINT_FOR_DOC = "facebook/nllb-moe-54b"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/nllb-moe-54b",
-    # See all NLLB-MOE models at https://huggingface.co/models?filter=nllb-moe
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

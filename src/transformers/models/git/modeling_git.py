@@ -45,11 +45,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
 
-GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/git-base",
-    # See all GIT models at https://huggingface.co/models?filter=git
-]
-
 
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git

@@ -84,11 +84,6 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "vumichien/emo-mobilebert"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
-TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilebert-uncased",
-    # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
-]
-
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss
 class TFMobileBertPreTrainingLoss:

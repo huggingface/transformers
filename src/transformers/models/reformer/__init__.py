@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"]}
+_import_structure = {"configuration_reformer": ["ReformerConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -48,7 +48,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_reformer"] = [
-        "REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ReformerAttention",
         "ReformerForMaskedLM",
         "ReformerForQuestionAnswering",
@@ -61,7 +60,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .configuration_reformer import ReformerConfig
 
     try:
         if not is_sentencepiece_available():
@@ -86,7 +85,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_reformer import (
-            REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ReformerAttention,
             ReformerForMaskedLM,
             ReformerForQuestionAnswering,

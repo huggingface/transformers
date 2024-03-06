@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"]}
+_import_structure = {"configuration_vit_hybrid": ["ViTHybridConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,7 +25,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vit_hybrid"] = [
-        "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTHybridForImageClassification",
         "ViTHybridModel",
         "ViTHybridPreTrainedModel",
@@ -41,7 +40,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
+    from .configuration_vit_hybrid import ViTHybridConfig
 
     try:
         if not is_torch_available():
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vit_hybrid import (
-            VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTHybridForImageClassification,
             ViTHybridModel,
             ViTHybridPreTrainedModel,

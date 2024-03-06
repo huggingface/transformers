@@ -49,11 +49,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 _IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-PVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Zetatech/pvt-tiny-224"
-    # See all PVT models at https://huggingface.co/models?filter=pvt
-]
-
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:

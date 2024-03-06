@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_whisper": ["WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP", "WhisperConfig", "WhisperOnnxConfig"],
+    "configuration_whisper": ["WhisperConfig", "WhisperOnnxConfig"],
     "feature_extraction_whisper": ["WhisperFeatureExtractor"],
     "processing_whisper": ["WhisperProcessor"],
     "tokenization_whisper": ["WhisperTokenizer"],
@@ -45,7 +45,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_whisper"] = [
-        "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "WhisperForCausalLM",
         "WhisperForConditionalGeneration",
         "WhisperModel",
@@ -60,7 +59,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_whisper"] = [
-        "TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFWhisperForConditionalGeneration",
         "TFWhisperModel",
         "TFWhisperPreTrainedModel",
@@ -81,7 +79,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_whisper import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP, WhisperConfig, WhisperOnnxConfig
+    from .configuration_whisper import WhisperConfig, WhisperOnnxConfig
     from .feature_extraction_whisper import WhisperFeatureExtractor
     from .processing_whisper import WhisperProcessor
     from .tokenization_whisper import WhisperTokenizer
@@ -101,7 +99,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_whisper import (
-            WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
             WhisperForCausalLM,
             WhisperForConditionalGeneration,
@@ -116,7 +113,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_whisper import (
-            TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWhisperForConditionalGeneration,
             TFWhisperModel,
             TFWhisperPreTrainedModel,

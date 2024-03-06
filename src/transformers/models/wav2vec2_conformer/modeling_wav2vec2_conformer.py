@@ -65,12 +65,6 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 64.21
 
 
-WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-conformer-rel-pos-large",
-    # See all Wav2Vec2Conformer models at https://huggingface.co/models?filter=wav2vec2-conformer
-]
-
-
 @dataclass
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTrainingOutput with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):

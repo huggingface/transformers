@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/mra-base-512-4": "https://huggingface.co/uw-madison/mra-base-512-4/resolve/main/config.json",
-}
-
 
 class MraConfig(PretrainedConfig):
     r"""

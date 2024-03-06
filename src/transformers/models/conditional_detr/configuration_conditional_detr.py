@@ -26,12 +26,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/conditional-detr-resnet-50": (
-        "https://huggingface.co/microsoft/conditional-detr-resnet-50/resolve/main/config.json"
-    ),
-}
-
 
 class ConditionalDetrConfig(PretrainedConfig):
     r"""

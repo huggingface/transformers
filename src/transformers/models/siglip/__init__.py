@@ -24,7 +24,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_siglip": [
-        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SiglipConfig",
         "SiglipTextConfig",
         "SiglipVisionConfig",
@@ -56,7 +55,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_siglip"] = [
-        "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SiglipModel",
         "SiglipPreTrainedModel",
         "SiglipTextModel",
@@ -67,7 +65,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_siglip import (
-        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SiglipConfig,
         SiglipTextConfig,
         SiglipVisionConfig,
@@ -97,7 +94,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_siglip import (
-            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             SiglipForImageClassification,
             SiglipModel,
             SiglipPreTrainedModel,

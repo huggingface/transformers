@@ -45,17 +45,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-13"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/cvt-13",
-    "microsoft/cvt-13-384",
-    "microsoft/cvt-13-384-22k",
-    "microsoft/cvt-21",
-    "microsoft/cvt-21-384",
-    "microsoft/cvt-21-384-22k",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-]
-
-
 @dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     """

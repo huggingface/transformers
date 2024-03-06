@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mistral-ai/Mixtral-8x7B": "https://huggingface.co/mistral-ai/Mixtral-8x7B/resolve/main/config.json",
-}
-
 
 class MixtralConfig(PretrainedConfig):
     r"""

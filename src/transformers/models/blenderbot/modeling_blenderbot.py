@@ -53,12 +53,6 @@ _CONFIG_FOR_DOC = "BlenderbotConfig"
 _CHECKPOINT_FOR_DOC = "facebook/blenderbot-400M-distill"
 
 
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot-3B",
-    # See all Blenderbot models at https://huggingface.co/models?filter=blenderbot
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """

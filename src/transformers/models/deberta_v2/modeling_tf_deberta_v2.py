@@ -52,11 +52,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DebertaV2Config"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-v2-xlarge"
 
-TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kamalkraj/deberta-v2-xlarge",
-    # See all DeBERTa models at https://huggingface.co/models?filter=deberta-v2
-]
-
 
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaContextPooler with Deberta->DebertaV2
 class TFDebertaV2ContextPooler(keras.layers.Layer):

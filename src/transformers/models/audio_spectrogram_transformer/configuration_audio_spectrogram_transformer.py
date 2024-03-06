@@ -21,12 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MIT/ast-finetuned-audioset-10-10-0.4593": (
-        "https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593/resolve/main/config.json"
-    ),
-}
-
 
 class ASTConfig(PretrainedConfig):
     r"""

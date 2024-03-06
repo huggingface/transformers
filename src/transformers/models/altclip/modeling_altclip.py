@@ -40,11 +40,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "BAAI/AltCLIP"
 _CONFIG_FOR_DOC = "AltCLIPConfig"
 
-ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "BAAI/AltCLIP",
-    # See all AltCLIP models at https://huggingface.co/models?filter=altclip
-]
-
 
 ALTCLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

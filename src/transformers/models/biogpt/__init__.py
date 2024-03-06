@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_biogpt": ["BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BioGptConfig"],
+    "configuration_biogpt": ["BioGptConfig"],
     "tokenization_biogpt": ["BioGptTokenizer"],
 }
 
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_biogpt"] = [
-        "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BioGptForCausalLM",
         "BioGptForTokenClassification",
         "BioGptForSequenceClassification",
@@ -38,7 +37,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_biogpt import BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, BioGptConfig
+    from .configuration_biogpt import BioGptConfig
     from .tokenization_biogpt import BioGptTokenizer
 
     try:
@@ -48,7 +47,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_biogpt import (
-            BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BioGptForCausalLM,
             BioGptForSequenceClassification,
             BioGptForTokenClassification,

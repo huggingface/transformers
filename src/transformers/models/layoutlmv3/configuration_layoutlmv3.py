@@ -32,10 +32,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/resolve/main/config.json",
-}
-
 
 class LayoutLMv3Config(PretrainedConfig):
     r"""

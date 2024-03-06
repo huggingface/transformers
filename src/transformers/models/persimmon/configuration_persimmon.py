@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/persimmon-8b-base": "https://huggingface.co/adept/persimmon-8b-base/resolve/main/config.json",
-}
-
 
 class PersimmonConfig(PretrainedConfig):
     r"""

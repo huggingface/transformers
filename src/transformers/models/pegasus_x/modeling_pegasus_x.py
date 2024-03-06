@@ -49,13 +49,6 @@ _CHECKPOINT_FOR_DOC = "google/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
 
 
-PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-x-base",
-    "google/pegasus-x-large",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus-x
-]
-
-
 @dataclasses.dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""

@@ -52,11 +52,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
-GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigcode/gpt_bigcode-santacoder",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
-]
-
 
 # Fused kernels
 # Use separate functions for each case because conditionals prevent kernel fusion.

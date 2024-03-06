@@ -34,11 +34,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "abeja/gpt-neox-japanese-2.7b"
 _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
 
-GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/config.json",
-    # See all GPTNeoXJapanese models at https://huggingface.co/models?filter=gpt_neox_japanese
-}
-
 
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     """

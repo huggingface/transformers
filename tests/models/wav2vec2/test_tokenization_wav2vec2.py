@@ -24,7 +24,6 @@ import unittest
 import numpy as np
 
 from transformers import (
-    WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
     AddedToken,
     Wav2Vec2Config,
     Wav2Vec2CTCTokenizer,
@@ -357,13 +356,13 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         # this test makes sure that models that are using
         # group norm don't have their tokenizer return the
         # attention_mask
-        for model_id in WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            config = Wav2Vec2Config.from_pretrained(model_id)
-            tokenizer = Wav2Vec2Tokenizer.from_pretrained(model_id)
+        model_id = "facebook/wav2vec2-base-960h"
+        config = Wav2Vec2Config.from_pretrained(model_id)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained(model_id)
 
-            # only "layer" feature extraction norm should make use of
-            # attention_mask
-            self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
+        # only "layer" feature extraction norm should make use of
+        # attention_mask
+        self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
 
 
 class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):

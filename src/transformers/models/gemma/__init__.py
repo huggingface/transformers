@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gemma": ["GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "GemmaConfig"],
+    "configuration_gemma": ["GemmaConfig"],
 }
 
 try:
@@ -71,7 +71,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, GemmaConfig
+    from .configuration_gemma import GemmaConfig
 
     try:
         if not is_sentencepiece_available():

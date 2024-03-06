@@ -42,11 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
 
-CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "CIDAS/clipseg-rd64-refined",
-    # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
-]
-
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html

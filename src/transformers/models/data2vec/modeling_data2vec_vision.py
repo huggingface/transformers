@@ -57,11 +57,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 _IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "remote control, remote"
 
-DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-vision-base-ft1k",
-    # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
-]
-
 
 @dataclass
 # Copied from transformers.models.beit.modeling_beit.BeitModelOutputWithPooling with Beit->Data2VecVision

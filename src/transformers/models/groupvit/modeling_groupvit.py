@@ -43,11 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
-GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/groupvit-gcc-yfcc",
-    # See all GroupViT models at https://huggingface.co/models?filter=groupvit
-]
-
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html

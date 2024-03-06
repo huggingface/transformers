@@ -51,14 +51,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 
-FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "flaubert/flaubert_small_cased",
-    "flaubert/flaubert_base_uncased",
-    "flaubert/flaubert_base_cased",
-    "flaubert/flaubert_large_cased",
-    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
-]
-
 
 # Copied from transformers.models.xlm.modeling_xlm.create_sinusoidal_embeddings
 def create_sinusoidal_embeddings(n_pos, dim, out):

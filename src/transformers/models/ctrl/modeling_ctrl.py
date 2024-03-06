@@ -33,11 +33,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CTRLConfig"
 
-CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/ctrl"
-    # See all CTRL models at https://huggingface.co/models?filter=ctrl
-]
-
 
 def angle_defn(pos, i, d_model_size):
     angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / d_model_size)

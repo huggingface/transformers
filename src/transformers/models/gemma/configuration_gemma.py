@@ -20,8 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
-
 
 class GemmaConfig(PretrainedConfig):
     r"""

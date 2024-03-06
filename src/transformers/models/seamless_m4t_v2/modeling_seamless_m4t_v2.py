@@ -50,16 +50,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = ""
 _CONFIG_FOR_DOC = "SeamlessM4Tv2Config"
 
-SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/seamless-m4t-v2-large",
-    # See all SeamlessM4T-v2 models at https://huggingface.co/models?filter=seamless_m4t_v2
-]
-
-
-SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "microsoft/speecht5_hifigan": "https://huggingface.co/microsoft/speecht5_hifigan/resolve/main/config.json",
-}
-
 
 @dataclass
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TGenerationOutput with SeamlessM4T->SeamlessM4Tv2

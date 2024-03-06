@@ -23,16 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/speecht5_asr": "https://huggingface.co/microsoft/speecht5_asr/resolve/main/config.json",
-    "microsoft/speecht5_tts": "https://huggingface.co/microsoft/speecht5_tts/resolve/main/config.json",
-    "microsoft/speecht5_vc": "https://huggingface.co/microsoft/speecht5_vc/resolve/main/config.json",
-}
-
-SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "microsoft/speecht5_hifigan": "https://huggingface.co/microsoft/speecht5_hifigan/resolve/main/config.json",
-}
-
 
 class SpeechT5Config(PretrainedConfig):
     r"""

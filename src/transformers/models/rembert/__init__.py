@@ -24,9 +24,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig", "RemBertOnnxConfig"]
-}
+_import_structure = {"configuration_rembert": ["RemBertConfig", "RemBertOnnxConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -51,7 +49,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_rembert"] = [
-        "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RemBertForCausalLM",
         "RemBertForMaskedLM",
         "RemBertForMultipleChoice",
@@ -72,7 +69,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_rembert"] = [
-        "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFRemBertForCausalLM",
         "TFRemBertForMaskedLM",
         "TFRemBertForMultipleChoice",
@@ -86,7 +82,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig, RemBertOnnxConfig
+    from .configuration_rembert import RemBertConfig, RemBertOnnxConfig
 
     try:
         if not is_sentencepiece_available():
@@ -111,7 +107,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_rembert import (
-            REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RemBertForCausalLM,
             RemBertForMaskedLM,
             RemBertForMultipleChoice,
@@ -131,7 +126,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_rembert import (
-            TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRemBertForCausalLM,
             TFRemBertForMaskedLM,
             TFRemBertForMultipleChoice,

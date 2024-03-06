@@ -43,11 +43,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ProphenetConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
 
-PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/prophetnet-large-uncased",
-    # See all ProphetNet models at https://huggingface.co/models?filter=prophetnet
-]
-
 
 PROPHETNET_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

@@ -41,11 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/xclip-base-patch32"
 
-XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/xclip-base-patch32",
-    # See all X-CLIP models at https://huggingface.co/models?filter=x-clip
-]
-
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html

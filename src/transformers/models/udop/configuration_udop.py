@@ -21,10 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/config.json",
-}
-
 
 class UdopConfig(PretrainedConfig):
     r"""

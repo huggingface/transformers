@@ -37,12 +37,6 @@ _CONFIG_FOR_DOC = "TrOCRConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/trocr-base-handwritten"
 
 
-TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/trocr-base-handwritten",
-    # See all TrOCR models at https://huggingface.co/models?filter=trocr
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR
 class TrOCRLearnedPositionalEmbedding(nn.Embedding):
     """

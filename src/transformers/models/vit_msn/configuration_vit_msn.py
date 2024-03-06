@@ -21,11 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sayakpaul/vit-msn-base": "https://huggingface.co/sayakpaul/vit-msn-base/resolve/main/config.json",
-    # See all ViT MSN models at https://huggingface.co/models?filter=vit_msn
-}
-
 
 class ViTMSNConfig(PretrainedConfig):
     r"""

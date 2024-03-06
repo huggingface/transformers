@@ -26,12 +26,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_convnextv2": [
-        "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConvNextV2Config",
-    ]
-}
+_import_structure = {"configuration_convnextv2": ["ConvNextV2Config"]}
 
 try:
     if not is_torch_available():
@@ -40,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_convnextv2"] = [
-        "CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvNextV2ForImageClassification",
         "ConvNextV2Model",
         "ConvNextV2PreTrainedModel",
@@ -61,7 +55,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_convnextv2 import (
-        CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConvNextV2Config,
     )
 
@@ -72,7 +65,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_convnextv2 import (
-            CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextV2Backbone,
             ConvNextV2ForImageClassification,
             ConvNextV2Model,

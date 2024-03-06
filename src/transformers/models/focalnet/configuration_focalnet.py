@@ -21,10 +21,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/focalnet-tiny": "https://huggingface.co/microsoft/focalnet-tiny/resolve/main/config.json",
-}
-
 
 class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""

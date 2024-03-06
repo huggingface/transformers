@@ -50,12 +50,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
 
-REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/reformer-crime-and-punishment",
-    "google/reformer-enwik8",
-    # See all Reformer models at https://huggingface.co/models?filter=reformer
-]
-
 
 # Define named tuples for nn.Modules here
 LSHSelfAttentionOutput = namedtuple("LSHSelfAttentionOutput", ["hidden_states", "attention_probs", "buckets"])

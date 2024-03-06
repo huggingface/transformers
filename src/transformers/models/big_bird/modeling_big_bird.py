@@ -54,12 +54,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
 
-BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/bigbird-roberta-base",
-    "google/bigbird-roberta-large",
-    "google/bigbird-base-trivia-itc",
-    # See all BigBird models at https://huggingface.co/models?filter=big_bird
-]
 
 _TRIVIA_QA_MAPPING = {
     "big_bird_attention": "attention/self",

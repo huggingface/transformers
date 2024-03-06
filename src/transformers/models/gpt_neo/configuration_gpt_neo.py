@@ -25,11 +25,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt-neo-1.3B": "https://huggingface.co/EleutherAI/gpt-neo-1.3B/resolve/main/config.json",
-    # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
-}
-
 
 class GPTNeoConfig(PretrainedConfig):
     r"""

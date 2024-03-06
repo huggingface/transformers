@@ -33,7 +33,7 @@ from ...utils import is_flax_available
 {% endif %}
 
 _import_structure = {
-    "configuration_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config"],
+    "configuration_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.camelcase_modelname}}Config"],
     "tokenization_{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.camelcase_modelname}}Tokenizer"],
 }
 
@@ -54,7 +54,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_{{cookiecutter.lowercase_modelname}}"] = [
-        "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "{{cookiecutter.camelcase_modelname}}ForMaskedLM",
         "{{cookiecutter.camelcase_modelname}}ForCausalLM",
         "{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
@@ -74,7 +73,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_{{cookiecutter.lowercase_modelname}}"] = [
-        "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
         "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
         "{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
@@ -95,7 +93,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_{{cookiecutter.lowercase_modelname}}"] = [
-        "TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TF{{cookiecutter.camelcase_modelname}}ForMaskedLM",
         "TF{{cookiecutter.camelcase_modelname}}ForCausalLM",
         "TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
@@ -160,7 +157,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
+    from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}{{cookiecutter.camelcase_modelname}}Config
     from .tokenization_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Tokenizer
 
     try:
@@ -180,8 +177,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
-            {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-            {{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            {{cookiecutter.uppercase_modelname}}            {{cookiecutter.camelcase_modelname}}ForMaskedLM,
             {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
@@ -200,8 +196,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
-            {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-            {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            {{cookiecutter.uppercase_modelname}}            {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
             {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -219,8 +214,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
-            TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            TF_{{cookiecutter.uppercase_modelname}}            TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
             TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
             TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
             TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,

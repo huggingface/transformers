@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigcode/gpt_bigcode-santacoder": "https://huggingface.co/bigcode/gpt_bigcode-santacoder/resolve/main/config.json",
-}
-
 
 class GPTBigCodeConfig(PretrainedConfig):
     """

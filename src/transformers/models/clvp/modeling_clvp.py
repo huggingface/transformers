@@ -55,11 +55,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
 
-CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/clvp_dev",
-    # See all Clvp models at https://huggingface.co/models?filter=clvp
-]
-
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:

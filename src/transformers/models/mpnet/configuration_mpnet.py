@@ -21,10 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/config.json",
-}
-
 
 class MPNetConfig(PretrainedConfig):
     r"""

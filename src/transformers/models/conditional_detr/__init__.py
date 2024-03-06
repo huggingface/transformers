@@ -19,7 +19,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_conditional_detr": [
-        "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ConditionalDetrConfig",
         "ConditionalDetrOnnxConfig",
     ]
@@ -41,7 +40,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_conditional_detr"] = [
-        "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConditionalDetrForObjectDetection",
         "ConditionalDetrForSegmentation",
         "ConditionalDetrModel",
@@ -51,7 +49,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_conditional_detr import (
-        CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConditionalDetrConfig,
         ConditionalDetrOnnxConfig,
     )
@@ -72,7 +69,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_conditional_detr import (
-            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConditionalDetrForObjectDetection,
             ConditionalDetrForSegmentation,
             ConditionalDetrModel,

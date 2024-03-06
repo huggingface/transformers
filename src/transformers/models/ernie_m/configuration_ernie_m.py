@@ -22,12 +22,6 @@ from typing import Dict
 from ...configuration_utils import PretrainedConfig
 
 
-ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/ernie-m-base_pytorch": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/config.json",
-    "susnato/ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/config.json",
-}
-
-
 class ErnieMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieMModel`]. It is used to instantiate a

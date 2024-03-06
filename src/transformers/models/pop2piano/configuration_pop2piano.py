@@ -21,10 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/config.json"
-}
-
 
 class Pop2PianoConfig(PretrainedConfig):
     r"""

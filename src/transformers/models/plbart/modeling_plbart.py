@@ -54,13 +54,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
 
-PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uclanlp/plbart-base",
-    "uclanlp/plbart-cs-java",
-    "uclanlp/plbart-multi_task-all",
-    # See all PLBART models at https://huggingface.co/models?filter=plbart
-]
-
 
 # Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):

@@ -23,11 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/rembert": "https://huggingface.co/google/rembert/resolve/main/config.json",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-}
-
 
 class RemBertConfig(PretrainedConfig):
     r"""

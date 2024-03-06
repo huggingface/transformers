@@ -48,11 +48,6 @@ _CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
 _IMAGE_CLASS_CHECKPOINT = "openai/clip-vit-base-patch32"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
 
-CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/clip-vit-base-patch32",
-    # See all CLIP models at https://huggingface.co/models?filter=clip
-]
-
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/2021-03-07-clip.html

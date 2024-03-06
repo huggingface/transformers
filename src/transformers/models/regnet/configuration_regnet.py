@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/regnet-y-040": "https://huggingface.co/facebook/regnet-y-040/blob/main/config.json",
-}
-
 
 class RegNetConfig(PretrainedConfig):
     r"""

@@ -52,11 +52,6 @@ _CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
 _REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
 _CONFIG_FOR_DOC = "GPTNeoXConfig"
 
-GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-neox-20b",
-    # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
-]
-
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):

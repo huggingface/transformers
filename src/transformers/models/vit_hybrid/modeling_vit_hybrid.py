@@ -47,12 +47,6 @@ _IMAGE_CLASS_CHECKPOINT = "google/vit-hybrid-base-bit-384"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-hybrid-base-bit-384",
-    # See all ViT hybrid models at https://huggingface.co/models?filter=vit-hybrid
-]
-
-
 class ViTHybridEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.

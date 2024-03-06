@@ -23,13 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/kosmos-2-patch14-224": (
-        "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/config.json"
-    ),
-    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
-}
-
 
 class Kosmos2TextConfig(PretrainedConfig):
     r"""

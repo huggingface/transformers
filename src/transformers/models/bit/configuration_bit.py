@@ -21,10 +21,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-BIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bit-50": "https://huggingface.co/google/bit-50/resolve/main/config.json",
-}
-
 
 class BitConfig(BackboneConfigMixin, PretrainedConfig):
     r"""

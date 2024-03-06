@@ -46,11 +46,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/regnet-y-040",
-    # See all regnet models at https://huggingface.co/models?filter=regnet
-]
-
 
 class RegNetConvLayer(nn.Module):
     def __init__(

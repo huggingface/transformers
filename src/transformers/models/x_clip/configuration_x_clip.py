@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/xclip-base-patch32": "https://huggingface.co/microsoft/xclip-base-patch32/resolve/main/config.json",
-}
-
 
 class XCLIPTextConfig(PretrainedConfig):
     r"""

@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_bart": ["BART_PRETRAINED_CONFIG_ARCHIVE_MAP", "BartConfig", "BartOnnxConfig"],
+    "configuration_bart": ["BartConfig", "BartOnnxConfig"],
     "tokenization_bart": ["BartTokenizer"],
 }
 
@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_bart"] = [
-        "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BartForCausalLM",
         "BartForConditionalGeneration",
         "BartForQuestionAnswering",
@@ -84,7 +83,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig, BartOnnxConfig
+    from .configuration_bart import BartConfig, BartOnnxConfig
     from .tokenization_bart import BartTokenizer
 
     try:
@@ -102,7 +101,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_bart import (
-            BART_PRETRAINED_MODEL_ARCHIVE_LIST,
             BartForCausalLM,
             BartForConditionalGeneration,
             BartForQuestionAnswering,

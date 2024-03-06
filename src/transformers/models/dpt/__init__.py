@@ -17,7 +17,7 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {"configuration_dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"]}
+_import_structure = {"configuration_dpt": ["DPTConfig"]}
 
 try:
     if not is_vision_available():
@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_dpt"] = [
-        "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DPTForDepthEstimation",
         "DPTForSemanticSegmentation",
         "DPTModel",
@@ -44,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
+    from .configuration_dpt import DPTConfig
 
     try:
         if not is_vision_available():
@@ -62,7 +61,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_dpt import (
-            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPTForDepthEstimation,
             DPTForSemanticSegmentation,
             DPTModel,

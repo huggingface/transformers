@@ -52,12 +52,6 @@ _IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MBZUAI/swiftformer-xs",
-    # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
-]
-
-
 class SwiftFormerPatchEmbedding(nn.Module):
     """
     Patch Embedding Layer constructed of two 2D convolutional layers.

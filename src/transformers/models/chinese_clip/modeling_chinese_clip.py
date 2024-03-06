@@ -48,11 +48,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 _CONFIG_FOR_DOC = "ChineseCLIPConfig"
 
-CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "OFA-Sys/chinese-clip-vit-base-patch16",
-    # See all Chinese-CLIP models at https://huggingface.co/models?filter=chinese_clip
-]
-
 
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss

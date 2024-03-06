@@ -26,11 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/encodec_24khz": "https://huggingface.co/facebook/encodec_24khz/resolve/main/config.json",
-    "facebook/encodec_48khz": "https://huggingface.co/facebook/encodec_48khz/resolve/main/config.json",
-}
-
 
 class EncodecConfig(PretrainedConfig):
     r"""

@@ -57,12 +57,6 @@ _IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
-]
-
-
 class ViTEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.

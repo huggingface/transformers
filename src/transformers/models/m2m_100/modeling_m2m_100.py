@@ -49,12 +49,6 @@ _CONFIG_FOR_DOC = "M2M100Config"
 _CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
-M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/m2m100_418M",
-    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """

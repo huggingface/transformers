@@ -51,11 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/clip-vit-base-patch32"
 
-TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/clip-vit-base-patch32",
-    # See all CLIP models at https://huggingface.co/models?filter=clip
-]
-
 
 LARGE_NEGATIVE = -1e8
 

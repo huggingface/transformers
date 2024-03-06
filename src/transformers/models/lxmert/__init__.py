@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig"],
+    "configuration_lxmert": ["LxmertConfig"],
     "tokenization_lxmert": ["LxmertTokenizer"],
 }
 
@@ -59,7 +59,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_lxmert"] = [
-        "TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFLxmertForPreTraining",
         "TFLxmertMainLayer",
         "TFLxmertModel",
@@ -69,7 +68,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
+    from .configuration_lxmert import LxmertConfig
     from .tokenization_lxmert import LxmertTokenizer
 
     try:
@@ -103,7 +102,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_lxmert import (
-            TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLxmertForPreTraining,
             TFLxmertMainLayer,
             TFLxmertModel,
