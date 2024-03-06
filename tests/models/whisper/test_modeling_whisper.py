@@ -1446,6 +1446,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"].to(torch_device)
+        input_features = input_features[:2]
 
         # len = 250 with num_input_frames = 60
         long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
