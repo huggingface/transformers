@@ -1559,7 +1559,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
         model_kwargs = super()._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder, standardize_cache_format,
+            outputs,
+            model_kwargs,
+            is_encoder_decoder,
+            standardize_cache_format,
         )
 
         if "image_attention_mask" in model_kwargs:

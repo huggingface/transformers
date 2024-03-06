@@ -398,16 +398,11 @@ class StaticCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
-        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
-        raise ValueError(
-            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
-        )
-
-    def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
-        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
-        raise ValueError(
-            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
-        )
+        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
+        # limit the check to the first batch member and head dimension.
+        # TODO: This is error prone, a filled cache may be `0.0`. Let's use a stateless integer instead, after
+        # https://github.com/pytorch/pytorch/issues/120248 is fixed
+        return (self.key_cache[0, 0].any(dim=-1)).sum()
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
