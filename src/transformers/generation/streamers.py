@@ -84,6 +84,7 @@ class OutputStreamer(BaseStreamer):
             values = self.cache[:] # gives us a list.... : TODO: iterate over items instead of... this.
         elif len(self.cache) == 1:
             values = self.cache[0] # gives us an item.
+            values = [values] # put it in a list to be consistent with multi-valued output supported above
         else:
             raise ValueError("on_ready() called on an empty buffer. This should not happen. Report this error.")
         self.cache = []
