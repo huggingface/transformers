@@ -261,7 +261,7 @@ class GenerationConfig(PushToHubMixin):
             The number of tokens to be output as candidate tokens.
 
         max_matching_ngram_size (`int`, *optional*, default to `None`):
-            The maximum ngram size to be considered for matching in the prompt
+            The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
         > Parameters specific to the caching mechanism:
 
