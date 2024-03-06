@@ -45,7 +45,6 @@ class OutputStreamer(BaseStreamer):
     def __init__(self,
                  filter_func=None,
                  cache = None,
-                 #queue=None,
     ):
         if filter_func is None:
             filter_func = self._filter_func
@@ -67,7 +66,6 @@ class OutputStreamer(BaseStreamer):
         """
         Called on each incoming value
         """
-        #print(type(value)) # still pushing tensors and not Output objects
         return self.filter_func(value)
 
     def is_ready(self):
@@ -81,10 +79,10 @@ class OutputStreamer(BaseStreamer):
         When the buffer is ready, flush it and do something with the values it was holding
         """
         if len(self.cache) > 1:
-            values = self.cache[:] # gives us a list.... : TODO: iterate over items instead of... this.
+            values = self.cache[:]
         elif len(self.cache) == 1:
-            values = self.cache[0] # gives us an item.
-            values = [values] # put it in a list to be consistent with multi-valued output supported above
+            values = self.cache[0]
+            values = [values] # put it in a list to be consistent
         else:
             raise ValueError("on_ready() called on an empty buffer. This should not happen. Report this error.")
         self.cache = []
@@ -134,17 +132,15 @@ class OutputIteratorStreamer(OutputStreamer):
 
     def __next__(self):
         value = self.queue.get(timeout=self.timeout)
-        # unclear why all outputs are being wrapped in a list except very last.
-        # frankly... none of them should be? why are any wrapped in a list? maybe something to do with Queue.put?
-        #print(("__next__",value))
         if value == self.stop_signal:
             raise StopIteration()
         else:
             return value
 
     def end(self):
+        # flush the cache if there's anything in it
         if self.cache:
-            self.on_ready() # flush the cache if there's anything in it
+            self.on_ready()
         self.queue.put(self.stop_signal)
 
 
@@ -155,8 +151,7 @@ class TokenStreamer(OutputStreamer):
     Filters the output stream on tokens to replicate legacy behavior
     """
     def _filter_func(self, value):
-        #if hasattr(value, 'sequences'):
-        if isinstance(value, GenerateDecoderOnlyOutput):
+        if isinstance(value, GenerateDecoderOnlyOutput): #TODO: *or* GenerateEncoderDecoderOutput
             return value.sequences.cpu()
         else:
             return value.cpu()
@@ -212,16 +207,14 @@ class TextStreamer(TokenStreamer):
         Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
         """
         # uses the parent classes built-in cache to restrict the "value" object to token_ids
-        #value = super().put(value) # why doesn't this work?
         value = self.filter_func(value)
         if value is None:
             return
-        #print(value)
+
+        #TODO: probably don't need this anymore?
         if isinstance(value, list):
-            #value = value[0]
             value = torch.tensor(value)
-        #print("unlisted")
-        #print(value)
+
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
         elif len(value.shape) > 1:

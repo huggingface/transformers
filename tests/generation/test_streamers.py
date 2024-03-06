@@ -138,23 +138,16 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         streamer = OutputIteratorStreamer()
         generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
-        thread.start() # does this not need to be closed?
+        thread.start()
 
         stream_ids = torch.Tensor()
         for answer in streamer:
-            #if isinstance(answer, list):
             assert isinstance(answer, list)
             for output_object in answer:
-                #new_ids = output_object.sequences.cpu()
                 new_ids = output_object.cpu()
                 if new_ids.ndim == 1:
                     new_ids = new_ids.unsqueeze(0)
                 stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            # else:
-            #     new_ids = answer.sequences.cpu()
-            #     if new_ids.ndim == 1:
-            #         new_ids = new_ids.unsqueeze(0)
-            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
 
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
         self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
@@ -178,7 +171,7 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         streamer = OutputIteratorStreamer()
         test_kwargs['streamer'] = streamer
         thread = Thread(target=model.generate, kwargs=test_kwargs)
-        thread.start() # does this not need to be closed?
+        thread.start()
 
         stream_ids = torch.Tensor()
         stream_scores = torch.Tensor()
@@ -199,20 +192,6 @@ class OutputIteratorStreamerTester(unittest.TestCase):
                             new_scores = new_scores.unsqueeze(0)
                         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
                         n_times_scores_extended +=1
-
-            # # Boy do I need to DRY this
-            # else:
-            #     new_ids = answer.sequences.cpu()
-            #     if new_ids.ndim == 1:
-            #         new_ids = new_ids.unsqueeze(0)
-            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            #
-            #     if output_object.scores is not None:
-            #         new_scores = output_object.scores.cpu()
-            #         if new_scores.ndim == 1:
-            #             new_scores = new_scores.unsqueeze(0)
-            #         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
-            #         n_times_scores_extended += 1
 
         greedy_ids = baseline_outputs.sequences
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
@@ -244,7 +223,7 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         test_kwargs['streamer'] = streamer
         torch.manual_seed(seed)
         thread = Thread(target=model.generate, kwargs=test_kwargs)
-        thread.start() # does this not need to be closed?
+        thread.start()
 
         stream_ids = torch.Tensor()
         stream_scores = torch.Tensor()
@@ -266,25 +245,10 @@ class OutputIteratorStreamerTester(unittest.TestCase):
                         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
                         n_times_scores_extended +=1
 
-            # Boy do I need to DRY this
-            # else:
-            #     new_ids = answer.sequences.cpu()
-            #     if new_ids.ndim == 1:
-            #         new_ids = new_ids.unsqueeze(0)
-            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            #
-            #     if output_object.scores is not None:
-            #         new_scores = output_object.scores.cpu()
-            #         if new_scores.ndim == 1:
-            #             new_scores = new_scores.unsqueeze(0)
-            #         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
-            #         n_times_scores_extended += 1
-
         greedy_ids = baseline_outputs.sequences
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
         self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
         self.assertTrue(n_times_scores_extended>1) # make sure we're not just comparing to the final output tensor
-
 
 
     def test_contrastive_ids_match(self):
@@ -307,23 +271,16 @@ class OutputIteratorStreamerTester(unittest.TestCase):
 
         torch.manual_seed(seed)
         thread = Thread(target=model.generate, kwargs=test_kwargs)
-        thread.start()  # does this not need to be closed?
+        thread.start()
 
         stream_ids = torch.Tensor()
         for answer in streamer:
-            #if isinstance(answer, list):
             assert isinstance(answer, list)
             for output_object in answer:
-                #new_ids = output_object.sequences.cpu()
                 new_ids = output_object.cpu()
                 if new_ids.ndim == 1:
                     new_ids = new_ids.unsqueeze(0)
                 stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            # else:
-            #     new_ids = answer.sequences.cpu()
-            #     if new_ids.ndim == 1:
-            #         new_ids = new_ids.unsqueeze(0)
-            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
 
         self.assertEqual(outputs_baseline.shape, stream_ids.shape)
         self.assertEqual(outputs_baseline.tolist(), stream_ids.tolist())

@@ -369,7 +369,6 @@ class GenerationMixin:
     def _prepare_output(
             self, *,
             return_dict_in_generate,
-            # output_logits output_scores output_attentions output_hidden_states # ... I think we only need these if there's a situation where we need to construct a tuple
             **output_kargs):
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -2793,7 +2792,6 @@ class GenerationMixin:
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-            #print(next_tokens.dtype, input_ids.dtype) # both int64 here
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -2854,31 +2852,6 @@ class GenerationMixin:
             decoder_hidden_states=decoder_hidden_states,
             past_key_values=model_kwargs.get("past_key_values")
         )
-
-        # if return_dict_in_generate:
-        #     if self.config.is_encoder_decoder:
-        #         return GenerateEncoderDecoderOutput(
-        #             sequences=input_ids,
-        #             scores=scores,
-        #             logits=raw_logits,
-        #             encoder_attentions=encoder_attentions,
-        #             encoder_hidden_states=encoder_hidden_states,
-        #             decoder_attentions=decoder_attentions,
-        #             cross_attentions=cross_attentions,
-        #             decoder_hidden_states=decoder_hidden_states,
-        #             past_key_values=model_kwargs.get("past_key_values"),
-        #         )
-        #     else:
-        #         return GenerateDecoderOnlyOutput(
-        #             sequences=input_ids,
-        #             scores=scores,
-        #             logits=raw_logits,
-        #             attentions=decoder_attentions,
-        #             hidden_states=decoder_hidden_states,
-        #             past_key_values=model_kwargs.get("past_key_values"),
-        #         )
-        # else:
-        #     return input_ids
 
     def _temporary_reorder_cache(self, past_key_values, beam_idx):
         """
@@ -4763,10 +4736,6 @@ class GenerationMixin:
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
-
-        # already took care of this above.
-        #if not self.config.is_encoder_decoder:
-        #    encoder_attentions = encoder_hidden_states = None
 
         return self._prepare_output(
             return_dict_in_generate=return_dict_in_generate,
