@@ -725,7 +725,8 @@ def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
     for task in custom_pipeline.keys():
         if "impl" in custom_pipeline[task]:
             module = custom_pipeline[task]["impl"]
-            custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
+            if "--" not in module :
+                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
     return custom_pipeline
 
 
