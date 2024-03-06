@@ -121,7 +121,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Params4bit):
             # Add here check for loaded components' dtypes once serialization is implemented
             return True
         elif isinstance(module, bnb.nn.Linear4bit) and tensor_name == "bias":
