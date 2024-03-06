@@ -366,6 +366,17 @@ class GenerationMixin:
     learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
+    def output_constructor(self, return_dict_in_generate, **output_kargs):
+        # potential better names:
+        # * _prepare_output
+        if return_dict_in_generate:
+            cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+            outv = cls(**output_kargs)
+        else:
+            outv = output_kargs['sequences']
+            # output_logits output_scores output_attentions output_hidden_states
+        return outv
+
     def prepare_inputs_for_generation(self, *args, **kwargs):
         raise NotImplementedError(
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
@@ -1430,13 +1441,13 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
-        def output_constructor(**output_kargs):
-            if generation_config.return_dict_in_generate:
-                cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-                outv = cls(**output_kargs)
-            else:
-                outv = output_kargs['sequences']
-            return outv
+        # def output_constructor(**output_kargs):
+        #     if generation_config.return_dict_in_generate:
+        #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+        #         outv = cls(**output_kargs)
+        #     else:
+        #         outv = output_kargs['sequences']
+        #     return outv
 
         # echo back the prompt
         # NB: if user wants prompt logits, this will prob need to be moved down
@@ -1446,7 +1457,7 @@ class GenerationMixin:
             # output_stub = GenerateDecoderOnlyOutput(
             #     sequences=input_ids,
             # )
-            output_stub = output_constructor(sequences=input_ids)
+            output_stub = self.output_constructor(return_dict_in_generate=generation_config.return_dict_in_generate, sequences=input_ids)
             streamer.put(output_stub)
 
         # 6. Prepare `max_length` depending on other stopping criteria.
@@ -2202,14 +2213,14 @@ class GenerationMixin:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            def output_constructor(**output_kargs):
-                if return_dict_in_generate:
-                    cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-                    outv = cls(**output_kargs)
-                else:
-                    outv = output_kargs['sequences']
-                    # output_logits output_scores output_attentions output_hidden_states
-                return outv
+            # def output_constructor(**output_kargs):
+            #     if return_dict_in_generate:
+            #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+            #         outv = cls(**output_kargs)
+            #     else:
+            #         outv = output_kargs['sequences']
+            #         # output_logits output_scores output_attentions output_hidden_states
+            #     return outv
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -2221,7 +2232,8 @@ class GenerationMixin:
                 #     scores=scores,
                 #     logits=logits,
                 # )
-                output_stub = output_constructor(
+                output_stub = self.output_constructor(
+                    return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
                     scores=scores,
                     logits=logits,
@@ -2441,14 +2453,14 @@ class GenerationMixin:
             )
 
         # feels like this is where this logic could go...
-        def output_constructor(**output_kargs):
-            if return_dict_in_generate:
-                cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-                outv = cls(**output_kargs)
-            else:
-                outv = output_kargs['sequences']
-                # output_logits output_scores output_attentions output_hidden_states
-            return outv
+        # def output_constructor(**output_kargs):
+        #     if return_dict_in_generate:
+        #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+        #         outv = cls(**output_kargs)
+        #     else:
+        #         outv = output_kargs['sequences']
+        #         # output_logits output_scores output_attentions output_hidden_states
+        #     return outv
 
 
         # keep track of which sequences are already finished
@@ -2523,7 +2535,8 @@ class GenerationMixin:
                 #     scores=next_tokens_scores,
                 #     logits=next_token_logits, # why are these names inconsistent....
                 # )
-                output_stub = output_constructor(
+                output_stub = self.output_constructor(
+                    return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
                     scores=next_tokens_scores,
                     logits=next_token_logits,
@@ -2825,14 +2838,14 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
 
-            def output_constructor(**output_kargs):
-                if return_dict_in_generate:
-                    cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-                    outv = cls(**output_kargs)
-                else:
-                    outv = output_kargs['sequences']
-                    # output_logits output_scores output_attentions output_hidden_states
-                return outv
+            # def output_constructor(**output_kargs):
+            #     if return_dict_in_generate:
+            #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+            #         outv = cls(**output_kargs)
+            #     else:
+            #         outv = output_kargs['sequences']
+            #         # output_logits output_scores output_attentions output_hidden_states
+            #     return outv
 
 
             # I am confusion...
@@ -2846,11 +2859,12 @@ class GenerationMixin:
                 #         logits=next_token_logits,
                 #     )
                 # )
-                output_stub = output_constructor(
-                        #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
-                        sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
-                        scores=next_token_scores,
-                        logits=next_token_logits,
+                output_stub = self.output_constructor(
+                    return_dict_in_generate=return_dict_in_generate,
+                    #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
+                    sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
+                    scores=next_token_scores,
+                    logits=next_token_logits,
                     )
                 streamer.put(output_stub)
 
@@ -4675,14 +4689,14 @@ class GenerationMixin:
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
             # is no match.
 
-            def output_constructor(**output_kargs):
-                if return_dict_in_generate:
-                    cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-                    outv = cls(**output_kargs)
-                else:
-                    outv = output_kargs['sequences']
-                    # output_logits output_scores output_attentions output_hidden_states
-                return outv
+            # def output_constructor(**output_kargs):
+            #     if return_dict_in_generate:
+            #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+            #         outv = cls(**output_kargs)
+            #     else:
+            #         outv = output_kargs['sequences']
+            #         # output_logits output_scores output_attentions output_hidden_states
+            #     return outv
 
             # 4.1. Get the valid continuation, after the matching tokens
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
@@ -4693,7 +4707,8 @@ class GenerationMixin:
                 #     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)), # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
                 #     logits=next_token_logits,
                 # )
-                output_stub = output_constructor(
+                output_stub = self.output_constructor(
+                    return_dict_in_generate=return_dict_in_generate,
                     sequences=valid_tokens,
                     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
                     # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
