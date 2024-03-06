@@ -26,12 +26,8 @@ if __name__ == "__main__":
         "measure_kwargs": {"number": 2, "repeat": 3},
         "target_kwargs": {"model_class": AutoModel, "repo_id": repo_id},
         "inputs_kwargs": [{}],
-        "report_kwargs": {},
-        # "report_kwargs": {"output_path": None, "keys_to_keep": None}
+        "report_kwargs": {"output_path": "benchmark_report.json"},
     }
     result = benchmakr.run(**run_kwargs)
     print(json.dumps(result, indent=4))
 
-    run_kwargs["report_kwargs"]["only_result"] = True
-    result = benchmakr.run(**run_kwargs)
-    print(json.dumps(result, indent=4))
