@@ -366,16 +366,31 @@ class GenerationMixin:
     learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
-    #def _prepare_output(self, return_dict_in_generate, **output_kargs):
-    def _prepare_output(self, return_dict_in_generate, **output_kargs):
-        # potential better names:
-        # * _prepare_output
+    def _prepare_output(
+            self, *,
+            return_dict_in_generate,
+            # output_logits output_scores output_attentions output_hidden_states # ... I think we only need these if there's a situation where we need to construct a tuple
+            **output_kargs):
         if return_dict_in_generate:
-            cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
+            if self.config.is_encoder_decoder:
+                cls = GenerateEncoderDecoderOnlyOutput
+            else:
+                cls =GenerateDecoderOnlyOutput
+                if 'decoder_attentions' in output_kargs:
+                    output_kargs['attentions'] = output_kargs.pop('decoder_attentions')
+                if 'decoder_hidden_states' in output_kargs:
+                    output_kargs['hidden_states'] = output_kargs.pop('decoder_hidden_states')
+
+                if 'encoder_attentions' in output_kargs:
+                    output_kargs.pop('encoder_attentions')
+                if 'encoder_hidden_states' in output_kargs:
+                    output_kargs.pop('encoder_hidden_states')
+                if 'cross_attentions' in output_kargs:
+                    output_kargs.pop('cross_attentions')
+
             outv = cls(**output_kargs)
         else:
             outv = output_kargs['sequences']
-            # output_logits output_scores output_attentions output_hidden_states
         return outv
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -1442,22 +1457,9 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
-        # def _prepare_output(**output_kargs):
-        #     if generation_config.return_dict_in_generate:
-        #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-        #         outv = cls(**output_kargs)
-        #     else:
-        #         outv = output_kargs['sequences']
-        #     return outv
-
         # echo back the prompt
         # NB: if user wants prompt logits, this will prob need to be moved down
         if streamer is not None:
-            #streamer.put(input_ids.cpu())
-            #if generation_config.return_dict_in_generate
-            # output_stub = GenerateDecoderOnlyOutput(
-            #     sequences=input_ids,
-            # )
             output_stub = self._prepare_output(return_dict_in_generate=generation_config.return_dict_in_generate, sequences=input_ids)
             streamer.put(output_stub)
 
@@ -2214,25 +2216,9 @@ class GenerationMixin:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            # def _prepare_output(**output_kargs):
-            #     if return_dict_in_generate:
-            #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-            #         outv = cls(**output_kargs)
-            #     else:
-            #         outv = output_kargs['sequences']
-            #         # output_logits output_scores output_attentions output_hidden_states
-            #     return outv
-
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
-                #when does this even get invoked? doesn't seem to be getting hit in tests i don't think?
-                #streamer.put(next_tokens.cpu())
-                # output_stub = GenerateDecoderOnlyOutput(
-                #     sequences=next_tokens,
-                #     scores=scores,
-                #     logits=logits,
-                # )
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
@@ -2275,29 +2261,42 @@ class GenerationMixin:
                     past_key_values.append(tuple(layer_past_key_values))
                 model_kwargs["past_key_values"] = tuple(past_key_values)
 
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
+            return self._prepare_output(
+                return_dict_in_generate=return_dict_in_generate,
+                sequences=input_ids,
+                scores=scores,
+                logits=raw_logits,
+                encoder_attentions=encoder_attentions,
+                encoder_hidden_states=encoder_hidden_states,
+                decoder_attentions=decoder_attentions,
+                cross_attentions=cross_attentions,
+                decoder_hidden_states=decoder_hidden_states,
+                past_key_values=model_kwargs.get("past_key_values")
+            )
+        #
+        #     if self.config.is_encoder_decoder:
+        #         return GenerateEncoderDecoderOutput(
+        #             sequences=input_ids,
+        #             scores=scores,
+        #             logits=raw_logits,
+        #             encoder_attentions=encoder_attentions,
+        #             encoder_hidden_states=encoder_hidden_states,
+        #             decoder_attentions=decoder_attentions,
+        #             cross_attentions=cross_attentions,
+        #             decoder_hidden_states=decoder_hidden_states,
+        #             past_key_values=model_kwargs.get("past_key_values"),
+        #         )
+        #     else:
+        #         return GenerateDecoderOnlyOutput(
+        #             sequences=input_ids,
+        #             scores=scores,
+        #             logits=raw_logits,
+        #             attentions=decoder_attentions,
+        #             hidden_states=decoder_hidden_states,
+        #             past_key_values=model_kwargs.get("past_key_values"),
+        #         )
+        # else:
+        #     return input_ids
 
     def greedy_search(
         self,
@@ -2447,22 +2446,12 @@ class GenerationMixin:
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        encoder_attentions = encoder_hidden_states = None # initialize variables for self._prepare_output()
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
             encoder_hidden_states = (
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
-
-        # feels like this is where this logic could go...
-        # def _prepare_output(**output_kargs):
-        #     if return_dict_in_generate:
-        #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-        #         outv = cls(**output_kargs)
-        #     else:
-        #         outv = output_kargs['sequences']
-        #         # output_logits output_scores output_attentions output_hidden_states
-        #     return outv
-
 
         # keep track of which sequences are already finished
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
@@ -2530,12 +2519,6 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
-                #streamer.put(next_tokens.cpu())
-                # output_stub = GenerateDecoderOnlyOutput(
-                #     sequences=next_tokens,
-                #     scores=next_tokens_scores,
-                #     logits=next_token_logits, # why are these names inconsistent....
-                # )
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
@@ -2569,30 +2552,43 @@ class GenerationMixin:
         if streamer is not None:
             streamer.end()
 
-        if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
+        return self._prepare_output(
+            return_dict_in_generate=return_dict_in_generate,
+            sequences=input_ids,
+            scores=scores,
+            logits=raw_logits,
+            encoder_attentions=encoder_attentions,
+            encoder_hidden_states=encoder_hidden_states,
+            decoder_attentions=decoder_attentions,
+            cross_attentions=cross_attentions,
+            decoder_hidden_states=decoder_hidden_states,
+            past_key_values=model_kwargs.get("past_key_values")
+        )
+        #
+        # if return_dict_in_generate:
+        #     if self.config.is_encoder_decoder:
+        #         return GenerateEncoderDecoderOutput(
+        #             sequences=input_ids,
+        #             scores=scores,
+        #             logits=raw_logits,
+        #             encoder_attentions=encoder_attentions,
+        #             encoder_hidden_states=encoder_hidden_states,
+        #             decoder_attentions=decoder_attentions,
+        #             cross_attentions=cross_attentions,
+        #             decoder_hidden_states=decoder_hidden_states,
+        #             past_key_values=model_kwargs.get("past_key_values"),
+        #         )
+        #     else:
+        #         return GenerateDecoderOnlyOutput(
+        #             sequences=input_ids,
+        #             scores=scores,
+        #             logits=raw_logits,
+        #             attentions=decoder_attentions,
+        #             hidden_states=decoder_hidden_states,
+        #             past_key_values=model_kwargs.get("past_key_values"),
+        #         )
+        # else:
+        #     return input_ids
 
     def sample(
         self,
@@ -2839,27 +2835,7 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
 
-            # def _prepare_output(**output_kargs):
-            #     if return_dict_in_generate:
-            #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-            #         outv = cls(**output_kargs)
-            #     else:
-            #         outv = output_kargs['sequences']
-            #         # output_logits output_scores output_attentions output_hidden_states
-            #     return outv
-
-
-            # I am confusion...
             if streamer is not None:
-                #streamer.put(next_tokens.cpu())
-                # streamer.put(
-                #     GenerateDecoderOnlyOutput(
-                #         #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
-                #         sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
-                #         scores=next_token_scores,
-                #         logits=next_token_logits,
-                #     )
-                # )
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
@@ -4581,6 +4557,7 @@ class GenerationMixin:
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        encoder_hidden_states = encoder_attentions = None # initialize variables for self._prepare_output()
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
             encoder_hidden_states = (
@@ -4690,24 +4667,9 @@ class GenerationMixin:
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
             # is no match.
 
-            # def _prepare_output(**output_kargs):
-            #     if return_dict_in_generate:
-            #         cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
-            #         outv = cls(**output_kargs)
-            #     else:
-            #         outv = output_kargs['sequences']
-            #         # output_logits output_scores output_attentions output_hidden_states
-            #     return outv
-
             # 4.1. Get the valid continuation, after the matching tokens
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
             if streamer is not None:
-                #streamer.put(valid_tokens.cpu())
-                # output_stub = GenerateDecoderOnlyOutput(
-                #     sequences=valid_tokens,
-                #     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)), # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
-                #     logits=next_token_logits,
-                # )
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=valid_tokens,
@@ -4807,30 +4769,47 @@ class GenerationMixin:
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
-        if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
+
+        # already took care of this above.
+        #if not self.config.is_encoder_decoder:
+        #    encoder_attentions = encoder_hidden_states = None
+
+        return self._prepare_output(
+            return_dict_in_generate=return_dict_in_generate,
+            sequences=input_ids,
+            scores=scores,
+            logits=raw_logits,
+            encoder_attentions=encoder_attentions,
+            encoder_hidden_states=encoder_hidden_states,
+            decoder_attentions=decoder_attentions,
+            cross_attentions=cross_attentions,
+            decoder_hidden_states=decoder_hidden_states,
+            past_key_values=model_kwargs.get("past_key_values")
+        )
+        #if return_dict_in_generate:
+        #     if self.config.is_encoder_decoder:
+        #         return GenerateEncoderDecoderOutput(
+        #             sequences=input_ids,
+        #             scores=scores,
+        #             logits=raw_logits,
+        #             encoder_attentions=encoder_attentions,
+        #             encoder_hidden_states=encoder_hidden_states,
+        #             decoder_attentions=decoder_attentions,
+        #             cross_attentions=cross_attentions,
+        #             decoder_hidden_states=decoder_hidden_states,
+        #             past_key_values=model_kwargs.get("past_key_values"),
+        #         )
+        #     else:
+        #         return GenerateDecoderOnlyOutput(
+        #             sequences=input_ids,
+        #             scores=scores,
+        #             logits=raw_logits,
+        #             attentions=decoder_attentions,
+        #             hidden_states=decoder_hidden_states,
+        #             past_key_values=model_kwargs.get("past_key_values"),
+        #         )
+        # else:
+        #     return input_ids
 
 
 def _speculative_sampling(
