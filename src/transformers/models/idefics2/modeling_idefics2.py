@@ -709,107 +709,16 @@ class Idefics2VisionTransformer(nn.Module):
         )
 
 
-# FIXME - make this transformers compatible
-class Idefics2DecoupledEmbedding(nn.Embedding):
-    # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/sparse.html#Embedding
-    """
-    Implements a decoupling of parameters to allow freezing (or not) a subset of the embeddings.
-    In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `num_additional_embeddings` > 0, then it will create `num_additional_embeddings` additional parameters that are always trained.
-    If `num_additional_embeddings=0`, then the module defaults back to the regular behavior of `nn.Embedding`.
-    """
-
-    def __init__(
-        self,
-        num_embeddings,
-        num_additional_embeddings,
-        embedding_dim,
-        partially_freeze=False,
-        device=None,
-        dtype=None,
-        padding_idx=None,
-        **kwargs,
-    ) -> None:
-        """
-        num_additional_embeddings: int. Number of additional embeddings. Only useful when you `partially_freeze=True`.
-        partially_freeze: bool. If True, the regular `weight` will be frozen. `additional_weight` is never frozen.
-        Note: there are a lot of other parameters to initialize a standard `nn.Embedding` such as `padding_idx`, `max_norm` or `norm_type`. We are not supporting these.
-        """
-        if padding_idx is not None and padding_idx > num_embeddings:
-            raise ValueError(f"padding_idx must be within num_embeddings. Got {padding_idx} and {num_embeddings}")
-        super().__init__(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            device=device,
-            dtype=dtype,
-            padding_idx=padding_idx,
-            **kwargs,
-        )
-        self.num_embeddings = num_embeddings
-        self.padding_idx = padding_idx
-        self.num_additional_embeddings = num_additional_embeddings
-        self.partially_freeze = partially_freeze
-
-        if partially_freeze:
-            self.weight.requires_grad_(False)
-
-        if self.num_additional_embeddings > 0:
-            self.additional_embedding = nn.Embedding(
-                num_embeddings=self.num_additional_embeddings,
-                embedding_dim=embedding_dim,
-                device=device,
-                dtype=dtype,
-            )
-
-    def forward(self, input_ids):
-        """
-        we have 2 embeddings, with different indices - one pretrained self.weight and another
-        self.additional_embedding.weight that is being trained.
-        in order to make a lookup of the input ids, we:
-        1. find out the indices of the entries belonging to the 2nd embedding
-        2. extract those values while subtracting the size of the first embedding (num_embeddings),
-           since the 2nd embedding starts from 0 and not num_embeddings
-        3. perform the 2nd embedding lookup
-        4. now we handle the 1st embedding, we overwrite indices belonging to the 2nd embedding with a padding index
-        5. perform the 1st embedding lookup
-        6. now we overwrite the values in the 1st embedding lookup with the values of the 2nd embedding lookup
-        note: for the 1st embedding lookup we could have looked up only the low indices and not do
-        the padding, but then we have to create a new tensor and populate it with 2 tensors that are
-        spread out across various indices - i.e. not a simple concat - I haven't benchmarked the
-        complex case if it's any faster, given that seqlens are usually relatively short it's
-        probably not faster or if faster not by much - but might be a good idea to measure.
-        """
-        # FIXME - double check intend behavior - possible bug in the original code
-        if self.num_additional_embeddings == 0:
-            return F.embedding(input_ids, self.weight)
-
-        # Clone so that we don't modify the original input_ids later on
-        input_ids = input_ids.clone()
-        additional_vocab_indices = torch.where(input_ids >= self.num_embeddings)
-        input_ids_additional_vocab = input_ids[additional_vocab_indices]
-        additional_embeddings = self.additional_embedding(input_ids_additional_vocab - self.num_embeddings)
-
-        # for successful lookup replace input_ids with 0, the results of these will be discarded anyway
-        input_ids[additional_vocab_indices] = 0
-        full_vector = F.embedding(input_ids, self.weight)
-
-        # overwrite the records with high indices
-        full_vector[additional_vocab_indices] = additional_embeddings
-
-        return full_vector
-
-
-# FIXME - just take the config
 class Idefics2MLP(nn.Module):
-    def __init__(self, config, input_size=None, intermediate_size=None, output_size=None, act=None):
+    def __init__(self, config, input_size=None):
         super().__init__()
         self.input_size = config.hidden_size if input_size is None else input_size
-        self.output_size = config.hidden_size if output_size is None else output_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.output_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.output_size, bias=False)
-        # FIXME should be robust to act being an activation or string
-        self.act_fn = ACT2FN[config.hidden_act if act is None else act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -922,7 +831,6 @@ class Idefics2PerceiverAttention(nn.Module):
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
 
-        # FIXME - perceiver layers should be fully defined by the perceiver config
         self.hidden_size = config.hidden_size
         self.num_heads = config.perceiver_config.resampler_n_heads
         self.head_dim = config.perceiver_config.resampler_head_dim
@@ -1285,26 +1193,35 @@ IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
 }
 
 
+class Idefics2PerceiverMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.input_size = config.hidden_size
+        self.output_size = config.hidden_size
+        self.intermediate_size = config.hidden_size * 4
+        self.gate_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.input_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.output_size, bias=False)
+        self.act_fn = ACT2FN[config.perceiver_config.hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
 class Idefics2PerceiverLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
-
-        self.config = config  # FIXME - remove this after removing _flash_attn_2_enabled
-
         self.hidden_size = config.hidden_size
-        self.hidden_act = config.perceiver_config.hidden_act
         self.n_latents = config.perceiver_config.resampler_n_latents
         self.depth = config.perceiver_config.resampler_depth
         self.rms_norm_eps = config.rms_norm_eps
-        self.intermediate_size = self.hidden_size * 4
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
-        # FIXME - make a perceiver MLP and put this information in its config
-        self.mlp = Idefics2MLP(config, intermediate_size=self.intermediate_size, act=self.hidden_act)
+        self.mlp = Idefics2PerceiverMLP(config)
 
     def forward(
         self,
@@ -2073,24 +1990,24 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """Idefics2 model consisting of a vision encoder and laguage decoder""",  # FIXME
+    """Idefics2 model consisting of a SIGLIP vision encoder and Mistral language decoder""",
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2Model(Idefics2PreTrainedModel):
     def __init__(self, config: Idefics2Config):
         super().__init__(config)
 
-        # FIXME - check the config settings here
         self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
 
         self.sliding_window = self.config.sliding_window
 
-        self.embed_tokens = Idefics2DecoupledEmbedding(
-            num_embeddings=self.config.vocab_size,
-            num_additional_embeddings=self.config.additional_vocab_size,
-            embedding_dim=self.config.hidden_size,
-            partially_freeze=self.config.freeze_text_layers,
+        embedding_size = config.vocab_size + config.additional_vocab_size
+        # ensure the embedding size is a multiple of 64 for performance
+        embedding_size += (64 - (embedding_size % 64)) % 64
+        self.embed_tokens = nn.Embedding(
+            num_embeddings=embedding_size,
+            embedding_dim=config.hidden_size,
             padding_idx=self.padding_idx,
         )
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
@@ -2171,8 +2088,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         batch_size = inputs_embeds.size(0)
 
         if inputs_embeds is not None:
-            # if image_hidden_states is not None: # FIXME - check the intended behaviour here - should we need input_ids?
-            if image_hidden_states is not None and input_ids is not None:
+            if image_hidden_states is not None:
                 vision_pipeline_output_seq_len = image_hidden_states.shape[1]
                 vision_hidden_size = image_hidden_states.shape[2]
                 new_inputs_embeds = inputs_embeds.clone()
@@ -2280,13 +2196,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
             batch_size, num_images, num_channels, height, width = pixel_values.shape
-            # batch_size, num_images, height, width = pixel_values.shape
-            # FIXME - is this needed?
             # pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
             pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
-            # FIXME - check the old dimensions here - are there more dimensions than h,w? Why num_images than num_channels?
-            # batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
-            # pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
             pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
             # Remove padding images - padding images are full 0.
@@ -2436,56 +2347,22 @@ class Idefics2Model(Idefics2PreTrainedModel):
         )
 
 
-class Idefics2DecoupledLinear(nn.Module):
-    """
-    Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters.
-    In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `out_additional_features` > 0, then it will create `out_additional_features * in_features` additional parameters that are always trained.
-    If `out_additional_features=0`, then the module defaults back to the regular behavior of `nn.Linear`.
-    """
-
-    def __init__(self, config) -> None:
-        """
-        out_additional_features: int. Number of additional trainable dimensions. Only makes sense when `partially_freeze=True`.
-        partially_freeze: bool. If True, the regular `weight` will be frozen and extra parameters (if any) will be trainable. If False, default to the regular behavior of nn.Linear.
-        """
-        super().__init__()
-        self.in_features = config.hidden_size
-        self.out_features = config.vocab_size
-        self.out_additional_features = config.additional_vocab_size
-        self.partially_freeze = config.freeze_lm_head
-
-        self.linear = nn.Linear(in_features=self.in_features, out_features=self.out_features, bias=False)
-
-        if self.partially_freeze:
-            self.linear.weight.requires_grad_(False)
-
-        if self.out_additional_features > 0:
-            self.additional_fc = nn.Linear(
-                in_features=self.in_features, out_features=self.out_additional_features, bias=False
-            )
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        output = self.linear(input)
-
-        if self.out_additional_features > 0:
-            additional_features = self.additional_fc(input)
-            output = torch.cat((output, additional_features), -1)
-
-        return output
-
-
 @add_start_docstrings(
     """The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS2_START_DOCSTRING,
 )
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.linear.weight"]  # FIXME - check if additional_fc is needed here
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Idefics2Model(config)
         self.image_token_id = self.config.image_token_id
-        self.lm_head = Idefics2DecoupledLinear(config)
+
+        embedding_size = config.vocab_size + config.additional_vocab_size
+        # ensure the embedding size is a multiple of 64 for performance
+        embedding_size += (64 - (embedding_size % 64)) % 64
+        self.lm_head = nn.Linear(config.hidden_size, embedding_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2496,13 +2373,26 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         the model weights fixed.
         """
 
+        # FIXME - check this difference is correct
         def get_lowest_module(module):
-            if len(list(module.children())) == 0:
-                # If the module has no children, it is a leaf module (e.g., Linear, Conv2d, etc.)
-                return module
-            else:
-                # Recursively call the function on each child module
-                return get_lowest_module(list(module.children())[0])  # FIXME - check if this is correct
+            def _get_lowest_module(module, depth):
+                if len(list(module.children())) == 0:
+                    # If the module has no children, it is a leaf module (e.g., Linear, Conv2d, etc.)
+                    return module, depth
+                else:
+                    # Get the children of the module
+                    children = list(module.children())
+
+                    # Get the lowest module for each child
+                    lowest_modules = [_get_lowest_module(child, depth + 1) for child in children]
+
+                    # Get the lowest module with the highest depth
+                    lowest_module, highest_depth = max(lowest_modules, key=lambda x: x[1])
+
+                    return lowest_module, highest_depth
+
+            lowest_module, highest_depth = _get_lowest_module(module, depth)
+            return lowest_module
 
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
@@ -2519,12 +2409,10 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        # FIXME - check if we need to return the additional_fc as well
-        return self.lm_head.linear
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        # FIXME - check if we need to return the additional_fc as well = new_embeddings
-        self.lm_head.linear = new_embeddings
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -2633,7 +2521,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    # FIXME - double check - past vs past_key_values -- possible bug?
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
