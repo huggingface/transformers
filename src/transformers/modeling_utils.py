@@ -803,21 +803,11 @@ def _load_state_dict_into_meta_model(
             or (not hf_quantizer.requires_parameters_quantization)
             or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
         ):
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-                with deepspeed.zero.GatheredParameters(old_param, modifier_rank=0):
-                    set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
-            else:
-                # For backward compatibility with older versions of `accelerate` and for non-quantized params
-                set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
+            # For backward compatibility with older versions of `accelerate` and for non-quantized params
+            set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-                with deepspeed.zero.GatheredParameters(old_param, modifier_rank=0):
-                    hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            else:
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            if is_fsdp_enabled():
+            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
                 module, tensor_name = get_module_from_name(model, param_name)
                 setattr(module, tensor_name, getattr(module, tensor_name).to("cpu"))
             # TODO: consider removing used param_parts from state_dict before return
