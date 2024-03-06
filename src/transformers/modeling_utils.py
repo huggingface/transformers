@@ -807,9 +807,9 @@ def _load_state_dict_into_meta_model(
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
             hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            if is_fsdp_enabled():
-                module, tensor_name = get_module_from_name(model, param_name)
-                setattr(module, tensor_name, getattr(module, tensor_name).to("cpu"))
+            # if is_fsdp_enabled():
+            module, tensor_name = get_module_from_name(model, param_name)
+            setattr(module, tensor_name, getattr(module, tensor_name).to("cpu"))
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
