@@ -3353,7 +3353,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         # Generation config max_length != 20 -> no warning
         with warnings.catch_warnings(record=True) as warning_list:
-            warnings.simplefilter("ignore", category=FutureWarning)
             # generation_config is modified -> legacy mode is disabled = generation_config takes precedence
             model.generation_config.max_length = 10
             model.generate(input_ids)
