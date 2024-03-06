@@ -219,7 +219,7 @@ if TYPE_CHECKING:
             WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
-            EOSTokenCriteria,
+            EosTokenCriteria,
             MaxLengthCriteria,
             MaxNewTokensCriteria,
             MaxTimeCriteria,
