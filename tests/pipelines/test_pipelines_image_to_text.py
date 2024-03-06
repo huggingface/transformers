@@ -141,6 +141,25 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         outputs = pipe(image, prompt=prompt)
         self.assertTrue(outputs[0]["generated_text"].startswith(prompt))
+        for batch_size in (1, 2):
+            outputs = pipe([image, image], prompt=prompt, batch_size=batch_size)
+            self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
+            self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
+
+        from torch.utils.data import Dataset
+
+        class MyDataset(Dataset):
+            def __len__(self):
+                return 5
+
+            def __getitem__(self, i):
+                return "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        dataset = MyDataset()
+        for batch_size in (1, 2):
+            outputs = pipe(dataset, prompt=prompt, batch_size=batch_size)
+            self.assertTrue(list(outputs)[0][0]["generated_text"].startswith(prompt))
+            self.assertTrue(list(outputs)[1][0]["generated_text"].startswith(prompt))
 
     @slow
     @require_torch
