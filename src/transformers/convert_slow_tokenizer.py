@@ -1319,7 +1319,8 @@ class GemmaConvert(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-
+        user_defined_symbols = [AddedToken(token, normalized=False, special=False) for token in proto.trainer_spec.user_defined_symbols]
+        tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
 
 
