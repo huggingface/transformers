@@ -20,31 +20,23 @@ URL: https://github.com/google-research/big_vision/tree/main
 
 import argparse
 import collections
+
 import numpy as np
-
 import torch
-
 from numpy import load
 from PIL import Image
 
-from transformers import PalmaForConditionalGeneration, PalmaConfig, AutoTokenizer
-from transformers.utils import logging
-from PIL import Image
-import numpy as np
-
+from transformers import AutoTokenizer, PalmaConfig, PalmaForConditionalGeneration
 from transformers.image_processing_utils import BatchFeature
-
-
-import torch
-
-from transformers.image_transforms import to_channel_dimension_format, normalize, rescale
+from transformers.image_transforms import normalize, rescale, to_channel_dimension_format
 from transformers.image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     infer_channel_dimension_format,
-
 )
+from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -62,7 +54,7 @@ def get_palma_config():
     config.vision_config.patch_size = patch_size
     config.text_config.vocab_size = vocab_size
 
-    #elif "so400m" in model_name:
+    # elif "so400m" in model_name:
 
     config.vision_config.hidden_size = 1152
     config.vision_config.intermediate_size = 4304
@@ -80,32 +72,35 @@ def get_palma_config():
 
 def slice_state_dict(state_dict, config):
     # patch embeddings
-    state_dict["vision_model.embeddings.patch_embedding.weight"] = state_dict.pop("img/embedding/kernel").transpose(3, 2, 0, 1)
+    state_dict["vision_model.embeddings.patch_embedding.weight"] = state_dict.pop("img/embedding/kernel").transpose(
+        3, 2, 0, 1
+    )
     state_dict["vision_model.embeddings.patch_embedding.bias"] = state_dict.pop("img/embedding/bias")
     # positional embeddings
-    state_dict["vision_model.embeddings.position_embedding.weight"] = state_dict.pop("img/pos_embedding").reshape(-1, config.vision_config.hidden_size)
-
+    state_dict["vision_model.embeddings.position_embedding.weight"] = state_dict.pop("img/pos_embedding").reshape(
+        -1, config.vision_config.hidden_size
+    )
 
     # fmt: off
     # extract vision layers to be sliced at index 0. There are 27 layers in the base model.
-    encoderblock_layernorm0_scale = state_dict.pop(f"img/Transformer/encoderblock/LayerNorm_0/scale")
-    encoderblock_layernorm0_bias = state_dict.pop(f"img/Transformer/encoderblock/LayerNorm_0/bias")
-    encoderblock_layernorm1_scale = state_dict.pop(f"img/Transformer/encoderblock/LayerNorm_1/scale")
-    encoderblock_layernorm1_bias = state_dict.pop(f"img/Transformer/encoderblock/LayerNorm_1/bias")
+    encoderblock_layernorm0_scale = state_dict.pop("img/Transformer/encoderblock/LayerNorm_0/scale")
+    encoderblock_layernorm0_bias = state_dict.pop("img/Transformer/encoderblock/LayerNorm_0/bias")
+    encoderblock_layernorm1_scale = state_dict.pop("img/Transformer/encoderblock/LayerNorm_1/scale")
+    encoderblock_layernorm1_bias = state_dict.pop("img/Transformer/encoderblock/LayerNorm_1/bias")
 
-    encoderblock_mlp_dense0_kernel= state_dict.pop(f"img/Transformer/encoderblock/MlpBlock_0/Dense_0/kernel")
-    encoderblock_mlp_dense0_bias= state_dict.pop(f"img/Transformer/encoderblock/MlpBlock_0/Dense_0/bias")
-    encoderblock_mlp_dense1_kernel= state_dict.pop(f"img/Transformer/encoderblock/MlpBlock_0/Dense_1/kernel")
-    encoderblock_mlp_dense1_bias= state_dict.pop(f"img/Transformer/encoderblock/MlpBlock_0/Dense_1/bias")
+    encoderblock_mlp_dense0_kernel= state_dict.pop("img/Transformer/encoderblock/MlpBlock_0/Dense_0/kernel")
+    encoderblock_mlp_dense0_bias= state_dict.pop("img/Transformer/encoderblock/MlpBlock_0/Dense_0/bias")
+    encoderblock_mlp_dense1_kernel= state_dict.pop("img/Transformer/encoderblock/MlpBlock_0/Dense_1/kernel")
+    encoderblock_mlp_dense1_bias= state_dict.pop("img/Transformer/encoderblock/MlpBlock_0/Dense_1/bias")
 
-    encoderblock_attention_0_key_kernel = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/key/kernel")
-    encoderblock_attention_0_key_bias = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/key/bias")
-    encoderblock_attention_0_value_kernel = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/value/kernel")
-    encoderblock_attention_0_value_bias = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/value/bias")
-    encoderblock_attention_0_query_kernel = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/query/kernel")
-    encoderblock_attention_0_query_bias = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/query/bias")
-    encoderblock_attention_0_out_kernel = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/kernel")
-    encoderblock_attention_0_out_bias = state_dict.pop(f"img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/bias")
+    encoderblock_attention_0_key_kernel = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/key/kernel")
+    encoderblock_attention_0_key_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/key/bias")
+    encoderblock_attention_0_value_kernel = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/value/kernel")
+    encoderblock_attention_0_value_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/value/bias")
+    encoderblock_attention_0_query_kernel = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/query/kernel")
+    encoderblock_attention_0_query_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/query/bias")
+    encoderblock_attention_0_out_kernel = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/kernel")
+    encoderblock_attention_0_out_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/bias")
 
 
     for i in range(config.vision_config.num_hidden_layers):
@@ -133,7 +128,7 @@ def slice_state_dict(state_dict, config):
     state_dict["vision_model.post_layernorm.bias"] = state_dict.pop("img/Transformer/encoder_norm/bias")
 
     # multimodal projector
-    
+
     state_dict['multi_modal_projector.linear.weight'] = state_dict.pop("img/head/kernel").transpose()
     state_dict['multi_modal_projector.linear.bias'] = state_dict.pop("img/head/bias")
 
@@ -142,15 +137,15 @@ def slice_state_dict(state_dict, config):
     state_dict["language_model.model.embed_tokens.weight"] = state_dict.pop("llm/embedder/input_embedding")
     state_dict["language_model.lm_head.weight"] = state_dict["language_model.model.embed_tokens.weight"] # weights are tied
     state_dict["language_model.model.norm.weight"] = state_dict.pop("llm/final_norm/scale")
-    
+
     # pop the einsum attention + mlp representations. There are 18 layers in gemma-2b.
 
-    llm_attention_attn_vec_einsum = state_dict.pop(f"llm/layers/attn/attn_vec_einsum/w")
-    llm_attention_kv_einsum = state_dict.pop(f"llm/layers/attn/kv_einsum/w")
-    llm_attention_q_einsum = state_dict.pop(f"llm/layers/attn/q_einsum/w")
-    
-    llm_mlp_gating_einsum = state_dict.pop(f"llm/layers/mlp/gating_einsum")
-    llm_mlp_linear = state_dict.pop(f"llm/layers/mlp/linear")
+    llm_attention_attn_vec_einsum = state_dict.pop("llm/layers/attn/attn_vec_einsum/w")
+    llm_attention_kv_einsum = state_dict.pop("llm/layers/attn/kv_einsum/w")
+    llm_attention_q_einsum = state_dict.pop("llm/layers/attn/q_einsum/w")
+
+    llm_mlp_gating_einsum = state_dict.pop("llm/layers/mlp/gating_einsum")
+    llm_mlp_linear = state_dict.pop("llm/layers/mlp/linear")
     # TODO verify correctness of layer norm loading
 
     llm_input_layernorm = state_dict.pop("llm/layers/pre_attention_norm/scale")
@@ -199,16 +194,14 @@ def verify_logits(model):
 
     # all intermediates activations
     intermediates_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
-    
-    
+
     cow_on_beach_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/cow_beach_1.png"
 
     # test prompt
     prompt = "answer en Where is the cow standing?\n"
     prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt")
-    
-    intermediates = np.load(intermediates_path)
 
+    intermediates = np.load(intermediates_path)
 
     # These steps mimic what should be taken in the processor - for an image we don't resize (given image is already 224px)
     # TODO replace by a proper Processor() call when tests pass
@@ -218,28 +211,31 @@ def verify_logits(model):
     images = img.astype(np.float32)
 
     input_data_format = infer_channel_dimension_format(images[0])
-    images = [
-            rescale(image=image, scale=1/255, input_data_format=input_data_format)
-            for image in images
-    ]
+    images = [rescale(image=image, scale=1 / 255, input_data_format=input_data_format) for image in images]
 
     images = [
-        normalize(image=image, mean=IMAGENET_STANDARD_MEAN, std=IMAGENET_STANDARD_STD, input_data_format=input_data_format)
+        normalize(
+            image=image, mean=IMAGENET_STANDARD_MEAN, std=IMAGENET_STANDARD_STD, input_data_format=input_data_format
+        )
         for image in images
     ]
     images = [
-        to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format) for image in images
+        to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+        for image in images
     ]
 
-    image_tensor = BatchFeature(data={"pixel_values": images}, tensor_type='pt')
+    image_tensor = BatchFeature(data={"pixel_values": images}, tensor_type="pt")
 
     with torch.inference_mode():
-        vision_outputs =  model.vision_model(pixel_values=image_tensor['pixel_values'], output_hidden_states=True).last_hidden_state
+        vision_outputs = model.vision_model(
+            pixel_values=image_tensor["pixel_values"], output_hidden_states=True
+        ).last_hidden_state
         projector_output = model.multi_modal_projector(vision_outputs)
-    
-    if not np.allclose(projector_output.cpu().numpy()[0], intermediates['img/zimg'][0], rtol=1e-3, atol=5e-3):
+
+    if not np.allclose(projector_output.cpu().numpy()[0], intermediates["img/zimg"][0], rtol=1e-3, atol=5e-3):
         raise ValueError("image activations do not match.")
-    
+
+
 @torch.no_grad()
 def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False):
     """
@@ -250,7 +246,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, verify_l
     config = get_palma_config()
 
     # get checkpoint (move to args)
-    checkpoint_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.bv.params.npz" # model_name_to_checkpoint[model_name]
+    checkpoint_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.bv.params.npz"  # model_name_to_checkpoint[model_name]
     # load HuggingFace model
     model = PalmaForConditionalGeneration(config).eval()
     # load original state dict
@@ -259,10 +255,11 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, verify_l
 
     state_dict_transformers = slice_state_dict(state_dict, config)
     model.load_state_dict(state_dict_transformers)
-    model.save_pretrained(pytorch_dump_folder_path, max_shard_size='2GB', safe_serialization=True)
+    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
     if verify_logits:
-       verify_logits(model)
+        verify_logits(model)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

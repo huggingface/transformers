@@ -25,7 +25,6 @@ PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class PalmaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PalmaForConditionalGeneration`]. It is used to instantiate an
@@ -85,7 +84,7 @@ class PalmaConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        image_token_index=257152, # put dummy token index at end of vocabulary
+        image_token_index=257152,  # put dummy token index at end of vocabulary
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
@@ -94,7 +93,7 @@ class PalmaConfig(PretrainedConfig):
         hidden_size=2048,
         intermediate_size=16384,
         # FIXME how do we pass vision/text specific config keys here?
-        # Why is this setup in init, attributes derived are not used, and configs 
+        # Why is this setup in init, attributes derived are not used, and configs
         # are then called with other hardcoded arguments?
         **kwargs,
     ):
@@ -137,7 +136,7 @@ class PalmaConfig(PretrainedConfig):
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["gemma"](
                 hidden_size=2048,
-                num_hidden_layers=18, # similar to gemma-2b
+                num_hidden_layers=18,  # similar to gemma-2b
                 intermediate_size=16384,
                 num_attention_heads=8,
                 num_key_value_heads=1,
