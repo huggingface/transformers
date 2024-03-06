@@ -743,7 +743,7 @@ class ModelTesterMixin:
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 self.assertTrue(
-                    equivalence(batched_row, single_row_object) <= 1e05,
+                    equivalence(batched_row, single_row_object) <= 1e-05,
                     msg=(
                         f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
                         f"Difference={equivalence(batched_row, single_row_object)}."
