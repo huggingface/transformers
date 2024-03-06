@@ -200,19 +200,19 @@ class OutputIteratorStreamerTester(unittest.TestCase):
                         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
                         n_times_scores_extended +=1
 
-            # Boy do I need to DRY this
-            else:
-                new_ids = answer.sequences.cpu()
-                if new_ids.ndim == 1:
-                    new_ids = new_ids.unsqueeze(0)
-                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-
-                if output_object.scores is not None:
-                    new_scores = output_object.scores.cpu()
-                    if new_scores.ndim == 1:
-                        new_scores = new_scores.unsqueeze(0)
-                    stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
-                    n_times_scores_extended += 1
+            # # Boy do I need to DRY this
+            # else:
+            #     new_ids = answer.sequences.cpu()
+            #     if new_ids.ndim == 1:
+            #         new_ids = new_ids.unsqueeze(0)
+            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            #
+            #     if output_object.scores is not None:
+            #         new_scores = output_object.scores.cpu()
+            #         if new_scores.ndim == 1:
+            #             new_scores = new_scores.unsqueeze(0)
+            #         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
+            #         n_times_scores_extended += 1
 
         greedy_ids = baseline_outputs.sequences
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
@@ -267,18 +267,18 @@ class OutputIteratorStreamerTester(unittest.TestCase):
                         n_times_scores_extended +=1
 
             # Boy do I need to DRY this
-            else:
-                new_ids = answer.sequences.cpu()
-                if new_ids.ndim == 1:
-                    new_ids = new_ids.unsqueeze(0)
-                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-
-                if output_object.scores is not None:
-                    new_scores = output_object.scores.cpu()
-                    if new_scores.ndim == 1:
-                        new_scores = new_scores.unsqueeze(0)
-                    stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
-                    n_times_scores_extended += 1
+            # else:
+            #     new_ids = answer.sequences.cpu()
+            #     if new_ids.ndim == 1:
+            #         new_ids = new_ids.unsqueeze(0)
+            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            #
+            #     if output_object.scores is not None:
+            #         new_scores = output_object.scores.cpu()
+            #         if new_scores.ndim == 1:
+            #             new_scores = new_scores.unsqueeze(0)
+            #         stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
+            #         n_times_scores_extended += 1
 
         greedy_ids = baseline_outputs.sequences
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
