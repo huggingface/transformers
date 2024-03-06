@@ -128,10 +128,7 @@ class LlamaRotaryEmbedding(nn.Module):
         return self._cos_cached
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
-        if seq_len is not None:
-            logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.39.")
-
+    def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -150,17 +147,17 @@ class LlamaRotaryEmbedding(nn.Module):
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
         position_ids = position_ids.float() / self.scaling_factor
-        cos, sin = super().forward(x, position_ids, seq_len)
+        cos, sin = super().forward(x, position_ids)
         return cos, sin
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_position_embeddings:
@@ -172,7 +169,7 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
             )
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
 
-        cos, sin = super().forward(x, position_ids, seq_len)
+        cos, sin = super().forward(x, position_ids)
         return cos, sin
 
 
