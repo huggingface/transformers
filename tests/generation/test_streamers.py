@@ -142,17 +142,19 @@ class OutputIteratorStreamerTester(unittest.TestCase):
 
         stream_ids = torch.Tensor()
         for answer in streamer:
-            if isinstance(answer, list):
-                for output_object in answer:
-                    new_ids = output_object.sequences.cpu()
-                    if new_ids.ndim == 1:
-                        new_ids = new_ids.unsqueeze(0)
-                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            else:
-                new_ids = answer.sequences.cpu()
+            #if isinstance(answer, list):
+            assert isinstance(answer, list)
+            for output_object in answer:
+                #new_ids = output_object.sequences.cpu()
+                new_ids = output_object.cpu()
                 if new_ids.ndim == 1:
                     new_ids = new_ids.unsqueeze(0)
                 stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            # else:
+            #     new_ids = answer.sequences.cpu()
+            #     if new_ids.ndim == 1:
+            #         new_ids = new_ids.unsqueeze(0)
+            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
 
         self.assertEqual(greedy_ids.shape, stream_ids.shape)
         self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
@@ -290,7 +292,9 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": True, 'penalty_alpha': 0.6, 'top_k': 4}
+        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": True, 'penalty_alpha': 0.6, 'top_k': 4,
+                             "return_dict_in_generate": False, #pretty sure this is implied, just being explicit
+                             }
         baseline_kwargs = copy.deepcopy(generation_kwargs)
 
         seed = random.randint(0, int(1e9))
@@ -307,17 +311,19 @@ class OutputIteratorStreamerTester(unittest.TestCase):
 
         stream_ids = torch.Tensor()
         for answer in streamer:
-            if isinstance(answer, list):
-                for output_object in answer:
-                    new_ids = output_object.sequences.cpu()
-                    if new_ids.ndim == 1:
-                        new_ids = new_ids.unsqueeze(0)
-                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-            else:
-                new_ids = answer.sequences.cpu()
+            #if isinstance(answer, list):
+            assert isinstance(answer, list)
+            for output_object in answer:
+                #new_ids = output_object.sequences.cpu()
+                new_ids = output_object.cpu()
                 if new_ids.ndim == 1:
                     new_ids = new_ids.unsqueeze(0)
                 stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+            # else:
+            #     new_ids = answer.sequences.cpu()
+            #     if new_ids.ndim == 1:
+            #         new_ids = new_ids.unsqueeze(0)
+            #     stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
 
         self.assertEqual(outputs_baseline.shape, stream_ids.shape)
         self.assertEqual(outputs_baseline.tolist(), stream_ids.tolist())
