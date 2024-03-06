@@ -2129,4 +2129,4 @@ class Mask4DTestFP16(Mask4DTestBase):
 
         # checking tokens order for the top tokens
         for token_ids_0, token_ids_1 in zip(indices_0, indices_1):
-            self.assertTrue(torch.equal(token_ids_0[:128], token_ids_1[:128]))
+            self.assertTrue(torch.equal(token_ids_0[:128], token_ids_1[:128])
