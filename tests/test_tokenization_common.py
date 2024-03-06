@@ -4178,20 +4178,23 @@ class TokenizerTesterMixin:
         # Behaviors for tokenizers below should be consistent
         tokenizer1 = self.get_tokenizer()
         tokenizer2 = self.get_tokenizer(oov_error="replace")
-        tokenizer3 = self.get_rust_tokenizer() if self.test_rust_tokenizer else ...
+        if self.test_rust_tokenizer:
+            tokenizer3 = self.get_rust_tokenizer()
 
         with self.subTest("OOV IDs"):
             for id in oov_ids:
                 self.assertEqual(tokenizer1.decode(id), tokenizer2.decode(id))
-                self.assertEqual(
-                    tokenizer2.decode(id),
-                    tokenizer3.decode(id),
-                ) if self.test_rust_tokenizer else ...
+                if self.test_rust_tokenizer:
+                    self.assertEqual(
+                        tokenizer2.decode(id),
+                        tokenizer3.decode(id),
+                    )
 
         with self.subTest("Non-OOV IDs"):
             for id in non_oov_ids:
                 self.assertEqual(tokenizer1.decode(id), tokenizer2.decode(id))
-                self.assertEqual(
-                    tokenizer2.decode(id),
-                    tokenizer3.decode(id),
-                ) if self.test_rust_tokenizer else ...
+                if self.test_rust_tokenizer:
+                    self.assertEqual(
+                        tokenizer2.decode(id),
+                        tokenizer3.decode(id),
+                    )
