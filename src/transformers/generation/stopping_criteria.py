@@ -146,7 +146,7 @@ class EOSTokenCriteria(StoppingCriteria):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = torch.isin(input_ids, self.eos_token_id.to(input_ids.device))[:, -1]
+        is_done = torch.isin(input_ids[:, -1], self.eos_token_id.to(input_ids.device))
         return is_done
 
 
