@@ -215,7 +215,7 @@ quantization_config = AwqConfig(version="exllama")
 model = AutoModelForCausalLM.from_pretrained(
     "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
     quantization_config=quantization_config,
-    device_map="auto" or torch.device("cuda"),
+    device_map="auto",
 )
 
 input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cuda")
