@@ -22,7 +22,7 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
+from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
