@@ -24,6 +24,7 @@ import pytest
 from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -319,6 +320,13 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         return True
+
+    # TODO: @Fxmarty
+    @is_flaky(max_attempts=3, description="flaky on some models.")
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
 
     def setUp(self):
         self.model_tester = Qwen2ModelTester(self)
