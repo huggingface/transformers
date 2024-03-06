@@ -182,7 +182,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
         super().__init__(
             mlm_vocab_file=None,
-            max_word_length=50,
+            max_word_length=max_word_length,
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
