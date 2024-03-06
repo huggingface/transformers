@@ -14,11 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ CHARACTER_BERT model configuration"""
-from collections import OrderedDict
-from typing import Mapping
-
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
