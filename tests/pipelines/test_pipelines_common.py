@@ -861,15 +861,15 @@ class DynamicPipelineTester(unittest.TestCase):
         self.assertEqual(new_classifier.__class__.__name__, "PairClassificationPipeline")
         # check for tag exitence, tag needs to be added when we are calling a custom pipeline from the hub
         self.assertDictEqual(
-                classifier.model.config.custom_pipelines,
-                {
-                    "pair-classification": {
-                        "impl": f"{USER}/test-dynamic-pipeline--custom_pipeline.PairClassificationPipeline",
-                        "pt": ("AutoModelForSequenceClassification",),
-                        "tf": (),
-                    }
-                },
-            )
+            classifier.model.config.custom_pipelines,
+            {
+                "pair-classification": {
+                    "impl": f"{USER}/test-dynamic-pipeline--custom_pipeline.PairClassificationPipeline",
+                    "pt": ("AutoModelForSequenceClassification",),
+                    "tf": (),
+                }
+            },
+        )
 
         results = classifier("I hate you", second_text="I love you")
         new_results = new_classifier("I hate you", second_text="I love you")
