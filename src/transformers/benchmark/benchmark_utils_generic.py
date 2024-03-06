@@ -68,7 +68,6 @@ import timeit
 
 
 class BenchMark:
-
     # @foo
     def __init__(self, *arg, **kwargs):
         pass
@@ -92,7 +91,6 @@ class BenchMark:
         return report
 
     def report(self, result, run_info, only_result=False, output_path=None):
-
         report = {"result": result}
         if not only_result:
             report["init_kwargs"] = getattr(self, "init_kwargs", {})
@@ -106,7 +104,6 @@ class BenchMark:
         return report
 
     def run(self, measure_kwargs=None, target_kwargs=None, inputs_kwargs=None, report_kwargs=None):
-
         if measure_kwargs is None:
             measure_kwargs = {}
         if target_kwargs is None:
@@ -123,7 +120,6 @@ class BenchMark:
         all_inputs_kwargs = [inputs_kwargs] if isinstance(inputs_kwargs, dict) else inputs_kwargs
         results = []
         for _inputs_kwargs in all_inputs_kwargs:
-
             inputs = self.inputs(**_inputs_kwargs)
             result = self.measure(target, **measure_kwargs)(**inputs)
             results.append(result)
@@ -142,11 +138,8 @@ class BenchMark:
 
 
 class SpeedBenchMark(BenchMark):
-
     def measure(self, func, number=3, repeat=1):
-
         def wrapper():
-
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
             runtimes = timeit.repeat(
                 func,

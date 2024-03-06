@@ -4,9 +4,7 @@ from benchmark_utils_generic import BenchMark, SpeedBenchMark
 
 
 class FromPretrainedBenchMark(BenchMark):
-
     def target(self, model_class, repo_id):
-
         def target():
             _ = model_class.from_pretrained(repo_id)
 
@@ -18,8 +16,8 @@ class FromPretrainedSpeedBenchMark(SpeedBenchMark, FromPretrainedBenchMark):
 
 
 if __name__ == "__main__":
-
     from transformers import AutoModel
+
     repo_id = "bert-base-uncased"
 
     benchmakr = FromPretrainedSpeedBenchMark()
