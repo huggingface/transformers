@@ -25,6 +25,7 @@ from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_wit
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 import re
+from ast import literal_eval
 
 logger = logging.get_logger(__name__)
 
@@ -130,7 +131,7 @@ def parse_json_tool_call(json_blob: str):
         first_accolade_index =  json_blob.find("{")
         last_accolade_index = [a.start() for a in list(re.finditer('}', json_blob))][-1]
         json_blob = json_blob[first_accolade_index:last_accolade_index+1]
-        json_blob = json.loads(json_blob)
+        json_blob = literal_eval(json_blob)
     except Exception as e:
         raise ValueError(f"The JSON blob you used is invalid: due to the following error: {e}. Try to correct its formatting.")
     if "action" in json_blob and "action_input" in json_blob:
@@ -214,7 +215,6 @@ class Agent:
         return OPENAI_TOOL_DESCRIPTION_TEMPLATE
     
     def show_memory(self):
-        print(self.memory)
         self.log('\n'.join(self.memory))
 
     

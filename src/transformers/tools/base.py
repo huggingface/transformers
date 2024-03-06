@@ -301,6 +301,14 @@ class Tool:
     ) -> str:
         """
         Upload the tool to the Hub.
+        
+        For this method to work properly, your tool must have been defined in a separate module (not `__main__`).
+        For instance:
+        ```
+        from my_tool_module import MyTool
+        my_tool = MyTool()
+        my_tool.push_to_hub("my-username/my-space")
+        ```
 
         Parameters:
             repo_id (`str`):
