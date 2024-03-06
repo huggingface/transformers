@@ -26,7 +26,7 @@ import traceback
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from parameterized import parameterized
 
@@ -279,6 +279,7 @@ class TokenizerTesterMixin:
         sequences: List[str] = None,
         decode_kwargs: Dict[str, Any] = None,
         padding: bool = True,
+        return_token_type_ids: Optional[bool] = None,
     ):
         """
         Util for integration test.
@@ -303,6 +304,8 @@ class TokenizerTesterMixin:
                 tokenized text back to a string.
             padding:
                 Activates and controls padding of the tokenizer.
+            return_token_type_ids:
+                Whether to return token type IDs.
         """
         decode_kwargs = {} if decode_kwargs is None else decode_kwargs
 
@@ -330,7 +333,7 @@ class TokenizerTesterMixin:
                 revision=revision,  # to pin the tokenizer version
             )
 
-            encoding = tokenizer(sequences, padding=padding)
+            encoding = tokenizer(sequences, padding=padding, return_token_type_ids=return_token_type_ids)
             decoded_sequences = [
                 tokenizer.decode(seq, skip_special_tokens=True, **decode_kwargs) for seq in encoding["input_ids"]
             ]
