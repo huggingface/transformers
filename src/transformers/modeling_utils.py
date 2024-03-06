@@ -811,7 +811,7 @@ def _load_state_dict_into_meta_model(
             module, tensor_name = get_module_from_name(model, param_name)
             value = getattr(module, tensor_name)
             value = type(value)(value.data.to("cpu"), **value.__dict__)
-            setattr(module, value)
+            setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
