@@ -1430,7 +1430,7 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
-        def output_contructor(**output_kargs):
+        def output_constructor(**output_kargs):
             if generation_config.return_dict_in_generate:
                 cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
                 outv = cls(**output_kargs)
@@ -1446,7 +1446,7 @@ class GenerationMixin:
             # output_stub = GenerateDecoderOnlyOutput(
             #     sequences=input_ids,
             # )
-            output_stub = output_contructor(sequences=input_ids)
+            output_stub = output_constructor(sequences=input_ids)
             streamer.put(output_stub)
 
         # 6. Prepare `max_length` depending on other stopping criteria.
@@ -2202,7 +2202,7 @@ class GenerationMixin:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            def output_contructor(**output_kargs):
+            def output_constructor(**output_kargs):
                 if return_dict_in_generate:
                     cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
                     outv = cls(**output_kargs)
@@ -2221,7 +2221,7 @@ class GenerationMixin:
                 #     scores=scores,
                 #     logits=logits,
                 # )
-                output_stub = output_contructor(
+                output_stub = output_constructor(
                     sequences=next_tokens,
                     scores=scores,
                     logits=logits,
@@ -2441,7 +2441,7 @@ class GenerationMixin:
             )
 
         # feels like this is where this logic could go...
-        def output_contructor(**output_kargs):
+        def output_constructor(**output_kargs):
             if return_dict_in_generate:
                 cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
                 outv = cls(**output_kargs)
@@ -2523,7 +2523,7 @@ class GenerationMixin:
                 #     scores=next_tokens_scores,
                 #     logits=next_token_logits, # why are these names inconsistent....
                 # )
-                output_stub = output_contructor(
+                output_stub = output_constructor(
                     sequences=next_tokens,
                     scores=next_tokens_scores,
                     logits=next_token_logits,
@@ -4675,7 +4675,7 @@ class GenerationMixin:
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
             # is no match.
 
-            def output_contructor(**output_kargs):
+            def output_constructor(**output_kargs):
                 if return_dict_in_generate:
                     cls = GenerateEncoderDecoderOnlyOutput if self.config.is_encoder_decoder else GenerateDecoderOnlyOutput
                     outv = cls(**output_kargs)
@@ -4693,7 +4693,7 @@ class GenerationMixin:
                 #     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)), # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
                 #     logits=next_token_logits,
                 # )
-                output_stub = output_contructor(
+                output_stub = output_constructor(
                     sequences=valid_tokens,
                     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
                     # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
