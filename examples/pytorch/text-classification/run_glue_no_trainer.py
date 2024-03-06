@@ -28,7 +28,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import HfApi, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -45,6 +45,7 @@ from transformers import (
 )
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.39.0.dev0")
@@ -255,7 +256,7 @@ def main():
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
             api = HfApi()
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -608,7 +609,6 @@ def main():
                     folder_path=args.output_dir,
                     repo_id=repo_id,
                     repo_type="model",
-                    ignore_patterns=["step_*", "epoch_*"],
                     token=args.hub_token,
                 )
 
@@ -635,7 +635,6 @@ def main():
                     folder_path=args.output_dir,
                     repo_id=repo_id,
                     repo_type="model",
-                    ignore_patterns=["step_*", "epoch_*"],
                     token=args.hub_token,
                 )
 

@@ -36,7 +36,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -328,15 +328,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
-
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
-                if "step_*" not in gitignore:
-                    gitignore.write("step_*\n")
-                if "epoch_*" not in gitignore:
-                    gitignore.write("epoch_*\n")
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()

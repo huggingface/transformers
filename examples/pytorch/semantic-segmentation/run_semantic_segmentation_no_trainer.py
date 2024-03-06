@@ -29,7 +29,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import Repository, create_repo, hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -365,15 +365,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
-
-            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
-                if "step_*" not in gitignore:
-                    gitignore.write("step_*\n")
-                if "epoch_*" not in gitignore:
-                    gitignore.write("epoch_*\n")
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -632,10 +625,12 @@ def main():
                         )
                         if accelerator.is_main_process:
                             image_processor.save_pretrained(args.output_dir)
-                            repo.push_to_hub(
-                                commit_message=f"Training in progress {completed_steps} steps",
-                                blocking=False,
-                                auto_lfs_prune=True,
+                            api.upload_folder(
+                                commit_message=f"Training in progress epoch {epoch}",
+                                folder_path=args.output_dir,
+                                repo_id=repo_id,
+                                repo_type="model",
+                                token=args.hub_token,
                             )
 
             if completed_steps >= args.max_train_steps:
@@ -687,8 +682,12 @@ def main():
             )
             if accelerator.is_main_process:
                 image_processor.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -709,7 +708,13 @@ def main():
         if accelerator.is_main_process:
             image_processor.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
 
             all_results = {
                 f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v for k, v in eval_metrics.items()
