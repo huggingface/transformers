@@ -236,8 +236,6 @@ class PretrainedConfig(PushToHubMixin):
 
             This attribute is currently not being used during model loading time, but this may change in the future
             versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
-        attn_implementation (`str`, *optional*):
-            The attention implementation to use in the model. Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (attention using [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (attention using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
         > TensorFlow specific parameters
 
@@ -527,8 +525,7 @@ class PretrainedConfig(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
@@ -581,16 +578,16 @@ class PretrainedConfig(PushToHubMixin):
         # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
         # derived class: BertConfig
         config = BertConfig.from_pretrained(
-            "bert-base-uncased"
+            "google-bert/bert-base-uncased"
         )  # Download configuration from huggingface.co and cache.
         config = BertConfig.from_pretrained(
             "./test/saved_model/"
         )  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
         config = BertConfig.from_pretrained("./test/saved_model/my_configuration.json")
-        config = BertConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        config = BertConfig.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         assert config.output_attentions == True
         config, unused_kwargs = BertConfig.from_pretrained(
-            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+            "google-bert/bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         )
         assert config.output_attentions == True
         assert unused_kwargs == {"foo": False}

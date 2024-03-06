@@ -71,13 +71,13 @@ Alle zusätzlichen Parameter für Ihre Aufgabe können auch in die [`pipeline`] 
 
 ### Wählen Sie ein Modell und einen Tokenizer
 
-Die [`pipeline`] akzeptiert jedes Modell aus dem [Hub] (https://huggingface.co/models). Auf dem Hub gibt es Tags, mit denen Sie nach einem Modell filtern können, das Sie für Ihre Aufgabe verwenden möchten. Sobald Sie ein passendes Modell ausgewählt haben, laden Sie es mit der entsprechenden `AutoModelFor` und [`AutoTokenizer`] Klasse. Laden Sie zum Beispiel die Klasse [`AutoModelForCausalLM`] für eine kausale Sprachmodellierungsaufgabe:
+Die [`pipeline`] akzeptiert jedes Modell aus dem [Hub](https://huggingface.co/models). Auf dem Hub gibt es Tags, mit denen Sie nach einem Modell filtern können, das Sie für Ihre Aufgabe verwenden möchten. Sobald Sie ein passendes Modell ausgewählt haben, laden Sie es mit der entsprechenden `AutoModelFor` und [`AutoTokenizer`] Klasse. Laden Sie zum Beispiel die Klasse [`AutoModelForCausalLM`] für eine kausale Sprachmodellierungsaufgabe:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
 Erstellen Sie eine [`pipeline`] für Ihre Aufgabe, und geben Sie das Modell und den Tokenizer an, die Sie geladen haben:

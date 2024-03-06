@@ -1191,9 +1191,9 @@ class LEDEncoderBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1255,13 +1255,13 @@ class LEDSeq2SeqModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1322,13 +1322,13 @@ class LEDSeq2SeqLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1389,13 +1389,13 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1459,13 +1459,13 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     start_logits: torch.FloatTensor = None
     end_logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 LED_START_DOCSTRING = r"""

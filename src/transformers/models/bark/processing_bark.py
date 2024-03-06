@@ -73,8 +73,7 @@ class BarkProcessor(ProcessorMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained [`BarkProcessor`] hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a processor saved using the [`~BarkProcessor.save_pretrained`]
                   method, e.g., `./my_model_directory/`.
             speaker_embeddings_dict_path (`str`, *optional*, defaults to `"speaker_embeddings_path.json"`):

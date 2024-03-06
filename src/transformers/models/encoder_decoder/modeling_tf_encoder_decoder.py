@@ -32,6 +32,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     unpack_inputs,
 )
 from ...tf_utils import shape_list
@@ -77,7 +78,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -258,7 +259,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
         ):
-            self.enc_to_dec_proj = tf.keras.layers.Dense(
+            self.enc_to_dec_proj = keras.layers.Dense(
                 units=self.decoder.config.hidden_size,
                 kernel_initializer=get_initializer(config.encoder.initializer_range),
                 name="enc_to_dec_proj",
@@ -326,8 +327,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 Information necessary to initiate the encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *pytorch index checkpoint file* (e.g, `./pt_model/`). In this case,
@@ -337,8 +336,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *pytorch checkpoint file* (e.g, `./pt_model/`). In this case,
@@ -363,7 +360,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> from transformers import TFEncoderDecoderModel
 
         >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "gpt2")
+        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "openai-community/gpt2")
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./bert2gpt2")
         >>> # load fine-tuned model
@@ -445,7 +442,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-        # Make sure these 2 `tf.keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
+        # Make sure these 2 `keras.Model` have fixed names so `from_pretrained` could load model weights correctly.
         if encoder.name != "encoder":
             raise ValueError("encoder model must be created with the name `encoder`.")
         if decoder.name != "decoder":
@@ -485,9 +482,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> from transformers import TFEncoderDecoderModel, BertTokenizer
 
         >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-cased", "openai-community/gpt2")
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        >>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
 
         >>> # forward
         >>> input_ids = tokenizer.encode(

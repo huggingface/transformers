@@ -55,8 +55,15 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        # LLMAWQ does not work on a T4
-        with self.assertRaises(ValueError):
+        compute_capability = torch.cuda.get_device_capability()
+        major, minor = compute_capability
+
+        if major < 8:
+            # LLMAWQ does not work on a T4
+            with self.assertRaises(ValueError):
+                AwqConfig(bits=4, backend="llm-awq")
+        else:
+            # LLMAWQ should work on an A100
             AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
@@ -184,6 +191,20 @@ class AwqTest(unittest.TestCase):
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
+
+    def test_quantized_model_exllama(self):
+        """
+        Simple test that checks if the quantized model is working properly with exllama backend
+        """
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        quantization_config = AwqConfig(version="exllama")
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=quantization_config
+        ).to(torch_device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=40)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_quantized_model_no_device_map(self):
         """

@@ -76,7 +76,7 @@ generator(
 
 データセット全体を繰り返し処理したり、ウェブサーバーで推論に使用したい場合は、専用の部分をチェックしてください。
 
-[データセットでパイプラインを使用する](#using-pipelines-on-a-dataset)
+[データセットでパイプラインを使用する](#using-pipeline-in-a-dataset)
 
 [ウェブサーバーでパイプラインを使用する](./pipeline_webserver)
 
@@ -165,7 +165,7 @@ def data():
         yield f"My example {i}"
 
 
-pipe = pipeline(model="gpt2", device=0)
+pipe = pipeline(model="openai-community/gpt2", device=0)
 generated_characters = 0
 for out in pipe(data()):
     generated_characters += len(out[0]["generated_text"])

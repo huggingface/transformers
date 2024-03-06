@@ -111,8 +111,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained image_processor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a image processor file saved using the
                   [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.

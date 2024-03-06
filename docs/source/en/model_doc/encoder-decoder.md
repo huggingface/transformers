@@ -55,8 +55,8 @@ To do so, the `EncoderDecoderModel` class provides a [`EncoderDecoderModel.from_
 ```python
 >>> from transformers import EncoderDecoderModel, BertTokenizer
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
->>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+>>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
 ```
 
 ## Loading an existing `EncoderDecoderModel` checkpoint and perform inference.
@@ -119,8 +119,8 @@ target sequence).
 ```python
 >>> from transformers import BertTokenizer, EncoderDecoderModel
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
->>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+>>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
 
 >>> model.config.decoder_start_token_id = tokenizer.cls_token_id
 >>> model.config.pad_token_id = tokenizer.pad_token_id

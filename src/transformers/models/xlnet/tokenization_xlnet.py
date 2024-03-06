@@ -32,14 +32,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/spiece.model",
-        "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/spiece.model",
+        "xlnet/xlnet-base-cased": "https://huggingface.co/xlnet/xlnet-base-cased/resolve/main/spiece.model",
+        "xlnet/xlnet-large-cased": "https://huggingface.co/xlnet/xlnet-large-cased/resolve/main/spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlnet-base-cased": None,
-    "xlnet-large-cased": None,
+    "xlnet/xlnet-base-cased": None,
+    "xlnet/xlnet-large-cased": None,
 }
 
 # Segments (not really needed)

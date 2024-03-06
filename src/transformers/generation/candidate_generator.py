@@ -99,7 +99,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
         input_ids = input_ids.to(device)
-        inputs_tensor = inputs_tensor.to(device)
+        if inputs_tensor is not None:
+            inputs_tensor = inputs_tensor.to(device)
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
@@ -171,12 +172,16 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """
         input_ids = input_ids.to(self.assistant_model.device)
 
+        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
+        new_cur_len = input_ids.shape[-1]
+        max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
+        if max_new_tokens == 0:
+            return input_ids, None
+
         # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
         # (which implicitly contains the number of accepted candidates from the previous round)
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cur_len = input_ids.shape[-1]
-
             new_cache_size = new_cur_len - 1
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
@@ -190,7 +195,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 2. Forecast next N tokens using the assistant model.
         assistant_generation_kwargs = {
             self.input_ids_key: input_ids,
-            "max_new_tokens": int(self.num_assistant_tokens),
+            "max_new_tokens": max_new_tokens,
             "generation_config": self.generation_config,
             "logits_processor": self.logits_processor,
         }
@@ -221,7 +226,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
         # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
         # cost of forecasting incorrect assistant tokens.
-        if self.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic":
+        if self.assistant_model.generation_config.num_assistant_tokens_schedule in {
+            "heuristic",
+            "heuristic_transient",
+        }:
             if num_matches == int(self.num_assistant_tokens):
                 self.num_assistant_tokens += 2.0
             else:
@@ -244,10 +252,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
     def __init__(
         self,
         num_output_tokens: int = 10,
-        max_matching_ngram_size: int = 2,
+        max_matching_ngram_size: int = None,
     ):
         self.num_output_tokens = num_output_tokens
-        self.max_matching_ngram_size = max_matching_ngram_size
+        self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -294,8 +302,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 break
 
         if chosen_ids is None or len(chosen_ids) == 0:
-            # Need to make a dummy tensor to avoid errors
-            chosen_ids = torch.zeros((1), dtype=torch.long, device=input_ids.device)
+            # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+            return input_ids, None
 
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)

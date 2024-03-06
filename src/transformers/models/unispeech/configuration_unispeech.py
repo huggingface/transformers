@@ -68,7 +68,7 @@ class UniSpeechConfig(PretrainedConfig):
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for output of the feature encoder.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
+            The dropout probability for the output of the feature encoder that's used by the quantizer.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`UniSpeechForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):

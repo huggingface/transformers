@@ -9,6 +9,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+from transformers.modeling_tf_utils import keras
 from transformers.utils import is_sagemaker_dp_enabled
 
 
@@ -135,9 +136,9 @@ if __name__ == "__main__":
     )
 
     # fine optimizer and loss
-    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
-    loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-    metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+    optimizer = keras.optimizers.Adam(learning_rate=args.learning_rate)
+    loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    metrics = [keras.metrics.SparseCategoricalAccuracy()]
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     # Training

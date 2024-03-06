@@ -148,19 +148,19 @@ MODEL_CLASSES = {
         BertForPreTraining,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "bert-large-uncased-whole-word-masking-finetuned-squad": (
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
         BertForQuestionAnswering,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "bert-large-cased-whole-word-masking-finetuned-squad": (
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
         BertForQuestionAnswering,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "bert-base-cased-finetuned-mrpc": (
+    "google-bert/bert-base-cased-finetuned-mrpc": (
         BertConfig,
         TFBertForSequenceClassification,
         BertForSequenceClassification,
@@ -178,7 +178,7 @@ MODEL_CLASSES = {
         DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
-    "gpt2": (
+    "openai-community/gpt2": (
         GPT2Config,
         TFGPT2LMHeadModel,
         GPT2LMHeadModel,
@@ -208,7 +208,7 @@ MODEL_CLASSES = {
         TransfoXLLMHeadModel,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "openai-gpt": (
+    "openai-community/openai-gpt": (
         OpenAIGPTConfig,
         TFOpenAIGPTLMHeadModel,
         OpenAIGPTLMHeadModel,
@@ -227,7 +227,7 @@ MODEL_CLASSES = {
         LayoutLMForMaskedLM,
         LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
-    "roberta-large-mnli": (
+    "FacebookAI/roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
         RobertaForSequenceClassification,
@@ -269,7 +269,7 @@ MODEL_CLASSES = {
         LxmertVisualFeatureEncoder,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "ctrl": (
+    "Salesforce/ctrl": (
         CTRLConfig,
         TFCTRLLMHeadModel,
         CTRLLMHeadModel,
@@ -330,10 +330,11 @@ def convert_pt_checkpoint_to_tf(
     if compare_with_pt_model:
         tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
 
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         state_dict = torch.load(
             pytorch_checkpoint_path,
             map_location="cpu",
-            weights_only=is_torch_greater_or_equal_than_1_13,
+            **weights_only_kwarg,
         )
         pt_model = pt_model_class.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict

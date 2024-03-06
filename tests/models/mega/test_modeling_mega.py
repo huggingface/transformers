@@ -19,6 +19,7 @@ import unittest
 from transformers import MegaConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
+    is_flaky,
     require_torch,
     require_torch_fp16,
     slow,
@@ -533,6 +534,18 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = MegaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MegaConfig, hidden_size=37)
+
+    # TODO: @ydshieh
+    @is_flaky(description="Sometimes gives `AssertionError` on expected outputs")
+    def test_pipeline_fill_mask(self):
+        super().test_pipeline_fill_mask()
+
+    # TODO: @ydshieh
+    @is_flaky(
+        description="Sometimes gives `RuntimeError: probability tensor contains either `inf`, `nan` or element < 0`"
+    )
+    def test_pipeline_text_generation(self):
+        super().test_pipeline_text_generation()
 
     def test_config(self):
         self.config_tester.run_common_tests()

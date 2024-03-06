@@ -4,7 +4,7 @@ from typing import List, Union
 import requests
 
 from ..utils import add_end_docstrings, is_decord_available, is_torch_available, logging, requires_backends
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_decord_available():
@@ -18,7 +18,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class VideoClassificationPipeline(Pipeline):
     """
     Video classification pipeline using any `AutoModelForVideoClassification`. This pipeline predicts the class of a

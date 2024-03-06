@@ -46,14 +46,14 @@ from .configuration_xlm_roberta import XLMRobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
 remat = nn_partitioning.remat
 
 FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlm-roberta-base",
-    "xlm-roberta-large",
+    "FacebookAI/xlm-roberta-base",
+    "FacebookAI/xlm-roberta-large",
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
 ]
 

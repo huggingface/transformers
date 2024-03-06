@@ -71,7 +71,7 @@ TorchScriptで`BertModel`をエクスポートするには、`BertConfig`クラ�
 from transformers import BertModel, BertTokenizer, BertConfig
 import torch
 
-enc = BertTokenizer.from_pretrained("bert-base-uncased")
+enc = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 # Tokenizing input text
 text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
@@ -106,7 +106,7 @@ model = BertModel(config)
 model.eval()
 
 # If you are instantiating the model with *from_pretrained* you can also easily set the TorchScript flag
-model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
+model = BertModel.from_pretrained("google-bert/bert-base-uncased", torchscript=True)
 
 # Creating the trace
 traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])

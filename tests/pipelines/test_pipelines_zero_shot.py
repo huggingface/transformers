@@ -199,7 +199,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli", framework="pt")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="pt"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )
@@ -254,7 +256,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
     @slow
     @require_tf
     def test_large_model_tf(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli", framework="tf")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="tf"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )

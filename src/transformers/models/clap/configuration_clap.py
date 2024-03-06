@@ -202,7 +202,7 @@ class ClapAudioConfig(PretrainedConfig):
             Whether or not to enable patch fusion. This is the main contribution of the authors, and should give the
             best results.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the encoder.
+            The dropout probability for all fully connected layers in the encoder.
         fusion_type (`[type]`, *optional*):
             Fusion type used for the patch fusion.
         patch_embed_input_channels (`int`, *optional*, defaults to 1):

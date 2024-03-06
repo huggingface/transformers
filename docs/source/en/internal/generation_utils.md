@@ -16,16 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Utilities for Generation
 
-This page lists all the utility functions used by [`~generation.GenerationMixin.generate`],
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`], and
-[`~generation.GenerationMixin.constrained_beam_search`].
-
-Most of those are only useful if you are studying the code of the generate methods in the library.
+This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 
 ## Generate Outputs
 
@@ -38,8 +29,8 @@ Here's an example:
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
@@ -373,3 +364,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - get_seq_length
     - reorder_cache
+
+[[autodoc]] StaticCache
+    - update
+    - get_seq_length

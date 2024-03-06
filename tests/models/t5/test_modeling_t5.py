@@ -52,6 +52,7 @@ if is_torch_available():
         T5ForConditionalGeneration,
         T5ForQuestionAnswering,
         T5ForSequenceClassification,
+        T5ForTokenClassification,
         T5Model,
         T5Tokenizer,
     )
@@ -107,7 +108,7 @@ class T5ModelTester:
         self.decoder_layers = decoder_layers
 
     def get_large_model_config(self):
-        return T5Config.from_pretrained("t5-base")
+        return T5Config.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
@@ -586,9 +587,11 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
     # `src/transformers/data/processors/squad.py` (where this test fails for this model)
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self, pipeline_test_case_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if tokenizer_name is None:
+            return True
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
         return False
@@ -939,7 +942,7 @@ class T5EncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return T5Config.from_pretrained("t5-base")
+        return T5Config.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -998,6 +1001,22 @@ class T5EncoderOnlyModelTester:
         output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    def create_and_check_with_token_classification_head(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+    ):
+        labels = torch.tensor([1] * self.seq_length * self.batch_size, dtype=torch.long, device=torch_device)
+        model = T5ForTokenClassification(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            labels=labels,
+            attention_mask=attention_mask,
+        )
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, config.num_labels))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -1013,11 +1032,18 @@ class T5EncoderOnlyModelTester:
         return config, inputs_dict
 
 
-class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (T5EncoderModel,) if is_torch_available() else ()
+class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = True
+    pipeline_model_mapping = (
+        {
+            "token-classification": T5ForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     all_parallelizable_model_classes = (T5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -1035,6 +1061,10 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    def test_with_token_classification_head(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
 
 def use_task_specific_params(model, task):
@@ -1066,36 +1096,40 @@ class T5ModelFp16Tests(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16)
+            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", torch_dtype=torch.float16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
             # Load without in bf16
-            model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16)
+            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", torch_dtype=torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16, device_map="auto")
+        model = T5ForConditionalGeneration.from_pretrained(
+            "google-t5/t5-small", torch_dtype=torch.bfloat16, device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
-            "t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+            "google-t5/t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load without using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
-            "t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
+            "google-t5/t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
-        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16, device_map="auto")
+        model = T5ForConditionalGeneration.from_pretrained(
+            "google-t5/t5-small", torch_dtype=torch.float16, device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
@@ -1106,11 +1140,11 @@ class T5ModelFp16Tests(unittest.TestCase):
 class T5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return T5ForConditionalGeneration.from_pretrained("t5-base").to(torch_device)
+        return T5ForConditionalGeneration.from_pretrained("google-t5/t5-base").to(torch_device)
 
     @cached_property
     def tokenizer(self):
-        return T5Tokenizer.from_pretrained("t5-base")
+        return T5Tokenizer.from_pretrained("google-t5/t5-base")
 
     @slow
     def test_torch_quant(self):
@@ -1127,11 +1161,11 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_generation(self):
-        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
 
@@ -1154,8 +1188,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
@@ -1471,7 +1505,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_translation_en_to_fr(self):
-        model = self.model  # t5-base
+        model = self.model  # google-t5/t5-base
         tok = self.tokenizer
         use_task_specific_params(model, "translation_en_to_fr")
 

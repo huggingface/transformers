@@ -35,6 +35,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -101,7 +102,7 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
     attentions: Tuple[tf.Tensor] | None = None
 
 
-class TFDeiTEmbeddings(tf.keras.layers.Layer):
+class TFDeiTEmbeddings(keras.layers.Layer):
     """
     Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
     """
@@ -111,18 +112,18 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         self.config = config
         self.use_mask_token = use_mask_token
         self.patch_embeddings = TFDeiTPatchEmbeddings(config=config, name="patch_embeddings")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
 
     def build(self, input_shape=None):
         self.cls_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
-            initializer=tf.keras.initializers.zeros(),
+            initializer=keras.initializers.zeros(),
             trainable=True,
             name="cls_token",
         )
         self.distillation_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
-            initializer=tf.keras.initializers.zeros(),
+            initializer=keras.initializers.zeros(),
             trainable=True,
             name="distillation_token",
         )
@@ -130,14 +131,14 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         if self.use_mask_token:
             self.mask_token = self.add_weight(
                 shape=(1, 1, self.config.hidden_size),
-                initializer=tf.keras.initializers.zeros(),
+                initializer=keras.initializers.zeros(),
                 trainable=True,
                 name="mask_token",
             )
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.add_weight(
             shape=(1, num_patches + 2, self.config.hidden_size),
-            initializer=tf.keras.initializers.zeros(),
+            initializer=keras.initializers.zeros(),
             trainable=True,
             name="position_embeddings",
         )
@@ -173,7 +174,7 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
+class TFDeiTPatchEmbeddings(keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -193,7 +194,7 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = tf.keras.layers.Conv2D(
+        self.projection = keras.layers.Conv2D(
             hidden_size, kernel_size=patch_size, strides=patch_size, name="projection"
         )
 
@@ -222,7 +223,7 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->DeiT
-class TFDeiTSelfAttention(tf.keras.layers.Layer):
+class TFDeiTSelfAttention(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -237,16 +238,16 @@ class TFDeiTSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
         self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
@@ -313,7 +314,7 @@ class TFDeiTSelfAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->DeiT
-class TFDeiTSelfOutput(tf.keras.layers.Layer):
+class TFDeiTSelfOutput(keras.layers.Layer):
     """
     The residual connection is defined in TFDeiTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -322,10 +323,10 @@ class TFDeiTSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -344,7 +345,7 @@ class TFDeiTSelfOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->DeiT
-class TFDeiTAttention(tf.keras.layers.Layer):
+class TFDeiTAttention(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -384,11 +385,11 @@ class TFDeiTAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->DeiT
-class TFDeiTIntermediate(tf.keras.layers.Layer):
+class TFDeiTIntermediate(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -414,14 +415,14 @@ class TFDeiTIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput with ViT->DeiT
-class TFDeiTOutput(tf.keras.layers.Layer):
+class TFDeiTOutput(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -440,7 +441,7 @@ class TFDeiTOutput(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.config.intermediate_size])
 
 
-class TFDeiTLayer(tf.keras.layers.Layer):
+class TFDeiTLayer(keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: DeiTConfig, **kwargs):
@@ -450,12 +451,8 @@ class TFDeiTLayer(tf.keras.layers.Layer):
         self.intermediate = TFDeiTIntermediate(config, name="intermediate")
         self.deit_output = TFDeiTOutput(config, name="output")
 
-        self.layernorm_before = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_before"
-        )
-        self.layernorm_after = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_after"
-        )
+        self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
+        self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
         self.config = config
 
     def call(
@@ -512,7 +509,7 @@ class TFDeiTLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->DeiT
-class TFDeiTEncoder(tf.keras.layers.Layer):
+class TFDeiTEncoder(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -567,7 +564,7 @@ class TFDeiTEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFDeiTMainLayer(tf.keras.layers.Layer):
+class TFDeiTMainLayer(keras.layers.Layer):
     config_class = DeiTConfig
 
     def __init__(
@@ -579,7 +576,7 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFDeiTEmbeddings(config, use_mask_token=use_mask_token, name="embeddings")
         self.encoder = TFDeiTEncoder(config, name="encoder")
 
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.pooler = TFDeiTPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self) -> TFDeiTPatchEmbeddings:
@@ -688,7 +685,7 @@ class TFDeiTPreTrainedModel(TFPreTrainedModel):
 
 DEIT_START_DOCSTRING = r"""
     This model is a TensorFlow
-    [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer). Use it as a regular
+    [keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer). Use it as a regular
     TensorFlow Module and refer to the TensorFlow documentation for all matter related to general usage and behavior.
 
     Parameters:
@@ -774,11 +771,11 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTPooler with ViT->DeiT
-class TFDeiTPooler(tf.keras.layers.Layer):
+class TFDeiTPooler(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -803,7 +800,7 @@ class TFDeiTPooler(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFDeitPixelShuffle(tf.keras.layers.Layer):
+class TFDeitPixelShuffle(keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
 
     def __init__(self, upscale_factor: int, **kwargs) -> None:
@@ -829,10 +826,10 @@ class TFDeitPixelShuffle(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFDeitDecoder(tf.keras.layers.Layer):
+class TFDeitDecoder(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.conv2d = tf.keras.layers.Conv2D(
+        self.conv2d = keras.layers.Conv2D(
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
         )
         self.pixel_shuffle = TFDeitPixelShuffle(config.encoder_stride, name="1")
@@ -946,7 +943,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             mask = tf.expand_dims(mask, 1)
             mask = tf.cast(mask, tf.float32)
 
-            reconstruction_loss = tf.keras.losses.mean_absolute_error(
+            reconstruction_loss = keras.losses.mean_absolute_error(
                 # Swap axes as metric calculation reduces over the final dimension
                 tf.transpose(pixel_values, (1, 2, 3, 0)),
                 tf.transpose(reconstructed_pixel_values, (1, 2, 3, 0)),
@@ -996,9 +993,9 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
 
         # Classifier head
         self.classifier = (
-            tf.keras.layers.Dense(config.num_labels, name="classifier")
+            keras.layers.Dense(config.num_labels, name="classifier")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="classifier")
+            else keras.layers.Activation("linear", name="classifier")
         )
         self.config = config
 
@@ -1031,7 +1028,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> from PIL import Image
         >>> import requests
 
-        >>> tf.keras.utils.set_random_seed(3)  # doctest: +IGNORE_RESULT
+        >>> keras.utils.set_random_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -1110,14 +1107,14 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
 
         # Classifier heads
         self.cls_classifier = (
-            tf.keras.layers.Dense(config.num_labels, name="cls_classifier")
+            keras.layers.Dense(config.num_labels, name="cls_classifier")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="cls_classifier")
+            else keras.layers.Activation("linear", name="cls_classifier")
         )
         self.distillation_classifier = (
-            tf.keras.layers.Dense(config.num_labels, name="distillation_classifier")
+            keras.layers.Dense(config.num_labels, name="distillation_classifier")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="distillation_classifier")
+            else keras.layers.Activation("linear", name="distillation_classifier")
         )
         self.config = config
 

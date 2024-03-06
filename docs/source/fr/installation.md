@@ -74,7 +74,7 @@ Pour les architectures mac M1 / ARM
 
 Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
 
-```
+```bash
 brew install cmake
 brew install pkg-config
 ```
@@ -181,12 +181,12 @@ Ajoutez [🤗 Datasets](https://huggingface.co/docs/datasets/) à votre processu
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Le script devrait maintenant s'exécuter sans rester en attente ou attendre une expiration, car il n'essaiera pas de télécharger des modèle sur le Hub.
 
-Vous pouvez aussi éviter de télécharger un modèle à chaque appel de la fonction [~PreTrainedModel.from_pretrained] en utilisant le paramètre [local_files_only]. Seuls les fichiers locaux sont chargés lorsque ce paramètre est activé (c.-à-d. `local_files_only=True`) :
+Vous pouvez aussi éviter de télécharger un modèle à chaque appel de la fonction [`~PreTrainedModel.from_pretrained`] en utilisant le paramètre [local_files_only]. Seuls les fichiers locaux sont chargés lorsque ce paramètre est activé (c.-à-d. `local_files_only=True`) :
 
 ```py
 from transformers import T5Model

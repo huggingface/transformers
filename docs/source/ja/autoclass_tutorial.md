@@ -26,7 +26,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 <Tip>
 
 アーキテクチャはモデルの骨格を指し、チェックポイントは特定のアーキテクチャの重みです。
-たとえば、[BERT](https://huggingface.co/bert-base-uncased)はアーキテクチャであり、`bert-base-uncased`はチェックポイントです。
+たとえば、[BERT](https://huggingface.co/google-bert/bert-base-uncased)はアーキテクチャであり、`google-bert/bert-base-uncased`はチェックポイントです。
 モデルはアーキテクチャまたはチェックポイントのどちらを指す一般的な用語です。
 
 </Tip>
@@ -48,7 +48,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 
@@ -110,7 +110,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 同じチェックポイントを再利用して異なるタスクのアーキテクチャをロードできます：
@@ -118,7 +118,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 ```py
 >>> from transformers import AutoModelForTokenClassification
 
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip warning={true}>
@@ -143,7 +143,7 @@ TensorFlowおよびFlaxのチェックポイントには影響がなく、`from_
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 同じチェックポイントを再利用して異なるタスクのアーキテクチャをロードできます：
@@ -151,7 +151,7 @@ TensorFlowおよびFlaxのチェックポイントには影響がなく、`from_
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
 
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 一般的には、事前学習済みモデルのインスタンスをロードするために`AutoTokenizer`クラスと`TFAutoModelFor`クラスの使用をお勧めします。

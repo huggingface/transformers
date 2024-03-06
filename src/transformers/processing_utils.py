@@ -234,8 +234,11 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
 
-        self.to_json_file(output_processor_file)
-        logger.info(f"processor saved in {output_processor_file}")
+        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
+        # `auto_map` is not specified.
+        if set(self.to_dict().keys()) != {"processor_class"}:
+            self.to_json_file(output_processor_file)
+            logger.info(f"processor saved in {output_processor_file}")
 
         if push_to_hub:
             self._upload_modified_files(
@@ -246,6 +249,8 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
+        if set(self.to_dict().keys()) == {"processor_class"}:
+            return []
         return [output_processor_file]
 
     @classmethod
@@ -312,6 +317,7 @@ class ProcessorMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -325,6 +331,13 @@ class ProcessorMixin(PushToHubMixin):
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a {PROCESSOR_NAME} file"
                 )
+
+        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
+        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
+        # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
+        # However, for models added in the future, we won't get the expected error if this file is missing.
+        if resolved_processor_file is None:
+            return {}, kwargs
 
         try:
             # Load processor dict
@@ -419,8 +432,7 @@ class ProcessorMixin(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
@@ -451,17 +463,7 @@ class ProcessorMixin(PushToHubMixin):
             kwargs["token"] = token
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
-        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
-        # However, for models added in the future, we won't get the expected error if this file is missing.
-        try:
-            processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        except EnvironmentError as e:
-            if "does not appear to have a file named processor_config.json." in str(e):
-                processor_dict, kwargs = {}, kwargs
-            else:
-                raise
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
 
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 

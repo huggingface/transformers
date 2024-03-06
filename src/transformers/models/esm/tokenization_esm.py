@@ -14,10 +14,9 @@
 # limitations under the License.
 """Tokenization classes for ESM."""
 import os
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import AddedToken
 from ...utils import logging
 
 
@@ -91,11 +90,10 @@ class EsmTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text, **kwargs):
         return text.split()
 
-    def get_vocab_size(self, with_added_tokens=False):
-        return len(self._id_to_token)
-
     def get_vocab(self):
-        return {token: i for i, token in enumerate(self.all_tokens)}
+        base_vocab = self._token_to_id.copy()
+        base_vocab.update(self.added_tokens_encoder)
+        return base_vocab
 
     def token_to_id(self, token: str) -> int:
         return self._token_to_id.get(token, self._token_to_id.get(self.unk_token))
@@ -156,7 +154,4 @@ class EsmTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return self.get_vocab_size(with_added_tokens=False)
-
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
-        return super()._add_tokens(new_tokens, special_tokens=True)
+        return len(self.all_tokens)

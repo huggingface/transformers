@@ -20,6 +20,7 @@ import os
 import os.path
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -34,6 +35,7 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    AutoModelForSequenceClassification,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -201,6 +203,7 @@ if is_tf_available():
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
+TINY_MISTRAL = "hf-internal-testing/tiny-random-MistralForCausalLM"
 
 
 def check_models_equal(model1, model2):
@@ -299,6 +302,15 @@ class ModelUtilsTest(TestCasePlus):
             with CaptureLogger(logger) as cl:
                 BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+    @require_accelerate
+    def test_model_from_pretrained_with_none_quantization_config(self):
+        # Needs a device_map for to enter the low_cpu_mem branch. We also load AutoModelForSequenceClassification
+        # deliberately to enter the missing keys branch.
+        model = AutoModelForSequenceClassification.from_pretrained(
+            TINY_MISTRAL, device_map="auto", quantization_config=None
+        )
+        self.assertIsNotNone(model)
 
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
@@ -698,7 +710,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
-        mname = "bert-base-cased"
+        mname = "google-bert/bert-base-cased"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
@@ -742,9 +754,9 @@ class ModelUtilsTest(TestCasePlus):
         for i in range(12):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2", device_map=device_map)
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", device_map=device_map)
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
         output = model.generate(inputs["input_ids"].to(0))
 
@@ -753,7 +765,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
@@ -796,7 +808,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
@@ -1154,7 +1166,7 @@ class ModelUtilsTest(TestCasePlus):
     @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
-        model_ids = ["gpt2"]
+        model_ids = ["openai-community/gpt2"]
 
         for model_id in model_ids:
             model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path=model_id)
@@ -1235,7 +1247,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.equal(p1, p2))
 
     def test_modifying_model_config_causes_warning_saving_generation_config(self):
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         model.config.top_k = 1
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
@@ -1417,7 +1429,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertBot":
+                if discussion.author == "SFconvertbot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1439,6 +1451,51 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+    def test_absence_of_safetensors_triggers_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # Download the model that doesn't have safetensors
+        BertModel.from_pretrained(self.repo_name, token=self.token)
+
+        for thread in threading.enumerate():
+            if thread.name == "Thread-autoconversion":
+                thread.join(timeout=10)
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertbot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
+    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
+        spawn_conversion_mock.side_effect = HTTPError()
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
+        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch
@@ -1503,7 +1560,7 @@ class ModelPushToHubTester(unittest.TestCase):
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
->>> config = AutoConfig.from_pretrained("bert-base-uncased")
+>>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
         commit_details = model.push_to_hub(

@@ -212,7 +212,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def big_tokenizer(self):
-        return XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+        return XLMRobertaTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
 
     def test_picklable_without_disk(self):
         with tempfile.NamedTemporaryFile() as f:
@@ -338,6 +338,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="xlm-roberta-base",
+            model_name="FacebookAI/xlm-roberta-base",
             revision="d9d8a8ea5eb94b1c6654ae9249df7793cd2933d3",
         )

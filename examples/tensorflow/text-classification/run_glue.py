@@ -48,7 +48,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.37.0.dev0")
+check_min_version("4.39.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -184,7 +184,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )

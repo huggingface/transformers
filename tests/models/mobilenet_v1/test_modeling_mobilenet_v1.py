@@ -147,7 +147,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     all_model_classes = (MobileNetV1Model, MobileNetV1ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MobileNetV1Model, "image-classification": MobileNetV1ForImageClassification}
+        {"image-feature-extraction": MobileNetV1Model, "image-classification": MobileNetV1ForImageClassification}
         if is_torch_available()
         else {}
     )

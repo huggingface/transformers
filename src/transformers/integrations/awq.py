@@ -15,7 +15,12 @@
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
 from ..utils import is_auto_awq_available, is_torch_available
-from ..utils.quantization_config import AwqBackendPackingMethod, AwqConfig, AWQLinearVersion
+from ..utils.quantization_config import (
+    AwqBackendPackingMethod,
+    AwqConfig,
+    AWQLinearVersion,
+    ExllamaVersion,
+)
 
 
 if is_torch_available():
@@ -91,13 +96,30 @@ def replace_with_awq_linear(
         )
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
-        from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
-    elif backend == AwqBackendPackingMethod.LLMAWQ:
+        if quantization_config.version == AWQLinearVersion.GEMM:
+            from awq.modules.linear.gemm import WQLinear_GEMM
+
+            target_cls = WQLinear_GEMM
+        elif quantization_config.version == AWQLinearVersion.GEMV:
+            from awq.modules.linear.gemv import WQLinear_GEMV
+
+            target_cls = WQLinear_GEMV
+        elif quantization_config.version == AWQLinearVersion.EXLLAMA:
+            if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
+                from awq.modules.linear.exllama import WQLinear_Exllama
+
+                target_cls = WQLinear_Exllama
+            elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
+                from awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
+
+                target_cls = WQLinear_ExllamaV2
+            else:
+                raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
+        else:
+            raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
+    else:
         from awq.quantize.qmodule import WQLinear
 
-    if backend == AwqBackendPackingMethod.AUTOAWQ:
-        target_cls = WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
-    else:
         target_cls = WQLinear
 
     for name, module in model.named_children():
@@ -187,17 +209,18 @@ def fuse_awq_modules(model, quantization_config):
     Args:
         model (`~PreTrainedModel`):
             The model to fuse - note this model should have been converted into AWQ format beforehand.
-        quantization_config (`dict`):
+        quantization_config (`Union[AwqConfig, dict]`):
             The quantization configuration to use.
     """
     # We need to convert it from dict in order to get an AwqConfig object
     # otherwise the fields `backend` etc. will not be available
     # https://github.com/huggingface/transformers/pull/27411#discussion_r1414044495
-    awq_config = AwqConfig.from_dict(quantization_config)
-    backend = awq_config.backend
+    if isinstance(quantization_config, dict):
+        quantization_config = AwqConfig.from_dict(quantization_config)
+    backend = quantization_config.backend
 
-    modules_to_fuse = get_modules_to_fuse(model, awq_config)
-    modules_to_not_convert = getattr(awq_config, "modules_to_not_convert", None)
+    modules_to_fuse = get_modules_to_fuse(model, quantization_config)
+    modules_to_not_convert = getattr(quantization_config, "modules_to_not_convert", None)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
@@ -371,3 +394,28 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         setattr(parent, child_name, fused_attention_layer.to(previous_device))
 
         del q_proj, k_proj, v_proj, o_proj
+
+
+def post_init_awq_exllama_modules(model, exllama_config):
+    """
+    Runs post init for Exllama layers which performs:
+        - Weights unpacking, reordering and repacking
+        - Devices scratch space allocation
+    """
+
+    if exllama_config["version"] == ExllamaVersion.ONE:
+        from awq.modules.linear.exllama import exllama_post_init
+
+        model = exllama_post_init(model)
+    elif exllama_config["version"] == ExllamaVersion.TWO:
+        from awq.modules.linear.exllamav2 import exllamav2_post_init
+
+        model = exllamav2_post_init(
+            model,
+            max_input_len=exllama_config["max_input_len"],
+            max_batch_size=exllama_config["max_batch_size"],
+        )
+    else:
+        raise ValueError(f"Unrecognized Exllama version: {exllama_config['version']}")
+
+    return model

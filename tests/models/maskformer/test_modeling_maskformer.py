@@ -102,6 +102,7 @@ class MaskFormerModelTester:
                 hidden_size=32,
                 num_heads=[1, 1, 2, 2],
             ),
+            backbone=None,
             decoder_config=DetrConfig(
                 decoder_ffn_dim=64,
                 decoder_layers=self.num_hidden_layers,
@@ -196,7 +197,7 @@ class MaskFormerModelTester:
 class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}
+        {"image-feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}
         if is_torch_available()
         else {}
     )
@@ -361,6 +362,24 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.assertIsNotNone(pixel_decoder_hidden_states.grad)
         self.assertIsNotNone(transformer_decoder_hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
+
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_auxiliary_loss = True
+        config.output_auxiliary_logits = True
+        config.output_hidden_states = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_logits)
+            self.assertEqual(len(outputs.auxiliary_logits), self.model_tester.num_channels - 1)
 
 
 TOLERANCE = 1e-4

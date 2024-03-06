@@ -17,7 +17,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
+from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
@@ -221,7 +221,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         return inputs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class QuestionAnsweringPipeline(ChunkPipeline):
     """
     Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering

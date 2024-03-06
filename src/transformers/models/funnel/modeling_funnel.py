@@ -235,8 +235,8 @@ class FunnelAttentionStructure(nn.Module):
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
             # We need to create and return the matrices phi, psi, pi and omega.
-            pos_seq = torch.arange(0, seq_len, 1.0, dtype=dtype, device=device)
-            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            pos_seq = torch.arange(0, seq_len, 1.0, dtype=torch.int64, device=device).to(dtype)
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
             sinusoid = pos_seq[:, None] * inv_freq[None]
             sin_embed = torch.sin(sinusoid)
@@ -252,17 +252,17 @@ class FunnelAttentionStructure(nn.Module):
         else:
             # Notations from the paper, appending A.2.1, final formula.
             # We need to create and return all the possible vectors R for all blocks and shifts.
-            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
             # Maximum relative positions for the first input
-            rel_pos_id = torch.arange(-seq_len * 2, seq_len * 2, 1.0, dtype=dtype, device=device)
+            rel_pos_id = torch.arange(-seq_len * 2, seq_len * 2, 1.0, dtype=torch.int64, device=device).to(dtype)
             zero_offset = seq_len * 2
             sinusoid = rel_pos_id[:, None] * inv_freq[None]
             sin_embed = self.sin_dropout(torch.sin(sinusoid))
             cos_embed = self.cos_dropout(torch.cos(sinusoid))
             pos_embed = torch.cat([sin_embed, cos_embed], dim=-1)
 
-            pos = torch.arange(0, seq_len, dtype=dtype, device=device)
+            pos = torch.arange(0, seq_len, dtype=torch.int64, device=device).to(dtype)
             pooled_pos = pos
             position_embeds_list = []
             for block_index in range(0, self.config.num_blocks):

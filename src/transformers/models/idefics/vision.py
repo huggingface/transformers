@@ -57,8 +57,8 @@ class IdeficsVisionModelOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings

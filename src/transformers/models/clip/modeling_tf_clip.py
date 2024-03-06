@@ -32,6 +32,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -77,7 +78,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
-        tf.keras.metrics.sparse_categorical_crossentropy(
+        keras.metrics.sparse_categorical_crossentropy(
             y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
         )
     )
@@ -127,7 +128,7 @@ class TFCLIPOutput(ModelOutput):
         )
 
 
-class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
+class TFCLIPVisionEmbeddings(keras.layers.Layer):
     def __init__(self, config: CLIPVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -140,7 +141,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
 
         self.config = config
 
-        self.patch_embedding = tf.keras.layers.Conv2D(
+        self.patch_embedding = keras.layers.Conv2D(
             filters=self.embed_dim,
             kernel_size=self.patch_size,
             strides=self.patch_size,
@@ -201,7 +202,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
+class TFCLIPTextEmbeddings(keras.layers.Layer):
     def __init__(self, config: CLIPTextConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -259,7 +260,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFCLIPAttention(tf.keras.layers.Layer):
+class TFCLIPAttention(keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: CLIPConfig, **kwargs):
@@ -280,19 +281,19 @@ class TFCLIPAttention(tf.keras.layers.Layer):
 
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.q_proj = tf.keras.layers.Dense(
+        self.q_proj = keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(in_proj_std), name="q_proj"
         )
-        self.k_proj = tf.keras.layers.Dense(
+        self.k_proj = keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(in_proj_std), name="k_proj"
         )
-        self.v_proj = tf.keras.layers.Dense(
+        self.v_proj = keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(in_proj_std), name="v_proj"
         )
 
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_dropout)
+        self.dropout = keras.layers.Dropout(rate=config.attention_dropout)
 
-        self.out_proj = tf.keras.layers.Dense(
+        self.out_proj = keras.layers.Dense(
             units=self.embed_dim, kernel_initializer=get_initializer(out_proj_std), name="out_proj"
         )
 
@@ -375,7 +376,7 @@ class TFCLIPAttention(tf.keras.layers.Layer):
                 self.out_proj.build([None, None, self.embed_dim])
 
 
-class TFCLIPMLP(tf.keras.layers.Layer):
+class TFCLIPMLP(keras.layers.Layer):
     def __init__(self, config: CLIPConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -385,10 +386,10 @@ class TFCLIPMLP(tf.keras.layers.Layer):
         in_proj_std = (config.hidden_size**-0.5) * ((2 * config.num_hidden_layers) ** -0.5) * factor
         fc_std = (2 * config.hidden_size) ** -0.5 * factor
 
-        self.fc1 = tf.keras.layers.Dense(
+        self.fc1 = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(fc_std), name="fc1"
         )
-        self.fc2 = tf.keras.layers.Dense(
+        self.fc2 = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(in_proj_std), name="fc2"
         )
         self.config = config
@@ -411,15 +412,15 @@ class TFCLIPMLP(tf.keras.layers.Layer):
                 self.fc2.build([None, None, self.config.intermediate_size])
 
 
-class TFCLIPEncoderLayer(tf.keras.layers.Layer):
+class TFCLIPEncoderLayer(keras.layers.Layer):
     def __init__(self, config: CLIPConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.embed_dim = config.hidden_size
         self.self_attn = TFCLIPAttention(config, name="self_attn")
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.mlp = TFCLIPMLP(config, name="mlp")
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
 
     def call(
         self,
@@ -480,7 +481,7 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
                 self.layer_norm2.build([None, None, self.embed_dim])
 
 
-class TFCLIPEncoder(tf.keras.layers.Layer):
+class TFCLIPEncoder(keras.layers.Layer):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`TFCLIPEncoderLayer`].
@@ -544,15 +545,13 @@ class TFCLIPEncoder(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFCLIPTextTransformer(tf.keras.layers.Layer):
+class TFCLIPTextTransformer(keras.layers.Layer):
     def __init__(self, config: CLIPTextConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.embeddings = TFCLIPTextEmbeddings(config, name="embeddings")
         self.encoder = TFCLIPEncoder(config, name="encoder")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="final_layer_norm"
-        )
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="final_layer_norm")
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
@@ -663,7 +662,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFCLIPTextMainLayer(tf.keras.layers.Layer):
+class TFCLIPTextMainLayer(keras.layers.Layer):
     config_class = CLIPTextConfig
 
     def __init__(self, config: CLIPTextConfig, **kwargs):
@@ -671,7 +670,7 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.text_model = TFCLIPTextTransformer(config, name="text_model")
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.text_model.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -718,14 +717,14 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
                 self.text_model.build(None)
 
 
-class TFCLIPVisionTransformer(tf.keras.layers.Layer):
+class TFCLIPVisionTransformer(keras.layers.Layer):
     def __init__(self, config: CLIPVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.embeddings = TFCLIPVisionEmbeddings(config, name="embeddings")
-        self.pre_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
+        self.pre_layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
         self.encoder = TFCLIPEncoder(config, name="encoder")
-        self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.post_layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
         self.embed_dim = config.hidden_size
 
     def call(
@@ -782,7 +781,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
+class TFCLIPVisionMainLayer(keras.layers.Layer):
     config_class = CLIPVisionConfig
 
     def __init__(self, config: CLIPVisionConfig, **kwargs):
@@ -790,7 +789,7 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.vision_model = TFCLIPVisionTransformer(config, name="vision_model")
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.vision_model.embeddings
 
     @unpack_inputs
@@ -825,7 +824,7 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFCLIPMainLayer(tf.keras.layers.Layer):
+class TFCLIPMainLayer(keras.layers.Layer):
     config_class = CLIPConfig
 
     def __init__(self, config: CLIPConfig, **kwargs):
@@ -853,14 +852,14 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         self.text_model = TFCLIPTextTransformer(text_config, name="text_model")
         self.vision_model = TFCLIPVisionTransformer(vision_config, name="vision_model")
 
-        self.visual_projection = tf.keras.layers.Dense(
+        self.visual_projection = keras.layers.Dense(
             units=self.projection_dim,
             kernel_initializer=get_initializer(vision_config.hidden_size**-0.5 * self.config.initializer_factor),
             use_bias=False,
             name="visual_projection",
         )
 
-        self.text_projection = tf.keras.layers.Dense(
+        self.text_projection = keras.layers.Dense(
             units=self.projection_dim,
             kernel_initializer=get_initializer(text_config.hidden_size**-0.5 * self.config.initializer_factor),
             use_bias=False,
@@ -872,7 +871,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape = None):
         self.logit_scale = self.add_weight(
             shape=(1,),
-            initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
+            initializer=keras.initializers.Constant(self.config.logit_scale_init_value),
             trainable=True,
             name="logit_scale",
         )
@@ -1046,7 +1045,7 @@ CLIP_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 

@@ -2192,10 +2192,10 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> from transformers import BertTokenizer, EncoderDecoderModel, AutoTokenizer
         >>> import torch
 
-        >>> tokenizer_enc = BertTokenizer.from_pretrained("bert-large-uncased")
+        >>> tokenizer_enc = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
         >>> tokenizer_dec = AutoTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "bert-large-uncased", "microsoft/prophetnet-large-uncased"
+        ...     "google-bert/bert-large-uncased", "microsoft/prophetnet-large-uncased"
         ... )
 
         >>> ARTICLE = (

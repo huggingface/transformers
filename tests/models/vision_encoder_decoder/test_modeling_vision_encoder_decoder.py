@@ -285,6 +285,8 @@ class EncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values

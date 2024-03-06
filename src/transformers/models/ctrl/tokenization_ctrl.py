@@ -33,12 +33,12 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json"},
-    "merges_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt"},
+    "vocab_file": {"Salesforce/ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json"},
+    "merges_file": {"Salesforce/ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt"},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ctrl": 256,
+    "Salesforce/ctrl": 256,
 }
 
 CONTROL_CODES = {

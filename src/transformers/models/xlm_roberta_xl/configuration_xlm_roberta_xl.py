@@ -88,10 +88,10 @@ class XLMRobertaXLConfig(PretrainedConfig):
     ```python
     >>> from transformers import XLMRobertaXLConfig, XLMRobertaXLModel
 
-    >>> # Initializing a XLM_ROBERTA_XL bert-base-uncased style configuration
+    >>> # Initializing a XLM_ROBERTA_XL google-bert/bert-base-uncased style configuration
     >>> configuration = XLMRobertaXLConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the google-bert/bert-base-uncased style configuration
     >>> model = XLMRobertaXLModel(configuration)
 
     >>> # Accessing the model configuration

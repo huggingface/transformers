@@ -291,8 +291,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 [`Trainer`] は、トレーニングを劇的に改善する可能性のあるライブラリをサポートするように拡張されました。
 時間とはるかに大きなモデルに適合します。
 
-現在、サードパーティのソリューション [DeepSpeed](https://github.com/microsoft/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化]
-兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
+現在、サードパーティのソリューション [DeepSpeed](https://github.com/microsoft/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
 
 この提供されるサポートは、この記事の執筆時点では新しくて実験的なものです。 DeepSpeed と PyTorch FSDP のサポートはアクティブであり、それに関する問題は歓迎しますが、FairScale 統合は PyTorch メインに統合されているため、もうサポートしていません ([PyTorch FSDP 統合](#pytorch-fully-sharded-data-parallel))
 
@@ -526,7 +525,7 @@ MacOS マシンに PyTorch >= 1.13 (執筆時点ではナイトリー バージ�
 export TASK_NAME=mrpc
 
 python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
@@ -661,7 +660,7 @@ cd transformers
 
 accelerate launch \
 ./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path bert-base-cased \
+--model_name_or_path google-bert/bert-base-cased \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \
@@ -686,7 +685,7 @@ accelerate launch --num_processes=2 \
 --fsdp_sharding_strategy=1 \
 --fsdp_state_dict_type=FULL_STATE_DICT \
 ./examples/pytorch/text-classification/run_glue.py
---model_name_or_path bert-base-cased \
+--model_name_or_path google-bert/bert-base-cased \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \
