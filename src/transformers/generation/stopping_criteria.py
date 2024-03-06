@@ -131,7 +131,7 @@ class MaxTimeCriteria(StoppingCriteria):
 
 class EosTokenCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever the "end-of-sequence" token in generated.
+    This class can be used to stop generation whenever the "end-of-sequence" token is generated.
     By default, it uses the `EOS` token from model's generation config.
 
     Args:
