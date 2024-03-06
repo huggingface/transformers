@@ -30,4 +30,3 @@ if __name__ == "__main__":
     }
     result = benchmakr.run(**run_kwargs)
     print(json.dumps(result, indent=4))
-
