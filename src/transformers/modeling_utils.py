@@ -98,6 +98,7 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
+from .quantizers.quantizers_utils import get_module_from_name
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -512,9 +513,9 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
             )
         return safe_load_file(checkpoint_file)
     try:
-        if (
+        if ((
             is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
-        ) or (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
+        ) or (is_fsdp_enabled() and not is_local_dist_rank_0())) and not is_quantized:
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -802,10 +803,23 @@ def _load_state_dict_into_meta_model(
             or (not hf_quantizer.requires_parameters_quantization)
             or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
         ):
-            # For backward compatibility with older versions of `accelerate` and for non-quantized params
-            set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+                with deepspeed.zero.GatheredParameters(old_param, modifier_rank=0):
+                    set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
+            else:
+                # For backward compatibility with older versions of `accelerate` and for non-quantized params
+                set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+                with deepspeed.zero.GatheredParameters(old_param, modifier_rank=0):
+                    hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            else:
+                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            if is_fsdp_enabled():
+                module, tensor_name = get_module_from_name(model, param_name)
+                setattr(module, tensor_name, getattr(module, tensor_name).to("cpu"))
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
@@ -2943,11 +2957,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
-            if is_deepspeed_zero3_enabled():
-                raise ValueError(
-                    "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
-                )
-            elif not is_accelerate_available():
+            # if is_deepspeed_zero3_enabled():
+            #     raise ValueError(
+            #         "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
+            #     )
+            if not is_accelerate_available():
                 raise ImportError(
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
@@ -3937,7 +3951,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
+                state_dict = load_state_dict(shard_file, is_quantized=hf_quantizer is not None)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -3950,7 +3964,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ignore_mismatched_sizes,
                 )
                 if low_cpu_mem_usage:
-                    if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
+                    if is_fsdp_enabled() and not is_local_dist_rank_0() and hf_quantizer is None:
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
                                 if hf_quantizer is None:
