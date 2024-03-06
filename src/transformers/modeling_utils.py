@@ -3596,7 +3596,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
-            dispatch_model(model, **device_map_kwargs)
+            # dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model)
