@@ -129,7 +129,7 @@ class MaxTimeCriteria(StoppingCriteria):
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
 
-class EOSTokenCriteria(StoppingCriteria):
+class EosTokenCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the "end-of-sequence" token in generated.
     By default, it uses the `EOS` token from model's generation config.
