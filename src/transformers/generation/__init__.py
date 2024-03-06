@@ -82,7 +82,7 @@ else:
         "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
-        "EOSTokenCriteria",
+        "EosTokenCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
