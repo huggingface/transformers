@@ -1460,7 +1460,11 @@ class GenerationMixin:
         # echo back the prompt
         # NB: if user wants prompt logits, this will prob need to be moved down
         if streamer is not None:
-            output_stub = self._prepare_output(return_dict_in_generate=generation_config.return_dict_in_generate, sequences=input_ids)
+            output_stub = self._prepare_output(
+                return_dict_in_generate=generation_config.return_dict_in_generate,
+                sequences=input_ids,
+                # no scores/logits/attention/hidden here because they haven't been computed yet.
+            )
             streamer.put(output_stub)
 
         # 6. Prepare `max_length` depending on other stopping criteria.
@@ -2225,6 +2229,12 @@ class GenerationMixin:
                     sequences=next_tokens,
                     scores=scores,
                     logits=logits,
+                    encoder_attentions=None,
+                    encoder_hidden_states=None,
+                    decoder_attentions=None,
+                    cross_attentions=None,
+                    decoder_hidden_states=None,
+                    past_key_values=None,
                 )
                 streamer.put(output_stub)
 
@@ -2501,6 +2511,12 @@ class GenerationMixin:
                     sequences=next_tokens,
                     scores=next_tokens_scores,
                     logits=next_token_logits,
+                    encoder_attentions=None,
+                    encoder_hidden_states=None,
+                    decoder_attentions=None,
+                    cross_attentions=None,
+                    decoder_hidden_states=None,
+                    past_key_values=None,
                 )
                 streamer.put(output_stub)
 
@@ -2795,6 +2811,12 @@ class GenerationMixin:
                     sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
                     scores=next_token_scores,
                     logits=next_token_logits,
+                    encoder_attentions=None,
+                    encoder_hidden_states=None,
+                    decoder_attentions=None,
+                    cross_attentions=None,
+                    decoder_hidden_states=None,
+                    past_key_values=None,
                     )
                 streamer.put(output_stub)
 
@@ -4642,6 +4664,12 @@ class GenerationMixin:
                     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
                     # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
                     logits=next_token_logits,
+                    encoder_attentions=None,
+                    encoder_hidden_states=None,
+                    decoder_attentions=None,
+                    cross_attentions=None,
+                    decoder_hidden_states=None,
+                    past_key_values=None,
                 )
                 streamer.put(output_stub)
             new_cur_len = input_ids.shape[-1]
