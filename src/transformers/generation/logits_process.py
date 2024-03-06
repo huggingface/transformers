@@ -15,6 +15,7 @@
 
 import inspect
 import math
+import warnings
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -1745,8 +1746,13 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, force_token_map: List[List[int]]):
+    def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
         self.force_token_map = dict(force_token_map)
+        if not _has_warned:
+            warnings.warn(
+                "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Please pass `input_ids` or `decoder_input_ids` to the generate method directly.",
+                FutureWarning,
+            )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
