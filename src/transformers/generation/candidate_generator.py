@@ -252,10 +252,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
     def __init__(
         self,
         num_output_tokens: int = 10,
-        max_matching_ngram_size: int = 2,
+        max_matching_ngram_size: int = None,
     ):
         self.num_output_tokens = num_output_tokens
-        self.max_matching_ngram_size = max_matching_ngram_size
+        self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
