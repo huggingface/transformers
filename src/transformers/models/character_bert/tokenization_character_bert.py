@@ -110,6 +110,12 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             `do_basic_tokenize=True`
+        bow_character_id (`int`, *optional*, defaults to 258):
+            Id used to delimit the beginning of a token. First element in the character_id vector of the token.
+        eow_character_id (`int`, *optional*, defaults to 259):
+            Id used to delimit the end of a token. Last element in the character_id vector of the token, before padding.
+        pad_character_id (`int`, *optional*, defaults to 260):
+            Id used to delimit pad all character_id vectors to the same length, the maximum token length.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
