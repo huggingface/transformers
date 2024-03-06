@@ -3348,7 +3348,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         # Explicitly setting max_length to 20 -> no warning
         with warnings.catch_warnings(record=True) as warning_list:
-            warnings.simplefilter("ignore", category=FutureWarning)
             model.generate(input_ids, max_length=20)
             self.assertEqual(len(warning_list), 0)
 
