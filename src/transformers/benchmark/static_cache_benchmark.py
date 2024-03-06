@@ -47,10 +47,8 @@ torch.set_printoptions(linewidth=200)  # you can better see how the mask is shap
 
 class StaticCacheBenchMark(BenchMark):
 
-    # @foo
     def __init__(self, repo_id, prefill_num_iter=3, num_iter=100, device="cuda", attn_implementation="sdpa", all_dtype=torch.bfloat16):
 
-        # How do we enforce!
         super().__init__()
 
         self.repo_id = repo_id
@@ -135,10 +133,6 @@ if __name__ == "__main__":
     # all_batch_size = [1, 2, 4]
     # all_max_cache_length = [4096, 2048, 1024, 512]
     # all_seq_length = [512, 1, 1024, 2048]
-
-    # all_batch_size = [1, 2]
-    # all_max_cache_length = [512, 256, 128]
-    # all_seq_length = [128, 1, 256]
 
     all_batch_size = [1, 2]
     all_max_cache_length = [16]

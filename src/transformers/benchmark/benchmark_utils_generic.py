@@ -14,12 +14,11 @@
 """
 Benchmark
 """
-import inspect
 import json
 import timeit
 
 
-# def foo(func):
+# def save_args(func):
 #
 #     info = inspect.signature(func)
 #
