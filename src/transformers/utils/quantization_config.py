@@ -269,7 +269,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
         if bnb_4bit_quant_storage is None:
-            self.bnb_4bit_quant_storage = torch.unint8
+            self.bnb_4bit_quant_storage = torch.uint8
         elif isinstance(bnb_4bit_quant_storage, str):
             self.bnb_4bit_quant_storage = getattr(torch, bnb_4bit_quant_storage)
         elif isinstance(bnb_4bit_quant_storage, torch.dtype):
