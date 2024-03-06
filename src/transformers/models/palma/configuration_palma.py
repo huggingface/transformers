@@ -94,6 +94,8 @@ class PalmaConfig(PretrainedConfig):
         hidden_size=2048,
         intermediate_size=16384,
         # FIXME how do we pass vision/text specific config keys here?
+        # Why is this setup in init, attributes derived are not used, and configs 
+        # are then called with other hardcoded arguments?
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -137,6 +139,8 @@ class PalmaConfig(PretrainedConfig):
                 hidden_size=2048,
                 num_hidden_layers=18, # similar to gemma-2b
                 intermediate_size=16384,
+                num_attention_heads=8,
+                num_key_value_heads=1,
             )
 
         super().__init__(**kwargs)
