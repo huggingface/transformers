@@ -530,7 +530,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
-@pytest.mark.integration_test
 class LlamaIntegrationTest(unittest.TestCase):
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
@@ -657,7 +656,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-@pytest.mark.integration_test
 class CodeLlamaIntegrationTest(unittest.TestCase):
     PROMPTS = [
         '''def remove_non_ascii(s: str) -> str:

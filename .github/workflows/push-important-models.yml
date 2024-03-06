@@ -44,7 +44,7 @@ jobs:
   test_modified_files:
     needs: get_modified_models
     name: Run slow tests on modified models
-    runs-on: [single-gpu, nvidia-gpu, a10, ci] # TODO: uncomment this
+    runs-on: [single-gpu, nvidia-gpu, a10, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
