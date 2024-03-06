@@ -1749,6 +1749,7 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
     def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
         self.force_token_map = dict(force_token_map)
         if not _has_warned:
+            # TODO(Sanchit): remove this processor entirely in v4.40
             warnings.warn(
                 "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Please pass `input_ids` or `decoder_input_ids` to the generate method directly.",
                 FutureWarning,
