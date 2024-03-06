@@ -132,7 +132,7 @@ class MaxTimeCriteria(StoppingCriteria):
 class EosTokenCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the "end-of-sequence" token is generated.
-    By default, it uses the `EOS` token from model's generation config.
+    By default, it uses the `model.generation_config.eos_token_id`.
 
     Args:
         eos_token_id (`Union[int, List[int]]`):
