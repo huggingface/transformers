@@ -8,3 +8,4 @@ tensorboard
 evaluate >= 0.2.0
 torch
 accelerate
+pygtrie >= 2.5.0
