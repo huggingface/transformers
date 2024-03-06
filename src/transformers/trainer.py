@@ -647,7 +647,7 @@ class Trainer:
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config["xla_fsdp_v2"]
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
