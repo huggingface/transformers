@@ -68,7 +68,6 @@ import timeit
 
 
 class BenchMark:
-    # @foo
     def __init__(self, *arg, **kwargs):
         pass
 
