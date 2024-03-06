@@ -410,6 +410,8 @@ class GenerationConfig(PushToHubMixin):
         Returns:
             `GenerationMode`: The generation mode triggered by the instance.
         """
+        # TODO joao: find out a way of not depending on external fields (e.g. `assistant_model`), then make this a
+        # property and part of the `__repr__`
         if self.constraints is not None or self.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
         elif self.num_beams == 1:
