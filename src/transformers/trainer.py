@@ -80,7 +80,6 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
-    AcceleratorConfig,
     DistributedTensorGatherer,
     IterableDatasetShard,
     LabelSmoother,
@@ -2012,7 +2011,7 @@ class Trainer:
                             is_accelerate_available()
                             and self.accelerator.distributed_type == DistributedType.DEEPSPEED
                         ):
-                            grad_norm = model.get_global_grad_norm()
+                            grad_norm = model.get_global_grad_norm().item()
                         else:
                             grad_norm = _grad_norm.item() if _grad_norm is not None else None
 
@@ -2081,7 +2080,8 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
-        train_loss = self._total_loss_scalar / self.state.global_step
+        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
+        train_loss = self._total_loss_scalar / effective_global_step
 
         metrics = speed_metrics(
             "train",
@@ -2491,21 +2491,13 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
-        if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
-            logger.warning(
-                f"Checkpoint destination directory {output_dir} already exists and is non-empty. "
-                "Saving will proceed but saved results may be invalid."
-            )
-            staging_output_dir = output_dir
-        else:
-            staging_output_dir = os.path.join(run_dir, f"tmp-{checkpoint_folder}")
-        self.save_model(staging_output_dir, _internal_call=True)
+        self.save_model(output_dir, _internal_call=True)
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler
-            self._save_optimizer_and_scheduler(staging_output_dir)
+            self._save_optimizer_and_scheduler(output_dir)
             # Save RNG state
-            self._save_rng_state(staging_output_dir)
+            self._save_rng_state(output_dir)
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -2525,39 +2517,16 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            self.state.save_to_json(os.path.join(staging_output_dir, TRAINER_STATE_NAME))
+            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
-            self._push_from_checkpoint(staging_output_dir)
+            self._push_from_checkpoint(output_dir)
 
-        # Place checkpoint in final location after all saving is finished.
-        # First wait for everyone to finish writing
-        self.args.distributed_state.wait_for_everyone()
-
-        # Then go through the rewriting process, only renaming and rotating from main process(es)
-        if self.is_local_process_zero() if self.args.save_on_each_node else self.is_world_process_zero():
-            if staging_output_dir != output_dir:
-                if os.path.exists(staging_output_dir):
-                    os.rename(staging_output_dir, output_dir)
-
-                    # Ensure rename completed in cases where os.rename is not atomic
-                    # And can only happen on non-windows based systems
-                    if os.name != "nt":
-                        fd = os.open(output_dir, os.O_RDONLY)
-                        os.fsync(fd)
-                        os.close(fd)
-
-            # Maybe delete some older checkpoints.
-            if self.args.should_save:
-                # Solely rely on numerical checkpoint id for rotation.
-                # mtime is not reliable especially on some fuse fs in cloud environments.
-                self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
-        elif self.is_local_process_zero():
-            # Clean up the remaining staging checkpoint folders on other nodes
-            if staging_output_dir != output_dir and os.path.exists(staging_output_dir):
-                shutil.rmtree(staging_output_dir)
-
-        self.args.distributed_state.wait_for_everyone()
+        # Maybe delete some older checkpoints.
+        if self.args.should_save:
+            # Solely rely on numerical checkpoint id for rotation.
+            # mtime is not reliable especially on some fuse fs in cloud environments.
+            self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
@@ -4116,21 +4085,10 @@ class Trainer:
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
-        accelerator_kwargs = {}
-        if self.args.accelerator_config is not None:
-            accelerator_kwargs = self.args.accelerator_config
-            # dict and AcceleratorConfigs are parseable, json files are not
-            if isinstance(accelerator_kwargs, AcceleratorConfig):
-                accelerator_kwargs = accelerator_kwargs.to_dict()
-            elif isinstance(accelerator_kwargs, dict):
-                # Some values may need to go through non-accelerate aligned defaults
-                # and we need to run the `__post_init__` to set them
-                accelerator_kwargs = AcceleratorConfig(**accelerator_kwargs).to_dict()
-
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
-            **accelerator_kwargs,
+            **self.args.accelerator_config.to_dict(),
         )
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics

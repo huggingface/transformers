@@ -43,22 +43,22 @@ class GenerationConfig(PushToHubMixin):
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
+        - *greedy decoding* by calling [`~generation.GenerationMixin._greedy_search`] if `num_beams=1` and
             `do_sample=False`
-        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
+        - *contrastive search* by calling [`~generation.GenerationMixin._contrastive_search`] if `penalty_alpha>0.`
             and `top_k>1`
-        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
+        - *multinomial sampling* by calling [`~generation.GenerationMixin._sample`] if `num_beams=1` and
             `do_sample=True`
-        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.GenerationMixin._beam_search`] if `num_beams>1` and
             `do_sample=False`
-        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin._beam_sample`] if
             `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin._group_beam_search`], if
             `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin._constrained_beam_search`], if
             `constraints!=None` or `force_words_ids!=None`
-        - *assisted decoding* by calling [`~generation.GenerationMixin.assisted_decoding`], if
-            `assistant_model` is passed to `.generate()`
+        - *assisted decoding* by calling [`~generation.GenerationMixin._assisted_decoding`], if
+            `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
