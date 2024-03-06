@@ -56,8 +56,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
 
 model_id = "facebook/opt-125m"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-quanto_config = QuantoConfig(weights="int8")
-quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=quanto_config)
+quantization_config = QuantoConfig(weights="int8")
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config= quantization_config)
 ```
 
 You can also save the quantized model using the [`~PreTrainedModel.save_pretrained`] method. 
