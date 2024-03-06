@@ -36,17 +36,17 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-15b", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-15b")
+>>> model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
 
 >>> prompt = "def print_hello_world():"
 
 >>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
 >>> model.to(device)
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
+>>> generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
 >>> tokenizer.batch_decode(generated_ids)[0]
-"The expected output"
+"def print_hello_world():\n\treturn 'Hello World!'"
 ```
 
 ## Starcoder2Config
