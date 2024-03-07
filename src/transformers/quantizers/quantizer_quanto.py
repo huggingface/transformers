@@ -78,20 +78,15 @@ class QuantoHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return missing_keys
         not_missing_keys = []
-        model_state_dict_keys = model.state_dict().keys()
-        for key in missing_keys:
-            updated_key = None
-            if key in list(model_state_dict_keys):
-                updated_key = key
-            elif f"{prefix}.{key}" in list(model_state_dict_keys):
-                updated_key = f"{prefix}.{key}"
-            elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict_keys):
-                updated_key = ".".join(key.split(".")[1:])
-            module, tensor_name = get_module_from_name(model, updated_key)
-            # we remove some of the missing keys since when we replaced the modules by QModuleMixin, we created a few buffers.
+        for name, module in model.named_modules():
             if isinstance(module, quanto.QModuleMixin):
-                if tensor_name != "weight" and tensor_name != "bias":
-                    not_missing_keys.append(key)
+                for missing in missing_keys:
+                    if (
+                        (name in missing or name in f"{prefix}.{missing}")
+                        and "weights" not in missing
+                        and "bias" not in "missing"
+                    ):
+                        not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def check_quantized_param(
