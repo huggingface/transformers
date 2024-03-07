@@ -32,6 +32,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_accelerate_available,
     is_scipy_available,
+    is_timm_available,
     is_vision_available,
     logging,
     replace_return_docstrings,
@@ -47,6 +48,11 @@ if is_accelerate_available():
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+
+if is_timm_available():
+    from timm import create_model
+
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
@@ -340,13 +346,33 @@ class DetrConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        backbone = load_backbone(config)
+
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = getattr(config, "backbone_kwargs", {})
+            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
+            if config.dilation:
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=out_indices,
+                in_chans=num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
         backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
         if "resnet" in backbone_model_type:
@@ -360,7 +386,7 @@ class DetrConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:

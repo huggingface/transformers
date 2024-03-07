@@ -35,6 +35,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -90,6 +91,9 @@ if is_vision_available():
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+if is_timm_available():
+    pass
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -437,7 +441,7 @@ class DeformableDetrConvEncoder(nn.Module):
     # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:

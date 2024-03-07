@@ -210,7 +210,7 @@ class ConditionalDetrConfig(PretrainedConfig):
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self._num_channels = num_channels
+        self.num_channels = num_channels
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -233,7 +233,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
-        self._dilation = dilation
+        self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
@@ -246,16 +246,6 @@ class ConditionalDetrConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.focal_alpha = focal_alpha
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def num_channels(self):
-        logger.warn("The `num_channels` attribute is deprecated and will be removed in v4.40")
-        return self._num_channels
-
-    @property
-    def dilation(self):
-        logger.warn("The `dilation` attribute is deprecated and will be removed in v4.40")
-        return self._dilation
 
     @property
     def num_attention_heads(self) -> int:
