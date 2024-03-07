@@ -36,7 +36,6 @@ import jax.numpy as jnp
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import optax
-from PIL import Image
 from datasets import Dataset, load_dataset
 from filelock import FileLock
 from flax import jax_utils, traverse_util
@@ -44,6 +43,7 @@ from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import HfApi
+from PIL import Image
 from tqdm import tqdm
 
 import transformers
@@ -456,7 +456,7 @@ def main():
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
         api = HfApi()
-        repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
