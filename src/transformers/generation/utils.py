@@ -4873,7 +4873,6 @@ def _speculative_sampling(
         n_matches -= 1
         valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
     else:
-
         # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
         gamma = min(candidate_logits.shape[1], n_matches)
         p_n_plus_1 = p[:, n_matches, :]
