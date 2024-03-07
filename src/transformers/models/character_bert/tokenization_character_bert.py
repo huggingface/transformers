@@ -824,6 +824,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return padding_strategy, truncation_strategy, max_length, kwargs
 
 
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -841,7 +842,7 @@ class BasicTokenizer(object):
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original CHARACTER_BERT).
+            value for `lowercase` (as in the original BERT).
         do_split_on_punc (`bool`, *optional*, defaults to `True`):
             In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
             the full context of the words, such as contractions.
@@ -865,7 +866,7 @@ class BasicTokenizer(object):
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
