@@ -123,9 +123,6 @@ caption = image_captioner(image)
 ```
 """
 
-# Task: "<<task>>"
-
-# I will use the following
 
 DEFAULT_REACT_SYSTEM_PROMPT = """Solve the following task as best you can. You have access to the following tools:
 

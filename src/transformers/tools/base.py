@@ -93,9 +93,9 @@ class Tool:
       returns the text contained in the file'.
     - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
       `"text-classifier"` or `"image_generator"`.
-    - **inputs** (`List[str]`) -- The list of modalities expected for the inputs (in the same order as in the call).
+    - **inputs** (`Dict[str, str]`) -- The dict of modalities expected for the inputs (in the same order as in the call).
       Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo` or to make a
-      nice space from your tool.
+      nice space from your tool. # TODO: update this
     - **outputs** (`List[str]`) -- The list of modalities returned but the tool (in the same order as the return of the
       call method). Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo`
       or to make a nice space from your tool.

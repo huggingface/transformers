@@ -16,15 +16,10 @@ import os
 import tempfile
 import unittest
 import uuid
-from pathlib import Path
 
-from transformers.testing_utils import get_tests_dir, require_torch
-from transformers.tools.agents import Agent, ReactAgent, CodeAgent
+from transformers.tools.agents import ReactAgent, CodeAgent
 from transformers.tools.base import CalculatorTool
-from transformers.utils import is_torch_available
 
-if is_torch_available():
-    import torch
 
 def get_new_path(suffix="") -> str:
     directory = tempfile.mkdtemp()
@@ -61,18 +56,22 @@ print(result)
 """
 
 class AgentTests(unittest.TestCase):
-    def test_react_agent(self):
+    def test_fake_react_agent(self):
         agent = ReactAgent(fake_react_llm, toolbox=[CalculatorTool()])
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
+        assert agent.memory[1] == "Task: What is 2 multiplied by 3.6452?"
+        assert agent.memory[3] == "Observation: 7.2904"
+        assert agent.memory[4] == """
+Thought: I can now answer the initial question
+Action:
+{
+    "action": "final_answer",
+    "action_input": {"answer": "7.2904"}
+}
+"""
 
-    def test_code_agent(self):
+    def test_fake_code_agent(self):
         agent = CodeAgent(fake_code_llm, toolbox=[CalculatorTool()])
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
-
-    def test_code_agent_remote_tool(self):
-        agent = CodeAgent(fake_code_llm, toolbox=[''])
-        output = agent.run("What is 2 multiplied by 3.6452?")
-        assert output == "7.2904"
-

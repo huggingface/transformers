@@ -39,12 +39,8 @@ In this guide we'll take a look at:
 
 ## Customizing the prompt
 
-As explained in [Transformers Agents](transformers_agents) agents can run in [`~Agent.run`] and [`~Agent.chat`] mode.
-Both the `run` and `chat` modes underlie the same logic. The language model powering the agent is conditioned on a long 
+As explained in [Transformers Agents], the language model powering the agent is conditioned on a long 
 prompt and completes the prompt by generating the next tokens until the stop token is reached.
-The only difference between the two modes is that during the `chat` mode the prompt is extended with 
-previous user inputs and model generations. This allows the agent to have access to past interactions,
-seemingly giving the agent some kind of memory.
 
 ### Structure of the prompt
 
@@ -52,7 +48,7 @@ Let's take a closer look at how the prompt is structured to understand how it ca
 The prompt is structured broadly into four parts.
 
 - 1. Introduction: how the agent should behave, explanation of the concept of tools.
-- 2. Description of all the tools. This is defined by a `<<all_tools>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
+- 2. Description of all the tools. This is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
 - 3. A set of examples of tasks and their solution
 - 4. Current example, and request for solution.
 
