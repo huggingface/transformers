@@ -2922,7 +2922,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         if filename == SAFE_WEIGHTS_NAME:
             with safe_open(resolved_archive_file, framework="tf") as f:
                 safetensors_metadata = f.metadata()
-            if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
+            if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
                 raise OSError(
                     f"The safetensors archive passed at {resolved_archive_file} does not contain the valid metadata."
                     " Make sure you save your model with the `save_pretrained` method."
@@ -2931,7 +2931,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         elif filename == SAFE_WEIGHTS_INDEX_NAME:
             with safe_open(resolved_archive_file[0], framework="tf") as f:
                 safetensors_metadata = f.metadata()
-            if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
+            if safetensors_metadata is None or safetensors_metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
                 raise OSError(
                     f"The safetensors archive passed at {resolved_archive_file} does not contain the valid metadata."
                     " Make sure you save your model with the `save_pretrained` method."
