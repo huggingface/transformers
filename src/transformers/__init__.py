@@ -5885,6 +5885,7 @@ if TYPE_CHECKING:
         is_psutil_available,
         is_py3nvml_available,
         is_pyctcdecode_available,
+        is_sacremoses_available,
         is_safetensors_available,
         is_scipy_available,
         is_sentencepiece_available,
