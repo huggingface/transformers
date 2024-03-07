@@ -239,8 +239,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 @require_torch
 class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2")
-        self.image_processor = Idefics2ImageProcessor()  # FIXME - remove after updating the checkpoint
+        self.processor = AutoProcessor.from_pretrained("amyeroberts/idefics2")
 
     def tearDown(self):
         gc.collect()
@@ -250,28 +249,11 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test(self):
         torch_device = "cuda"
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2",
+            "amyeroberts/idefics2",
             torch_dtype=torch.bfloat16,
         )
         model.to(torch_device)
 
-        bos_token = self.processor.tokenizer.bos_token
-        bad_words_ids = self.processor.tokenizer(
-            ["<image>", "<fake_token_around_image>"], add_special_tokens=False
-        ).input_ids
-        image_seq_len = model.config.perceiver_config.resampler_n_latents
-
-        # Create text token inputs
-        image_seq = "<image>" * image_seq_len
-        inputs = self.processor.tokenizer(
-            [
-                f"{bos_token}<fake_token_around_image>{image_seq}<fake_token_around_image>In this image, we see",
-                f"{bos_token}bla bla<fake_token_around_image>{image_seq}<fake_token_around_image>{image_seq}<fake_token_around_image>",
-            ],
-            return_tensors="pt",
-            add_special_tokens=False,
-            padding=True,
-        )
         # Create pixel inputs
         image1 = Image.open(
             BytesIO(
@@ -290,17 +272,15 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ).content
             )
         )
-        raw_images = [
-            [image1],
-            [image2, image3],
+        # Create inputs
+        prompts = [
+            [image1, "In this image, we see"],
+            ["bla, bla", image2, image3],
         ]
-        image_inputs = self.image_processor(raw_images, return_tensors="pt")
-
-        inputs["pixel_values"] = image_inputs["pixel_values"]
-        inputs["pixel_attention_mask"] = image_inputs["pixel_attention_mask"]
+        inputs = self.processor(prompts, return_tensors="pt", padding=True)
         inputs.to(torch_device)
 
-        generated_ids = model.generate(**inputs, bad_words_ids=bad_words_ids, max_new_tokens=10)
+        generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in New York City.']
@@ -313,20 +293,6 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2", load_in_4bit=True)
 
-        bos_token = self.processor.tokenizer.bos_token
-        bad_words_ids = self.processor.tokenizer(
-            ["<image>", "<fake_token_around_image>"], add_special_tokens=False
-        ).input_ids
-        image_seq_len = model.config.perceiver_config.resampler_n_latents
-
-        # Create text token inputs
-        image_seq = "<image>" * image_seq_len
-        inputs = self.processor.tokenizer(
-            f"{bos_token}<fake_token_around_image>{image_seq}<fake_token_around_image>In this image, we see",
-            return_tensors="pt",
-            add_special_tokens=False,
-            padding=True,
-        )
         # Create pixel inputs
         image1 = Image.open(
             BytesIO(
@@ -335,10 +301,8 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ).content
             )
         )
-        image_inputs = self.image_processor(image1, return_tensors="pt")
-
-        inputs["pixel_values"] = image_inputs["pixel_values"]
-        inputs["pixel_attention_mask"] = image_inputs["pixel_attention_mask"]
+        prompts = [image1, "In this image, we see"]
+        inputs = self.processor(prompts, return_tensors="pt")
 
         generated_ids = model.generate(**inputs, bad_words_ids=bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
