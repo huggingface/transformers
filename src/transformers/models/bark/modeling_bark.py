@@ -1881,7 +1881,7 @@ class BarkModel(BarkPreTrainedModel):
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         hard_check_only: bool = False,
-        check_device_map:bool = False,
+        check_device_map: bool = False,
     ):
         """
         `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
