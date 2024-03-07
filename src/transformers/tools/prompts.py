@@ -121,6 +121,10 @@ Answer:
 ```py
 caption = image_captioner(image)
 ```
+Above example were using tools that might not exist directly for you. You only have acces to those Tools:
+<<tool_names>>
+
+Now Begin !
 """
 
 
