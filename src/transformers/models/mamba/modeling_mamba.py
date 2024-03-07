@@ -605,7 +605,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def _update_model_kwargs_for_generation(
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
-        model_kwargs["cache_params"] = outputs.get(["cache_params"], None)
+        model_kwargs["cache_params"] = outputs.get("cache_params", None)
         return model_kwargs
 
     def prepare_inputs_for_generation(
