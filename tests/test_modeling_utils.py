@@ -20,7 +20,6 @@ import os
 import os.path
 import sys
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -765,7 +764,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
@@ -808,7 +807,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
@@ -1189,12 +1188,14 @@ class ModelUtilsTest(TestCasePlus):
         # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
+        model = AutoModelForCausalLM.from_pretrained(
+            "joaogante/tiny-random-gpt2-with-generation-config", use_safetensors=False
+        )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
         # 2. Load with `device_map`
         model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto"
+            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto", use_safetensors=False
         )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
@@ -1429,7 +1430,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertbot":
+                if discussion.author == "SFconvertBot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1451,51 +1452,6 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
-
-    def test_absence_of_safetensors_triggers_conversion(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
-
-        # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-
-        # Download the model that doesn't have safetensors
-        BertModel.from_pretrained(self.repo_name, token=self.token)
-
-        for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
-                thread.join(timeout=10)
-
-        with self.subTest("PR was open with the safetensors account"):
-            discussions = self.api.get_repo_discussions(self.repo_name)
-
-            bot_opened_pr = None
-            bot_opened_pr_title = None
-
-            for discussion in discussions:
-                if discussion.author == "SFconvertbot":
-                    bot_opened_pr = True
-                    bot_opened_pr_title = discussion.title
-
-            self.assertTrue(bot_opened_pr)
-            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
-
-    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
-    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
-        spawn_conversion_mock.side_effect = HTTPError()
-
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
-
-        # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-
-        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
-        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch

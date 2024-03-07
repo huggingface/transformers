@@ -647,7 +647,7 @@ class Trainer:
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config["xla_fsdp_v2"]
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
@@ -2011,7 +2011,10 @@ class Trainer:
                             is_accelerate_available()
                             and self.accelerator.distributed_type == DistributedType.DEEPSPEED
                         ):
-                            grad_norm = model.get_global_grad_norm().item()
+                            grad_norm = model.get_global_grad_norm()
+                            # In some cases the grad norm may not return a float
+                            if hasattr(grad_norm, "item"):
+                                grad_norm = grad_norm.item()
                         else:
                             grad_norm = _grad_norm.item() if _grad_norm is not None else None
 

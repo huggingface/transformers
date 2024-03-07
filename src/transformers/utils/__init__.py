@@ -194,6 +194,7 @@ from .import_utils import (
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
+    is_torchdynamo_compiling,
     is_torchvision_available,
     is_training_run_on_sagemaker,
     is_vision_available,
