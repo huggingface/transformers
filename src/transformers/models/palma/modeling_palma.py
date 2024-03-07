@@ -21,32 +21,20 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ... import PreTrainedModel
-from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_outputs import ModelOutput
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_palma import PalmaConfig
-from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...models.siglip.configuration_siglip import SiglipVisionConfig
+from ...models.siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from ...models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-from ...models.siglip.modeling_siglip import SiglipVisionEmbeddings, SiglipEncoder
-
+from ..auto import AutoModelForCausalLM
+from .configuration_palma import PalmaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -78,6 +66,7 @@ class PalmaSiglipVisionTransformer(nn.Module):
     """
     Modified version of Siglip with a linear head and no pooling, used specifically in Palma.
     """
+
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
@@ -120,7 +109,7 @@ class PalmaSiglipVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        if not return_dict: #FIXME is there a standard for a non-dict returned output? esp for non-pooled output
+        if not return_dict:  # FIXME is there a standard for a non-dict returned output? esp for non-pooled output
             return (last_hidden_state,) + encoder_outputs[1:]
 
         return BaseModelOutput(
@@ -322,7 +311,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         super().__init__(config)
         self.vision_model = PalmaSiglipVisionTransformer(config=config.vision_config)
 
-        # Here Moved out AutoModel since the arch is slightly different and we don't want to rewrite .head on-the-fly 
+        # Here Moved out AutoModel since the arch is slightly different and we don't want to rewrite .head on-the-fly
         # AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = PalmaMultiModalProjector(config)
@@ -433,6 +422,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
         return final_embedding, final_attention_mask, final_labels, position_ids
     """
+
     @add_start_docstrings_to_model_forward(PALMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PalmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
