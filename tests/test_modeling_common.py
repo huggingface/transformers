@@ -786,7 +786,6 @@ class ModelTesterMixin:
             for key in model_batched_output:
                 # models like DETR start from zero-init queries to decoder, leading to cos_similarity = `nan`
                 if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
-                    print("HEY?")
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
