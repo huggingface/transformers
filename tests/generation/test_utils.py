@@ -421,8 +421,7 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
             # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            # shorter than `max_length` can be generated
             config.eos_token_id = None
             config.forced_eos_token_id = None
 
@@ -436,9 +435,9 @@ class GenerationTesterMixin:
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
             # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            # shorter than `max_length` can be generated
             config.eos_token_id = None
             config.forced_eos_token_id = None
             config.use_cache = False
@@ -470,9 +469,9 @@ class GenerationTesterMixin:
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
             # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            # shorter than `max_length` can be generated
             config.eos_token_id = None
             config.forced_eos_token_id = None
 
@@ -500,9 +499,9 @@ class GenerationTesterMixin:
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
             # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            # shorter than `max_length` can be generated
             config.eos_token_id = None
             config.forced_eos_token_id = None
 
@@ -532,9 +531,9 @@ class GenerationTesterMixin:
     def test_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
             # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            # shorter than `max_length` can be generated
             config.eos_token_id = None
             config.forced_eos_token_id = None
             config.use_cache = False
@@ -656,7 +655,9 @@ class GenerationTesterMixin:
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self.assertTrue(output_generate.sequences.shape[-1] == max_length)
-            self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     def test_beam_search_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
@@ -703,7 +704,9 @@ class GenerationTesterMixin:
             )
 
             self.assertTrue(output_generate.sequences.shape[-1] == max_length)
-            self._check_outputs(output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     @require_accelerate
     @require_torch_multi_accelerator
@@ -799,7 +802,9 @@ class GenerationTesterMixin:
                 self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
             self.assertTrue(output_generate.sequences.shape[-1] == max_length)
-            self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     def test_generate_without_input_ids(self):
         config, _, _, max_length = self._get_input_ids_and_config()
@@ -907,7 +912,9 @@ class GenerationTesterMixin:
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self.assertTrue(output_generate.sequences.shape[-1] == max_length)
-            self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     # TODO: @gante
     @is_flaky()
@@ -1036,7 +1043,9 @@ class GenerationTesterMixin:
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self.assertTrue(output_generate.sequences.shape[-1] == max_length)
-            self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+            )
 
     def test_contrastive_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -2257,6 +2266,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
+    @slow
     def test_beam_search_low_memory(self):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
