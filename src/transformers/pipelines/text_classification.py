@@ -152,12 +152,7 @@ class TextClassificationPipeline(Pipeline):
 
             If `top_k` is used, one such dictionary is returned per label.
         """
-        if isinstance(inputs, str) or isinstance(inputs, dict):
-            inputs = (inputs,)
-        else:
-            inputs = tuple(
-                [inputs],
-            )  # noqa: C409
+        inputs = (inputs,)
         result = super().__call__(*inputs, **kwargs)
         # TODO try and retrieve it in a nicer way from _sanitize_parameters.
         _legacy = "top_k" not in kwargs
