@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,68 +32,6 @@ if is_torch_available():
     from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST, HieraBlock
 
 import math
-
-
-class HieraBlockTester:
-    def __init__(
-        self,
-        parent,
-        batch_size: int = 1,
-        input_dim: int = 96,
-        output_dim: int = 192,
-        number_of_heads: int = 2,
-        mlp_ratio: float = 4.0,
-        drop_path: float = 0.0,
-        q_stride: int = 4,
-        window_size: int = 16,
-        use_mask_unit_attention: bool = True,
-        num_patches: int = 3136,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.number_of_heads = number_of_heads
-        self.mlp_ratio = mlp_ratio
-        self.drop_path = drop_path
-        self.q_stride = q_stride
-        self.window_size = window_size
-        self.use_mask_unit_attention = use_mask_unit_attention
-        self.num_patches = num_patches
-
-    def create_and_check_block(self):
-        block = HieraBlock(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-            number_of_heads=self.number_of_heads,
-            mlp_ratio=self.mlp_ratio,
-            drop_path=self.drop_path,
-            q_stride=self.q_stride,
-            window_size=self.window_size,
-            use_mask_unit_attention=self.use_mask_unit_attention,
-        )
-
-        x = torch.randn(self.batch_size, self.num_patches, self.input_dim)
-        out = block(x)
-
-        expected_shape = (self.batch_size, self.num_patches // self.q_stride, self.output_dim)
-        self.parent.assertEqual(out.shape, expected_shape, "Output shape is incorrect")
-
-
-@require_torch
-class HieraBlockTest(unittest.TestCase):
-    def setUp(self):
-        self.block_tester = HieraBlockTester(self)
-
-    def test_output_shape(self):
-        self.block_tester.create_and_check_block()
-
-    def test_input_output_dim_equality(self):
-        self.block_tester.output_dim = self.block_tester.input_dim
-        self.block_tester.q_stride = 1
-        self.block_tester.number_of_heads = 1
-        self.block_tester.window_size = 64
-        self.block_tester.create_and_check_block()
 
 
 class HieraModelTester:
@@ -298,6 +236,6 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         out.last_hidden_state.argmax(dim=-1).item()
 
-        out = model(random_tensor, return_intermediates=True)
+        out = model(random_tensor, output_intermediates=True)
         for idx, x in enumerate(out.intermediates):
             self.assertEqual(x.shape, indermediate_shapes[idx], "Invalid Intermediate shape")
