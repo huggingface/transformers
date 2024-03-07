@@ -2226,8 +2226,8 @@ class GenerationMixin:
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
-                    scores=scores,
-                    logits=logits,
+                    scores=(scores,),
+                    logits=(logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
                     decoder_attentions=None,
@@ -2508,8 +2508,8 @@ class GenerationMixin:
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
-                    scores=next_tokens_scores,
-                    logits=next_token_logits,
+                    scores=(next_tokens_scores,),
+                    logits=(next_token_logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
                     decoder_attentions=None,
@@ -2807,8 +2807,8 @@ class GenerationMixin:
                     return_dict_in_generate=return_dict_in_generate,
                     #sequences=next_tokens[:, None] # doesn't seem to make a difference. Handled downstream
                     sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
-                    scores=next_token_scores,
-                    logits=next_token_logits,
+                    scores=(next_token_scores,),
+                    logits=(next_token_logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
                     decoder_attentions=None,
@@ -4636,7 +4636,7 @@ class GenerationMixin:
                     sequences=valid_tokens,
                     scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
                     # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
-                    logits=next_token_logits,
+                    logits=(next_token_logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
                     decoder_attentions=None,

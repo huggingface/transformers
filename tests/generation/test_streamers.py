@@ -190,7 +190,10 @@ class TestOutputIteratorStreamer:
                 for output_object in answer:
                     for output_name in outputs.keys():
                         new_values = getattr(output_object, output_name)
-                        if new_values is not None:
+                        if (new_values is not None) and (len(new_values) > 0):
+                            if output_name != 'sequences':
+                                # unpack tuple
+                                new_values = new_values[0]
                             new_values = new_values.cpu()
                             if new_values.ndim == 1:
                                 new_values = new_values.unsqueeze(0)
