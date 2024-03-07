@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...tokenization_utils_base import LARGE_INTEGER, BatchEncoding, EncodedInput, TruncationStrategy, AddedToken
+from ...tokenization_utils_base import LARGE_INTEGER, AddedToken, BatchEncoding, EncodedInput, TruncationStrategy
 from ...utils import (
     PaddingStrategy,
     TensorType,
@@ -408,7 +408,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         """
         # NOTE: this condition had to be changed to account for the fact
         #       that we are working with character id vectors
-        
+
         if isinstance(ids, list) and isinstance(ids[0], int):
             index = ids[1] - 1
             if index in self._added_tokens_decoder:
@@ -531,7 +531,10 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[List[int]],
+        token_ids_1: Optional[List[List[int]]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
