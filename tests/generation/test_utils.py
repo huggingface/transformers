@@ -1082,7 +1082,7 @@ class GenerationTesterMixin:
             model = model_class(config).eval()
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
-                new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+                new_model = model_class.from_pretrained(tmp_dir, device_map=torch_device)
 
                 new_model.generate(
                     input_ids,
