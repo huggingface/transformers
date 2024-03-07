@@ -110,7 +110,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             `do_basic_tokenize=True`
-        cls_character_id (`int`, *optional*, defaults to 256)
+        cls_character_id (`int`, *optional*, defaults to 256):
             Id used to generate the character id vector for the `[CLS]` token.
         sep_character_id (`int`, *optional*, defaults to 257):
             Id used to generate the character id vector for the `[SEP]` token.
