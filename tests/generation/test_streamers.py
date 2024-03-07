@@ -186,35 +186,34 @@ class TestOutputIteratorStreamer:
 
         n_times_field_extended = Counter()
         for answer in streamer:
-            if isinstance(answer, list):
-                for output_object in answer:
-                    for output_name in outputs.keys():
-                        new_values = getattr(output_object, output_name)
-                        if (new_values is not None) and (len(new_values) > 0):
-                            if output_name != 'sequences':
-                                # unpack tuple
-                                new_values = new_values[0]
-                            new_values = new_values.cpu()
-                            if new_values.ndim == 1:
-                                new_values = new_values.unsqueeze(0)
-                            outputs[output_name] = torch.cat([outputs[output_name], new_values], axis=-1)
-                            n_times_field_extended[output_name] +=1
+            #if isinstance(answer, list):
+            assert isinstance(answer, list)
+            for output_object in answer:
+                for output_name in outputs.keys():
+                    new_values = getattr(output_object, output_name)
+                    if (new_values is not None) and (len(new_values) > 0):
+                        if output_name != 'sequences':
+                            # unpack tuple
+                            new_values = new_values[0]
+                        new_values = new_values.cpu()
+                        if new_values.ndim == 1:
+                            new_values = new_values.unsqueeze(0)
+                        outputs[output_name] = torch.cat([outputs[output_name], new_values], axis=-1)
+                        n_times_field_extended[output_name] +=1
 
         for output_name in outputs.keys():
             print(output_name)
             baseline_values = getattr(baseline_outputs, output_name)
             assert baseline_values is not None
+            assert type(baseline_values) == type(getattr(output_object, output_name))
+            assert n_times_field_extended[output_name] > 1 # make sure we're not just comparing to the final output tensor
 
-            assert type(baseline_values) == type(getattr(output_object, output_name)) # scores = tuple(tensors) :(
-            #print(baseline_values) # why is this a tuple...
-            #TODO: apparently scores is *supposed* to be a tuple of tensors????
             if not isinstance(baseline_values, torch.Tensor):
                 baseline_values = torch.cat(baseline_values, axis=-1)
             target_values = outputs[output_name]
-
             assert baseline_values.shape == target_values.shape
             assert baseline_values.tolist() == target_values.tolist()
-            assert n_times_field_extended[output_name] > 1 # make sure we're not just comparing to the final output tensor
+
 
     @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
     @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
@@ -227,9 +226,7 @@ class TestOutputIteratorStreamer:
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        # generation_kwargs 'input_ids'] = input_ids
-        # generation_kwargs['max_new_tokens'] = 10
-        # generation_kwargs['return_dict_in_generate'] = False
+
         generation_kwargs = dict(
             input_ids=input_ids,
             max_new_tokens=max_new_tokens,
