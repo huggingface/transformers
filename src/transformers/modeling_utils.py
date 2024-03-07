@@ -504,7 +504,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax"]:
+        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
@@ -795,7 +795,7 @@ def _load_state_dict_into_meta_model(
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
+            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif (
             hf_quantizer is None
             or (not hf_quantizer.requires_parameters_quantization)

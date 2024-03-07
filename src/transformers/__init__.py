@@ -576,6 +576,7 @@ _import_structure = {
         "LxmertTokenizer",
     ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
+    "models.mamba": ["MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MambaConfig"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -861,6 +862,11 @@ _import_structure = {
         "TvpConfig",
         "TvpProcessor",
     ],
+    "models.udop": [
+        "UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UdopConfig",
+        "UdopProcessor",
+    ],
     "models.umt5": ["UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1140,6 +1146,7 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
+    _import_structure["models.udop"].append("UdopTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -1219,6 +1226,7 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.udop"].append("UdopTokenizerFast")
     _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -1406,7 +1414,6 @@ else:
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
-            "top_k_top_p_filtering",
         ]
     )
     _import_structure["generation_utils"] = []
@@ -2592,6 +2599,14 @@ else:
             "M2M100PreTrainedModel",
         ]
     )
+    _import_structure["models.mamba"].extend(
+        [
+            "MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MambaForCausalLM",
+            "MambaModel",
+            "MambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
     _import_structure["models.markuplm"].extend(
         [
@@ -3432,6 +3447,15 @@ else:
             "TvpPreTrainedModel",
         ]
     )
+    _import_structure["models.udop"].extend(
+        [
+            "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UdopEncoderModel",
+            "UdopForConditionalGeneration",
+            "UdopModel",
+            "UdopPreTrainedModel",
+        ],
+    )
     _import_structure["models.umt5"].extend(
         [
             "UMT5EncoderModel",
@@ -3810,7 +3834,6 @@ else:
             "TFTemperatureLogitsWarper",
             "TFTopKLogitsWarper",
             "TFTopPLogitsWarper",
-            "tf_top_k_top_p_filtering",
         ]
     )
     _import_structure["generation_tf_utils"] = []
@@ -5380,6 +5403,7 @@ if TYPE_CHECKING:
         LxmertTokenizer,
     )
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
+    from .models.mamba import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, MambaConfig
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5666,6 +5690,7 @@ if TYPE_CHECKING:
         TvpConfig,
         TvpProcessor,
     )
+    from .models.udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig, UdopProcessor
     from .models.umt5 import UMT5Config
     from .models.unispeech import (
         UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5941,6 +5966,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
+        from .models.udop import UdopTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -6013,6 +6039,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.udop import UdopTokenizerFast
         from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -6203,7 +6230,6 @@ if TYPE_CHECKING:
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
-            top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
         from .models.albert import (
@@ -7181,6 +7207,12 @@ if TYPE_CHECKING:
             M2M100Model,
             M2M100PreTrainedModel,
         )
+        from .models.mamba import (
+            MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MambaForCausalLM,
+            MambaModel,
+            MambaPreTrainedModel,
+        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
             MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7867,6 +7899,13 @@ if TYPE_CHECKING:
             TvpModel,
             TvpPreTrainedModel,
         )
+        from .models.udop import (
+            UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UdopEncoderModel,
+            UdopForConditionalGeneration,
+            UdopModel,
+            UdopPreTrainedModel,
+        )
         from .models.umt5 import (
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
@@ -8176,7 +8215,6 @@ if TYPE_CHECKING:
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
-            tf_top_k_top_p_filtering,
         )
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_utils import (

@@ -16,16 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Utilities for Generation
 
-This page lists all the utility functions used by [`~generation.GenerationMixin.generate`],
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`], and
-[`~generation.GenerationMixin.constrained_beam_search`].
-
-Most of those are only useful if you are studying the code of the generate methods in the library.
+This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 
 ## Generate Outputs
 
@@ -344,12 +335,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] ConstrainedBeamSearchScorer
     - process
     - finalize
-
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
 
 ## Streamers
 
