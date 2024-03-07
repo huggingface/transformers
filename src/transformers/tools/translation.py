@@ -250,8 +250,8 @@ class TranslationTool(PipelineTool):
     model_class = AutoModelForSeq2SeqLM
     lang_to_code = LANGUAGE_CODES
 
-    inputs = ["text", "text", "text"]
-    outputs = ["text"]
+    inputs = {"text": str, "src_lang": str, "tgt_lang": str}
+    output_type = str
 
     def encode(self, text, src_lang, tgt_lang):
         if src_lang not in self.lang_to_code:

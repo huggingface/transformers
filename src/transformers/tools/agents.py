@@ -17,7 +17,7 @@
 import importlib.util
 import json
 from dataclasses import dataclass
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Any
 from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, is_torch_available, logging
@@ -36,6 +36,7 @@ if is_torch_available():
 else:
     StoppingCriteria = object
 
+_tools_are_initialized = False
 
 BASE_PYTHON_TOOLS = {
     "print": print,
@@ -49,6 +50,9 @@ BASE_PYTHON_TOOLS = {
 
 @dataclass
 class PreTool:
+    name: str
+    inputs: Dict[str, type]
+    output_type: type
     task: str
     description: str
     repo_id: str
@@ -79,7 +83,15 @@ def get_remote_tools(organization="huggingface-tools"):
             config = json.load(reader)
 
         task = repo_id.split("/")[-1]
-        tools[config["name"]] = PreTool(task=task, description=config["description"], repo_id=repo_id)
+        print(repo_id, config)
+        tools[config["name"]] = PreTool(
+            task=task,
+            description=config["description"],
+            repo_id=repo_id,
+            name=task,
+            inputs=config["inputs"],
+            output_type=config["output_type"]
+        )
 
     return tools
 
@@ -97,8 +109,16 @@ def _setup_default_tools():
     remote_tools = get_remote_tools()
     for task_name, tool_class_name in TASK_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
-        description = tool_class.description
-        HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
+        print(dir(tool_class))
+        HUGGINGFACE_DEFAULT_TOOLS[tool_name] = PreTool(
+            name=tool_class.name,
+            inputs=tool_class.inputs,
+            input_type=tool_class.output_type,
+            output_type=str,
+            task=task_name,
+            description=tool_class.description,
+            repo_id=None
+        )
 
     if not is_offline_mode():
         for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
@@ -144,7 +164,7 @@ class FinalAnswerTool(Tool):
     name = "final_answer"
     description = "Provides a final answer to the given problem"
     inputs = {"answer": str}
-    outputs = {"answer": str}
+    output_type = str
 
     def __call__(self):
         pass
@@ -331,6 +351,9 @@ class CodeAgent(Agent):
         # Run LLM
         prompt = self.system_prompt + f"\nTask: {task}"
         llm_output = self.llm_callable(prompt, stop=["Task:"])
+        self.log("====Executing with this prompt====")
+        self.log(prompt)
+
 
         # Parse
         code_action = self.extract_action(

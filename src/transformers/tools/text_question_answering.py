@@ -33,8 +33,8 @@ class TextQuestionAnsweringTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
-    inputs = ["text", "text"]
-    outputs = ["text"]
+    inputs = {"context": str, "question": str}
+    output_type= str
 
     def encode(self, text: str, question: str):
         prompt = QA_PROMPT.format(text=text, question=question)

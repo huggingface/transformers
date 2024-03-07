@@ -19,6 +19,7 @@ import torch
 from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5Processor
 from ..utils import is_datasets_available
 from .base import PipelineTool
+from typing import Any
 
 
 if is_datasets_available():
@@ -36,8 +37,8 @@ class TextToSpeechTool(PipelineTool):
     model_class = SpeechT5ForTextToSpeech
     post_processor_class = SpeechT5HifiGan
 
-    inputs = ["text"]
-    outputs = ["audio"]
+    inputs = {"text": str}
+    output_type = Any
 
     def setup(self):
         if self.post_processor is None:

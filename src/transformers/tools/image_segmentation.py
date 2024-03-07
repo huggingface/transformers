@@ -36,8 +36,8 @@ class ImageSegmentationTool(PipelineTool):
     name = "image_segmenter"
     model_class = CLIPSegForImageSegmentation
 
-    inputs = ["image", "text"]
-    outputs = ["image"]
+    inputs = {"image": Image.Image, "label": str}
+    output_type = Image.Image
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

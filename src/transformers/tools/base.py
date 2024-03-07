@@ -83,7 +83,25 @@ launch_gradio_demo({class_name})
 """
 
 
-class Tool:
+from typing import Dict, List, Type
+
+class ToolMeta(type):
+    def __new__(cls, name, bases, dct):
+        # Only apply checks to subclasses of Tool, not Tool itself
+        if bases:
+            required_attributes = {
+                'description': str,
+                'name': str,
+                'inputs': dict,
+                'output_type': type,
+            }
+            for attr, expected_type in required_attributes.items():
+                if attr not in dct or not isinstance(dct[attr], expected_type):
+                    raise TypeError(f"{attr} must be of type {expected_type.__name__}")
+        return super().__new__(cls, name, bases, dct)
+
+
+class Tool(metaclass=ToolMeta):
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
     following class attributes:
@@ -105,12 +123,12 @@ class Tool:
     instantiation.
     """
 
-    description: str = "This is a tool that ..."
-    name: str = ""
+    description: str
+    name: str
 
     # TODO: Replace the below str with enum
-    inputs: Dict[str, str]
-    outputs: List[str]
+    inputs: Dict[str, type]
+    output_type: type
 
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
@@ -432,6 +450,10 @@ class RemoteTool(Tool):
             The corresponding `tool_class` if this is a remote version of an existing tool. Will help determine when
             the output should be converted to another type (like images).
     """
+    name = "remote tool"
+    description = "a remote tool"
+    inputs = {"default": Any}
+    output_type = str
 
     def __init__(self, endpoint_url=None, token=None, tool_class=None):
         self.endpoint_url = endpoint_url
@@ -547,6 +569,10 @@ class PipelineTool(Tool):
     model_class = None
     post_processor_class = AutoProcessor
     default_checkpoint = None
+    description = "This is a pipeline tool"
+    name = "pipeline"
+    inputs = {"prompt": str}
+    output_type = str
 
     def __init__(
         self,
@@ -837,12 +863,13 @@ def from_langchain(langchain_tool):
 
     return ConvertedTool()
 
+
 class CalculatorTool(Tool):
     name = "calculator"
     description = "This is a tool that calculates. It can be used to perform simple arithmetic operations. The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers"
 
     inputs = {"expression": str}
-    outputs = {"calculator_result": str}
+    output_type = str
 
     def __call__(self, expression):
         local_dict = {"pi": math.pi, "e": math.e}

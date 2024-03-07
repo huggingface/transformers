@@ -75,3 +75,7 @@ Action:
         agent = CodeAgent(fake_code_llm, toolbox=[CalculatorTool()])
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert output == "7.2904"
+
+    def test_setup_agent_with_empty_toolbox():
+        agent = ReactAgent(fake_react_llm, toolbox=[])
+        assert False # TODO: finish this

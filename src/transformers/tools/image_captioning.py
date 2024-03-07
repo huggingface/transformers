@@ -34,8 +34,8 @@ class ImageCaptioningTool(PipelineTool):
     name = "image_captioner"
     model_class = AutoModelForVision2Seq
 
-    inputs = ["image"]
-    outputs = ["text"]
+    inputs = {"image": Image.Image}
+    output_type = str
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

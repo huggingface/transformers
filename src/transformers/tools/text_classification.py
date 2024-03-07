@@ -18,6 +18,7 @@ import torch
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
 from .base import PipelineTool
+from typing import Union, List
 
 
 class TextClassificationTool(PipelineTool):
@@ -42,8 +43,8 @@ class TextClassificationTool(PipelineTool):
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSequenceClassification
 
-    inputs = ["text", ["text"]]
-    outputs = ["text"]
+    inputs = {"text": Union[str, List[str]]}
+    output_type: str
 
     def setup(self):
         super().setup()
