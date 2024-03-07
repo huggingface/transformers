@@ -1188,12 +1188,14 @@ class ModelUtilsTest(TestCasePlus):
         # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
+        model = AutoModelForCausalLM.from_pretrained(
+            "joaogante/tiny-random-gpt2-with-generation-config", use_safetensors=False
+        )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
         # 2. Load with `device_map`
         model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto"
+            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto", use_safetensors=False
         )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
