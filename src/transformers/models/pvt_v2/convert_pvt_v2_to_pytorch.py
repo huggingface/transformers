@@ -188,19 +188,19 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
 
     # define default PvtV2 configuration
     if pvt_v2_size == "b0":
-        config_path = "FoamoftheSea/pvt_v2_b0"
+        config_path = "OpenGVLab/pvt_v2_b0"
     elif pvt_v2_size == "b1":
-        config_path = "FoamoftheSea/pvt_v2_b1"
+        config_path = "OpenGVLab/pvt_v2_b1"
     elif pvt_v2_size == "b2":
-        config_path = "FoamoftheSea/pvt_v2_b2"
+        config_path = "OpenGVLab/pvt_v2_b2"
     elif pvt_v2_size == "b2-linear":
-        config_path = "FoamoftheSea/pvt_v2_b2_linear"
+        config_path = "OpenGVLab/pvt_v2_b2_linear"
     elif pvt_v2_size == "b3":
-        config_path = "FoamoftheSea/pvt_v2_b3"
+        config_path = "OpenGVLab/pvt_v2_b3"
     elif pvt_v2_size == "b4":
-        config_path = "FoamoftheSea/pvt_v2_b4"
+        config_path = "OpenGVLab/pvt_v2_b4"
     elif pvt_v2_size == "b5":
-        config_path = "FoamoftheSea/pvt_v2_b5"
+        config_path = "OpenGVLab/pvt_v2_b5"
     else:
         raise ValueError(
             f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "

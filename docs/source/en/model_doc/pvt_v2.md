@@ -50,8 +50,8 @@ import torch
 from transformers import AutoModelForImageClassification, AutoImageProcessor
 from PIL import Image
 
-model = AutoModelForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0")
-image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+model = AutoModelForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0")
+image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 processed = image_processor(image)
@@ -70,7 +70,7 @@ from PIL import Image
 model = AutoModelForObjectDetection.from_config(
     config=AutoConfig.from_pretrained(
         "SenseTime/deformable-detr",
-        backbone_config=AutoConfig.from_pretrained("FoamoftheSea/pvt_v2_b5"),
+        backbone_config=AutoConfig.from_pretrained("OpenGVLab/pvt_v2_b5"),
         use_timm_backbone=False
     ),
 )

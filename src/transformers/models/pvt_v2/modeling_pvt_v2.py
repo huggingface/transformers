@@ -43,20 +43,20 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PvtV2Config"
 
-_CHECKPOINT_FOR_DOC = "FoamoftheSea/pvt_v2_b0"
+_CHECKPOINT_FOR_DOC = "OpenGVLab/pvt_v2_b0"
 _EXPECTED_OUTPUT_SHAPE = [1, 256, 7, 7]
 
-_IMAGE_CLASS_CHECKPOINT = "FoamoftheSea/pvt_v2_b0"
+_IMAGE_CLASS_CHECKPOINT = "OpenGVLab/pvt_v2_b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_281"  # ImageNet ID for "tabby, tabby cat"
 
 PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FoamoftheSea/pvt_v2_b0",
-    "FoamoftheSea/pvt_v2_b1",
-    "FoamoftheSea/pvt_v2_b2",
-    "FoamoftheSea/pvt_v2_b2_linear",
-    "FoamoftheSea/pvt_v2_b3",
-    "FoamoftheSea/pvt_v2_b4",
-    "FoamoftheSea/pvt_v2_b5",
+    "OpenGVLab/pvt_v2_b0",
+    "OpenGVLab/pvt_v2_b1",
+    "OpenGVLab/pvt_v2_b2",
+    "OpenGVLab/pvt_v2_b2_linear",
+    "OpenGVLab/pvt_v2_b3",
+    "OpenGVLab/pvt_v2_b4",
+    "OpenGVLab/pvt_v2_b5",
     # See all PVT models at https://huggingface.co/models?filter=pvt_v2
 ]
 
@@ -667,9 +667,9 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        >>> processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "FoamoftheSea/pvt_v2_b0", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "OpenGVLab/pvt_v2_b0", out_features=["stage1", "stage2", "stage3", "stage4"]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

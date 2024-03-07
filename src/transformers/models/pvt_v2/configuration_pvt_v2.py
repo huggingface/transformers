@@ -26,13 +26,13 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pvt_v2_b0": "https://huggingface.co/FoamoftheSea/pvt_v2_b0",
-    "pvt_v2_b1": "https://huggingface.co/FoamoftheSea/pvt_v2_b1",
-    "pvt_v2_b2": "https://huggingface.co/FoamoftheSea/pvt_v2_b2",
-    "pvt_v2_b2_linear": "https://huggingface.co/FoamoftheSea/pvt_v2_b2_linear",
-    "pvt_v2_b3": "https://huggingface.co/FoamoftheSea/pvt_v2_b3",
-    "pvt_v2_b4": "https://huggingface.co/FoamoftheSea/pvt_v2_b4",
-    "pvt_v2_b5": "https://huggingface.co/FoamoftheSea/pvt_v2_b5",
+    "pvt_v2_b0": "https://huggingface.co/OpenGVLab/pvt_v2_b0",
+    "pvt_v2_b1": "https://huggingface.co/OpenGVLab/pvt_v2_b1",
+    "pvt_v2_b2": "https://huggingface.co/OpenGVLab/pvt_v2_b2",
+    "pvt_v2_b2_linear": "https://huggingface.co/OpenGVLab/pvt_v2_b2_linear",
+    "pvt_v2_b3": "https://huggingface.co/OpenGVLab/pvt_v2_b3",
+    "pvt_v2_b4": "https://huggingface.co/OpenGVLab/pvt_v2_b4",
+    "pvt_v2_b5": "https://huggingface.co/OpenGVLab/pvt_v2_b5",
 }
 
 
@@ -41,7 +41,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate a Pvt V2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Pvt V2 B0
-    [FoamoftheSea/pvt_v2_b0](https://huggingface.co/FoamoftheSea/pvt_v2_b0) architecture.
+    [OpenGVLab/pvt_v2_b0](https://huggingface.co/OpenGVLab/pvt_v2_b0) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -102,7 +102,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     >>> # Initializing a pvt_v2_b0 style configuration
     >>> configuration = PvtV2Config()
 
-    >>> # Initializing a model from the FoamoftheSea/pvt_v2_b0 style configuration
+    >>> # Initializing a model from the OpenGVLab/pvt_v2_b0 style configuration
     >>> model = PvtV2Model(configuration)
 
     >>> # Accessing the model configuration

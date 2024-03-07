@@ -322,8 +322,8 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
-        model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
+        image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
+        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0").to(torch_device).eval()
 
         image = prepare_img()
         encoded_inputs = image_processor(images=image, return_tensors="pt")
@@ -341,9 +341,9 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_model(self):
-        model = PvtV2Model.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
+        model = PvtV2Model.from_pretrained("OpenGVLab/pvt_v2_b0").to(torch_device).eval()
 
-        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -370,9 +370,9 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0", torch_dtype=torch.float16)
+        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", torch_dtype=torch.float16)
         model.to(torch_device)
-        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
