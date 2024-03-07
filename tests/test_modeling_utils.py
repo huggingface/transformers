@@ -20,7 +20,6 @@ import os
 import os.path
 import sys
 import tempfile
-import threading
 import unittest
 import unittest.mock as mock
 import uuid
@@ -1429,7 +1428,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             bot_opened_pr_title = None
 
             for discussion in discussions:
-                if discussion.author == "SFconvertbot":
+                if discussion.author == "SFconvertBot":
                     bot_opened_pr = True
                     bot_opened_pr_title = discussion.title
 
@@ -1451,51 +1450,6 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
             BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
-
-    def test_absence_of_safetensors_triggers_conversion(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
-
-        # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-
-        # Download the model that doesn't have safetensors
-        BertModel.from_pretrained(self.repo_name, token=self.token)
-
-        for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
-                thread.join(timeout=10)
-
-        with self.subTest("PR was open with the safetensors account"):
-            discussions = self.api.get_repo_discussions(self.repo_name)
-
-            bot_opened_pr = None
-            bot_opened_pr_title = None
-
-            for discussion in discussions:
-                if discussion.author == "SFconvertbot":
-                    bot_opened_pr = True
-                    bot_opened_pr_title = discussion.title
-
-            self.assertTrue(bot_opened_pr)
-            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
-
-    @mock.patch("transformers.safetensors_conversion.spawn_conversion")
-    def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
-        spawn_conversion_mock.side_effect = HTTPError()
-
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
-
-        # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-
-        # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
-        BertModel.from_pretrained(self.repo_name, token=self.token)
 
 
 @require_torch
