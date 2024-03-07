@@ -110,15 +110,24 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         never_split (`Iterable`, *optional*):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             `do_basic_tokenize=True`
+        cls_character_id (`int`, *optional*, defaults to 256)
+            Id used to generate the character id vector for the `[CLS]` token.
+        sep_character_id (`int`, *optional*, defaults to 257):
+            Id used to generate the character id vector for the `[SEP]` token.
         bow_character_id (`int`, *optional*, defaults to 258):
             Id used to delimit the beginning of a token. First element in the character_id vector of the token.
         eow_character_id (`int`, *optional*, defaults to 259):
             Id used to delimit the end of a token. Last element in the character_id vector of the token, before padding.
         pad_character_id (`int`, *optional*, defaults to 260):
             Id used to delimit pad all character_id vectors to the same length, the maximum token length.
-        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
+        mask_character_id (`int`, *optional*, defaults to 261):
+            Id used to generate the character id vector for the `[MASK]` token.
+        bow_token (`int`, *optional*, defaults to `"[BOW]"`):
+            Symbol used to represent the beginning of a token. This is not really a token but is used to have an internal
+            id in the tokenizer object to build character id vectors.
+        eow_token (`int`, *optional*, defaults to `"[EOW]"`):
+            Symbol used to represent the end of a token. This is not really a token but is used to have an internal
+            id in the tokenizer object to build character id vectors.
         sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
@@ -139,6 +148,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original CHARACTER_BERT).
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
