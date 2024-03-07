@@ -25,11 +25,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    keras_serializable,
-    unpack_inputs,
-)
+from ...modeling_tf_utils import TFPreTrainedModel, keras, keras_serializable, unpack_inputs
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -58,7 +54,7 @@ TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
+class TFSwiftFormerPatchEmbeddingSequential(keras.layers.Layer):
     """
     The sequential component of the patch embedding layer.
 
@@ -71,11 +67,11 @@ class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.out_chs = config.embed_dims[0]
 
-        self.zero_padding = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.conv1 = tf.keras.layers.Conv2D(self.out_chs // 2, kernel_size=3, strides=2, name="0")
-        self.batch_norm1 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="1")
-        self.conv2 = tf.keras.layers.Conv2D(self.out_chs, kernel_size=3, strides=2, name="3")
-        self.batch_norm2 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="4")
+        self.zero_padding = keras.layers.ZeroPadding2D(padding=(1, 1))
+        self.conv1 = keras.layers.Conv2D(self.out_chs // 2, kernel_size=3, strides=2, name="0")
+        self.batch_norm1 = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="1")
+        self.conv2 = keras.layers.Conv2D(self.out_chs, kernel_size=3, strides=2, name="3")
+        self.batch_norm2 = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="4")
         self.config = config
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -107,7 +103,7 @@ class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
                 self.batch_norm2.build((None, None, None, self.out_chs))
 
 
-class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
+class TFSwiftFormerPatchEmbedding(keras.layers.Layer):
     """
     Patch Embedding Layer constructed of two 2D convolutional layers.
 
@@ -153,7 +149,7 @@ def drop_path(input: tf.Tensor, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-class TFSwiftFormerDropPath(tf.keras.layers.Layer):
+class TFSwiftFormerDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
@@ -164,7 +160,7 @@ class TFSwiftFormerDropPath(tf.keras.layers.Layer):
         return drop_path(hidden_states, self.drop_prob, training)
 
 
-class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
+class TFSwiftFormerEmbeddings(keras.layers.Layer):
     """
     Embeddings layer consisting of a single 2D convolutional and batch normalization layer.
 
@@ -188,9 +184,9 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
-        self.pad = tf.keras.layers.ZeroPadding2D(padding=padding)
-        self.proj = tf.keras.layers.Conv2D(self.embed_dim, kernel_size=patch_size, strides=stride, name="proj")
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+        self.pad = keras.layers.ZeroPadding2D(padding=padding)
+        self.proj = keras.layers.Conv2D(self.embed_dim, kernel_size=patch_size, strides=stride, name="proj")
+        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.pad(x)
@@ -210,7 +206,7 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
                 self.norm.build((None, None, None, self.embed_dim))
 
 
-class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
+class TFSwiftFormerConvEncoder(keras.layers.Layer):
     """
     `SwiftFormerConvEncoder` with 3*3 and 1*1 convolutions.
 
@@ -224,16 +220,19 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
         hidden_dim = int(config.mlp_ratio * dim)
 
         self.dim = dim
-        self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
-        self.point_wise_conv1 = tf.keras.layers.Conv2D(hidden_dim, kernel_size=1, name="point_wise_conv1")
+        self.pad = keras.layers.ZeroPadding2D(padding=(1, 1))
+        self.depth_wise_conv = keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
+        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+        self.point_wise_conv1 = keras.layers.Conv2D(hidden_dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
-        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
-        self.drop_path = tf.keras.layers.Dropout(name="drop_path", rate=config.drop_conv_encoder_rate)
+        self.point_wise_conv2 = keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
+        self.drop_path = keras.layers.Dropout(name="drop_path", rate=config.drop_conv_encoder_rate)
         self.hidden_dim = int(config.mlp_ratio * self.dim)
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         self.layer_scale = self.add_weight(
             name="layer_scale",
             shape=(self.dim),  # TODO: check this
@@ -241,9 +240,6 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
             trainable=True,
         )
 
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "depth_wise_conv", None) is not None:
             with tf.name_scope(self.depth_wise_conv.name):
                 self.depth_wise_conv.build(self.dim)
@@ -272,7 +268,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
         return x
 
 
-class TFSwiftFormerMlp(tf.keras.layers.Layer):
+class TFSwiftFormerMlp(keras.layers.Layer):
     """
     MLP layer with 1*1 convolutions.
 
@@ -285,12 +281,12 @@ class TFSwiftFormerMlp(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         hidden_features = int(in_features * config.mlp_ratio)
-        self.norm1 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm1")
-        self.fc1 = tf.keras.layers.Conv2D(hidden_features, 1, name="fc1")
+        self.norm1 = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm1")
+        self.fc1 = keras.layers.Conv2D(hidden_features, 1, name="fc1")
         act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer
-        self.fc2 = tf.keras.layers.Conv2D(in_features, 1, name="fc2")
-        self.drop = tf.keras.layers.Dropout(rate=config.drop_mlp_rate)
+        self.fc2 = keras.layers.Conv2D(in_features, 1, name="fc2")
+        self.drop = keras.layers.Dropout(rate=config.drop_mlp_rate)
         self.hidden_features = hidden_features
         self.in_features = in_features
 
@@ -318,7 +314,7 @@ class TFSwiftFormerMlp(tf.keras.layers.Layer):
                 self.fc2.build((None, None, None, self.hidden_features))
 
 
-class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
+class TFSwiftFormerEfficientAdditiveAttention(keras.layers.Layer):
     """
     Efficient Additive Attention module for SwiftFormer.
 
@@ -332,24 +328,25 @@ class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
 
         self.dim = dim
 
-        self.to_query = tf.keras.layers.Dense(dim, name="to_query")
-        self.to_key = tf.keras.layers.Dense(dim, name="to_key")
+        self.to_query = keras.layers.Dense(dim, name="to_query")
+        self.to_key = keras.layers.Dense(dim, name="to_key")
 
         self.scale_factor = dim**-0.5
-        self.proj = tf.keras.layers.Dense(dim, name="proj")
-        self.final = tf.keras.layers.Dense(dim, name="final")
+        self.proj = keras.layers.Dense(dim, name="proj")
+        self.final = keras.layers.Dense(dim, name="final")
 
     def build(self, input_shape=None):
-        self.w_g = self.add_weight(
-            name="w_g",
-            shape=(self.dim, 1),
-            initializer=tf.keras.initializers.RandomNormal(mean=0, stddev=1),
-            trainable=True,
-        )
-
         if self.built:
             return
         self.built = True
+
+        self.w_g = self.add_weight(
+            name="w_g",
+            shape=(self.dim, 1),
+            initializer=keras.initializers.RandomNormal(mean=0, stddev=1),
+            trainable=True,
+        )
+
         if getattr(self, "to_query", None) is not None:
             with tf.name_scope(self.to_query.name):
                 self.to_query.build(self.dim)
@@ -383,7 +380,7 @@ class TFSwiftFormerEfficientAdditiveAttention(tf.keras.layers.Layer):
         return out
 
 
-class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
+class TFSwiftFormerLocalRepresentation(keras.layers.Layer):
     """
     Local Representation module for SwiftFormer that is implemented by 3*3 depth-wise and point-wise convolutions.
 
@@ -397,15 +394,19 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
 
         self.dim = dim
 
-        self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
-        self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
+        self.pad = keras.layers.ZeroPadding2D(padding=(1, 1))
+        self.depth_wise_conv = keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
+        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+        self.point_wise_conv1 = keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
-        self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
-        self.drop_path = tf.keras.layers.Identity(name="drop_path")
+        self.point_wise_conv2 = keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
+        self.drop_path = keras.layers.Identity(name="drop_path")
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+
         self.layer_scale = self.add_weight(
             name="layer_scale",
             shape=(self.dim),
@@ -413,9 +414,6 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
             trainable=True,
         )
 
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "depth_wise_conv", None) is not None:
             with tf.name_scope(self.depth_wise_conv.name):
                 self.depth_wise_conv.build((None, None, None, self.dim))
@@ -444,7 +442,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
         return x
 
 
-class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
+class TFSwiftFormerEncoderBlock(keras.layers.Layer):
     """
     SwiftFormer Encoder Block for SwiftFormer. It consists of (1) Local representation module, (2)
     SwiftFormerEfficientAdditiveAttention, and (3) MLP block.
@@ -463,7 +461,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         self.local_representation = TFSwiftFormerLocalRepresentation(config, dim=dim, name="local_representation")
         self.attn = TFSwiftFormerEfficientAdditiveAttention(config, dim=dim, name="attn")
         self.linear = TFSwiftFormerMlp(config, in_features=dim, name="linear")
-        self.drop_path = TFSwiftFormerDropPath(config) if drop_path > 0.0 else tf.keras.layers.Identity()
+        self.drop_path = TFSwiftFormerDropPath(config) if drop_path > 0.0 else keras.layers.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.dim = dim
@@ -477,13 +475,13 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         self.layer_scale_1 = self.add_weight(
             name="layer_scale_1",
             shape=(self.dim),
-            initializer=tf.keras.initializers.constant(self.layer_scale_init_value),
+            initializer=keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
         self.layer_scale_2 = self.add_weight(
             name="layer_scale_2",
             shape=(self.dim),
-            initializer=tf.keras.initializers.constant(self.layer_scale_init_value),
+            initializer=keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
 
@@ -513,7 +511,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         return x
 
 
-class TFSwiftFormerStage(tf.keras.layers.Layer):
+class TFSwiftFormerStage(keras.layers.Layer):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
@@ -552,7 +550,7 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
                 layer.build(None)
 
 
-class TFSwiftFormerEncoder(tf.keras.layers.Layer):
+class TFSwiftFormerEncoder(keras.layers.Layer):
     def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.config = config
@@ -629,7 +627,7 @@ TFSWIFTFORMER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -638,7 +636,7 @@ TFSWIFTFORMER_START_DOCSTRING = r"""
     TF 2.0 models accepts two formats as inputs:
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    This second option is useful when using [`keras.Model.fit`] method which currently requires having all the
     tensors in the first argument of the model call function: `model(inputs)`.
     If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
     first positional argument :
@@ -672,7 +670,7 @@ TFSWIFTFORMER_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFSwiftFormerMainLayer(tf.keras.layers.Layer):
+class TFSwiftFormerMainLayer(keras.layers.Layer):
     config_class = SwiftFormerConfig
 
     def __init__(self, config: SwiftFormerConfig, **kwargs):
@@ -783,16 +781,16 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
         # Classifier head
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
         self.head = (
-            tf.keras.layers.Dense(self.num_labels, name="head")
+            keras.layers.Dense(self.num_labels, name="head")
             if self.num_labels > 0
-            else tf.keras.layers.Identity(name="head")
+            else keras.layers.Identity(name="head")
         )
         self.dist_head = (
-            tf.keras.layers.Dense(self.num_labels, name="dist_head")
+            keras.layers.Dense(self.num_labels, name="dist_head")
             if self.num_labels > 0
-            else tf.keras.layers.Identity(name="dist_head")
+            else keras.layers.Identity(name="dist_head")
         )
 
     @unpack_inputs
@@ -846,20 +844,20 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
                     self.config.problem_type = "multi_label_classification"
 
             if self.config.problem_type == "regression":
-                loss_fct = tf.keras.losses.MSE
+                loss_fct = keras.losses.MSE
                 if self.num_labels == 1:
                     loss = loss_fct(labels.squeeze(), logits.squeeze())
                 else:
                     loss = loss_fct(labels, logits)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
-                    from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+                loss_fct = keras.losses.SparseCategoricalCrossentropy(
+                    from_logits=True, reduction=keras.losses.Reduction.NONE
                 )
                 loss = loss_fct(labels, logits)
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+                loss_fct = keras.losses.SparseCategoricalCrossentropy(
                     from_logits=True,
-                    reduction=tf.keras.losses.Reduction.NONE,
+                    reduction=keras.losses.Reduction.NONE,
                 )
                 loss = loss_fct(labels, logits)
 
