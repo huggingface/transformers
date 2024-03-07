@@ -2386,7 +2386,6 @@ class GenerationMixin:
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if eos_token_id is not None:
             warnings.warn(
                 "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
@@ -4592,7 +4591,6 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if eos_token_id is not None:
             warnings.warn(
                 "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
@@ -4644,9 +4642,6 @@ class GenerationMixin:
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
 
-        # other auxiliary variables
-        max_len = stopping_criteria[0].max_length
-
         this_peer_finished = False  # used by synced_gpus only
         while True:
             if synced_gpus:
@@ -4668,7 +4663,7 @@ class GenerationMixin:
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
-            last_assistant_token_is_eos = stopping_criteria[-1](candidate_input_ids, None)
+            is_done_candidate = stopping_criteria(candidate_input_ids, None)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -4703,15 +4698,13 @@ class GenerationMixin:
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
-            max_matches = max_len - cur_len - 1
             if do_sample and candidate_logits is not None:
                 valid_tokens, n_matches = _speculative_sampling(
                     candidate_input_ids,
                     candidate_logits,
                     candidate_length,
                     new_logits,
-                    last_assistant_token_is_eos,
-                    max_matches,
+                    is_done_candidate,
                 )
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
@@ -4728,9 +4721,8 @@ class GenerationMixin:
                 n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
 
                 # Ensure we don't generate beyond max_len or an EOS token
-                if last_assistant_token_is_eos and n_matches == candidate_length:
+                if is_done_candidate and n_matches == candidate_length:
                     n_matches -= 1
-                n_matches = min(n_matches, max_matches)
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
@@ -4850,8 +4842,7 @@ def _speculative_sampling(
     candidate_logits,
     candidate_length,
     new_logits,
-    last_assistant_token_is_eos,
-    max_matches,
+    is_done_candidate,
 ):
     """
     Applies sampling as in the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf, algorithm 1). Returns
@@ -4876,16 +4867,15 @@ def _speculative_sampling(
     n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
 
     # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
-    if last_assistant_token_is_eos and n_matches == candidate_length:
+    if is_done_candidate and n_matches == candidate_length:
         # Output length is assumed to be `n_matches + 1`. Since we won't generate another token with the target model
         # due to acceptance on EOS we fix `n_matches`
         n_matches -= 1
         valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
     else:
-        n_matches = min(n_matches, max_matches)
 
         # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
-        gamma = min(candidate_logits.shape[1], max_matches)
+        gamma = min(candidate_logits.shape[1], n_matches)
         p_n_plus_1 = p[:, n_matches, :]
         if n_matches < gamma:
             q_n_plus_1 = q[:, n_matches, :]

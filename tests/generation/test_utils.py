@@ -2497,14 +2497,12 @@ class UtilsFunctionsTest(unittest.TestCase):
             ]
         )
         last_assistant_token_is_eos = False
-        max_matches = 5
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
             last_assistant_token_is_eos,
-            max_matches,
         )
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
