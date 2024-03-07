@@ -706,8 +706,6 @@ def is_sklearn_available():
 def is_sentencepiece_available():
     return _sentencepiece_available
 
-def is_sacremoses_available():
-    return _sacremoses_available
 
 def is_seqio_available():
     return _is_seqio_available
