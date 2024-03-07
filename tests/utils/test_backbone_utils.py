@@ -167,7 +167,7 @@ class BackboneUtilsTester(unittest.TestCase):
         )
         backbone = load_backbone(config)
         # We can't know ahead of time the exact output features and indices, or the layer names before
-        # creating the timm model, so it defalts to the last layer (-1,) and has a different layer name
+        # creating the timm model, so it defaults to the last layer (-1,) and has a different layer name
         self.assertEqual(backbone.out_indices, (-1,))
         self.assertEqual(backbone.out_features, ["layer4"])
         self.assertIsInstance(backbone, TimmBackbone)
