@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import Counter
 import copy
 from queue import Empty
 import random
@@ -125,21 +126,42 @@ class StreamerTester(unittest.TestCase):
             for new_text in streamer:
                 streamer_text += new_text
 
-@require_torch
-class OutputIteratorStreamerTester(unittest.TestCase):
+# for debugging only
+import lovely_tensors as lt
+lt.monkey_patch()
 
+@require_torch
+#class OutputIteratorStreamerTester(unittest.TestCase): # incompatible with pytest.mark.parameterize
+class TestOutputIteratorStreamer:
     @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
     @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
     @pytest.mark.parametrize("output_scores", [False, True])
     @pytest.mark.parametrize("output_logits", [False, True])
-    def test_outputs_match(self, **generation_kwargs):
+    def test_outputs_match(self,
+                           *,
+                           do_sample,top_k,penalty_alpha,output_scores,output_logits,
+                           max_new_tokens=10,
+                           return_dict_in_generate=True,
+                           output_attentions=False,
+                           output_hidden_states=False
+                           ):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        generation_kwargs['input_ids'] = input_ids
-        generation_kwargs['max_new_tokens'] = 10
-        generation_kwargs['return_dict_in_generate'] = True
+        #generation_kwargs['input_ids'] = input_ids
+        #generation_kwargs['max_new_tokens'] = 10
+        #generation_kwargs['return_dict_in_generate'] = True
+        generation_kwargs = dict(
+            input_ids=input_ids,
+            max_new_tokens=max_new_tokens,
+            return_dict_in_generate=return_dict_in_generate,
+            do_sample=do_sample,
+            top_k=top_k,
+            penalty_alpha=penalty_alpha,
+            output_scores=output_scores,
+            output_logits=output_logits,
+        )
 
         baseline_kwargs = copy.deepcopy(generation_kwargs)
         test_kwargs = copy.deepcopy(generation_kwargs)
@@ -147,6 +169,8 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         seed = random.randint(0, int(1e9))
         torch.manual_seed(seed)
         baseline_outputs = model.generate(**baseline_kwargs)
+        print(baseline_outputs)
+        #_,baseline_outputs = model.generate(**baseline_kwargs)
 
         streamer = OutputIteratorStreamer()
         test_kwargs['streamer'] = streamer
@@ -154,50 +178,84 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         thread = Thread(target=model.generate, kwargs=test_kwargs)
         thread.start()
 
-        stream_ids = torch.Tensor()
-        stream_scores = torch.Tensor()
-        n_times_scores_extended = 0
+        # TODO: make sure output fields match what was requested and run equality checks per field
+        #stream_ids = torch.Tensor()
+        outputs = {'sequences':torch.Tensor()}
+        if output_scores:
+            outputs['scores'] = torch.Tensor()
+        if output_logits:
+            outputs['logits'] = torch.Tensor()
+        if output_attentions:
+            outputs['attentions'] = torch.Tensor()
+        if output_hidden_states:
+            outputs['hidden_states'] = torch.Tensor()
+
+        #stream_scores = torch.Tensor()
+        #n_times_scores_extended = 0
+        n_times_field_extended = Counter()
         for answer in streamer:
             if isinstance(answer, list):
                 for output_object in answer:
-
-                    new_ids = output_object.sequences.cpu()
-                    if new_ids.ndim == 1:
-                        new_ids = new_ids.unsqueeze(0)
-                    stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
-
-                    # We don't get scores back from the prompt
-                    if output_object.scores is not None:
-                        new_scores = output_object.scores.cpu()
-                        if new_scores.ndim == 1:
-                            new_scores = new_scores.unsqueeze(0)
-                        stream_scores = torch.cat([stream_scores, new_scores], axis=-1)
-                        n_times_scores_extended +=1
-
+                    for output_name in outputs.keys():
+                        new_values = getattr(output_object, output_name)
+                        if new_values is not None:
+                            #new_ids = output_object.sequences.cpu()
+                            new_values = new_values.cpu()
+                            if new_values.ndim == 1:
+                                new_values = new_values.unsqueeze(0)
+                            outputs[output_name] = torch.cat([outputs[output_name], new_values], axis=-1)
+                            n_times_field_extended[output_name] +=1
+        print(n_times_field_extended)
         # TODO: rename "greedy_ids"
-        greedy_ids = baseline_outputs.sequences
-        self.assertEqual(greedy_ids.shape, stream_ids.shape)
-        self.assertEqual(greedy_ids.tolist(), stream_ids.tolist())
-        self.assertTrue(n_times_scores_extended>1) # make sure we're not just comparing to the final output tensor
+        #greedy_ids = baseline_outputs.sequences
+        for output_name in outputs.keys():
+            print(output_name)
+            baseline_values = getattr(baseline_outputs, output_name)
+            assert baseline_values is not None
+            #print(baseline_values) # why is this a tuple...
+            #TODO: apparently scores is *supposed* to be a tuple of tensors????
+            if not isinstance(baseline_values, torch.Tensor):
+                baseline_values = torch.cat(baseline_values, axis=-1)
+            target_values = outputs[output_name]
+            print(type(baseline_values), type(target_values))
+            assert baseline_values.shape == target_values.shape
+            assert baseline_values.tolist() == target_values.tolist()
+            assert n_times_field_extended[output_name] > 1 # make sure we're not just comparing to the final output tensor
+            #self.assertEqual(baseline_values.shape, target_values.shape)
+            #self.assertEqual(baseline_values.tolist(), target_values.tolist())
+            #self.assertTrue(n_times_field_extended[output_name]>1) # make sure we're not just comparing to the final output tensor
 
     @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
     @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
     def test_ids_only_match(self,
-                       **generation_kwargs,
+                       #**generation_kwargs,
+                            do_sample, top_k, penalty_alpha,
+                            max_new_tokens=10,
+                            return_dict_in_generate=False,
                        ):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        generation_kwargs['input_ids'] = input_ids
-        generation_kwargs['max_new_tokens'] = 10
-        generation_kwargs['return_dict_in_generate'] = False
+        # generation_kwargs 'input_ids'] = input_ids
+        # generation_kwargs['max_new_tokens'] = 10
+        # generation_kwargs['return_dict_in_generate'] = False
+        generation_kwargs = dict(
+            input_ids=input_ids,
+            max_new_tokens=max_new_tokens,
+            return_dict_in_generate=return_dict_in_generate,
+            do_sample=do_sample,
+            top_k=top_k,
+            penalty_alpha=penalty_alpha,
+            # output_scores=output_scores,
+            # output_logits=output_logits,
+        )
 
         baseline_kwargs = copy.deepcopy(generation_kwargs)
 
         seed = random.randint(0, int(1e9))
         torch.manual_seed(seed)
-        outputs_baseline = model.generate(**baseline_kwargs)
+        baseline_values = model.generate(**baseline_kwargs)
 
         streamer = OutputIteratorStreamer()
         test_kwargs = copy.deepcopy(generation_kwargs)
@@ -207,15 +265,14 @@ class OutputIteratorStreamerTester(unittest.TestCase):
         thread = Thread(target=model.generate, kwargs=test_kwargs)
         thread.start()
 
-        # TODO: make sure output fields match what was requested and run equality checks per field
-        stream_ids = torch.Tensor()
+        target_values = torch.Tensor()
         for answer in streamer:
             assert isinstance(answer, list)
             for output_object in answer:
                 new_ids = output_object.cpu()
                 if new_ids.ndim == 1:
                     new_ids = new_ids.unsqueeze(0)
-                stream_ids = torch.cat([stream_ids, new_ids], axis=-1)
+                target_values = torch.cat([target_values, new_ids], axis=-1)
 
-        self.assertEqual(outputs_baseline.shape, stream_ids.shape)
-        self.assertEqual(outputs_baseline.tolist(), stream_ids.tolist())
+        assert baseline_values.shape == target_values.shape
+        assert baseline_values.tolist() == target_values.tolist()
