@@ -39,7 +39,7 @@ class DocumentQuestionAnsweringTool(PipelineTool):
     model_class = VisionEncoderDecoderModel
 
     inputs = {"input": Union[Image.Image, str]}
-    outputs = str
+    output_type = str
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():

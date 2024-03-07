@@ -21,7 +21,7 @@ from typing import Dict, Union, List, Any
 from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, is_torch_available, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 import re
@@ -80,17 +80,15 @@ def get_remote_tools(organization="huggingface-tools"):
         repo_id = space_info.id
         resolved_config_file = hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="space")
         with open(resolved_config_file, encoding="utf-8") as reader:
-            config = json.load(reader)
-
+            config = literal_eval(reader.read())
         task = repo_id.split("/")[-1]
-        print(repo_id, config)
         tools[config["name"]] = PreTool(
             task=task,
             description=config["description"],
             repo_id=repo_id,
             name=task,
             inputs=config["inputs"],
-            output_type=config["output_type"]
+            output_type=config["output_type"],
         )
 
     return tools
@@ -109,12 +107,10 @@ def _setup_default_tools():
     remote_tools = get_remote_tools()
     for task_name, tool_class_name in TASK_MAPPING.items():
         tool_class = getattr(tools_module, tool_class_name)
-        print(dir(tool_class))
-        HUGGINGFACE_DEFAULT_TOOLS[tool_name] = PreTool(
+        HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(
             name=tool_class.name,
             inputs=tool_class.inputs,
-            input_type=tool_class.output_type,
-            output_type=str,
+            output_type=tool_class.output_type,
             task=task_name,
             description=tool_class.description,
             repo_id=None
@@ -132,7 +128,18 @@ def _setup_default_tools():
             if not found:
                 raise ValueError(f"{task_name} is not implemented on the Hub.")
 
+    
     _tools_are_initialized = True
+
+
+def resolve_tools(toolbox, remote=False):
+    for name, tool in toolbox.items():
+        if not isinstance(tool, Tool):
+            task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
+            _remote = remote and supports_remote(task_or_repo_id)
+            toolbox[name] = load_tool(task_or_repo_id, remote=_remote)
+
+    return toolbox
 
 
 def clean_code_for_run(code):
@@ -209,9 +216,11 @@ class Agent:
 
         if toolbox is None:
             _setup_default_tools()
-            self._toolbox = HUGGINGFACE_DEFAULT_TOOLS
+            self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
         else:
             self._toolbox = {tool.name: tool for tool in toolbox}
+
+        self._toolbox = resolve_tools(self._toolbox)
 
         self.system_prompt = format_prompt(self.toolbox, self.prompt_template, self.tool_description_template)
         self.memory = []
@@ -277,7 +286,6 @@ class Agent:
             observation_message = "Observation: " + observation.strip()
             self.log(observation_message)
             self.memory.append(observation_message)
-            print("OK >WZPOKJP")
         except Exception as e:
             raise RuntimeError(
                 f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
@@ -307,7 +315,8 @@ class CodeAgent(Agent):
             tool_description_template=tool_description_template if tool_description_template else self.default_tool_description_template,
             **kwargs
         )
-    
+
+
     @property
     def default_tool_description_template(self)-> str:
         """
@@ -370,7 +379,8 @@ class CodeAgent(Agent):
 
         # Execute
         try: 
-            self.log("\n\n==Execution==")
+            self.log("\n\n==Executing the code below:==")
+            self.log(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox} 
             # NOTE: The base python tools are not added to toolbox, since they do not have the proper attributes for a description
             return evaluate_python_code(code_action, available_tools, state=kwargs.copy())

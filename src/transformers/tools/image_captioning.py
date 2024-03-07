@@ -14,15 +14,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
-
 from ..models.auto import AutoModelForVision2Seq
 from ..utils import requires_backends
 from .base import PipelineTool
-
-
-if TYPE_CHECKING:
-    from PIL import Image
+from PIL import Image
 
 
 class ImageCaptioningTool(PipelineTool):

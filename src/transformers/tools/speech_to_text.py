@@ -14,9 +14,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Any
+
 from ..models.whisper import WhisperForConditionalGeneration, WhisperProcessor
 from .base import PipelineTool
-from typing import Any
+
 
 class SpeechToTextTool(PipelineTool):
     default_checkpoint = "openai/whisper-base"
@@ -29,7 +31,7 @@ class SpeechToTextTool(PipelineTool):
     model_class = WhisperForConditionalGeneration
 
     inputs = {"audio": Any}
-    output_type: str
+    output_type= str
 
     def encode(self, audio):
         return self.pre_processor(audio, return_tensors="pt").input_features

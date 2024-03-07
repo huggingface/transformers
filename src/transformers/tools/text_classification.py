@@ -15,10 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
+from typing import Union, List
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
 from .base import PipelineTool
-from typing import Union, List
 
 
 class TextClassificationTool(PipelineTool):
@@ -44,7 +44,7 @@ class TextClassificationTool(PipelineTool):
     model_class = AutoModelForSequenceClassification
 
     inputs = {"text": Union[str, List[str]]}
-    output_type: str
+    output_type= str
 
     def setup(self):
         super().setup()

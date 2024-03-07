@@ -95,9 +95,10 @@ class ToolMeta(type):
                 'inputs': dict,
                 'output_type': type,
             }
+            print(dct)
             for attr, expected_type in required_attributes.items():
                 if attr not in dct or not isinstance(dct[attr], expected_type):
-                    raise TypeError(f"{attr} must be of type {expected_type.__name__}")
+                    raise TypeError(f"{attr} must exist and be of type {expected_type.__name__}")
         return super().__new__(cls, name, bases, dct)
 
 
@@ -111,22 +112,19 @@ class Tool(metaclass=ToolMeta):
       returns the text contained in the file'.
     - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
       `"text-classifier"` or `"image_generator"`.
-    - **inputs** (`Dict[str, str]`) -- The dict of modalities expected for the inputs (in the same order as in the call).
-      Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo` or to make a
-      nice space from your tool. # TODO: update this
-    - **outputs** (`List[str]`) -- The list of modalities returned but the tool (in the same order as the return of the
-      call method). Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo`
-      or to make a nice space from your tool.
+    - **inputs** (`Dict[str, str]`) -- The dict of modalities expected for the inputs.
+      This is used by `launch_gradio_demo` or to make a nice space from your tool, and also can be used in the generated
+      description for your tool.
+    - **output_type** (`type`) -- The type of the tool output. This is used by `launch_gradio_demo`
+      or to make a nice space from your tool, and also can be used in the generated description for your tool.
 
     You can also override the method [`~Tool.setup`] if your tool as an expensive operation to perform before being
     usable (such as loading a model). [`~Tool.setup`] will be called the first time you use your tool, but not at
     instantiation.
     """
 
-    description: str
     name: str
-
-    # TODO: Replace the below str with enum
+    description: str
     inputs: Dict[str, type]
     output_type: type
 
@@ -305,6 +303,11 @@ class Tool(metaclass=ToolMeta):
             )
             tool_class.description = custom_tool["description"]
 
+        if tool_class.inputs != custom_tool['inputs']:
+            tool_class.inputs = custom_tool['inputs']
+        if tool_class.output_type != custom_tool['output_type']:
+            tool_class.output_type = custom_tool['output_type']
+
         if remote:
             return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
         return tool_class(model_repo_id, token=token, **kwargs)
@@ -459,6 +462,11 @@ class RemoteTool(Tool):
         self.endpoint_url = endpoint_url
         self.client = EndpointClient(endpoint_url, token=token)
         self.tool_class = tool_class
+        self.name = tool_class.name
+        self.description = tool_class.description
+        self.inputs = tool_class.inputs
+        self.output_type = tool_class.output_type
+
 
     def prepare_inputs(self, *args, **kwargs):
         """
@@ -853,12 +861,10 @@ def from_langchain(langchain_tool):
         description = langchain_tool.description
         name = langchain_tool.name
         inputs = parse_langchain_args(langchain_tool.args)
-        print(inputs)
         outputs = {}
 
         def __call__(self, **kwargs):
             # Assuming kwargs matches the structure expected by langchain_tool.run
-            print(kwargs)
             return langchain_tool.run(kwargs)
 
     return ConvertedTool()
