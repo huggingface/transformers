@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import requests
 import unittest
 from io import BytesIO
+
+import requests
 
 from transformers import Idefics2Processor
 from transformers.models.idefics2.processing_idefics2 import build_string_from_input
@@ -23,11 +24,10 @@ from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_vision_available():
     from PIL import Image
-
 
 
 class Idefics2ProcessorTest(unittest.TestCase):
@@ -54,35 +54,22 @@ class Idefics2ProcessorTest(unittest.TestCase):
     def test_build_string_from_input(self):
         prompt = ["Initial str", self.image1, self.image2, "mid str", self.image3]
         prompt_string = build_string_from_input(
-            prompt=prompt,
-            image_seq_len=2,
-            bos_token="<s>",
-            image_token="<im>",
-            fake_image_token="<fake>"
+            prompt=prompt, image_seq_len=2, bos_token="<s>", image_token="<im>", fake_image_token="<fake>"
         )
         expected_string = "<s>Initial str<fake><im><im><fake><im><im><fake>mid str<fake><im><im><fake>"
         self.assertEqual(prompt_string, expected_string)
 
         prompt = [self.image1, self.image3]
         prompt_string = build_string_from_input(
-            prompt=prompt,
-            image_seq_len=2,
-            bos_token="<s>",
-            image_token="<im>",
-            fake_image_token="<fake>"
+            prompt=prompt, image_seq_len=2, bos_token="<s>", image_token="<im>", fake_image_token="<fake>"
         )
         expected_string = "<s><fake><im><im><fake><im><im><fake>"
 
         prompt = ["Initial str"]
         prompt_string = build_string_from_input(
-            prompt=prompt,
-            image_seq_len=2,
-            bos_token="<s>",
-            image_token="<im>",
-            fake_image_token="<fake>"
+            prompt=prompt, image_seq_len=2, bos_token="<s>", image_token="<im>", fake_image_token="<fake>"
         )
         expected_string = "<s>Initial str"
-
 
     def test_process_interleaved_images_prompts(self):
         # Test that a single image is processed correctly

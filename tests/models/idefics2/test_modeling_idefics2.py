@@ -24,7 +24,6 @@ from transformers import (
     AutoProcessor,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
-    Idefics2ImageProcessor,
     Idefics2Model,
     is_torch_available,
     is_vision_available,
@@ -304,7 +303,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompts = [image1, "In this image, we see"]
         inputs = self.processor(prompts, return_tensors="pt")
 
-        generated_ids = model.generate(**inputs, bad_words_ids=bad_words_ids, max_new_tokens=10)
+        generated_ids = model.generate(**inputs, bad_words_ids=self.processor.bad_words_ids, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         expected_generated_text = "In this image, we see the beautiful cityscape of New York City. The"

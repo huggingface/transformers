@@ -654,6 +654,12 @@ class Idefics2VisionTransformer(nn.Module):
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
+    def get_input_embeddings(self):
+        return self.embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings = value
+
     def forward(
         self,
         pixel_values,
@@ -2373,32 +2379,11 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         the model weights fixed.
         """
 
-        # FIXME - check this difference is correct
-        def get_lowest_module(module):
-            def _get_lowest_module(module, depth):
-                if len(list(module.children())) == 0:
-                    # If the module has no children, it is a leaf module (e.g., Linear, Conv2d, etc.)
-                    return module, depth
-                else:
-                    # Get the children of the module
-                    children = list(module.children())
-
-                    # Get the lowest module for each child
-                    lowest_modules = [_get_lowest_module(child, depth + 1) for child in children]
-
-                    # Get the lowest module with the highest depth
-                    lowest_module, highest_depth = max(lowest_modules, key=lambda x: x[1])
-
-                    return lowest_module, highest_depth
-
-            lowest_module, highest_depth = _get_lowest_module(module, depth)
-            return lowest_module
-
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
 
         self._text_require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
-        self._vision_require_grads_hook = get_lowest_module(self.model.vision_model).register_forward_hook(
+        self._vision_require_grads_hook = self.model.vision_model.get_input_embeddings().register_forward_hook(
             make_inputs_require_grads
         )
 

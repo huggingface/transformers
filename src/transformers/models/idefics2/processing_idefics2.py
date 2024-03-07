@@ -19,7 +19,7 @@ Processor class for IDEFICS2.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import is_valid_image
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
@@ -67,7 +67,6 @@ def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_
     return s
 
 
-
 class Idefics2Processor(ProcessorMixin):
     r"""
     Constructs a IDEFICS2 processor which wraps a LLama tokenizer and IDEFICS2 image processor into a single processor.
@@ -78,8 +77,12 @@ class Idefics2Processor(ProcessorMixin):
     Args:
         image_processor (`Idefics2ImageProcessor`):
             An instance of [`Idefics2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`):
+        tokenizer (`LlamaTokenizerFast`, *optional*):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
+        image_seq_len (`int`, *optional*, defaults to 64):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+            This parameter is used to build the string from the input prompt and image tokens and should match the
+            config.perceiver_config.resampler_n_latents value for the model used.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -98,7 +101,7 @@ class Idefics2Processor(ProcessorMixin):
 
         tokens_to_add = [
             AddedToken(self.fake_image_token, lstrip=True, rstrip=False, normalized=False),
-            AddedToken(self.image_token, lstrip=True, rstrip=False, normalized=False)
+            AddedToken(self.image_token, lstrip=True, rstrip=False, normalized=False),
         ]
         tokenizer.add_tokens(tokens_to_add)
 
@@ -132,8 +135,9 @@ class Idefics2Processor(ProcessorMixin):
                 image_seq_len=image_seq_len,
                 bos_token=self.tokenizer.bos_token,
                 image_token=self.image_token,
-                fake_image_token=self.fake_image_token
-            ) for prompt in prompts
+                fake_image_token=self.fake_image_token,
+            )
+            for prompt in prompts
         ]
 
         inputs = BatchFeature()
@@ -148,9 +152,7 @@ class Idefics2Processor(ProcessorMixin):
         inputs.update(text_inputs)
 
         # Extract the images from the prompts
-        images = [
-            [elem for elem in prompt if is_valid_image(elem)] for prompt in prompts
-        ]
+        images = [[elem for elem in prompt if is_valid_image(elem)] for prompt in prompts]
         image_inputs = self.image_processor(images, return_tensors=return_tensors)
         inputs.update(image_inputs)
 

@@ -244,8 +244,6 @@ class Idefics2Config(PretrainedConfig):
             Whether to freeze text layers
         freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing text layers when `freeze_text_layers` is `True`
-        freeze_lm_head (`bool`, *optional*, defaults to `False`):
-            Whether to freeze lm head
         freeze_vision_layers (`bool`, *optional*, defaults to `True`):
             Whether to freeze vision layers
         freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
@@ -295,7 +293,6 @@ class Idefics2Config(PretrainedConfig):
         qk_layer_norms=False,
         freeze_text_layers=True,
         freeze_text_module_exceptions=[],
-        freeze_lm_head=False,
         freeze_vision_layers=True,
         freeze_vision_module_exceptions=[],
         attention_dropout=0.0,
@@ -330,7 +327,6 @@ class Idefics2Config(PretrainedConfig):
         self.freeze_text_layers = freeze_text_layers
         self.freeze_text_module_exceptions = freeze_text_module_exceptions
         self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
-        self.freeze_lm_head = freeze_lm_head
 
         self.attention_dropout = attention_dropout
 
