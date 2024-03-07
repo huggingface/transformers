@@ -102,6 +102,9 @@ class Idefics2Processor(ProcessorMixin):
         ]
         tokenizer.add_tokens(tokens_to_add)
 
+        bad_words_ids = tokenizer.convert_tokens_to_ids([self.image_token, self.fake_image_token])
+        self.bad_words_ids = [[id_] for id_ in bad_words_ids]
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -116,7 +119,10 @@ class Idefics2Processor(ProcessorMixin):
         """ """
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
-        if isinstance(prompts, list) and not isinstance(prompts[0], list):
+        if not isinstance(prompts, list):
+            prompts = [[prompts]]
+
+        elif isinstance(prompts, list) and not isinstance(prompts[0], list):
             prompts = [prompts]
 
         # Build the string from the input prompt and image tokens
