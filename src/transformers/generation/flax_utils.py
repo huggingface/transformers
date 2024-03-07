@@ -330,7 +330,6 @@ class FlaxGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
-        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         logits_processor = logits_processor if logits_processor is not None else FlaxLogitsProcessorList()

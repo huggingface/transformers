@@ -32,6 +32,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -190,6 +192,22 @@ class ViltImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -415,20 +433,26 @@ class ViltImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        # Here the pad() method does not require any additional argument as it takes the maximum of (height, width).
+        # Hence, it does not need to be passed to a validate_preprocess_arguments() method.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

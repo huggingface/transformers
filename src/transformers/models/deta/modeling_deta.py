@@ -50,9 +50,14 @@ from .configuration_deta import DetaConfig
 
 logger = logging.get_logger(__name__)
 
+MultiScaleDeformableAttention = None
 
+
+# Copied from models.deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
+
+    global MultiScaleDeformableAttention
 
     root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
     src_files = [
@@ -77,22 +82,6 @@ def load_cuda_kernels():
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ],
     )
-
-    import MultiScaleDeformableAttention as MSDA
-
-    return MSDA
-
-
-# Move this to not compile only when importing, this needs to happen later, like in __init__.
-if is_torch_cuda_available() and is_ninja_available():
-    logger.info("Loading custom CUDA kernels...")
-    try:
-        MultiScaleDeformableAttention = load_cuda_kernels()
-    except Exception as e:
-        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-        MultiScaleDeformableAttention = None
-else:
-    MultiScaleDeformableAttention = None
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
@@ -596,6 +585,14 @@ class DetaMultiscaleDeformableAttention(nn.Module):
 
     def __init__(self, config: DetaConfig, num_heads: int, n_points: int):
         super().__init__()
+
+        kernel_loaded = MultiScaleDeformableAttention is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
         if config.d_model % num_heads != 0:
             raise ValueError(
                 f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
@@ -2348,9 +2345,10 @@ class DetaLoss(nn.Module):
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # Check that we have initialized the distributed state
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
