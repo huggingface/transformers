@@ -21,8 +21,13 @@ from typing import List
 
 import numpy as np
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.udop import UdopTokenizer, UdopTokenizerFast
+from transformers import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
+    PreTrainedTokenizerFast,
+    UdopTokenizer,
+    UdopTokenizerFast,
+)
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
