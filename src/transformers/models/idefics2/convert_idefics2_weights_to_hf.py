@@ -112,7 +112,7 @@ def convert_idefics2_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     model.save_pretrained(output_hub_path)
     processor.save_pretrained(output_hub_path)
 
-    if push_to_hub
+    if push_to_hub:
         model.push_to_hub(output_hub_path, private=True)
         processor.push_to_hub(output_hub_path, private=True)
 
