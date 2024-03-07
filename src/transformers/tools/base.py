@@ -848,7 +848,7 @@ class EndpointClient:
         else:
             return response.json()
 
-def parse_langchain_args(args: Dict[str, Any]) -> Dict[str, str]:
+def parse_langchain_args(args):
     """Parse the args attribute of a LangChain tool to create a matching inputs dictionary."""
     inputs = {}
     for arg_name, arg_info in args.items():
@@ -857,15 +857,23 @@ def parse_langchain_args(args: Dict[str, Any]) -> Dict[str, str]:
     return inputs
 
 def from_langchain(langchain_tool):
-    class ConvertedTool(Tool):
+    class ConvertedTool:
         description = langchain_tool.description
         name = langchain_tool.name
         inputs = parse_langchain_args(langchain_tool.args)
         outputs = {}
 
-        def __call__(self, **kwargs):
-            # Assuming kwargs matches the structure expected by langchain_tool.run
-            return langchain_tool.run(kwargs)
+        def __call__(self, *args, **kwargs):
+            for index,argument in enumerate(args):
+                if index<len(self.inputs):
+                    input_key = next(iter(self.inputs))
+                    kwargs[input_key] = argument
+            
+            tool_input = {}
+            for key, value in kwargs.items():
+                tool_input[key] = value
+
+            return langchain_tool.run(tool_input)
 
     return ConvertedTool()
 
