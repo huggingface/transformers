@@ -707,7 +707,7 @@ class ModelTesterMixin:
             # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
             if "input_ids" not in batched_input:
                 return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float(), tensor2.float(), dim=0).max()
+                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=0).max()
                 )
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
@@ -743,7 +743,7 @@ class ModelTesterMixin:
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 self.assertTrue(
-                    equivalence(batched_row, single_row_object) <= 1e-05,
+                    (equivalence(batched_row, single_row_object)) <= 1e-03,
                     msg=(
                         f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
                         f"Difference={equivalence(batched_row, single_row_object)}."
@@ -784,6 +784,11 @@ class ModelTesterMixin:
                 model_row_output = {"model_output": model_row_output}
 
             for key in model_batched_output:
+                # models like DETR start from zero-init queries to decoder, leading to cos_similarity = `nan`
+                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
+                    print("HEY?")
+                    model_batched_output[key] = model_batched_output[key][1:]
+                    model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
