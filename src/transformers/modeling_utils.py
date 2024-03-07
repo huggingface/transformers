@@ -366,14 +366,16 @@ def shard_checkpoint(
     for key, weight in state_dict.items():
         # when bnb serialization is used the weights in the state dict can be strings
         # check: https://github.com/huggingface/transformers/pull/24416 for more details
+        has_storage = True
         if isinstance(weight, str):
             continue
-        elif weight.__class__.__name__ in ["QTensor", "QBitsTensor"]:
-            # Okay if storage_id is not accurate. This is only useful for safetensors saving and it doesn't yet with quanto tensors
-            # We will remove these conditions once when quanto is compatible with safetensors
-            storage_id = id(weight)
         else:
-            storage_id = id_tensor_storage(weight)
+            try:
+                storage_id = id_tensor_storage(weight)
+            except RuntimeError:
+                # fallback in case the tensor don't have a storage (e.g. QTensor with quanto)
+                storage_id = id(weight)
+                has_storage = False
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
         if storage_id in storage_id_to_block:
@@ -381,11 +383,15 @@ def shard_checkpoint(
             sharded_state_dicts[block_id][key] = weight
             continue
 
-        if weight.__class__.__name__ in ["QTensor", "QBitsTensor"]:
-            # we don't add the scales/zero-point because those can be negligeable + subject to changes
-            weight_size = weight._data.numel() * dtype_byte_size(weight._data.dtype)
-        else:
+        if has_storage:
             weight_size = weight.numel() * dtype_byte_size(weight.dtype)
+        else:
+            # If the tensor don't have a storage, some field on this tensor can be a tensor (e.g. QTensor in quanto
+            # where the tensor is creatde using _make_wrapper_subclass() )
+            weight_size = 0
+            for val in weight.__dict__.values():
+                if isinstance(val, torch.Tensor):
+                    weight_size += val.numel() * dtype_byte_size(val.dtype)
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
