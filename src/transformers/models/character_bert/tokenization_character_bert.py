@@ -374,7 +374,6 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    # TODO: check the methods below
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
     ) -> List[List[int]]:
