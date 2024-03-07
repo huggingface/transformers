@@ -165,11 +165,13 @@ class TestOutputIteratorStreamer:
             penalty_alpha=penalty_alpha,
             output_scores=output_scores,
             output_logits=output_logits,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         ### dmarx Force behaviors here for development
         # only output attentions for greedy sampling
-        if not (generation_kwargs['do_sample'] and (generation_kwargs['penalty_alpha'] is None)):
-            generation_kwargs['output_attentions'] = False
+        #if not (generation_kwargs['do_sample'] and (generation_kwargs['penalty_alpha'] is None)):
+        #    generation_kwargs['output_attentions'] = False
         #### /dmarx
 
         print(generation_kwargs)  # easier than decoding pytest parameterization shorthand on error
@@ -224,6 +226,10 @@ class TestOutputIteratorStreamer:
             target_values = outputs[output_name]
             assert baseline_values.shape == target_values.shape
             assert baseline_values.tolist() == target_values.tolist()
+
+        # haven't supported this case yet.
+        if generation_kwargs['output_attentions'] and generation_kwargs['do_sample']:
+            raise
 
 
     @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
