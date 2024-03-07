@@ -505,7 +505,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax"]:
+        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
@@ -3328,6 +3328,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif metadata.get("format") == "flax":
                 from_flax = True
                 logger.info("A Flax safetensors file is being loaded in a PyTorch model.")
+            elif metadata.get("format") == "mlx":
+                # This is a mlx file, we assume weights are compatible with pt
+                pass
             else:
                 raise ValueError(
                     f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax'] but {metadata.get('format')}"
