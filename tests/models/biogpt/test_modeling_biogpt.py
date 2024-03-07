@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import BioGptConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_sacremoses, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -278,6 +278,7 @@ class BioGptModelTester:
         return config, inputs_dict
 
 
+@require_sacremoses
 @require_torch
 class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (

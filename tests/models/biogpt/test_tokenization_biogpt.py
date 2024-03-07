@@ -19,11 +19,12 @@ import os
 import unittest
 
 from transformers.models.biogpt.tokenization_biogpt import VOCAB_FILES_NAMES, BioGptTokenizer
-from transformers.testing_utils import slow
+from transformers.testing_utils import slow, require_sacremoses
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
+@require_sacremoses
 class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BioGptTokenizer
     test_rust_tokenizer = False
@@ -69,7 +70,7 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
-
+    
     def test_full_tokenizer(self):
         """Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt"""
         tokenizer = BioGptTokenizer(self.vocab_file, self.merges_file)
@@ -82,7 +83,7 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
+    
     @slow
     def test_sequence_builders(self):
         tokenizer = BioGptTokenizer.from_pretrained("microsoft/biogpt")
