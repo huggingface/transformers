@@ -342,17 +342,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             return bytes(utf8_codes).decode("utf-8")
 
     def convert_ids_to_tokens(
-        self, ids: Union[int, List[int]], skip_special_tokens: bool = False
+        self, ids: Union[List[int], List[List[int]]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
-        # NOTE: the first condition needed to be adapted for character_ids instead
-        # of token ids.
+        # NOTE: the first condition needed to be adapted for character_ids instead of token ids.
         """
-        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
-        added tokens.
+        Converts a single character_ids vector or a sequence of vectors to a token or a sequence of tokens,
+        using the vocabulary and added tokens.
 
         Args:
-            ids (`int` or `List[int]`):
-                The token id (or token ids) to convert to tokens.
+            ids (`List[int]` or `List[List[int]]`):
+                The token vector (or token vectors) to convert to tokens.
+                Each vector is a list of character ids.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
@@ -385,13 +385,13 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`List[List[int]]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`List[List[int]]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `List[List[int]]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -400,20 +400,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self,
-        token_ids_0: List[List[int]],
-        token_ids_1: Optional[List[List[int]]] = None,
-        already_has_special_tokens: bool = False,
+        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
+            token_ids_0 (`List[List[int]]`):
+                List of list of character IDs (each token is a list of character ids).
+            token_ids_1 (`List[List[int]]`, *optional*):
+                Optional second list of list of character IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
@@ -431,7 +428,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CHARACTER_BERT sequence
@@ -445,9 +442,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`List[List[int]]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`List[List[int]]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -547,7 +544,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
+                Instead of `List[List[int]]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
                 the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
