@@ -706,6 +706,7 @@ class GenerationMixin:
         if generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
+                max_length=generation_config.max_length,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
