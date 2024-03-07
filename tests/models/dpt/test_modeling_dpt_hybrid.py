@@ -31,7 +31,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_MAPPING, DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
+    from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -229,7 +230,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
 
             model = model_class(config)
@@ -248,7 +249,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.use_cache = False
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
                 continue
             model = model_class(config)
             model.to(torch_device)

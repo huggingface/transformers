@@ -1039,6 +1039,17 @@ class T5Converter(SpmConverter):
         )
 
 
+class UdopConverter(SpmConverter):
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class WhisperConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.encoder
@@ -1471,6 +1482,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "UdopTokenizer": UdopConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,

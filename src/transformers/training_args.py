@@ -66,6 +66,8 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
@@ -1023,13 +1025,13 @@ class TrainingArguments:
             )
         },
     )
-    dataloader_prefetch_factor: int = field(
-        default=None,
+    dataloader_prefetch_factor: Optional[int] = field(
+        default=None if not is_torch_available() or is_torch_greater_or_equal_than_2_0 else 2,
         metadata={
             "help": (
                 "Number of batches loaded in advance by each worker. "
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
-                "Default is unset"
+                "Default is 2 for PyTorch < 2.0.0 and otherwise None."
             )
         },
     )
@@ -1737,9 +1739,11 @@ class TrainingArguments:
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
         if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig, dict)):
+            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
+                elif isinstance(self.accelerator_config, dict):
+                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
             if self.dispatch_batches is not None:
@@ -1748,7 +1752,7 @@ class TrainingArguments:
                     " `--accelerator_config {'dispatch_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config["dispatch_batches"] = self.dispatch_batches
+                self.accelerator_config.dispatch_batches = self.dispatch_batches
 
             if self.split_batches is not None:
                 warnings.warn(
@@ -1756,7 +1760,7 @@ class TrainingArguments:
                     " `--accelerator_config {'split_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config["split_batches"] = self.split_batches
+                self.accelerator_config.split_batches = self.split_batches
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -1805,7 +1809,11 @@ class TrainingArguments:
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
-        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
+        if (
+            (not is_torch_available() or is_torch_greater_or_equal_than_2_0)
+            and self.dataloader_num_workers == 0
+            and self.dataloader_prefetch_factor is not None
+        ):
             raise ValueError(
                 "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
                 " when --dataloader_num_workers > 1."

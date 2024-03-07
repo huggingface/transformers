@@ -99,7 +99,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
         input_ids = input_ids.to(device)
-        inputs_tensor = inputs_tensor.to(device)
+        if inputs_tensor is not None:
+            inputs_tensor = inputs_tensor.to(device)
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
@@ -251,10 +252,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
     def __init__(
         self,
         num_output_tokens: int = 10,
-        max_matching_ngram_size: int = 2,
+        max_matching_ngram_size: int = None,
     ):
         self.num_output_tokens = num_output_tokens
-        self.max_matching_ngram_size = max_matching_ngram_size
+        self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -301,8 +302,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 break
 
         if chosen_ids is None or len(chosen_ids) == 0:
-            # Need to make a dummy tensor to avoid errors
-            chosen_ids = torch.zeros((1), dtype=torch.long, device=input_ids.device)
+            # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
+            return input_ids, None
 
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)
