@@ -221,3 +221,11 @@ class HfQuantizer(ABC):
     @abstractmethod
     def is_trainable(self):
         ...
+
+    @property
+    def weights_only_kwarg(self) -> Optional[Dict[str, Any]]:
+        """
+        Override this method if you want override the existing weights_only_kwarg with a new
+        one.
+        """
+        return None

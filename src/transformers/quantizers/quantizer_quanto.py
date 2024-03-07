@@ -71,10 +71,6 @@ class QuantoHfQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch_dtype
 
-    def update_weights_only_kwarg(self, weights_only_kwarg: Dict[str, Any]) -> Dict[str, Any]:
-        weights_only_kwarg["weights_only"] = False
-        return weights_only_kwarg
-
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         import quanto
 
@@ -179,6 +175,10 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model):
         return model
+
+    @property
+    def weights_only_kwarg(self) -> Optional[Dict[str, Any]]:
+        return {"weights_only": False}
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):

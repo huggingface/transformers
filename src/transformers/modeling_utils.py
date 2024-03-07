@@ -505,7 +505,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike], hf_quantizer=None):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike], weights_only_kwarg=None):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -535,9 +535,8 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], hf_quantizer=None)
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
-        if hf_quantizer is not None:
-            weights_only_kwarg = hf_quantizer.update_weights_only_kwarg(weights_only_kwarg)
+        if weights_only_kwarg is None:
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
@@ -3347,11 +3346,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         from_pt = not (from_tf | from_flax)
 
+        weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
+
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file, hf_quantizer=hf_quantizer)
+                state_dict = load_state_dict(resolved_archive_file, weights_only_kwarg=weights_only_kwarg)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3372,7 +3373,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0], hf_quantizer=hf_quantizer)
+                                one_state_dict = load_state_dict(
+                                    resolved_archive_file[0], weights_only_kwarg=weights_only_kwarg
+                                )
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -3952,7 +3955,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file, hf_quantizer=hf_quantizer)
+                weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
+                state_dict = load_state_dict(shard_file, weights_only_kwarg=weights_only_kwarg)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4117,7 +4121,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
-        state_dict = load_state_dict(resolved_archive_file, hf_quantizer=hf_quantizer)
+        weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
+        state_dict = load_state_dict(resolved_archive_file, weights_only_kwarg=weights_only_kwarg)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
         error_msgs = _load_state_dict_into_meta_model(
             model,
