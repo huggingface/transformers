@@ -137,12 +137,18 @@ class TestOutputIteratorStreamer:
     @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
     @pytest.mark.parametrize("output_scores", [False, True])
     @pytest.mark.parametrize("output_logits", [False, True])
+    @pytest.mark.parametrize("output_attentions", [False, True])
     def test_outputs_match(self,
                            *,
-                           do_sample,top_k,penalty_alpha,output_scores,output_logits,
+                           do_sample,
+                           top_k,
+                           penalty_alpha,
+                           output_scores,
+                           output_logits,
+                           output_attentions,
                            max_new_tokens=10,
                            return_dict_in_generate=True,
-                           output_attentions=False,
+                           #output_attentions=False,
                            output_hidden_states=False
                            ):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -160,6 +166,12 @@ class TestOutputIteratorStreamer:
             output_scores=output_scores,
             output_logits=output_logits,
         )
+        ### dmarx Force behaviors here for development
+        # only output attentions for greedy sampling
+        if not (generation_kwargs['do_sample'] and (generation_kwargs['penalty_alpha'] is None)):
+            generation_kwargs['output_attentions'] = False
+        #### /dmarx
+
         print(generation_kwargs)  # easier than decoding pytest parameterization shorthand on error
         generation_kwargs['input_ids'] = input_ids
 
@@ -177,14 +189,11 @@ class TestOutputIteratorStreamer:
         thread.start()
 
         outputs = {'sequences':torch.Tensor()}
-        if output_scores:
-            outputs['scores'] = torch.Tensor()
-        if output_logits:
-            outputs['logits'] = torch.Tensor()
-        if output_attentions:
-            outputs['attentions'] = torch.Tensor()
-        if output_hidden_states:
-            outputs['hidden_states'] = torch.Tensor()
+        # todo: generalize this to support encoder/decoder conditional attributes...
+        for attr_name in ('scores', 'logits', 'decoder_attentions', 'attentions', 'hidden_states'):
+            if hasattr(baseline_outputs, attr_name):
+                if getattr(baseline_outputs, attr_name) is not None:
+                    outputs[attr_name] = torch.Tensor()
 
         n_times_field_extended = Counter()
         for answer in streamer:
