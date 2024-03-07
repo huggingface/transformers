@@ -314,7 +314,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             character_ids = [(index + 1) for index in character_ids]
         return character_ids
 
-    def _convert_id_to_token(self, character_ids):
+    def _convert_id_to_token(self, character_ids: List[int]):
         """Converts a list of character ids (integer) intp a token (str)."""
         assert len(character_ids) == self.max_word_length, (
             f"Got a character sequence of length {len(character_ids)} while "
