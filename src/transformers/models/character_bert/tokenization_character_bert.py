@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...tokenization_utils_base import LARGE_INTEGER, BatchEncoding, EncodedInput, TruncationStrategy
+from ...tokenization_utils_base import LARGE_INTEGER, BatchEncoding, EncodedInput, TruncationStrategy, AddedToken
 from ...utils import (
     PaddingStrategy,
     TensorType,
@@ -153,23 +153,28 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         do_lower_case=True,
         do_basic_tokenize=True,
         never_split=None,
+        cls_character_id=256,
+        sep_character_id=257,
         bow_character_id=258,
         eow_character_id=259,
         pad_character_id=260,
-        unk_token="[UNK]",
+        mask_character_id=261,
+        bow_token="[BOW]",
+        eow_token="[EOW]",
         sep_token="[SEP]",
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
+        additional_special_tokens=None,
         **kwargs,
     ):
         self.vocab = {}
         if mlm_vocab_file:
             if not os.path.isfile(mlm_vocab_file):
                 raise ValueError(
-                    f"Can't find a vocabulary file at path '{mlm_vocab_file}'. To load the vocabulary from a Google pretrained"
+                    f"Can't find a vocabulary file at path '{mlm_vocab_file}'. To load the vocabulary from a pretrained"
                     " model use `tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
                 )
             self.mlm_vocab = load_vocab(mlm_vocab_file)
@@ -186,28 +191,39 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 strip_accents=strip_accents,
             )
 
+        self._added_tokens_decoder = {
+            cls_character_id: AddedToken(cls_token, special=True) if isinstance(cls_token, str) else cls_token,
+            sep_character_id: AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token,
+            pad_character_id: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
+            mask_character_id: AddedToken(mask_token, special=True) if isinstance(mask_token, str) else mask_token,
+            # These last two symbols are used to delimit the beginning and end of a token (character id vector)
+            bow_character_id: AddedToken(bow_token, special=True) if isinstance(bow_token, str) else bow_token,
+            eow_character_id: AddedToken(eow_token, special=True) if isinstance(eow_token, str) else eow_token,
+        }
+
         super().__init__(
             mlm_vocab_file=None,
             max_word_length=max_word_length,
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
+            cls_character_id=cls_character_id,
+            sep_character_id=sep_character_id,
             bow_character_id=bow_character_id,
             eow_character_id=eow_character_id,
             pad_character_id=pad_character_id,
-            unk_token=unk_token,
+            mask_character_id=mask_character_id,
+            bow_token=bow_token,
+            eow_token=eow_token,
             sep_token=sep_token,
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens or [bow_token, eow_token],
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             **kwargs,
         )
-
-        # NOTE: this is to force the use of our custom character ids for
-        # CLS/SEP/MASK/PAD instead of the default ones
-        self._added_tokens_encoder = {}
 
         # Maximum number of characters (utf-8 bytes) per word
         if max_word_length < 3:
@@ -220,31 +236,6 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         self.eow_character_id = eow_character_id
         # Pads a TOKEN up to the maximum character length
         self.pad_character_id = pad_character_id
-
-        # Token delimiting the BEGINNING of a TEXT
-        self.cls_character_ids = special_token_character_ids(
-            index=256,
-            bow_character_id=self.bow_character_id,
-            eow_character_id=self.eow_character_id,
-            pad_character_id=self.pad_character_id,
-            max_word_length=max_word_length,
-        )
-        # Token delimiting the END of a TEXT
-        self.sep_character_ids = special_token_character_ids(
-            index=257,
-            bow_character_id=self.bow_character_id,
-            eow_character_id=self.eow_character_id,
-            pad_character_id=self.pad_character_id,
-            max_word_length=max_word_length,
-        )
-        # Masks a subset of TOKENS for Maked Language Modeling
-        self.mask_character_ids = special_token_character_ids(
-            index=261,
-            bow_character_id=self.bow_character_id,
-            eow_character_id=self.eow_character_id,
-            pad_character_id=self.pad_character_id,
-            max_word_length=max_word_length,
-        )
 
         # Pads a sequence of TOKENS up to a desired length
         # NOTE: since this is zero, actual characters' ids are assigned
@@ -270,6 +261,72 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     def get_mlm_vocab(self):
         return self.mlm_vocab
 
+    # NOTE: We override this method to dynamically compute special token ids in the form of character id vectors.
+    #       For non-special tokens, we use the _convert_token_to_id method to get the character id sequence.
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        """
+        Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
+        it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the
+        vocab which is why they have to be handled specifically.
+
+        Args:
+            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
+                Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary
+                (tested by checking if the tokenizer assign the index of the `unk_token` to them). If a token is part
+                of the vocabulary then we simply mark this token as an `AddedToken` which allows to control the
+                stripping and normalization of this token. This is NOT possible in `tokenizers`.
+            special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the tokens should be added as special tokens.
+
+        Returns:
+            `int`: The number of tokens actually added to the vocabulary.
+        """
+        added_tokens = 0
+        if new_tokens is None:
+            return added_tokens
+        current_vocab = self.get_vocab().copy()
+        new_idx = 256 + len(current_vocab)  # all ids up to 255 are reserved for actual utf-8 bytes/characters
+        for token in new_tokens:
+            if not isinstance(token, (str, AddedToken)):
+                raise TypeError(f"Token {token} is not a string but a {type(token)}.")
+            if str(token) == "":
+                continue
+            if isinstance(token, str):
+                if token in self._added_tokens_encoder:
+                    continue
+                else:
+                    # very important for fast and slow equivalence!
+                    is_special = token in self.all_special_tokens or special_tokens
+                    token = AddedToken(
+                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
+                    )
+            elif special_tokens:
+                # doing token.special=True changes the normalization! will fix in rust
+                # this is important and the only reason why the AddedTokens in each class are normalized by default
+                token.__setstate__({"special": True, "normalized": token.normalized})
+            if token in self._added_tokens_decoder:
+                continue
+            if not token.special and token.normalized and getattr(self, "do_lower_case", False):
+                # Normalize if requested
+                token.content = token.content.lower()
+            if token.content not in current_vocab:
+                token_index = new_idx + added_tokens
+                current_vocab[token.content] = token_index
+                added_tokens += 1
+            else:
+                token_index = current_vocab[token.content]
+
+            if token.special and str(token) not in self.all_special_tokens:
+                self._additional_special_tokens.append(token)
+            # the setter automatically updates the reverse map
+            self._added_tokens_decoder[token_index] = token
+            self._added_tokens_encoder[token.content] = token_index
+            if self.verbose:
+                logger.info(f"Adding {token} to the vocabulary")
+
+        self._update_trie()
+        return added_tokens
+
     def _tokenize(self, text, split_special_tokens=False):
         split_tokens = []
         if self.do_basic_tokenize:
@@ -292,59 +349,38 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     # NOTE: the following two methods have misleading names since we are
     # working with character id lists instead of standard token ids.
     # Changing these names breaks a lot of things so we keep them for now.
+    def _convert_token_to_id_with_added_voc(self, token):
+        if token is None:
+            return None
+
+        if token in self._added_tokens_encoder:
+            if token == self.pad_token:
+                return self.pad_character_ids
+            return special_token_character_ids(
+                index=self._added_tokens_encoder[token],
+                bow_character_id=self.bow_character_id,
+                eow_character_id=self.eow_character_id,
+                pad_character_id=self.pad_character_id,
+                max_word_length=self.max_word_length,
+            )
+        return self._convert_token_to_id(token)
+
     def _convert_token_to_id(self, token):
         """Converts a token (str) into a list of character ids (integer)."""
-        if token == self.cls_token:
-            character_ids = self.cls_character_ids
-        elif token == self.sep_token:
-            character_ids = self.sep_character_ids
-        elif token == self.mask_token:
-            character_ids = self.mask_character_ids
-        elif token == self.pad_token:
-            character_ids = self.pad_character_ids
-        else:
-            token_bytes = token.encode("utf-8", "ignore")[: (self.max_word_length - 2)]
-            character_ids = [self.pad_character_id] * self.max_word_length
-            character_ids[0] = self.bow_character_id
-            for k, index in enumerate(token_bytes, start=1):
-                character_ids[k] = index
-            character_ids[len(token_bytes) + 1] = self.eow_character_id
-            # NOTE: we shift everything so that the PAD token
-            #       can be assigned the all zeros vector
-            character_ids = [(index + 1) for index in character_ids]
+        token_bytes = token.encode("utf-8", "ignore")[: (self.max_word_length - 2)]
+        character_ids = [self.pad_character_id] * self.max_word_length
+        character_ids[0] = self.bow_character_id
+        for k, index in enumerate(token_bytes, start=1):
+            character_ids[k] = index
+        character_ids[len(token_bytes) + 1] = self.eow_character_id
+        # NOTE: we shift everything so that the PAD token
+        #       can be assigned the all zeros vector
+        character_ids = [(index + 1) for index in character_ids]
         return character_ids
-
-    def _convert_id_to_token(self, character_ids: List[int]):
-        """Converts a list of character ids (integer) intp a token (str)."""
-        assert len(character_ids) == self.max_word_length, (
-            f"Got a character sequence of length {len(character_ids)} while "
-            f"`max_word_length={self.max_word_length}`"
-        )
-
-        if character_ids == self.cls_character_ids:
-            return self.cls_token
-        elif character_ids == self.sep_character_ids:
-            return self.sep_token
-        elif character_ids == self.mask_character_ids:
-            return self.mask_token
-        elif character_ids == self.pad_character_ids:
-            return self.pad_token
-        else:
-            character_ids_ = [(index - 1) for index in character_ids]
-            utf8_codes = list(
-                filter(
-                    lambda x: (
-                        (x != self.pad_character_id) and (x != self.bow_character_id) and (x != self.eow_character_id)
-                    ),
-                    character_ids_,
-                )
-            )
-            return bytes(utf8_codes).decode("utf-8")
 
     def convert_ids_to_tokens(
         self, ids: Union[List[int], List[List[int]]], skip_special_tokens: bool = False
     ) -> Union[str, List[str]]:
-        # NOTE: the first condition needed to be adapted for character_ids instead of token ids.
         """
         Converts a single character_ids vector or a sequence of vectors to a token or a sequence of tokens,
         using the vocabulary and added tokens.
@@ -359,15 +395,99 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         Returns:
             `str` or `List[str]`: The decoded token(s).
         """
+        # NOTE: this condition had to be changed to account for the fact
+        #       that we are working with character id vectors
+        
         if isinstance(ids, list) and isinstance(ids[0], int):
-            # if ids in self._added_tokens_decoder:
-            #    return self._added_tokens_decoder[ids].content
-            # else:
-            return self._convert_id_to_token(ids)
+            index = ids[1] - 1
+            if index in self._added_tokens_decoder:
+                return self._added_tokens_decoder[index].content
+            elif ids == self.pad_character_ids:
+                return self.pad_token
+            else:
+                return self._convert_id_to_token(ids)
         tokens = []
         for character_ids in ids:
-            tokens.append(self._convert_id_to_token(character_ids))
+            if skip_special_tokens and character_ids in self.all_special_ids:
+                continue
+            index = character_ids[1] - 1
+            if index in self._added_tokens_decoder:
+                tokens.append(self._added_tokens_decoder[index].content)
+            elif character_ids == self.pad_character_ids:
+                tokens.append(self.pad_token)
+            else:
+                tokens.append(self._convert_id_to_token(character_ids))
         return tokens
+
+    def _convert_id_to_token(self, character_ids: List[int]):
+        """Converts a list of character ids (integer) intp a token (str)."""
+        assert len(character_ids) == self.max_word_length, (
+            f"Got a character sequence of length {len(character_ids)} while "
+            f"`max_word_length={self.max_word_length}`"
+        )
+        character_ids_ = [(index - 1) for index in character_ids]
+        utf8_codes = list(
+            filter(
+                lambda x: (
+                    (x != self.pad_character_id) and (x != self.bow_character_id) and (x != self.eow_character_id)
+                ),
+                character_ids_,
+            )
+        )
+        return bytes(utf8_codes).decode("utf-8")
+
+    # NOTE: This whole override is due to a minor change due to convert_tokens_to_ids returning character id vectors..
+    # see: https://github.com/huggingface/transformers/blob/v4.38.2/src/transformers/tokenization_utils.py#L1003C62-L1003C118
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
+            token for token in self.additional_special_tokens
+        }
+        # To avoid mixing byte-level and unicode for byte-level BPT
+        # we need to build string separately for added tokens and byte-level tokens
+        # cf. https://github.com/huggingface/transformers/issues/1133
+        sub_texts = []
+        current_sub_text = []
+        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            if token in legacy_added_tokens:
+                if current_sub_text:
+                    string = self.convert_tokens_to_string(current_sub_text)
+                    if len(string) > 0:
+                        sub_texts.append(string)
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        if spaces_between_special_tokens:
+            text = " ".join(sub_texts)
+        else:
+            text = "".join(sub_texts)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
