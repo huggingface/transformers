@@ -151,7 +151,7 @@ class TestOutputIteratorStreamer:
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
 
         generation_kwargs = dict(
-            input_ids=input_ids,
+            #input_ids=input_ids,
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=return_dict_in_generate,
             do_sample=do_sample,
@@ -160,6 +160,8 @@ class TestOutputIteratorStreamer:
             output_scores=output_scores,
             output_logits=output_logits,
         )
+        print(generation_kwargs)  # easier than decoding pytest parameterization shorthand on error
+        generation_kwargs['input_ids'] = input_ids
 
         baseline_kwargs = copy.deepcopy(generation_kwargs)
         test_kwargs = copy.deepcopy(generation_kwargs)
@@ -228,7 +230,7 @@ class TestOutputIteratorStreamer:
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
 
         generation_kwargs = dict(
-            input_ids=input_ids,
+            #input_ids=input_ids,
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=return_dict_in_generate,
             do_sample=do_sample,
@@ -237,6 +239,9 @@ class TestOutputIteratorStreamer:
             # output_scores=output_scores,
             # output_logits=output_logits,
         )
+        print(generation_kwargs) # easier than decoding pytest parameterization shorthand on error
+        generation_kwargs['input_ids'] = input_ids
+
 
         baseline_kwargs = copy.deepcopy(generation_kwargs)
 
