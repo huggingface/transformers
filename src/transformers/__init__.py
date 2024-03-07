@@ -34,7 +34,6 @@ from .utils import (
     is_keras_nlp_available,
     is_librosa_available,
     is_pretty_midi_available,
-    is_sacremoses_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_speech_available,
