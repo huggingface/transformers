@@ -996,7 +996,7 @@ class BertModel(BertPreTrainedModel):
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
-        self._use_sdpa = config._attn_implementation == "sdpa"
+        self.attn_implementation = config._attn_implementation
         self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
@@ -1105,7 +1105,7 @@ class BertModel(BertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=device)
 
         use_sdpa_attention_masks = (
-            self._use_sdpa
+            self.attn_implementation == "sdpa"
             and self.position_embedding_type == "absolute"
             and head_mask is None
             and not output_attentions
