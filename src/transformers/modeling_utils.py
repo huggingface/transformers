@@ -795,7 +795,7 @@ def _load_state_dict_into_meta_model(
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
+            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif (
             hf_quantizer is None
             or (not hf_quantizer.requires_parameters_quantization)
