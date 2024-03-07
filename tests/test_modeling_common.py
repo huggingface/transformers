@@ -707,7 +707,7 @@ class ModelTesterMixin:
             # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
             if "input_ids" not in batched_input:
                 return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=0).max()
+                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
                 )
             return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
 
@@ -769,9 +769,6 @@ class ModelTesterMixin:
                     # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
-                elif hasattr(value, "tensor"):
-                    # only for layoutlmv2 which ises ImageList intead of pixel values (needs for torchscript)
-                    single_row_input[key] = value.tensor[:single_batch_shape]
                 else:
                     single_row_input[key] = value
 
@@ -784,7 +781,7 @@ class ModelTesterMixin:
                 model_row_output = {"model_output": model_row_output}
 
             for key in model_batched_output:
-                # models like DETR start from zero-init queries to decoder, leading to cos_similarity = `nan`
+                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
                 if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
