@@ -58,9 +58,11 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_staging_test,
     require_accelerate,
+    require_bitsandbytes,
     require_deepspeed,
     require_intel_extension_for_pytorch,
     require_optuna,
+    require_peft,
     require_ray,
     require_safetensors,
     require_sentencepiece,
@@ -82,8 +84,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, get_last_checkpoint
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -872,6 +873,92 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
 
+    @require_peft
+    @require_bitsandbytes
+    def test_bnb_compile(self):
+        from peft import LoraConfig, get_peft_model
+
+        # Simply tests if initializing a Trainer with a PEFT + compiled model works out of the box
+        # QLoRA + torch compile is not really supported yet, but we should at least support the model
+        # loading and let torch throw the
+        tiny_model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", load_in_4bit=True
+        )
+
+        peft_config = LoraConfig(
+            r=8,
+            lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        tiny_model = get_peft_model(tiny_model, peft_config)
+
+        tiny_model = torch.compile(tiny_model)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                learning_rate=1e-9,
+                logging_steps=5,
+            )
+            with self.assertRaises(ValueError):
+                _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb_8bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_8bit"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
+    @require_bitsandbytes
+    def test_rmsprop_bnb_32bit(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_32bit"
+            )
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+            # Check that it trains without errors
+            trainer.train()
+
     def test_neftune(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
@@ -1317,19 +1404,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5, pretrained=False)
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
-
-    def test_save_checkpoints_is_atomic(self):
-        class UnsaveableTokenizer(PreTrainedTokenizerBase):
-            def save_pretrained(self, *args, **kwargs):
-                raise OSError("simulated file write error")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
-            # Attach unsaveable tokenizer to partially fail checkpointing
-            trainer.tokenizer = UnsaveableTokenizer()
-            with self.assertRaises(OSError) as _context:
-                trainer.train()
-            assert get_last_checkpoint(tmpdir) is None
 
     @require_safetensors
     def test_safe_checkpoints(self):
@@ -2544,6 +2618,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
+
+    def test_accelerator_config_only_deprecated_args(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertWarns(FutureWarning) as cm:
+                args = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    split_batches=True,
+                )
+                self.assertIn("split_batches", str(cm.warnings[0].message))
+                config = RegressionModelConfig(a=1.5, b=2.5)
+                model = RegressionPreTrainedModel(config)
+                eval_dataset = SampleIterableDataset()
+                trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+                self.assertEqual(trainer.accelerator.split_batches, True)
 
 
 @require_torch

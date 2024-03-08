@@ -157,6 +157,9 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
+    RMSPROP_BNB = "rmsprop_bnb"
+    RMSPROP_8BIT = "rmsprop_bnb_8bit"
+    RMSPROP_32BIT = "rmsprop_bnb_32bit"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -1734,9 +1737,11 @@ class TrainingArguments:
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
         if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig, dict)):
+            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
                 if self.accelerator_config is None:
                     self.accelerator_config = AcceleratorConfig()
+                elif isinstance(self.accelerator_config, dict):
+                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
             if self.dispatch_batches is not None:
@@ -1745,7 +1750,7 @@ class TrainingArguments:
                     " `--accelerator_config {'dispatch_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config["dispatch_batches"] = self.dispatch_batches
+                self.accelerator_config.dispatch_batches = self.dispatch_batches
 
             if self.split_batches is not None:
                 warnings.warn(
@@ -1753,7 +1758,7 @@ class TrainingArguments:
                     " `--accelerator_config {'split_batches':VALUE} instead",
                     FutureWarning,
                 )
-                self.accelerator_config["split_batches"] = self.split_batches
+                self.accelerator_config.split_batches = self.split_batches
 
         if self.tpu_metrics_debug:
             warnings.warn(

@@ -43,22 +43,22 @@ class GenerationConfig(PushToHubMixin):
     Class that holds a configuration for a generation task. A `generate` call supports the following generation methods
     for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
+        - *greedy decoding* by calling [`~generation.GenerationMixin._greedy_search`] if `num_beams=1` and
             `do_sample=False`
-        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
+        - *contrastive search* by calling [`~generation.GenerationMixin._contrastive_search`] if `penalty_alpha>0.`
             and `top_k>1`
-        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
+        - *multinomial sampling* by calling [`~generation.GenerationMixin._sample`] if `num_beams=1` and
             `do_sample=True`
-        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.GenerationMixin._beam_search`] if `num_beams>1` and
             `do_sample=False`
-        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin._beam_sample`] if
             `num_beams>1` and `do_sample=True`
-        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin._group_beam_search`], if
             `num_beams>1` and `num_beam_groups>1`
-        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin._constrained_beam_search`], if
             `constraints!=None` or `force_words_ids!=None`
-        - *assisted decoding* by calling [`~generation.GenerationMixin.assisted_decoding`], if
-            `assistant_model` is passed to `.generate()`
+        - *assisted decoding* by calling [`~generation.GenerationMixin._assisted_decoding`], if
+            `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
@@ -274,7 +274,6 @@ class GenerationConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
-        # if the default `max_length` is updated here, make sure to update the `generate` tests following https://github.com/huggingface/transformers/pull/25030
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
         self.min_length = kwargs.pop("min_length", 0)
@@ -411,32 +410,34 @@ class GenerationConfig(PushToHubMixin):
                 "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
                 + fix_location
             )
-            if self.temperature != 1.0:
+            if self.temperature is not None and self.temperature != 1.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="temperature", flag_value=self.temperature),
                     UserWarning,
                 )
-            if self.top_p != 1.0:
+            if self.top_p is not None and self.top_p != 1.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p),
                     UserWarning,
                 )
-            if self.typical_p != 1.0:
+            if self.typical_p is not None and self.typical_p != 1.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p),
                     UserWarning,
                 )
-            if self.top_k != 50 and self.penalty_alpha is None:  # contrastive search uses top_k
+            if (
+                self.top_k is not None and self.top_k != 50 and self.penalty_alpha is None
+            ):  # contrastive search uses top_k
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k),
                     UserWarning,
                 )
-            if self.epsilon_cutoff != 0.0:
+            if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff),
                     UserWarning,
                 )
-            if self.eta_cutoff != 0.0:
+            if self.eta_cutoff is not None and self.eta_cutoff != 0.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="eta_cutoff", flag_value=self.eta_cutoff),
                     UserWarning,
@@ -457,21 +458,21 @@ class GenerationConfig(PushToHubMixin):
                     single_beam_wrong_parameter_msg.format(flag_name="early_stopping", flag_value=self.early_stopping),
                     UserWarning,
                 )
-            if self.num_beam_groups != 1:
+            if self.num_beam_groups is not None and self.num_beam_groups != 1:
                 warnings.warn(
                     single_beam_wrong_parameter_msg.format(
                         flag_name="num_beam_groups", flag_value=self.num_beam_groups
                     ),
                     UserWarning,
                 )
-            if self.diversity_penalty != 0.0:
+            if self.diversity_penalty is not None and self.diversity_penalty != 0.0:
                 warnings.warn(
                     single_beam_wrong_parameter_msg.format(
                         flag_name="diversity_penalty", flag_value=self.diversity_penalty
                     ),
                     UserWarning,
                 )
-            if self.length_penalty != 1.0:
+            if self.length_penalty is not None and self.length_penalty != 1.0:
                 warnings.warn(
                     single_beam_wrong_parameter_msg.format(flag_name="length_penalty", flag_value=self.length_penalty),
                     UserWarning,
@@ -485,17 +486,17 @@ class GenerationConfig(PushToHubMixin):
         # 3. detect incorrect paramaterization specific to advanced beam modes
         else:
             # constrained beam search
-            if self.constraints is not None:
+            if self.constraints is not None or self.force_words_ids is not None:
                 constrained_wrong_parameter_msg = (
-                    "`constraints` is not `None`, triggering constrained beam search. However, `{flag_name}` is set "
-                    "to `{flag_value}`, which is incompatible with this generation mode. Set `constraints=None` or "
-                    "unset `{flag_name}` to continue." + fix_location
+                    "one of `constraints`, `force_words_ids` is not `None`, triggering constrained beam search. However, "
+                    "`{flag_name}` is set to `{flag_value}`, which is incompatible with this generation mode. Set "
+                    "`constraints` and `force_words_ids` to `None` or unset `{flag_name}` to continue." + fix_location
                 )
                 if self.do_sample is True:
                     raise ValueError(
                         constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
                     )
-                if self.num_beam_groups != 1:
+                if self.num_beam_groups is not None and self.num_beam_groups != 1:
                     raise ValueError(
                         constrained_wrong_parameter_msg.format(
                             flag_name="num_beam_groups", flag_value=self.num_beam_groups
@@ -1004,6 +1005,9 @@ class GenerationConfig(PushToHubMixin):
                 setattr(self, key, value)
                 to_remove.append(key)
 
-        # remove all the attributes that were updated, without modifying the input dict
+        # Confirm that the updated instance is still valid
+        self.validate()
+
+        # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs

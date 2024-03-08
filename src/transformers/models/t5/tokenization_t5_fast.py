@@ -96,6 +96,10 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
+        from_slow (`book`, *optional*, defaults to `False`):
+            Whether or not the tokenizer should be converted from a slow one. If `add_prefix_space` is set, this will be set to `True`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -115,6 +119,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
+        add_prefix_space=None,
         **kwargs,
     ):
         # Add extra_ids to the special token list
@@ -131,6 +136,12 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         else:
             extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
             additional_special_tokens = extra_tokens
+
+        if add_prefix_space is not None:
+            logger.warning_once(
+                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
+            )
+            kwargs["from_slow"] = True
 
         super().__init__(
             vocab_file,

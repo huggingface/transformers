@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 import torch
 import torch.distributed as dist
 from pygtrie import CharTrie
+from pygtrie import CharTrie
 from torch import nn
 
 from ..cache_utils import Cache, DynamicCache, StaticCache
@@ -87,6 +88,7 @@ from .stopping_criteria import (
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
@@ -145,7 +147,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     Outputs of encoder-decoder generation models, when using non-beam methods.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
@@ -206,7 +208,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
-            with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True` is passed or when `config.output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
@@ -349,20 +351,22 @@ class GenerationMixin:
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
-        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
+        - *greedy decoding* by calling [`~generation.GenerationMixin._greedy_search`] if `num_beams=1` and
           `do_sample=False`
-        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0` and
+        - *contrastive search* by calling [`~generation.GenerationMixin._contrastive_search`] if `penalty_alpha>0` and
           `top_k>1`
-        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
+        - *multinomial sampling* by calling [`~generation.GenerationMixin._sample`] if `num_beams=1` and
           `do_sample=True`
-        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.GenerationMixin._beam_search`] if `num_beams>1` and
           `do_sample=False`
-        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if `num_beams>1`
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin._beam_sample`] if `num_beams>1`
           and `do_sample=True`
-        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if `num_beams>1`
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin._group_beam_search`], if `num_beams>1`
           and `num_beam_groups>1`
-        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin._constrained_beam_search`], if
           `constraints!=None` or `force_words_ids!=None`
+        - *assisted decoding* by calling [`~generation.GenerationMixin._assisted_decoding`], if
+            `assistant_model` or `prompt_lookup_num_tokens` is passed to `.generate()`
 
     You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
     learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
@@ -650,6 +654,7 @@ class GenerationMixin:
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
+        model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
@@ -678,6 +683,8 @@ class GenerationMixin:
                     [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
                     dim=-1,
                 )
+
+        model_kwargs["cache_position"] = model_inputs.get("cache_position", None)
 
         return model_kwargs
 
@@ -980,9 +987,9 @@ class GenerationMixin:
                 shorter if all batches finished early due to the `eos_token_id`.
             scores (`tuple(torch.FloatTensor)`):
                 Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
-                of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
-                `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with
-                each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+                of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
+                Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+                with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
                 `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
@@ -1250,12 +1257,12 @@ class GenerationMixin:
             inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
-                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                should be in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, the default will be used, which had the following loading
+                `generation_config` is not provided, the default will be used, which has the following loading
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
@@ -1264,7 +1271,7 @@ class GenerationMixin:
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
             stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complement the default stopping criteria built from arguments and a
+                Custom stopping criteria that complements the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. If your stopping criteria depends on the `scores` input, make
                 sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`. This feature is
@@ -1294,7 +1301,7 @@ class GenerationMixin:
             negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Attention_mask for `negative_prompt_ids`.
             kwargs (`Dict[str, Any]`, *optional*):
-                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+                Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
 
@@ -1320,6 +1327,7 @@ class GenerationMixin:
                 synced_gpus = True
             else:
                 synced_gpus = False
+        tokenizer = kwargs.pop("tokenizer", None)
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
@@ -1349,7 +1357,6 @@ class GenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
-        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Set generation parameters if not already defined
@@ -1431,7 +1438,7 @@ class GenerationMixin:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
         if generation_config.token_healing:
-            input_ids = self.heal_tokens(input_ids)
+            input_ids = self.heal_tokens(input_ids, tokenizer)
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -1456,18 +1463,21 @@ class GenerationMixin:
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
+            generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
 
-        # if we don't pass `past_key_values` and a cache_implementation is specified
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
-            "past_key_values", False
-        ):
-            cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
-            if not callable(getattr(self, "_setup_cache", None)):
-                raise ValueError(
-                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                    " Make sure it has a `_setup_cache` function."
-                )
-            self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation == "static":
+                if model_kwargs.get("past_key_values", False) is not False:
+                    raise ValueError(
+                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
+                    )
+                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
+                if not callable(getattr(self, "_setup_cache", None)):
+                    raise ValueError(
+                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                        " Make sure it has a `_setup_cache` function."
+                    )
+                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -1529,7 +1539,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            return self.assisted_decoding(
+            result = self.assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
@@ -1547,7 +1557,7 @@ class GenerationMixin:
             )
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
-            return self.greedy_search(
+            result = self._greedy_search(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -1565,7 +1575,7 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
 
-            return self.contrastive_search(
+            result = self._contrastive_search(
                 input_ids,
                 top_k=generation_config.top_k,
                 penalty_alpha=generation_config.penalty_alpha,
@@ -1595,7 +1605,7 @@ class GenerationMixin:
             )
 
             # 13. run sample
-            return self.sample(
+            result = self._sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
@@ -1629,7 +1639,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.beam_search(
+            result = self._beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1668,7 +1678,7 @@ class GenerationMixin:
             )
 
             # 14. run beam sample
-            return self.beam_sample(
+            result = self._beam_sample(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1703,7 +1713,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.group_beam_search(
+            result = self._group_beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1777,7 +1787,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
             # 13. run beam search
-            return self.constrained_beam_search(
+            result = self._constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
@@ -1791,16 +1801,32 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-    def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if not callable(getattr(self, "_reset_cache", None)):
+                raise ValueError(
+                    "A `static_cache` was used to generate but there was a failure when trying to  release the cache. "
+                    " Make sure this model implements a `_reset_cache` function."
+                )
+            self._reset_cache()
+
+        return result
+
+    def heal_tokens(
+        self, input_ids: torch.LongTensor, tokenizer: Optional["PreTrainedTokenizerBase"] = None
+    ) -> torch.LongTensor:
         r"""
         Generates sequences of token ids for models with a language modeling head.
         Parameters:
             input_ids (`torch.LongTensor`): The sequence used as a prompt for the generation.
+            tokenizer (`PreTrainedTokenizerBase`, *optional*): The tokenizer used to decode the input ids.
         Return:
             `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
         """
-
-        tokenizer = AutoTokenizer.from_pretrained(self.name_or_path)
+        if tokenizer is None:
+            raise ValueError(
+                " When generating with token healing, you must pass the model's tokenizer to the `tokenizer` "
+                "argument of `generate`."
+            )
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
         vocab_trie = CharTrie(tokenizer.get_vocab())
         gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
@@ -1846,8 +1872,15 @@ class GenerationMixin:
 
         return input_ids
 
+    def contrastive_search(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `contrastive_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._contrastive_search(*args, **kwargs)
+
     @torch.no_grad()
-    def contrastive_search(
+    def _contrastive_search(
         self,
         input_ids: torch.LongTensor,
         top_k: Optional[int] = 1,
@@ -1873,7 +1906,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.contrastive_search`] directly. Use
+        In most cases, you do not need to call [`~generation.GenerationMixin._contrastive_search`] directly. Use
         generate() instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -1947,7 +1980,7 @@ class GenerationMixin:
         >>> input_prompt = "DeepMind Company is"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt")
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=64)])
-        >>> outputs = model.contrastive_search(
+        >>> outputs = model._contrastive_search(
         ...     **input_ids, penalty_alpha=0.6, top_k=4, stopping_criteria=stopping_criteria
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -2036,6 +2069,7 @@ class GenerationMixin:
                     model_kwargs,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     standardize_cache_format=True,
+                    model_inputs=model_inputs,
                 )
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -2230,7 +2264,7 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2239,12 +2273,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            # stop when each sentence is finished
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2289,7 +2321,14 @@ class GenerationMixin:
         else:
             return input_ids
 
-    def greedy_search(
+    def greedy_search(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `greedy_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._greedy_search(*args, **kwargs)
+
+    def _greedy_search(
         self,
         input_ids: torch.LongTensor,
         logits_processor: Optional[LogitsProcessorList] = None,
@@ -2312,7 +2351,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.greedy_search`] directly. Use generate()
+        In most cases, you do not need to call [`~generation.GenerationMixin._greedy_search`] directly. Use generate()
         instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -2394,7 +2433,7 @@ class GenerationMixin:
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
 
-        >>> outputs = model.greedy_search(
+        >>> outputs = model._greedy_search(
         ...     input_ids, logits_processor=logits_processor, stopping_criteria=stopping_criteria
         ... )
 
@@ -2511,7 +2550,10 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                model_inputs=model_inputs,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2520,12 +2562,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2559,7 +2599,14 @@ class GenerationMixin:
         else:
             return input_ids
 
-    def sample(
+    def sample(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `sample` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._sample(*args, **kwargs)
+
+    def _sample(
         self,
         input_ids: torch.LongTensor,
         logits_processor: Optional[LogitsProcessorList] = None,
@@ -2583,7 +2630,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.sample`] directly. Use generate() instead.
+        In most cases, you do not need to call [`~generation.GenerationMixin._sample`] directly. Use generate() instead.
         For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -2680,7 +2727,7 @@ class GenerationMixin:
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
 
         >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> outputs = model.sample(
+        >>> outputs = model._sample(
         ...     input_ids,
         ...     logits_processor=logits_processor,
         ...     logits_warper=logits_warper,
@@ -2805,7 +2852,7 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2814,12 +2861,10 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:
@@ -2879,7 +2924,14 @@ class GenerationMixin:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
 
-    def beam_search(
+    def beam_search(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `beam_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._beam_search(*args, **kwargs)
+
+    def _beam_search(
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
@@ -2903,7 +2955,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.beam_search`] directly. Use generate()
+        In most cases, you do not need to call [`~generation.GenerationMixin._beam_search`] directly. Use generate()
         instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -3005,7 +3057,7 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+        >>> outputs = model._beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Wie alt bist du?']
@@ -3198,7 +3250,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3211,7 +3263,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -3261,7 +3313,14 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def beam_sample(
+    def beam_sample(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `beam_sample` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._beam_sample(*args, **kwargs)
+
+    def _beam_sample(
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
@@ -3285,7 +3344,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.beam_sample`] directly. Use generate()
+        In most cases, you do not need to call [`~generation.GenerationMixin._beam_sample`] directly. Use generate()
         instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -3393,7 +3452,7 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.beam_sample(
+        >>> outputs = model._beam_sample(
         ...     input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs
         ... )
 
@@ -3545,7 +3604,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3558,7 +3617,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -3608,7 +3667,14 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def group_beam_search(
+    def group_beam_search(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `group_beam_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._group_beam_search(*args, **kwargs)
+
+    def _group_beam_search(
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
@@ -3631,7 +3697,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.group_beam_search`] directly. Use
+        In most cases, you do not need to call [`~generation.GenerationMixin._group_beam_search`] directly. Use
         generate() instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -3733,7 +3799,7 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.group_beam_search(
+        >>> outputs = model._group_beam_search(
         ...     input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs
         ... )
 
@@ -3944,7 +4010,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3954,7 +4020,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -4005,7 +4071,14 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def constrained_beam_search(
+    def constrained_beam_search(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `constrained_beam_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._constrained_beam_search(*args, **kwargs)
+
+    def _constrained_beam_search(
         self,
         input_ids: torch.LongTensor,
         constrained_beam_scorer: ConstrainedBeamSearchScorer,
@@ -4028,7 +4101,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.constrained_beam_search`] directly. Use
+        In most cases, you do not need to call [`~generation.GenerationMixin._constrained_beam_search`] directly. Use
         generate() instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -4135,7 +4208,7 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.constrained_beam_search(
+        >>> outputs = model._constrained_beam_search(
         ...     input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs
         ... )
 
@@ -4296,7 +4369,7 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -4309,7 +4382,7 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-            if constrained_beam_scorer.is_done or stopping_criteria(input_ids, scores):
+            if constrained_beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 if not synced_gpus:
                     break
                 else:
@@ -4358,10 +4431,16 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
-    def assisted_decoding(
+    def assisted_decoding(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `_assisted_decoding` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._assisted_decoding(*args, **kwargs)
+
+    def _assisted_decoding(
         self,
         input_ids: torch.LongTensor,
-        assistant_model: Optional["PreTrainedModel"] = None,
         candidate_generator: Optional["CandidateGenerator"] = None,
         do_sample: bool = False,
         logits_processor: Optional[LogitsProcessorList] = None,
@@ -4386,7 +4465,7 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.candidate_decoding`] directly. Use
+        In most cases, you do not need to call [`~generation.GenerationMixin._assisted_decoding`] directly. Use
         generate() instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -4397,12 +4476,7 @@ class GenerationMixin:
                 The sequence used as a prompt for the generation.
             candidate_generator (`CandidateGenerator`, *optional*):
                 A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
-                more information, the documentation of [`CandidateGenerator`] should be read. Only one of `assistant_model` or `candidate_generator` should be passed as input to this function.
-            assistant_model (`PreTrainedModel`, *optional*):
-                An assistant model that can be used to accelerate generation. The assistant model must have the exact
-                same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
-                is much faster than running generation with the model you're calling generate from. As such, the
-                assistant model should be much smaller.
+                more information, the documentation of [`CandidateGenerator`] should be read.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             logits_processor (`LogitsProcessorList`, *optional*):
@@ -4459,6 +4533,7 @@ class GenerationMixin:
         ...     StoppingCriteriaList,
         ...     MaxLengthCriteria,
         ... )
+        >>> from transformers.generation import AssistedCandidateGenerator
 
         >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
@@ -4474,33 +4549,22 @@ class GenerationMixin:
         ...     ]
         ... )
         >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-        >>> outputs = model.assisted_decoding(
-        ...     input_ids,
+        >>> candidate_generator = AssistedCandidateGenerator(
+        ...     input_ids=input_ids,
         ...     assistant_model=assistant_model,
+        ...     generation_config=model.generation_config,
+        ...     logits_processor=logits_processor,
+        ...     model_kwargs={},
+        ... )
+        >>> outputs = model._assisted_decoding(
+        ...     input_ids,
+        ...     candidate_generator=candidate_generator,
         ...     logits_processor=logits_processor,
         ...     stopping_criteria=stopping_criteria,
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
-        # handling deprecated arguments
-        if (assistant_model is None) == (candidate_generator is None):
-            raise ValueError("One (and only one) of `assistant_model` and `candidate_generator` should be defined.")
-
-        if assistant_model is not None:
-            candidate_generator = AssistedCandidateGenerator(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                logits_processor=logits_processor,
-                model_kwargs=model_kwargs,
-                eos_token_id=eos_token_id,
-            )
-            warnings.warn(
-                "Passing `assistant_model` to `assisted_decoding` is deprecated and will be removed in v4.38. "
-                "Pass the `candidate_generator` argument instead.",
-                FutureWarning,
-            )
-
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
@@ -4703,7 +4767,7 @@ class GenerationMixin:
                         )
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -4715,12 +4779,10 @@ class GenerationMixin:
                     .prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
 
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
+            # stop when each sentence is finished
+            if unfinished_sequences.max() == 0:
                 this_peer_finished = True
 
             if this_peer_finished and not synced_gpus:

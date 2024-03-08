@@ -326,6 +326,7 @@ extras["testing"] = (
     )
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["generate"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
@@ -433,7 +434,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.38.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.39.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

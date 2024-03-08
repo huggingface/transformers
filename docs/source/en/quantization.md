@@ -39,9 +39,13 @@ Inference support for AQLM is realised in the `aqlm` library. Make sure to insta
 pip install aqlm[gpu,cpu]
 ```
 
-The library provides efficient kernels for both GPU and CPU inference.
+The library provides efficient kernels for both GPU and CPU inference and training.
 
 The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM).
+
+### PEFT
+
+Starting with version `aqlm 1.0.2`, AQLM supports Parameter-Efficient Fine-Tuning in a form of [LoRA](https://huggingface.co/docs/peft/package_reference/lora) integrated into the [PEFT](https://huggingface.co/blog/peft) library.
 
 ### AQLM configurations
 

@@ -17,8 +17,10 @@
 
 import copy
 import math
+import os
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -46,21 +48,42 @@ from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
-from .load_custom import load_cuda_kernels
 
 
 logger = logging.get_logger(__name__)
 
-# Move this to not compile only when importing, this needs to happen later, like in __init__.
-if is_torch_cuda_available() and is_ninja_available():
-    logger.info("Loading custom CUDA kernels...")
-    try:
-        MultiScaleDeformableAttention = load_cuda_kernels()
-    except Exception as e:
-        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
-        MultiScaleDeformableAttention = None
-else:
-    MultiScaleDeformableAttention = None
+MultiScaleDeformableAttention = None
+
+
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    global MultiScaleDeformableAttention
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
+    src_files = [
+        root / filename
+        for filename in [
+            "vision.cpp",
+            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
+            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
+        ]
+    ]
+
+    MultiScaleDeformableAttention = load(
+        "MultiScaleDeformableAttention",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cflags=["-DWITH_CUDA=1"],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
+
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
@@ -590,6 +613,14 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
 
     def __init__(self, config: DeformableDetrConfig, num_heads: int, n_points: int):
         super().__init__()
+
+        kernel_loaded = MultiScaleDeformableAttention is not None
+        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+            try:
+                load_cuda_kernels()
+            except Exception as e:
+                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+
         if config.d_model % num_heads != 0:
             raise ValueError(
                 f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
@@ -1727,7 +1758,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -2251,9 +2281,10 @@ class DeformableDetrLoss(nn.Module):
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if PartialState._shared_state != {}:
-            num_boxes = reduce(num_boxes)
-            world_size = PartialState().num_processes
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

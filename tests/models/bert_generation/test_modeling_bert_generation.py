@@ -305,12 +305,6 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
         self.assertIsNotNone(model)
 
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
 
 @require_torch
 class BertGenerationEncoderIntegrationTest(unittest.TestCase):
