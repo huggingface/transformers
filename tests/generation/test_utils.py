@@ -1840,7 +1840,7 @@ class GenerationTesterMixin:
         # First, filter out models that don't support left padding
         # - The model must have generative capabilities
         if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative model available.")
+            self.skipTest(reason="No generative architecture available for this model.")
 
         # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
         decoder_only_classes = []
@@ -1851,7 +1851,7 @@ class GenerationTesterMixin:
             else:
                 decoder_only_classes.append(model_class)
         if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only model available.")
+            self.skipTest(reason="No decoder-only architecture available for this model.")
 
         # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
         #   added support for it yet. We skip these models for now.
