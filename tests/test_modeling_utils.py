@@ -1260,7 +1260,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_model_from_pretrained_from_mlx(self):
         from safetensors import safe_open
 
-        model = AutoModelForCausalLM.from_pretrained("pcuenq/tiny-random-mistral-mlx")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-mistral-mlx")
         self.assertIsNotNone(model)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
