@@ -156,8 +156,6 @@ class TestOutputIteratorStreamer:
         model.config.eos_token_id = -1
         print(model.config)
 
-        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-
         generation_kwargs = dict(
             #input_ids=input_ids,
             max_new_tokens=max_new_tokens,
@@ -178,6 +176,8 @@ class TestOutputIteratorStreamer:
         #### /dmarx
 
         print(generation_kwargs)  # easier than decoding pytest parameterization shorthand on error
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
         generation_kwargs['input_ids'] = input_ids
 
         baseline_kwargs = copy.deepcopy(generation_kwargs)
