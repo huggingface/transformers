@@ -541,6 +541,9 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
             self.assertTrue(outputs)
 
+            # Confirm out_indices was propogated to backbone
+            self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
