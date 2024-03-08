@@ -338,7 +338,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr >ConditionalDetr
+# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->ConditionalDetr
 class ConditionalDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
