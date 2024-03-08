@@ -9084,7 +9084,7 @@ else:
 
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
-    logger.warning(
+    logger.warning_advice(
         "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
