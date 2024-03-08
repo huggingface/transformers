@@ -267,7 +267,7 @@ SUPPORTED_TASKS = {
         "type": "text",
     },
     "summarization": {
-        "impl": SummarizationPipeline,
+        "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
@@ -288,7 +288,7 @@ SUPPORTED_TASKS = {
         "type": "text",
     },
     "text2text-generation": {
-        "impl": Text2TextGenerationPipeline,
+        "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
