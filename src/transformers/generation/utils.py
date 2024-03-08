@@ -2229,7 +2229,7 @@ class GenerationMixin:
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
                     scores=(processed_logit_for_next_step,), #(scores,),
-                    logits=(logit_for_next_step,), # `logit_for_next_step`: values don't match, `logits`: shapes don't match
+                    logits=(processed_logit_for_next_step,), # I think there's an issue with the contrastive sampling implementation that is currently returning the same values for logits as scores    #(logits[selected_idx,:],), #(logit_for_next_step,), # `logit_for_next_step`: values don't match, `logits`: shapes don't match
                     encoder_attentions=None, # probably doesn't make sense to stream this
                     encoder_hidden_states=None, # probably doesn't make sense to stream this
                     decoder_attentions=(next_step_decoder_attentions,), # ([0],),# very concerning that if I set this to `([0],)` my tests don't fail
