@@ -1910,7 +1910,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
         loss = alpha_t * loss
 
     return loss.mean(1).sum() / num_boxes
-    
+
 
 class RTDetrLoss(nn.Module):
     """
@@ -2323,9 +2323,11 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
         Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
