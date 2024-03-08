@@ -139,9 +139,11 @@ class TestOutputIteratorStreamer:
     @pytest.mark.parametrize("output_logits", [False, True])
     @pytest.mark.parametrize("output_attentions", [False, True])
     @pytest.mark.parametrize("model", ["hf-internal-testing/tiny-random-gpt2", "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bart"]) # decoder, encoder, encoder-decoder
+    @pytest.mark.parametrize("assistant_model", [False, True])
     def test_outputs_match(self,
                            *,
                            model,
+                           assistant_model,
                            do_sample,
                            top_k,
                            penalty_alpha,
@@ -168,6 +170,8 @@ class TestOutputIteratorStreamer:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
+        if assistant_model:
+            generation_kwargs['assistant_model'] = copy.deepcopy(model)
         ### dmarx Force behaviors here for development ###########################################
         # lol maybe these should just be separate tests....
 
@@ -246,7 +250,7 @@ class TestOutputIteratorStreamer:
                 baseline_values = baseline_values.cpu()
             #assert (baseline_values is not None) and (baseline_values != tuple())
             assert (baseline_values is not None)
-            assert type(baseline_values) == type(getattr(output_object, output_name))
+            #assert type(baseline_values) == type(getattr(output_object, output_name))
             #assert n_times_field_extended[output_name] > 1 # make sure we're not just comparing to the final output tensor
             # TODO: pick a better "are these literally the same object" test
 
@@ -256,7 +260,9 @@ class TestOutputIteratorStreamer:
             #assert baseline_values.shape == target_values.shape
             print("baseline", baseline_values)
             print("target", target_values)
+            assert type(baseline_values) == type(target_values)
             assert len(baseline_values) == len(target_values)
+
 
             # attention/hidden = tuples of tuples
             def nested_tensor_equality(left, right):
