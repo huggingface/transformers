@@ -4094,15 +4094,32 @@ class Trainer:
             self.repo.git_push()
 
     def create_accelerator_and_postprocess(self):
-        grad_acc_kwargs = {"num_steps": self.args.gradient_accumulation_steps}
-        grad_acc_kwargs["sync_with_dataloader"] = False
+
+        grad_acc_kwargs = {}
+        if self.args.accelerator_config.gradient_accumulation_kwargs is not None:
+            grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
+
+        # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
+        if "num_steps" in grad_acc_kwargs:
+            warnings.warn("\"num_steps\" passed in gradient_accumulation_kwargs will be ignored in favour of TrainingArguments.gradient_accumulation_steps.")
+        grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
+
+        # this is legacy code. Are we sure is a good idea to overwrite without any warning?
+        grad_acc_kwargs["sync_with_dataloader"] = False 
+
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
+        # convert AcceleratorConfig to Accelerator kwargs, but first 
+        # remove the grad accumulation kwargs that should not be passed in 
+        accelerator_config = {
+            k:v for k,v in self.args.accelerator_config.to_dict().items()
+            if k != 'gradient_accumulation_kwargs'
+        }
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
-            **self.args.accelerator_config.to_dict(),
+            **accelerator_config,
         )
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics

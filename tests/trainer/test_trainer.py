@@ -2499,6 +2499,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
 
+            # gradient accumulation kwargs wil configure the gradient_state
+            self.assertNotIn('sync_each_batch', trainer.accelerator.gradient_state.plugin_kwargs)
+
     def test_accelerator_config_from_dict(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
@@ -2515,6 +2518,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     "dispatch_batches": True,
                     "even_batches": False,
                     "use_seedable_sampler": True,
+                    "gradient_accumulation_kwargs": {
+                        "sync_each_batch": True
+                    }
                 },
             )
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
@@ -2522,6 +2528,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+            # gradient accumulation kwargs wil configure the gradient_state
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs['sync_each_batch'], True)
 
     def test_accelerator_config_from_yaml(self):
         # Checks that accelerator kwargs can be passed through
@@ -2534,6 +2543,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     "dispatch_batches": True,
                     "even_batches": False,
                     "use_seedable_sampler": False,
+                    "gradient_accumulation_kwargs": {
+                        "sync_each_batch": True
+                    }
                 }
                 json.dump(accelerator_config, f)
             config = RegressionModelConfig(a=1.5, b=2.5)
@@ -2548,11 +2560,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
+            # gradient accumulation kwargs wil configure the gradient_state
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs['sync_each_batch'], True)
+
     def test_accelerator_config_from_dataclass(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
+
+        grad_acc_kwargs = {
+            'sync_each_batch': True,
+        }
         accelerator_config = AcceleratorConfig(
-            split_batches=True, dispatch_batches=True, even_batches=False, use_seedable_sampler=False
+            split_batches=True, dispatch_batches=True, even_batches=False, use_seedable_sampler=False,
+            gradient_accumulation_kwargs=grad_acc_kwargs
         )
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
@@ -2564,6 +2584,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+
+            # gradient accumulation kwargs wil configure the gradient_state
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs['sync_each_batch'], True)
 
     def test_accelerator_config_from_partial(self):
         # Checks that accelerator kwargs can be passed through
@@ -2578,6 +2601,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 output_dir=tmp_dir,
                 accelerator_config={
                     "split_batches": True,
+                    "gradient_accumulation_kwargs": {
+                        "sync_each_batch": True
+                    }
                 },
             )
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
@@ -2585,6 +2611,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+            # gradient accumulation kwargs wil configure the gradient_state
+            self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs['sync_each_batch'], True)
 
     def test_accelerator_config_from_dict_with_deprecated_args(self):
         # Checks that accelerator kwargs can be passed through

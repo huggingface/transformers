@@ -1170,7 +1170,9 @@ class AcceleratorConfig:
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
-
+        gradient_accumulation_kwargs (`dict`, *optional*, defaults to `None`):
+            Additional kwargs to configure gradient accumulation, see GradientAccumulationPlugin. The 
+            This should exclude GradientAccumulationPlugin.num_steps that will be set to TrainingArguments.gradient_accumulation_steps.
     """
 
     # Data related arguments
@@ -1207,6 +1209,13 @@ class AcceleratorConfig:
             "While seed-to-seed results may differ, on average the differences are neglible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
+    )
+    gradient_accumulation_kwargs: Optional[Dict] = field(
+        default=None, 
+        metadata={
+            "help": "Additional kwargs to configure gradient accumulation, see GradientAccumulationPlugin. The "
+            "This should exclude GradientAccumulationPlugin.num_steps that will be set to TrainingArguments.gradient_accumulation_steps."
+        }
     )
 
     @classmethod
