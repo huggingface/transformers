@@ -2228,12 +2228,12 @@ class GenerationMixin:
                     sequences=next_tokens,
                     scores=(scores,),
                     logits=(logits,),
-                    encoder_attentions=None,
-                    encoder_hidden_states=None,
-                    decoder_attentions=(next_step_decoder_attentions,),
+                    encoder_attentions=None, # probably doesn't make sense to stream this
+                    encoder_hidden_states=None, # probably doesn't make sense to stream this
+                    decoder_attentions=(next_step_decoder_attentions,), # ([0],),# very concerning that if I set this to `([0],)` my tests don't fail
                     cross_attentions=(next_step_cross_attentions,),
                     decoder_hidden_states=(next_decoder_hidden_states,),
-                    past_key_values=None,
+                    past_key_values=None, # probably doesn't make sense to stream this
                 )
                 streamer.put(output_stub)
 
@@ -2495,7 +2495,7 @@ class GenerationMixin:
                     next_decoder_hidden_states = (
                         outputs.decoder_hidden_states
                         if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
+                        else outputs.hidden_states
                     )
                     decoder_hidden_states += (next_decoder_hidden_states,)
 
@@ -2516,12 +2516,12 @@ class GenerationMixin:
                     sequences=next_tokens,
                     scores=(next_tokens_scores,),
                     logits=(next_token_logits,),
-                    encoder_attentions=None,
-                    encoder_hidden_states=None,
-                    decoder_attentions=(next_decoder_attentions,),       # not sure this is right
-                    cross_attentions=(next_cross_attentions,),           # not sure this is right
+                    encoder_attentions=None, # (encoder_attentions,),       # this will always be the same values for each streamed token. not sure it makes sense to stream it
+                    encoder_hidden_states=None, # (encoder_hidden_states,), # this will always be the same values for each streamed token. not sure it makes sense to stream it
+                    decoder_attentions=(next_decoder_attentions,),       # ok this time changing it to `([0],)` causes a test failure. so that's good.
+                    cross_attentions=(next_cross_attentions,),           # not sure this is right ### changing to `([0],)` does not cause test failure :(
                     decoder_hidden_states=(next_decoder_hidden_states,), # not sure this is right
-                    past_key_values=None,
+                    past_key_values=None, # probably don't want to stream this just in general
                 )
                 streamer.put(output_stub)
 
@@ -2733,7 +2733,7 @@ class GenerationMixin:
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         encoder_attentions = encoder_hidden_states = None # initialize variables for self._prepare_output(...)
-        next_decoder_attentions = None  # initialize variables for streamer.put(self._prepare_output(...))
+        next_decoder_attentions = next_cross_attentions = next_decoder_hidden_states = None  # initialize variables for streamer.put(self._prepare_output(...))
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
             encoder_hidden_states = (
@@ -2788,16 +2788,18 @@ class GenerationMixin:
                     )
                     decoder_attentions += (next_decoder_attentions,)
                     if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
+                        next_cross_attentions = outputs.cross_attentions
+                        cross_attentions += (next_cross_attentions,)
 
                 if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
+                    next_decoder_hidden_states = (
+                        outputs.decoder_hidden_states
                         if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
+                        else outputs.hidden_states
                     )
+                    decoder_hidden_states += (next_decoder_hidden_states,)
 
-            # sample
+                    # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
@@ -2817,12 +2819,12 @@ class GenerationMixin:
                     sequences=next_tokens,  # this seems to be getting coerced to float somewhere?
                     scores=(next_token_scores,),
                     logits=(next_token_logits,),
-                    encoder_attentions=None,
-                    encoder_hidden_states=None,
+                    encoder_attentions=None, # probably don't want to stream this
+                    encoder_hidden_states=None, # probably don't want to stream this
                     decoder_attentions=(next_decoder_attentions,),
-                    cross_attentions=None,
-                    decoder_hidden_states=None,
-                    past_key_values=None,
+                    cross_attentions=(next_cross_attentions,),
+                    decoder_hidden_states=(next_decoder_hidden_states,),
+                    past_key_values=None, # probably don't want to stream this
                     )
                 streamer.put(output_stub)
 
@@ -4638,21 +4640,22 @@ class GenerationMixin:
 
             # 4.1. Get the valid continuation, after the matching tokens
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
-            if streamer is not None:
-                output_stub = self._prepare_output(
-                    return_dict_in_generate=return_dict_in_generate,
-                    sequences=valid_tokens,
-                    scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
-                    # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
-                    logits=(next_token_logits,),
-                    encoder_attentions=None,
-                    encoder_hidden_states=None,
-                    decoder_attentions=None,
-                    cross_attentions=None,
-                    decoder_hidden_states=None,
-                    past_key_values=None,
-                )
-                streamer.put(output_stub)
+            # move this down
+            # if streamer is not None:
+            #     output_stub = self._prepare_output(
+            #         return_dict_in_generate=return_dict_in_generate,
+            #         sequences=valid_tokens,
+            #         scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
+            #         # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
+            #         logits=(next_token_logits,),
+            #         encoder_attentions=None,
+            #         encoder_hidden_states=None,
+            #         decoder_attentions=None,
+            #         cross_attentions=None,
+            #         decoder_hidden_states=None,
+            #         past_key_values=None,
+            #     )
+            #     streamer.put(output_stub)
             new_cur_len = input_ids.shape[-1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
@@ -4715,6 +4718,23 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
             )
+
+            if streamer is not None:
+                output_stub = self._prepare_output(
+                    return_dict_in_generate=return_dict_in_generate,
+                    sequences=valid_tokens,
+                    scores=tuple(new_logits[:, i, :] for i in range(n_matches + 1)),
+                    # todo: just slice a view into the tensor... new_logits[:, :(n_matches+1), :], right?
+                    logits=(next_token_logits,),
+                    encoder_attentions=None,
+                    encoder_hidden_states=None,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=None,
+                )
+                streamer.put(output_stub)
+
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
