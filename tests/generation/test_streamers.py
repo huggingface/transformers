@@ -138,8 +138,10 @@ class TestOutputIteratorStreamer:
     @pytest.mark.parametrize("output_scores", [False, True])
     @pytest.mark.parametrize("output_logits", [False, True])
     @pytest.mark.parametrize("output_attentions", [False, True])
+    @pytest.mark.parametrize("model", ["hf-internal-testing/tiny-random-gpt2", "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bart"]) # decoder, encoder, encoder-decoder
     def test_outputs_match(self,
                            *,
+                           model,
                            do_sample,
                            top_k,
                            penalty_alpha,
@@ -148,10 +150,9 @@ class TestOutputIteratorStreamer:
                            output_attentions,
                            max_new_tokens=10,
                            return_dict_in_generate=True,
-                           #output_attentions=False,
-                           output_hidden_states=False
+                           output_hidden_states=False,
                            ):
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model).to(torch_device)
         model.config.eos_token_id = -1
         print(model.config)
 
