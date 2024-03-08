@@ -137,10 +137,6 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     ):
         super().__init__(**kwargs)
 
-        if kwargs.get("_out_indices", None) is not None:
-            out_indices = kwargs["_out_indices"]
-            out_features = None
-
         image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
 
         self.image_size = image_size
@@ -163,5 +159,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self.linear_attention = linear_attention
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+            out_features=out_features if out_features is not None else getattr(self, "out_features", None),
+            out_indices=out_indices if out_indices is not None else getattr(self, "out_indices", None),
+            stage_names=self.stage_names
         )
