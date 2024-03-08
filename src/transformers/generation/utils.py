@@ -2230,9 +2230,9 @@ class GenerationMixin:
                     logits=(logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
-                    decoder_attentions=None,
-                    cross_attentions=None,
-                    decoder_hidden_states=None,
+                    decoder_attentions=(next_step_decoder_attentions,),
+                    cross_attentions=(next_step_cross_attentions,),
+                    decoder_hidden_states=(next_decoder_hidden_states,),
                     past_key_values=None,
                 )
                 streamer.put(output_stub)
@@ -2518,9 +2518,9 @@ class GenerationMixin:
                     logits=(next_token_logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
-                    decoder_attentions=(next_decoder_attentions,),
-                    cross_attentions=(next_cross_attentions,),
-                    decoder_hidden_states=(next_decoder_hidden_states,),
+                    decoder_attentions=(next_decoder_attentions,),       # not sure this is right
+                    cross_attentions=(next_cross_attentions,),           # not sure this is right
+                    decoder_hidden_states=(next_decoder_hidden_states,), # not sure this is right
                     past_key_values=None,
                 )
                 streamer.put(output_stub)
@@ -2732,7 +2732,8 @@ class GenerationMixin:
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        encoder_attentions = encoder_hidden_states = None # initialize variables for self._prepare_output
+        encoder_attentions = encoder_hidden_states = None # initialize variables for self._prepare_output(...)
+        next_decoder_attentions = None  # initialize variables for streamer.put(self._prepare_output(...))
         if return_dict_in_generate and self.config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
             encoder_hidden_states = (
@@ -2782,9 +2783,10 @@ class GenerationMixin:
                 if output_logits:
                     raw_logits += (next_token_logits,)
                 if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    next_decoder_attentions = (
+                        outputs.decoder_attentions if self.config.is_encoder_decoder else outputs.attentions
                     )
+                    decoder_attentions += (next_decoder_attentions,)
                     if self.config.is_encoder_decoder:
                         cross_attentions += (outputs.cross_attentions,)
 
@@ -2817,7 +2819,7 @@ class GenerationMixin:
                     logits=(next_token_logits,),
                     encoder_attentions=None,
                     encoder_hidden_states=None,
-                    decoder_attentions=None,
+                    decoder_attentions=(next_decoder_attentions,),
                     cross_attentions=None,
                     decoder_hidden_states=None,
                     past_key_values=None,

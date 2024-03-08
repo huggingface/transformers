@@ -168,12 +168,23 @@ class TestOutputIteratorStreamer:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        ### dmarx Force behaviors here for development
-        # only output attentions for greedy decoding
+        ### dmarx Force behaviors here for development ###########################################
+        # lol maybe these should just be separate tests....
+
+        # output attentions for...
+        # ...greedy decoding
         generation_kwargs['output_attentions'] = False
         if (not generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is None):
             generation_kwargs['output_attentions'] = True
-        #### /dmarx
+
+        # ...multinomial sampling
+        if (generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is None):
+            generation_kwargs['output_attentions'] = True
+
+        # output attentions for contrastive decoding
+        #if (generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is not None) and (generation_kwargs['top_k'] is not None) :
+        #    generation_kwargs['output_attentions'] = True
+        #### /dmarx ##############################################################################
 
         print(generation_kwargs)  # easier than decoding pytest parameterization shorthand on error
 
@@ -227,6 +238,7 @@ class TestOutputIteratorStreamer:
                         else:
                             outputs[output_name] += new_values # tuples gonna tuple...
 
+        print(outputs)
         for output_name in outputs.keys():
             print(output_name)
             baseline_values = getattr(baseline_outputs, output_name)
