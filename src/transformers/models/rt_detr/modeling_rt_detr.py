@@ -622,13 +622,13 @@ class RTDetrEncoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.encoder_activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model)
+        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1056,18 +1056,18 @@ class RTDetrDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = RTDetrMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model)
+        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model)
+        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1587,7 +1587,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # encoder head
         self.enc_output = nn.Sequential(
             nn.Linear(config.d_model, config.d_model),
-            nn.LayerNorm(config.d_model, config.layer_norm_eps),
+            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
         self.enc_bbox_head = RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
