@@ -1,10 +1,9 @@
 import enum
-import logging
 import warnings
 from typing import Dict
 
 from ..tokenization_utils import TruncationStrategy
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
 
