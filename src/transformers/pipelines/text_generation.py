@@ -214,17 +214,6 @@ class TextGenerationPipeline(Pipeline):
 
         return preprocess_params, forward_params, postprocess_params
 
-    # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
-    def _parse_and_tokenize(self, *args, **kwargs):
-        """
-        Parse arguments and tokenize
-        """
-        # Parse arguments
-        if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
-            kwargs.update({"add_space_before_punct_symbol": True})
-
-        return super()._parse_and_tokenize(*args, **kwargs)
-
     def __call__(self, text_inputs, **kwargs):
         """
         Complete the prompt(s) given as inputs.
@@ -530,13 +519,36 @@ class TranslationPipeline(TextGenerationPipeline):
             )
         return True
 
-    def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None, **kwargs):
+    def preprocess(self, prompt_text, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None, **kwargs):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
-            return self.tokenizer._build_translation_inputs(
-                *args, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
+            out = self.tokenizer._build_translation_inputs(
+                prompt_text, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
             )
         else:
-            return super()._parse_and_tokenize(*args, truncation=truncation)
+            out = self._parse_and_tokenize(prompt_text, truncation=truncation)
+        out["prompt_text"] = prompt_text
+        return out
+
+    def _parse_and_tokenize(self, prompt_text, truncation):
+        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+        if isinstance(prompt_text, list):
+            if self.tokenizer.pad_token_id is None:
+                raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
+            prompt_text = [prefix + arg for arg in prompt_text]
+            padding = True
+
+        elif isinstance(prompt_text, str):
+            prompt_text = prefix + prompt_text
+            padding = False
+        else:
+            raise ValueError(
+                "prompt_text has the wrong format. This should be either of type `str` or type `list`"
+            )
+        inputs = self.tokenizer(prompt_text, padding=padding, truncation=truncation, return_tensors=self.framework)
+        # This is produced by tokenizers but is an invalid generate kwargs
+        if "token_type_ids" in inputs:
+            del inputs["token_type_ids"]
+        return inputs
 
     def _sanitize_parameters(self, src_lang=None, tgt_lang=None, **kwargs):
         preprocess_params, forward_params, postprocess_params = super()._sanitize_parameters(**kwargs)

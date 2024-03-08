@@ -114,26 +114,7 @@ class Text2TextGenerationPipeline(Pipeline):
         """
         return True
 
-    def _parse_and_tokenize(self, *args, truncation):
-        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
-        if isinstance(args[0], list):
-            if self.tokenizer.pad_token_id is None:
-                raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
-            args = ([prefix + arg for arg in args[0]],)
-            padding = True
 
-        elif isinstance(args[0], str):
-            args = (prefix + args[0],)
-            padding = False
-        else:
-            raise ValueError(
-                f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
-            )
-        inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
-        # This is produced by tokenizers but is an invalid generate kwargs
-        if "token_type_ids" in inputs:
-            del inputs["token_type_ids"]
-        return inputs
 
     def __call__(self, *args, **kwargs):
         r"""
