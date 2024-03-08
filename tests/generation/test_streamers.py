@@ -130,36 +130,42 @@ class StreamerTester(unittest.TestCase):
                 streamer_text += new_text
 
 
+def nested_tensor_equality(left, right):
+    """
+    Recursively check equality of tensors nested in tuple of tuples
+    """
+    assert type(left) == type(right)
+    assert len(left) == len(right)
+    if isinstance(left, torch.Tensor):
+        assert torch.equal(left, right)
+    else:
+        for left2, right2 in zip(left, right):
+            assert nested_tensor_equality(left2, right2)
+    return True
+
 @require_torch
 #class OutputIteratorStreamerTester(unittest.TestCase): # incompatible with pytest.mark.parameterize
 class TestOutputIteratorStreamer:
-    @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
-    @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
-    @pytest.mark.parametrize("output_scores", [False, True])
-    @pytest.mark.parametrize("output_logits", [False, True])
-    @pytest.mark.parametrize("output_attentions", [False, True])
-    @pytest.mark.parametrize("model", ["hf-internal-testing/tiny-random-gpt2", "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bart"]) # decoder, encoder, encoder-decoder
-    #@pytest.mark.parametrize("assistant_model", [False, True]) # having issues
-    def test_outputs_match(self,
-                           *,
-                           model,
-                           #assistant_model,
-                           do_sample,
-                           top_k,
-                           penalty_alpha,
-                           output_scores,
-                           output_logits,
-                           output_attentions,
-                           max_new_tokens=10,
-                           return_dict_in_generate=True,
-                           output_hidden_states=False,
-                           ):
+
+    def _setup(self,
+               model,
+               # assistant_model,
+               do_sample,
+               top_k,
+               penalty_alpha,
+               output_scores,
+               output_logits,
+               output_attentions,
+               max_new_tokens=10,
+               return_dict_in_generate=True,
+               output_hidden_states=False,
+    ):
         model = AutoModelForCausalLM.from_pretrained(model).to(torch_device)
         model.config.eos_token_id = -1
         print(model.config)
 
         generation_kwargs = dict(
-            #input_ids=input_ids,
+            # input_ids=input_ids,
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=return_dict_in_generate,
             do_sample=do_sample,
@@ -227,6 +233,45 @@ class TestOutputIteratorStreamer:
                     #print(getattr(baseline_outputs, attr_name))
                     outputs[attr_name] = ()
 
+        return baseline_outputs, outputs, streamer
+
+
+    @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
+    @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
+    @pytest.mark.parametrize("output_scores", [False, True])
+    @pytest.mark.parametrize("output_logits", [False, True])
+    @pytest.mark.parametrize("output_attentions", [False, True])
+    @pytest.mark.parametrize("model", ["hf-internal-testing/tiny-random-gpt2", "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bart"]) # decoder, encoder, encoder-decoder
+    #@pytest.mark.parametrize("assistant_model", [False, True]) # having issues
+    def test_outputs_match(self,
+                           *,
+                           model,
+                           #assistant_model,
+                           do_sample,
+                           top_k,
+                           penalty_alpha,
+                           output_scores,
+                           output_logits,
+                           output_attentions,
+                           max_new_tokens=10,
+                           return_dict_in_generate=True,
+                           output_hidden_states=False,
+                           ):
+
+        baseline_outputs, outputs, streamer = self._setup(
+            model=model,
+            # assistant_model=assistant_model,
+            do_sample=do_sample,
+            top_k=top_k,
+            penalty_alpha=penalty_alpha,
+            output_scores=output_scores,
+            output_logits=output_logits,
+            output_attentions=output_attentions,
+            max_new_tokens=max_new_tokens,
+            return_dict_in_generate=return_dict_in_generate,
+            output_hidden_states=output_hidden_states,
+        )
+
         n_times_field_extended = Counter()
         for answer in streamer:
             #if isinstance(answer, list):
@@ -269,15 +314,6 @@ class TestOutputIteratorStreamer:
 
 
             # attention/hidden = tuples of tuples
-            def nested_tensor_equality(left, right):
-                assert type(left) == type(right)
-                assert len(left) == len(right)
-                if isinstance(left, torch.Tensor):
-                    assert torch.equal(left, right)
-                else:
-                    for left2, right2 in zip(left, right):
-                        assert nested_tensor_equality(left2, right2)
-                return True
             assert nested_tensor_equality(baseline_values, target_values)
 
 
@@ -286,40 +322,21 @@ class TestOutputIteratorStreamer:
     def test_ids_only_match(self,
                             do_sample, top_k, penalty_alpha,
                             max_new_tokens=10,
-                            return_dict_in_generate=False,
+                            model="hf-internal-testing/tiny-random-gpt2",
                        ):
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        model.config.eos_token_id = -1
-
-        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-
-        generation_kwargs = dict(
-            #input_ids=input_ids,
-            max_new_tokens=max_new_tokens,
-            return_dict_in_generate=return_dict_in_generate,
+        baseline_values, outputs, streamer = self._setup(
+            model=model,
+            # assistant_model=assistant_model,
             do_sample=do_sample,
             top_k=top_k,
             penalty_alpha=penalty_alpha,
-            # output_scores=output_scores,
-            # output_logits=output_logits,
+            max_new_tokens=max_new_tokens,
+            return_dict_in_generate=False,
+            output_scores=False,
+            output_logits=False,
+            output_attentions=False,
+            output_hidden_states=False,
         )
-        print(generation_kwargs) # easier than decoding pytest parameterization shorthand on error
-        generation_kwargs['input_ids'] = input_ids
-
-
-        baseline_kwargs = copy.deepcopy(generation_kwargs)
-
-        seed = random.randint(0, int(1e9))
-        torch.manual_seed(seed)
-        baseline_values = model.generate(**baseline_kwargs)
-
-        streamer = OutputIteratorStreamer()
-        test_kwargs = copy.deepcopy(generation_kwargs)
-        test_kwargs['streamer'] = streamer
-
-        torch.manual_seed(seed)
-        thread = Thread(target=model.generate, kwargs=test_kwargs)
-        thread.start()
 
         target_values = torch.Tensor()
         for answer in streamer:
