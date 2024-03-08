@@ -1074,6 +1074,9 @@ class GenerationTesterMixin:
     @require_torch_multi_accelerator
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
+            if torch_device == "xpu":
+                return unittest.skip("device_map='auto' does not work with XPU devices")
+
             if model_class._no_split_modules is None:
                 continue
 
@@ -1082,7 +1085,7 @@ class GenerationTesterMixin:
             model = model_class(config).eval()
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
-                new_model = model_class.from_pretrained(tmp_dir, device_map=torch_device)
+                new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
 
                 new_model.generate(
                     input_ids,
