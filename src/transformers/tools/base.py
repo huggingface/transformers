@@ -385,7 +385,7 @@ DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 
 OPENAI_TOOL_DESCRIPTION_TEMPLATE = """
 {
-    "type": "{{ tool.type }}",
+    "type": "Function}",
     "function": {
         "name": "{{ tool.name }}",
         "description": "{{ tool.description }}",
@@ -841,25 +841,33 @@ def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
             arg_details.pop("title")
     return inputs
 
-
-def from_langchain(langchain_tool):
-    class ConvertedTool(Tool):
+class ConvertedTool(Tool):
+    description =""
+    name =""
+    inputs={}
+    output_type=str
+    langchain_tool=None
+    
+    def __init__(self,langchain_tool):
         description = langchain_tool.description
         name = langchain_tool.name
         inputs = parse_langchain_args(langchain_tool.args)
         output_type = str
+        langchain_tool=langchain_tool
 
-        def __call__(self, *args, **kwargs):
-            # This lets the user type args either as kwargs or positional arguments
-            for index,argument in enumerate(args):
-                if index<len(self.inputs):
-                    input_key = next(iter(self.inputs))
-                    kwargs[input_key] = argument
-            
-            tool_input = {}
-            for key, value in kwargs.items():
-                tool_input[key] = value
+    def __call__(self, *args, **kwargs):
+        # This lets the user type args either as kwargs or positional arguments
+        for index,argument in enumerate(args):
+            if index<len(self.inputs):
+                input_key = next(iter(self.inputs))
+                kwargs[input_key] = argument
+        
+        tool_input = {}
+        for key, value in kwargs.items():
+            tool_input[key] = value
 
-            return langchain_tool.run(tool_input)
+        return self.langchain_tool.run(tool_input)
 
-    return ConvertedTool()
+
+def from_langchain(langchain_tool):
+    return ConvertedTool(langchain_tool)
