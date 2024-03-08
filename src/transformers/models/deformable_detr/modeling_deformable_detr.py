@@ -428,6 +428,7 @@ class DeformableDetrConvEncoder(nn.Module):
         if config.use_timm_backbone:
             requires_backends(self, ["timm"])
             kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs
             out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
             num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
