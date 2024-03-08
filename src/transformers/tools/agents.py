@@ -15,26 +15,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.util
-import json
-from dataclasses import dataclass
-from typing import Dict, Union, List, Any
-from huggingface_hub import hf_hub_download, list_spaces
-
-from ..utils import is_offline_mode, is_torch_available, logging
-from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
-from .python_interpreter import evaluate as evaluate_python_code
 import re
 from ast import literal_eval
+from dataclasses import dataclass
+from typing import Dict, Union, List
+from huggingface_hub import hf_hub_download, list_spaces
+
+from ..utils import is_offline_mode, logging
+from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, get_tool_description_with_args, load_tool, supports_remote, OPENAI_TOOL_DESCRIPTION_TEMPLATE,DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+from .default_tools import FinalAnswerTool
+from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
+from .python_interpreter import evaluate as evaluate_python_code
+
 
 logger = logging.get_logger(__name__)
-
-
-if is_torch_available():
-    from ..generation import StoppingCriteria, StoppingCriteriaList
-    from ..models.auto import AutoModelForCausalLM
-else:
-    StoppingCriteria = object
 
 _tools_are_initialized = False
 
@@ -165,16 +159,6 @@ def parse_json_tool_call(json_blob: str):
         return json_blob["action"], json_blob["action_input"]
     else:
         raise ValueError(f"Missing keys: {[key for key in ['action', 'action_input'] if key not in json_blob]} in blob {json_blob}")
-
-
-class FinalAnswerTool(Tool):
-    name = "final_answer"
-    description = "Provides a final answer to the given problem"
-    inputs = {"answer": str}
-    output_type = str
-
-    def __call__(self):
-        pass
 
 
 def format_prompt(toolbox, prompt_template,tool_description_template):

@@ -16,11 +16,8 @@
 # limitations under the License.
 import base64
 import importlib
-import inspect
 import io
 import json
-import numexpr
-import math
 import os
 import tempfile
 from typing import Any, Dict, List, Optional, Union
@@ -113,7 +110,7 @@ class Tool(metaclass=ToolMeta):
       returns the text contained in the file'.
     - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
       `"text-classifier"` or `"image_generator"`.
-    - **inputs** (`Dict[str, str]`) -- The dict of modalities expected for the inputs.
+    - **inputs** (`Dict[str, type]`) -- The dict of modalities expected for the inputs.
       This is used by `launch_gradio_demo` or to make a nice space from your tool, and also can be used in the generated
       description for your tool.
     - **output_type** (`type`) -- The type of the tool output. This is used by `launch_gradio_demo`
@@ -126,7 +123,7 @@ class Tool(metaclass=ToolMeta):
 
     name: str
     description: str
-    inputs: Dict[str, type]
+    inputs: Dict[str, Dict[str, Union[str, type]]]
     output_type: type
 
     def __init__(self, *args, **kwargs):
@@ -439,6 +436,7 @@ def compile_jinja_template(template):
     jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     jinja_env.globals["raise_exception"] = raise_exception
     return jinja_env.from_string(template)
+
 
 class RemoteTool(Tool):
     """
@@ -834,22 +832,25 @@ class EndpointClient:
         else:
             return response.json()
 
-def parse_langchain_args(args):
+
+def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
     """Parse the args attribute of a LangChain tool to create a matching inputs dictionary."""
-    inputs = {}
-    for arg_name, arg_info in args.items():
-        arg_type = arg_info.get('type', 'string')
-        inputs[arg_name] = arg_type
+    inputs = args.copy()
+    for arg_details in inputs.values():
+        if 'title' in arg_details:
+            arg_details.pop("title")
     return inputs
 
+
 def from_langchain(langchain_tool):
-    class ConvertedTool:
+    class ConvertedTool(Tool):
         description = langchain_tool.description
         name = langchain_tool.name
         inputs = parse_langchain_args(langchain_tool.args)
-        outputs = {}
+        output_type = str
 
         def __call__(self, *args, **kwargs):
+            # This lets the user type args either as kwargs or positional arguments
             for index,argument in enumerate(args):
                 if index<len(self.inputs):
                     input_key = next(iter(self.inputs))
@@ -862,22 +863,3 @@ def from_langchain(langchain_tool):
             return langchain_tool.run(tool_input)
 
     return ConvertedTool()
-
-
-class CalculatorTool(Tool):
-    name = "calculator"
-    description = "This is a tool that calculates. It can be used to perform simple arithmetic operations. The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers"
-
-    inputs = {"expression": str}
-    output_type = str
-
-    def __call__(self, expression):
-        local_dict = {"pi": math.pi, "e": math.e}
-        output = str(
-            numexpr.evaluate(
-                expression.strip(),
-                global_dict={},  # restrict access to globals
-                local_dict=local_dict,  # add common mathematical functions
-            )
-        )
-        return output
