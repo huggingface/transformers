@@ -582,7 +582,7 @@ class RTDetrConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values) if self._use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
