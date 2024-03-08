@@ -386,11 +386,22 @@ def shard_checkpoint(
             weight_size = weight.numel() * dtype_byte_size(weight.dtype)
         else:
             # If the tensor don't have a storage, some field on this tensor can be a tensor (e.g. QTensor in quanto
-            # where the tensor is creatde using _make_wrapper_subclass() )
+            # where the tensor is created using _make_wrapper_subclass() )
+            def get_tensors(weight):
+                if not isinstance(weight, torch.Tensor):
+                    return []
+                weight_dict = weight.__dict__
+                if len(weight_dict) == 0:
+                    return [weight]
+                tensors = []
+                for val in weight_dict.values():
+                    tensors.extend(get_tensors(val))
+                return tensors
+
+            tensors = get_tensors(weight)
             weight_size = 0
-            for val in weight.__dict__.values():
-                if isinstance(val, torch.Tensor):
-                    weight_size += val.numel() * dtype_byte_size(val.dtype)
+            for t in tensors:
+                weight_size += t.numel() * dtype_byte_size(t.dtype)
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
