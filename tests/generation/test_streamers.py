@@ -173,17 +173,17 @@ class TestOutputIteratorStreamer:
 
         # output attentions for...
         # ...greedy decoding
-        generation_kwargs['output_attentions'] = False
-        if (not generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is None):
-            generation_kwargs['output_attentions'] = True
-
-        # ...multinomial sampling
-        if (generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is None):
-            generation_kwargs['output_attentions'] = True
-
-        # output attentions for contrastive decoding
-        if (generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is not None) and (generation_kwargs['top_k'] is not None) :
-            generation_kwargs['output_attentions'] = True
+        # generation_kwargs['output_attentions'] = False
+        # if (not generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is None):
+        #     generation_kwargs['output_attentions'] = True
+        #
+        # # ...multinomial sampling
+        # if (generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is None):
+        #     generation_kwargs['output_attentions'] = True
+        #
+        # # output attentions for contrastive decoding
+        # if (generation_kwargs['do_sample']) and (generation_kwargs['penalty_alpha'] is not None) and (generation_kwargs['top_k'] is not None) :
+        #     generation_kwargs['output_attentions'] = True
         #### /dmarx ##############################################################################
 
         print(generation_kwargs)  # easier than decoding pytest parameterization shorthand on error
