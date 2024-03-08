@@ -2484,7 +2484,7 @@ class GenerationMixin:
                     raw_logits += (next_token_logits,)
                 if output_attentions:
                     next_decoder_attentions = (
-                        outputs.decoder_attentions if self.config.is_encoder_decoder else (outputs.attentions,)
+                        outputs.decoder_attentions if self.config.is_encoder_decoder else outputs.attentions
                     )
                     decoder_attentions += (next_decoder_attentions,)
                     if self.config.is_encoder_decoder:
