@@ -4562,9 +4562,11 @@ class GenerationMixin:
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
+            #last_assistant_token_is_eos = False
+            #if eos_token_id_tensor is not None:
             last_assistant_token_is_eos = (
                 ~candidate_input_ids[:, -1]
-                .tile(eos_token_id_tensor.shape[0], 1)
+                .tile(eos_token_id_tensor.shape[0], 1) # <<< throwing error in streamer tests. looks like valid behavior for eos_token_id_tensor to be None.
                 .ne(eos_token_id_tensor.unsqueeze(1))
                 .prod(dim=0)
                 .bool()
@@ -4604,6 +4606,7 @@ class GenerationMixin:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
             max_matches = max_len - cur_len - 1
+            #n_matches = None # initialize variable for streamer.put(...)
             if do_sample and candidate_logits is not None:
                 valid_tokens, n_matches = _speculative_sampling(
                     candidate_input_ids,
@@ -4720,6 +4723,15 @@ class GenerationMixin:
             )
 
             if streamer is not None:
+                # if n_matches is None:
+                #     n_matches = len(valid_tokens)
+                # if decoder_attentions is not None:
+                #     decoder_attentions = decoder_attentions[: n_matches + 1]
+                # if cross_attentions is not None:
+                #     cross_attentions = cross_attentions[: n_matches + 1]
+                # if decoder_hidden_states is not None:
+                #     decoder_hidden_states = decoder_hidden_states[: n_matches + 1]
+
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=valid_tokens,
