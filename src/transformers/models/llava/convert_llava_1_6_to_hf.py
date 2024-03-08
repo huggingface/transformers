@@ -222,12 +222,25 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     print("Generated text is ok!")
 
     # verify batched generation
-    inputs = processor(images=[image, image], text=[prompt, prompt], return_tensors="pt").to(device)
+    print("Batched generation...")
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    cats_image = Image.open(requests.get(url, stream=True).raw)
+
+    inputs = processor(images=[image, cats_image], text=[prompt, prompt], padding=True, return_tensors="pt").to(device)
+
+    for k, v in inputs.items():
+        print(k, v.shape)
+
+    print("Image sizes:", inputs.image_sizes)
+
+    # make sure image_sizes are the same
+    # as otherwise batched generation doesn't work
+    inputs.image_sizes[1] = inputs.image_sizes[0]
 
     print("Batched generation...")
     output_ids = model.generate(
         **inputs,
-        max_new_tokens=3,
+        max_new_tokens=20,
         use_cache=True,
     )
 

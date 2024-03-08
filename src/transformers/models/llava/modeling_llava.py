@@ -491,6 +491,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         selected_image_feature = selected_image_feature
                     image_features = self.multi_modal_projector(selected_image_feature)
 
+                    # split up image_features for each of the individual images
+                    # hence we get a list of image_features, each of shape (5, num_patches, hidden_size)
+                    # if we assume each image has 5 image features (base image + 4 patches)
                     split_sizes = [image.shape[0] for image in pixel_values]
                     image_features = torch.split(image_features, split_sizes, dim=0)
 
