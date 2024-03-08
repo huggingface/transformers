@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import unittest
 
 import requests
@@ -100,6 +101,85 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"height": 640, "width": 640})
+
+    def test_valid_coco_detection_annotations(self):
+        # prepare image and target
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        params = {"image_id": 39769, "annotations": target}
+
+        # encode them
+        image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
+
+        # legal encodings (single image)
+        _ = image_processing(images=image, annotations=params, return_tensors="pt")
+        _ = image_processing(images=image, annotations=[params], return_tensors="pt")
+
+        # legal encodings (batch of one image)
+        _ = image_processing(images=[image], annotations=params, return_tensors="pt")
+        _ = image_processing(images=[image], annotations=[params], return_tensors="pt")
+
+        # legal encoding (batch of more than one image)
+        n = 5
+        _ = image_processing(images=[image] * n, annotations=[params] * n, return_tensors="pt")
+
+        # example of an illegal encoding (missing the 'image_id' key)
+        with self.assertRaises(ValueError) as e:
+            image_processing(images=image, annotations={"annotations": target}, return_tensors="pt")
+
+        self.assertTrue(str(e.exception).startswith("Invalid COCO detection annotations"))
+
+        # example of an illegal encoding (unequal lengths of images and annotations)
+        with self.assertRaises(ValueError) as e:
+            image_processing(images=[image] * n, annotations=[params] * (n - 1), return_tensors="pt")
+
+        self.assertTrue(str(e.exception) == "The number of images (5) and annotations (4) do not match.")
+
+    @slow
+    def test_call_pytorch_with_coco_detection_annotations(self):
+        # prepare image and target
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        target = {"image_id": 39769, "annotations": target}
+
+        # encode them
+        image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
+        encoding = image_processing(images=image, annotations=target, return_tensors="pt")
+
+        # verify pixel values
+        expected_shape = torch.Size([1, 3, 800, 1066])
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+
+        expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
+        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
+
+        # verify area
+        expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
+        # verify boxes
+        expected_boxes_shape = torch.Size([6, 4])
+        self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
+        expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
+        # verify image_id
+        expected_image_id = torch.tensor([39769])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
+        # verify is_crowd
+        expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
+        # verify class_labels
+        expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
+        # verify orig_size
+        expected_orig_size = torch.tensor([480, 640])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
+        # verify size
+        expected_size = torch.tensor([800, 1066])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
     @slow
     def test_image_processor_outputs(self):
