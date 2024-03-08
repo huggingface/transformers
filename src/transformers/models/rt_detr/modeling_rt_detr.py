@@ -1398,19 +1398,17 @@ class RTDetrHybridEncoder(nn.Module):
             fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
             fpn_feature_maps.insert(0, fps_map)
 
-        encoder_states = [fpn_feature_maps[0]]
+        fpn_states = [fpn_feature_maps[0]]
         for idx in range(len(self.in_channels) - 1):
-            feat_low = encoder_states[-1]
+            feat_low = fpn_states[-1]
             feat_high = fpn_feature_maps[idx + 1]
             downsample_feat = self.downsample_convs[idx](feat_low)
             hidden_states = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
-            encoder_states.append(hidden_states)
+            fpn_states.append(hidden_states)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+            return tuple(v for v in [fpn_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=fpn_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class RTDetrDecoder(RTDetrPreTrainedModel):
@@ -1753,22 +1751,26 @@ class RTDetrModel(RTDetrPreTrainedModel):
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                hidden_states=encoder_outputs[1] if output_hidden_states else None,
+                attentions=encoder_outputs[2]
+                if len(encoder_outputs) > 2
+                else encoder_outputs[1]
+                if output_attentions
+                else None,
             )
 
         # Equivalent to def _get_encoder_input
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
-        for level, source in enumerate(encoder_outputs[1]):
+        for level, source in enumerate(encoder_outputs[0]):
             sources.append(self.decoder_input_proj[level](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[1])[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs[1][-1]))
+                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
