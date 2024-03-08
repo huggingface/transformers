@@ -1258,12 +1258,13 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_safetensors
     def test_model_from_pretrained_from_mlx(self):
+        from safetensors import safe_open
+
         model = AutoModelForCausalLM.from_pretrained("pcuenq/tiny-random-mistral-mlx")
         self.assertIsNotNone(model)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, safe_serialization=True)
-            from safetensors import safe_open
             with safe_open(os.path.join(tmp_dir, "model.safetensors"), framework="pt") as f:
                 metadata = f.metadata()
                 self.assertEqual(metadata.get("format"), "pt")
@@ -1273,8 +1274,7 @@ class ModelUtilsTest(TestCasePlus):
         with torch.no_grad():
             outputs = model(input_ids)
             outputs_from_saved = new_model(input_ids)
-            self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"])
-)
+            self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
 
 
 @slow
