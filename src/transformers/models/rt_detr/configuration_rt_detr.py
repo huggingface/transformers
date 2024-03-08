@@ -48,6 +48,8 @@ class RTDetrConfig(PretrainedConfig):
             Whether the model use timm backbone.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
         backbone (`str`, *optional*, defaults to `"resnet50d"`):
             Type of the backbone based on timm.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
@@ -55,8 +57,6 @@ class RTDetrConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
