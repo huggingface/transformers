@@ -374,13 +374,13 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     height_and_width = inputs.shape[1]
 
     criterion = nn.BCEWithLogitsLoss(reduction="none")
-    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
-    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
+    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs)) / height_and_width
+    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs)) / height_and_width
 
     loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
     loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
     loss = loss_pos + loss_neg
-    loss = loss / height_and_width
+    loss = loss
     return loss
 
 
