@@ -195,8 +195,12 @@ class TestOutputIteratorStreamer:
         thread.start()
 
         outputs = {'sequences':torch.Tensor()}
-        # todo: generalize this to support all encoder/decoder conditional attributes
-        for attr_name in ('scores', 'logits', 'decoder_attentions', 'attentions', 'hidden_states'):
+        for attr_name in (
+            'scores', 'logits',
+            'attentions', 'encoder_attentions', 'decoder_attentions', 'cross_attentions',
+            'hidden_states', 'encoder_hidden_states', 'decoder_hidden_states',
+            #'past_key_values' # uh... let's just say we're not going to support streaming the cache.
+        ):
             if hasattr(baseline_outputs, attr_name):
                 if getattr(baseline_outputs, attr_name) is not None:
                     #print(attr_name)
