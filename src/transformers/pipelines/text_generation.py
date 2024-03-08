@@ -365,6 +365,25 @@ class TextGenerationPipeline(Pipeline):
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
     def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
+        if self.text2text:
+            # Matt: In Seq2Seq generation the output sequence is separate from the input sequence, and so we don't
+            #       ever want to concatenate the output to the input.
+            records = []
+            for output_ids in model_outputs["generated_sequence"][0]:
+                if return_type == ReturnType.TENSORS:
+                    record = {"generated_token_ids": output_ids}
+                else:
+                    # TODO Matt is there any return type besides TENSORS where we shouldn't do this?
+                    record = {
+                        "generated_text": self.tokenizer.decode(
+                            output_ids,
+                            skip_special_tokens=True,
+                            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                        )
+                    }
+                records.append(record)
+            return records
+
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
@@ -392,7 +411,7 @@ class TextGenerationPipeline(Pipeline):
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )
-
+                breakpoint()
                 all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
                     if isinstance(prompt_text, str):
