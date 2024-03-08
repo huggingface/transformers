@@ -32,14 +32,13 @@ class TextSummarizationTool(PipelineTool):
 
     default_checkpoint = "philschmid/bart-large-cnn-samsum"
     description = (
-        "This is a tool that summarizes an English text. It takes an input `text` containing the text to summarize, "
-        "and returns a summary of the text."
+        "This is a tool that summarizes an English text. It returns a summary of the text."
     )
     name = "summarizer"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
 
-    inputs = {"text": str}
+    inputs = {"text": {"type": str, "description": "The text to summarize"}}
     output_type = str
 
     def encode(self, text):

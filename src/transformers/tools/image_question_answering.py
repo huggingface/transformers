@@ -27,15 +27,17 @@ from .base import PipelineTool
 class ImageQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "dandelin/vilt-b32-finetuned-vqa"
     description = (
-        "This is a tool that answers a question about an image. It takes an input named `image` which should be the "
-        "image containing the information, as well as a `question` which should be the question in English. It "
+        "This is a tool that answers a question about an image. It "
         "returns a text that is the answer to the question."
     )
     name = "image_qa"
     pre_processor_class = AutoProcessor
     model_class = AutoModelForVisualQuestionAnswering
 
-    inputs = {"input": Union[Image.Image, str]}
+    inputs = {
+        "image": {"type": Union[Image.Image, str],"description": "The image containing the information"},
+        "question": {"type": str, "description": "The question in English"}
+    }
     output_type = str
 
     def __init__(self, *args, **kwargs):

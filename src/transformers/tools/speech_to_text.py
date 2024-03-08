@@ -23,14 +23,14 @@ from .base import PipelineTool
 class SpeechToTextTool(PipelineTool):
     default_checkpoint = "openai/whisper-base"
     description = (
-        "This is a tool that transcribes an audio into text. It takes an input named `audio` and returns the "
+        "This is a tool that transcribes an audio into text. It returns the "
         "transcribed text."
     )
     name = "transcriber"
     pre_processor_class = WhisperProcessor
     model_class = WhisperForConditionalGeneration
 
-    inputs = {"audio": Any}
+    inputs = {"audio": {"type": Any, "description": "the audio to transcribe"}}
     output_type= str
 
     def encode(self, audio):

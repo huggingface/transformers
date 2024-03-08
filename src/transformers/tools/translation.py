@@ -240,17 +240,18 @@ class TranslationTool(PipelineTool):
 
     default_checkpoint = "facebook/nllb-200-distilled-600M"
     description = (
-        "This is a tool that translates text from a language to another. It takes three inputs: `text`, which should "
-        "be the text to translate, `src_lang`, which should be the language of the text to translate and `tgt_lang`, "
-        "which should be the language for the desired ouput language. Both `src_lang` and `tgt_lang` are written in "
-        "plain English, such as 'Romanian', or 'Albanian'. It returns the text translated in `tgt_lang`."
+        "This is a tool that translates text from a language to another. It returns the text translated in `tgt_lang`."
     )
     name = "translator"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
     lang_to_code = LANGUAGE_CODES
 
-    inputs = {"text": str, "src_lang": str, "tgt_lang": str}
+    inputs = {
+        "text": {"type": str, "description": "The text to translate"},
+        "src_lang": {"type": str, "description": "The language of the text to translate. Written in plain English, such as 'Romanian', or 'Albanian'"},
+        "tgt_lang": {"type": str, "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'"}
+    }
     output_type = str
 
     def encode(self, text, src_lang, tgt_lang):

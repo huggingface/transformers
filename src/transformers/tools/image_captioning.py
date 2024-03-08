@@ -23,13 +23,13 @@ from PIL import Image
 class ImageCaptioningTool(PipelineTool):
     default_checkpoint = "Salesforce/blip-image-captioning-base"
     description = (
-        "This is a tool that generates a description of an image. It takes an input named `image` which should be the "
-        "image to caption, and returns a text that contains the description in English."
+        "This is a tool that generates a description of an image. It returns a text that contains"
+        "the description in English."
     )
     name = "image_captioner"
     model_class = AutoModelForVision2Seq
 
-    inputs = {"image": Image.Image}
+    inputs = {"image": {"type": Image.Image, "description": "The image to caption"}}
     output_type = str
 
     def __init__(self, *args, **kwargs):

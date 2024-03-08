@@ -29,14 +29,16 @@ if is_vision_available():
 class ImageSegmentationTool(PipelineTool):
     description = (
         "This is a tool that creates a segmentation mask of an image according to a label. It cannot create an image. "
-        "It takes two arguments named `image` which should be the original image, and `label` which should be a text "
-        "describing the elements what should be identified in the segmentation mask. The tool returns the mask."
+        "This tool returns the mask."
     )
     default_checkpoint = "CIDAS/clipseg-rd64-refined"
     name = "image_segmenter"
     model_class = CLIPSegForImageSegmentation
 
-    inputs = {"image": Image.Image, "label": str}
+    inputs = {
+        "image": {"type": Image.Image, "description": "The image to segment"},
+        "label": {"type": str, "description": "The label describing the elements what should be identified in the segmentation mask"}
+    }
     output_type = Image.Image
 
     def __init__(self, *args, **kwargs):
