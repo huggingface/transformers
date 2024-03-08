@@ -149,12 +149,10 @@ class TextGenerationPipeline(Pipeline):
             seq2seq_lm_map = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
         if self.model.__class__.__name__ in seq2seq_lm_map.values():
             self.text2text = True
-            if add_special_tokens is None:
-                add_special_tokens = True
         else:
             self.text2text = False
-            if add_special_tokens is None:
-                add_special_tokens = False
+        if add_special_tokens is None:
+            add_special_tokens = self.text2text
 
         preprocess_params = {
             "add_special_tokens": add_special_tokens,
@@ -164,8 +162,6 @@ class TextGenerationPipeline(Pipeline):
         }
         if max_length is not None:
             generate_kwargs["max_length"] = max_length
-        if add_special_tokens is None:
-            add_special_tokens = self.text2text
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
