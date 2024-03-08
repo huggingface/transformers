@@ -1438,10 +1438,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             "input_values"
         ]
         outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10))
-        self.assertEqual(len(outs), 2)
-        self.assertEqual([o["stride"] for o in outs], [(100, 0, 10), (30, 20, 0)])
-        self.assertEqual([o["input_values"].shape for o in outs], [(1, 100), (1, 30)])
-        self.assertEqual([o["is_last"] for o in outs], [False, True])
+        self.assertEqual(len(outs), 1)
+        self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
+        self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
+        self.assertEqual([o["is_last"] for o in outs], [True])
 
         outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10))
         self.assertEqual(len(outs), 2)
