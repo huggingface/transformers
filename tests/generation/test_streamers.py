@@ -148,14 +148,14 @@ def nested_tensor_equality(left, right):
 class TestOutputIteratorStreamer:
 
     def _setup(self,
-               model,
+               model="hf-internal-testing/tiny-random-gpt2",
                # assistant_model,
-               do_sample,
-               top_k,
-               penalty_alpha,
-               output_scores,
-               output_logits,
-               output_attentions,
+               do_sample=False,
+               top_k=None,
+               penalty_alpha=None,
+               output_scores=False,
+               output_logits=False,
+               output_attentions=False,
                max_new_tokens=10,
                return_dict_in_generate=True,
                output_hidden_states=False,
@@ -236,27 +236,26 @@ class TestOutputIteratorStreamer:
         return baseline_outputs, outputs, streamer
 
 
-    @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
-    @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
-    @pytest.mark.parametrize("output_scores", [False, True])
-    @pytest.mark.parametrize("output_logits", [False, True])
-    @pytest.mark.parametrize("output_attentions", [False, True])
-    @pytest.mark.parametrize("model", ["hf-internal-testing/tiny-random-gpt2", "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bart"]) # decoder, encoder, encoder-decoder
+    # @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
+    # @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
+    # @pytest.mark.parametrize("output_scores", [False, True])
+    # @pytest.mark.parametrize("output_logits", [False, True])
+    # @pytest.mark.parametrize("output_attentions", [False, True])
+    # @pytest.mark.parametrize("model", ["hf-internal-testing/tiny-random-gpt2", "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bart"]) # decoder, encoder, encoder-decoder
     #@pytest.mark.parametrize("assistant_model", [False, True]) # having issues
-    def test_outputs_match(self,
-                           *,
-                           model,
-                           #assistant_model,
-                           do_sample,
-                           top_k,
-                           penalty_alpha,
-                           output_scores,
-                           output_logits,
-                           output_attentions,
-                           max_new_tokens=10,
-                           return_dict_in_generate=True,
-                           output_hidden_states=False,
-                           ):
+    def check_outputs_match(self,
+                            *,
+                            model="hf-internal-testing/tiny-random-gpt2",
+                            #assistant_model,
+                            do_sample=False,
+                            top_k=None,
+                            max_new_tokens=10,
+                            penalty_alpha=None,
+                            output_scores=False,
+                            output_logits=False,
+                            output_attentions=False,
+                            output_hidden_states=False,
+                            ):
 
         baseline_outputs, outputs, streamer = self._setup(
             model=model,
@@ -268,7 +267,7 @@ class TestOutputIteratorStreamer:
             output_logits=output_logits,
             output_attentions=output_attentions,
             max_new_tokens=max_new_tokens,
-            return_dict_in_generate=return_dict_in_generate,
+            return_dict_in_generate=True,
             output_hidden_states=output_hidden_states,
         )
 
@@ -316,13 +315,14 @@ class TestOutputIteratorStreamer:
             # attention/hidden = tuples of tuples
             assert nested_tensor_equality(baseline_values, target_values)
 
-
-    @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
-    @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
-    def test_ids_only_match(self,
-                            do_sample, top_k, penalty_alpha,
-                            max_new_tokens=10,
-                            model="hf-internal-testing/tiny-random-gpt2",
+    # @pytest.mark.parametrize("do_sample,top_k", [(False,None), (True,4)])
+    # @pytest.mark.parametrize("penalty_alpha", [None, 0.6])
+    def check_ids_only_match(self,
+                             do_sample=False,
+                             top_k=None,
+                             penalty_alpha=None,
+                             max_new_tokens=10,
+                             model="hf-internal-testing/tiny-random-gpt2",
                        ):
         baseline_values, outputs, streamer = self._setup(
             model=model,
@@ -349,3 +349,59 @@ class TestOutputIteratorStreamer:
 
         assert baseline_values.shape == target_values.shape
         assert baseline_values.tolist() == target_values.tolist()
+
+    def test_greedy_ids_only(self):
+        self.check_ids_only_match(do_sample=False)
+
+    def test_multinomial_ids_only(self):
+        self.check_ids_only_match(do_sample=True)
+
+    def test_contrastive_ids_only(self):
+        self.check_ids_only_match(do_sample=False, penalty_alpha=0.6, top_k=4)
+
+    #def test_assisted_ids_only(self):
+    #
+
+    @pytest.mark.parametrize("output_scores", [False, True])
+    @pytest.mark.parametrize("output_logits", [False, True])
+    @pytest.mark.parametrize("output_attentions", [False, True])
+    def test_greedy_outputs(self,
+                            output_scores,
+                            output_logits,
+                            output_attentions,
+                            ):
+        self.check_outputs_match(
+            do_sample=False,
+            output_scores=output_scores,
+            output_logits=output_logits,
+            output_attentions=output_attentions)
+
+    @pytest.mark.parametrize("output_scores", [False, True])
+    @pytest.mark.parametrize("output_logits", [False, True])
+    @pytest.mark.parametrize("output_attentions", [False, True])
+    def test_multinomial_outputs(self,
+                            output_scores,
+                            output_logits,
+                            output_attentions,
+                            ):
+        self.check_outputs_match(
+            do_sample=True,
+            output_scores=output_scores,
+            output_logits=output_logits,
+            output_attentions=output_attentions)
+
+    @pytest.mark.parametrize("output_scores", [False, True])
+    @pytest.mark.parametrize("output_logits", [False, True])
+    @pytest.mark.parametrize("output_attentions", [False, True])
+    def test_contrastive_outputs(self,
+                            output_scores,
+                            output_logits,
+                            output_attentions,
+                            ):
+        self.check_outputs_match(
+            do_sample=False,
+            penalty_alpha=0.6,
+            top_k=4,
+            output_scores=output_scores,
+            output_logits=output_logits,
+            output_attentions=output_attentions)

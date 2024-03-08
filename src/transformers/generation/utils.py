@@ -2182,9 +2182,11 @@ class GenerationMixin:
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
+            next_step_cross_attentions = ()
+            next_step_decoder_attentions = ()
             if self.config.is_encoder_decoder:
-                next_step_cross_attentions = ()
-                next_step_decoder_attentions = ()
+                #next_step_cross_attentions = ()
+                #next_step_decoder_attentions = ()
                 if output_attentions:
                     for layer in outputs.cross_attentions:
                         layer = torch.stack(torch.split(layer, top_k, dim=0))[range(batch_size), selected_idx, ...]
@@ -2226,8 +2228,8 @@ class GenerationMixin:
                 output_stub = self._prepare_output(
                     return_dict_in_generate=return_dict_in_generate,
                     sequences=next_tokens,
-                    scores=(scores,),
-                    logits=(logits,),
+                    scores=(processed_logit_for_next_step,), #(scores,),
+                    logits=(logit_for_next_step,),
                     encoder_attentions=None, # probably doesn't make sense to stream this
                     encoder_hidden_states=None, # probably doesn't make sense to stream this
                     decoder_attentions=(next_step_decoder_attentions,), # ([0],),# very concerning that if I set this to `([0],)` my tests don't fail
