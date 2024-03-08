@@ -248,8 +248,9 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
                 f"'{pvt_v2_size}' was given"
             )
 
-        assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4), \
-            "ImageNet weights not converted successfully."
+        assert torch.allclose(
+            logits[0, :3], expected_slice_logits, atol=1e-4
+        ), "ImageNet weights not converted successfully."
 
         print("ImageNet weights verified, conversion successful.")
 
@@ -282,7 +283,7 @@ if __name__ == "__main__":
         "--verify-imagenet-weights",
         action="store_true",
         default=False,
-        help="Verifies the correct conversion of author-published pretrained ImageNet weights."
+        help="Verifies the correct conversion of author-published pretrained ImageNet weights.",
     )
 
     args = parser.parse_args()

@@ -161,5 +161,5 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features if out_features is not None else getattr(self, "out_features", None),
             out_indices=out_indices if out_indices is not None else getattr(self, "out_indices", None),
-            stage_names=self.stage_names
+            stage_names=self.stage_names,
         )
