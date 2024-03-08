@@ -348,8 +348,11 @@ class SegGptImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
 
-        images = make_list_of_images(images)
-
+        try:
+            images = make_list_of_images(images)
+        except ValueError:
+            images = make_list_of_images(images, expected_ndims=2)
+            
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
