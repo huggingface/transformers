@@ -88,7 +88,6 @@ else:
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
-        "top_k_top_p_filtering",
         "GreedySearchEncoderDecoderOutput",
         "GreedySearchDecoderOnlyOutput",
         "SampleEncoderDecoderOutput",
@@ -130,7 +129,6 @@ else:
     ]
     _import_structure["tf_utils"] = [
         "TFGenerationMixin",
-        "tf_top_k_top_p_filtering",
         "TFGreedySearchDecoderOnlyOutput",
         "TFGreedySearchEncoderDecoderOutput",
         "TFSampleEncoderDecoderOutput",
@@ -241,7 +239,6 @@ if TYPE_CHECKING:
             GreedySearchEncoderDecoderOutput,
             SampleDecoderOnlyOutput,
             SampleEncoderDecoderOutput,
-            top_k_top_p_filtering,
         )
 
     try:
@@ -279,7 +276,6 @@ if TYPE_CHECKING:
             TFGreedySearchEncoderDecoderOutput,
             TFSampleDecoderOnlyOutput,
             TFSampleEncoderDecoderOutput,
-            tf_top_k_top_p_filtering,
         )
 
     try:
