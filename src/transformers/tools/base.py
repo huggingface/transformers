@@ -46,6 +46,11 @@ from .agent_types import handle_agent_inputs, handle_agent_outputs
 
 logger = logging.get_logger(__name__)
 
+
+if is_vision_available():
+    import PIL.Image
+    import PIL.ImageOps
+
 if is_torch_available():
     import torch
 
@@ -83,19 +88,15 @@ launch_gradio_demo({class_name})
 """
 
 
-from typing import Dict, List, Type
-
 class ToolMeta(type):
     def __new__(cls, name, bases, dct):
-        # Only apply checks to subclasses of Tool, not Tool itself
         if bases:
             required_attributes = {
                 'description': str,
                 'name': str,
-                'inputs': dict,
+                'inputs': Dict,
                 'output_type': type,
             }
-            print(dct)
             for attr, expected_type in required_attributes.items():
                 if attr not in dct or not isinstance(dct[attr], expected_type):
                     raise TypeError(f"{attr} must exist and be of type {expected_type.__name__}")
@@ -458,57 +459,26 @@ class RemoteTool(Tool):
     inputs = {"default": Any}
     output_type = str
 
-    def __init__(self, endpoint_url=None, token=None, tool_class=None):
+    def __init__(self, endpoint_url, name, description, inputs, output_type, token=None):
         self.endpoint_url = endpoint_url
         self.client = EndpointClient(endpoint_url, token=token)
-        self.tool_class = tool_class
-        self.name = tool_class.name
-        self.description = tool_class.description
-        self.inputs = tool_class.inputs
-        self.output_type = tool_class.output_type
+        self.name = name
+        self.description = description
+        self.inputs = inputs
+        self.output_type = output_type
 
 
     def prepare_inputs(self, *args, **kwargs):
         """
-        Prepare the inputs received for the HTTP client sending data to the endpoint. Positional arguments will be
-        matched with the signature of the `tool_class` if it was provided at instantation. Images will be encoded into
+        Prepare the inputs received for the HTTP client sending data to the endpoint. Images will be encoded into
         bytes.
 
         You can override this method in your custom class of [`RemoteTool`].
         """
         inputs = kwargs.copy()
-        if len(args) > 0:
-            if self.tool_class is not None:
-                # Match args with the signature
-                if issubclass(self.tool_class, PipelineTool):
-                    call_method = self.tool_class.encode
-                else:
-                    call_method = self.tool_class.__call__
-                signature = inspect.signature(call_method).parameters
-                parameters = [
-                    k
-                    for k, p in signature.items()
-                    if p.kind not in [inspect._ParameterKind.VAR_POSITIONAL, inspect._ParameterKind.VAR_KEYWORD]
-                ]
-                if parameters[0] == "self":
-                    parameters = parameters[1:]
-                if len(args) > len(parameters):
-                    raise ValueError(
-                        f"{self.tool_class} only accepts {len(parameters)} arguments but {len(args)} were given."
-                    )
-                for arg, name in zip(args, parameters):
-                    inputs[name] = arg
-            elif len(args) > 1:
-                raise ValueError("A `RemoteTool` can only accept one positional input.")
-            elif len(args) == 1:
-                if is_pil_image(args[0]):
-                    return {"inputs": self.client.encode_image(args[0])}
-                return {"inputs": args[0]}
-
         for key, value in inputs.items():
             if is_pil_image(value):
                 inputs[key] = self.client.encode_image(value)
-
         return {"inputs": inputs}
 
     def extract_outputs(self, outputs):
@@ -519,9 +489,9 @@ class RemoteTool(Tool):
         return outputs
 
     def __call__(self, *args, **kwargs):
-        args, kwargs = handle_agent_inputs(*args, **kwargs)
-
-        output_image = self.tool_class is not None and self.tool_class.outputs == ["image"]
+        output_image = False
+        if is_vision_available():
+            output_image = (self.output_type == PIL.Image.Image)
         inputs = self.prepare_inputs(*args, **kwargs)
         if isinstance(inputs, dict):
             outputs = self.client(**inputs, output_image=output_image)
@@ -529,9 +499,6 @@ class RemoteTool(Tool):
             outputs = self.client(inputs, output_image=output_image)
         if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
             outputs = outputs[0]
-
-        outputs = handle_agent_outputs(outputs, self.tool_class.outputs if self.tool_class is not None else None)
-
         return self.extract_outputs(outputs)
 
 
@@ -682,7 +649,7 @@ class PipelineTool(Tool):
 def launch_gradio_demo(tool_class: Tool):
     """
     Launches a gradio demo for a tool. The corresponding tool class needs to properly implement the class attributes
-    `inputs` and `outputs`.
+    `inputs` and `output_type`.
 
     Args:
         tool_class (`type`): The class of the tool for which to launch the demo.
@@ -697,10 +664,29 @@ def launch_gradio_demo(tool_class: Tool):
     def fn(*args, **kwargs):
         return tool(*args, **kwargs)
 
+    gradio_inputs = []
+    for input_type in tool_class.inputs.values():
+        if input_type in [str, int, float]:
+            gradio_inputs += "text"
+        elif is_vision_available() and input_type == PIL.Image.Image:
+            gradio_inputs += "image"
+        else:
+            gradio_inputs += "audio"
+        
+    if tool_class.output_type in [str, int, float]:
+        gradio_output = "text"
+    elif is_vision_available() and tool_class.output_type == PIL.Image.Image:
+        gradio_output = "image"
+    else:
+        gradio_output = "audio"
+
+    def fn(*args, **kwargs):
+        return tool(*args, **kwargs)
+
     gr.Interface(
         fn=fn,
-        inputs=tool_class.inputs.keys(),
-        outputs=tool_class.outputs.keys(),
+        inputs=gradio_inputs,
+        outputs=gradio_output,
         title=tool_class.__name__,
         article=tool.description,
     ).launch()

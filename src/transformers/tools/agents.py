@@ -234,10 +234,10 @@ class Agent:
     @property
     def default_tool_description_template(self)-> str:
         """
-        This template is taking can desbribe a tool as it is expected by the model
+        This template is taking can describe a tool as it is expected by the model
         """
         logger.warning_once(
-            "\nNo function template is defined for this tokenizer - using a default function template " #TODO change message
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
@@ -323,7 +323,7 @@ class CodeAgent(Agent):
         This template is taking can desbribe a tool as it is expected by the model
         """
         logger.warning_once(
-            "\nNo function template is defined for this tokenizer - using a default function template "
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
@@ -420,7 +420,7 @@ class ReactAgent(Agent):
         This template is taking can desbribe a tool as it is expected by the model
         """
         logger.warning_once(
-            "\nNo function template is defined for this tokenizer - using a default function template "
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
             "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
         )
