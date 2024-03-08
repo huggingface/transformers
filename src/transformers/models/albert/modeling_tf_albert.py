@@ -62,18 +62,18 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "albert-base-v2"
+_CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "albert-base-v1",
-    "albert-large-v1",
-    "albert-xlarge-v1",
-    "albert-xxlarge-v1",
-    "albert-base-v2",
-    "albert-large-v2",
-    "albert-xlarge-v2",
-    "albert-xxlarge-v2",
+    "albert/albert-base-v1",
+    "albert/albert-large-v1",
+    "albert/albert-xlarge-v1",
+    "albert/albert-xxlarge-v1",
+    "albert/albert-base-v2",
+    "albert/albert-large-v2",
+    "albert/albert-xlarge-v2",
+    "albert/albert-xxlarge-v2",
     # See all ALBERT models at https://huggingface.co/models?filter=albert
 ]
 
@@ -971,8 +971,8 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFAlbertForPreTraining
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-        >>> model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+        >>> model = TFAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
 
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
         >>> # Batch size 1
@@ -1103,8 +1103,8 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFAlbertForMaskedLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-        >>> model = TFAlbertForMaskedLM.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+        >>> model = TFAlbertForMaskedLM.from_pretrained("albert/albert-base-v2")
 
         >>> # add mask_token
         >>> inputs = tokenizer(f"The capital of [MASK] is Paris.", return_tensors="tf")

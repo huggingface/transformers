@@ -1,4 +1,4 @@
-        <!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -142,6 +142,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [FocalNet](model_doc/focalnet)                      |       ✅        |         ❌         |      ❌      |
 |                  [Funnel Transformer](model_doc/funnel)                  |       ✅        |         ✅         |      ❌      |
 |                          [Fuyu](model_doc/fuyu)                          |       ✅        |         ❌         |      ❌      |
+|                         [Gemma](model_doc/gemma)                         |       ✅        |         ❌         |      ✅      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
@@ -179,6 +180,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [M-CTC-T](model_doc/mctct)                        |       ✅        |         ❌         |      ❌      |
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
+|                         [Mamba](model_doc/mamba)                         |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -250,6 +252,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
 |                [SeamlessM4Tv2](model_doc/seamless_m4t_v2)                |       ✅        |         ❌         |      ❌      |
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
+|                        [SegGPT](model_doc/seggpt)                        |       ✅        |         ❌         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
 |                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
@@ -258,6 +261,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |
 |                      [Splinter](model_doc/splinter)                      |       ✅        |         ❌         |      ❌      |
 |                   [SqueezeBERT](model_doc/squeezebert)                   |       ✅        |         ❌         |      ❌      |
+|                      [StableLm](model_doc/stablelm)                      |       ✅        |         ❌         |      ❌      |
+|                    [Starcoder2](model_doc/starcoder2)                    |       ✅        |         ❌         |      ❌      |
 |                   [SwiftFormer](model_doc/swiftformer)                   |       ✅        |         ❌         |      ❌      |
 |                    [Swin Transformer](model_doc/swin)                    |       ✅        |         ✅         |      ❌      |
 |                 [Swin Transformer V2](model_doc/swinv2)                  |       ✅        |         ❌         |      ❌      |
@@ -275,6 +280,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
 |                          [TVLT](model_doc/tvlt)                          |       ✅        |         ❌         |      ❌      |
 |                           [TVP](model_doc/tvp)                           |       ✅        |         ❌         |      ❌      |
+|                          [UDOP](model_doc/udop)                          |       ✅        |         ❌         |      ❌      |
 |                           [UL2](model_doc/ul2)                           |       ✅        |         ✅         |      ✅      |
 |                          [UMT5](model_doc/umt5)                          |       ✅        |         ❌         |      ❌      |
 |                     [UniSpeech](model_doc/unispeech)                     |       ✅        |         ❌         |      ❌      |

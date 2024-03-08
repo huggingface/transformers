@@ -16,16 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 用于生成的工具
 
-此页面列出了所有由 [`~generation.GenerationMixin.generate`],
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`], 和
-[`~generation.GenerationMixin.constrained_beam_search`]使用的实用函数。
-
-其中大多数仅在您研究库中生成方法的代码时才有用。
+此页面列出了所有由 [`~generation.GenerationMixin.generate`]。
 
 ## 生成输出
 
@@ -36,8 +27,8 @@ rendered properly in your Markdown viewer.
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
@@ -338,12 +329,6 @@ generation_output[:2]
 [[autodoc]] ConstrainedBeamSearchScorer
     - process
     - finalize
-
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
 
 ## Streamers
 

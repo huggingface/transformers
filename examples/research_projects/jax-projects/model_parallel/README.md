@@ -54,7 +54,7 @@ model.save_pretrained("gpt-neo-1.3B")
 ```bash
 python run_clm_mp.py \
     --model_name_or_path gpt-neo-1.3B  \
-    --tokenizer_name gpt2 \
+    --tokenizer_name openai-community/gpt2 \
     --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
     --do_train  --do_eval \
     --block_size 1024 \

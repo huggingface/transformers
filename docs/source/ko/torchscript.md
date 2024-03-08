@@ -82,7 +82,7 @@ TorchScript는 묶인 가중치를 가진 모델을 내보낼 수 없으므로, 
 from transformers import BertModel, BertTokenizer, BertConfig
 import torch
 
-enc = BertTokenizer.from_pretrained("bert-base-uncased")
+enc = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
 # 입력 텍스트 토큰화하기
 text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
@@ -117,7 +117,7 @@ model = BertModel(config)
 model.eval()
 
 # 만약 *from_pretrained*를 사용하여 모델을 인스턴스화하는 경우, TorchScript 플래그를 쉽게 설정할 수 있습니다
-model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
+model = BertModel.from_pretrained("google-bert/bert-base-uncased", torchscript=True)
 
 # 추적 생성하기
 traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])

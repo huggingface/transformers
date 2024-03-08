@@ -166,7 +166,7 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_src_tokens, batch["input_ids"][0])
         self.assertEqual(expected_tgt_tokens, batch["labels"][0])
 
-    # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
+    # cannot use default save_and_load_tokenizer test method because tokenizer has no vocab
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()

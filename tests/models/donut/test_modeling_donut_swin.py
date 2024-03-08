@@ -145,7 +145,7 @@ class DonutSwinModelTester:
 @require_torch
 class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": DonutSwinModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": DonutSwinModel} if is_torch_available() else {}
     fx_compatible = True
 
     test_pruning = False

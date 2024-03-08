@@ -31,6 +31,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     logging,
     replace_return_docstrings,
@@ -41,6 +42,10 @@ from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
@@ -1193,8 +1198,15 @@ class MaskFormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor(num_masks, dtype=torch.float, device=device)
-        return num_masks_pt
+        num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_masks = reduce(num_masks)
+                world_size = PartialState().num_processes
+
+        num_masks = torch.clamp(num_masks / world_size, min=1)
+        return num_masks
 
 
 class MaskFormerFPNConvLayer(nn.Module):
@@ -1428,7 +1440,7 @@ class MaskFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        if hasattr(config, "backbone_config") and config.backbone_config.model_type == "swin":
+        if getattr(config, "backbone_config") is not None and config.backbone_config.model_type == "swin":
             # for backwards compatibility
             backbone_config = config.backbone_config
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())

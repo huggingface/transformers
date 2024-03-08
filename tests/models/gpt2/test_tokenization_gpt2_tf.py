@@ -15,8 +15,8 @@ if is_keras_nlp_available():
     from transformers.models.gpt2 import TFGPT2Tokenizer
 
 
-TOKENIZER_CHECKPOINTS = ["gpt2"]
-TINY_MODEL_CHECKPOINT = "gpt2"
+TOKENIZER_CHECKPOINTS = ["openai-community/gpt2"]
+TINY_MODEL_CHECKPOINT = "openai-community/gpt2"
 
 if is_tf_available():
 

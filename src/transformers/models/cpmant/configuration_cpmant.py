@@ -51,7 +51,7 @@ class CpmAntConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of layers of the Transformer encoder.
         dropout_p (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
+            The dropout probability for all fully connected layers in the embeddings, encoder.
         position_bias_num_buckets (`int`, *optional*, defaults to 512):
             The number of position_bias buckets.
         position_bias_max_distance (`int`, *optional*, defaults to 2048):

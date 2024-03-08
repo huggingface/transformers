@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 from typing import TYPE_CHECKING
+
+from packaging import version
 
 from .base import HfQuantizer
 
@@ -20,6 +23,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available, logging
+from ..utils.quantization_config import AWQLinearVersion
 
 
 if is_torch_available():
@@ -95,16 +99,26 @@ class AwqQuantizer(HfQuantizer):
             model = fuse_awq_modules(model, self.quantization_config)
             model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
 
+        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+            from ..integrations import post_init_awq_exllama_modules
+
+            model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
+
     @property
     def is_serializable(self):
         # AWQ through auto-awq has been always serializable, except if the model is fused.
         if self.quantization_config.do_fuse:
             logger.warning("You cannot save an AWQ model that uses fused modules!")
             return False
+
+        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+            logger.warning("You cannot save an AWQ model that uses Exllama backend!")
+            return False
+
         return True
 
     @property
     def is_trainable(self):
-        # AWQ does not support neither QAT (Quantization Aware Training or PEFT yet.)
-        # TODO: if this is supported in the future, do a version check here.
-        return False
+        # AWQ supports PEFT fine-tuning from version 0.2.0
+        MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
+        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)

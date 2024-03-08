@@ -76,7 +76,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             else:
                 new_value = torch.tensor(value, device="cpu")
 
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
             if issubclass(module.source_cls, Conv1D) and not prequantized_loading:
                 new_value = new_value.T

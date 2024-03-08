@@ -146,7 +146,7 @@ class FlaxEmbeddings(nn.Module):
             position_embeds = self.position_embeddings(position_ids.astype("i4"))
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
-            # explictly cast the positions here, since self.embed_positions are not registered as parameters
+            # explicitly cast the positions here, since self.embed_positions are not registered as parameters
             position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
         # Sum all embeddings

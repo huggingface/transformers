@@ -131,8 +131,6 @@ class ModelCard:
             pretrained_model_name_or_path: either:
 
                 - a string, the *model id* of a pretrained model card hosted inside a model repo on huggingface.co.
-                  Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                  user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a model card file saved using the [`~ModelCard.save_pretrained`]
                   method, e.g.: `./my_model_directory/`.
                 - a path or url to a saved model card JSON *file*, e.g.: `./my_model_directory/modelcard.json`.
@@ -163,11 +161,11 @@ class ModelCard:
 
         ```python
         # Download model card from huggingface.co and cache.
-        modelcard = ModelCard.from_pretrained("bert-base-uncased")
+        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased")
         # Model card was saved using *save_pretrained('./test/saved_model/')*
         modelcard = ModelCard.from_pretrained("./test/saved_model/")
         modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
-        modelcard = ModelCard.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         ```"""
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)

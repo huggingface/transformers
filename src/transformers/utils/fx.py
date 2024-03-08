@@ -39,6 +39,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -95,6 +96,7 @@ def _generate_supported_model_class_names(
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
         "backbone": MODEL_FOR_BACKBONE_MAPPING_NAMES,
+        "image-feature-extraction": MODEL_FOR_IMAGE_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -765,7 +767,7 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: PreTrainedModel, input_name: str, shape: List[int]
+        self, model: PreTrainedModel, input_name: str, shape: List[int], input_names: List[str]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
@@ -773,6 +775,11 @@ class HFTracer(Tracer):
         model_class_name = getattr(model, "class_for_deserialization", model.__class__).__name__
         device = model.device
         inputs_dict = {}
+
+        # when tracing a model with KV cache, we simply need to unsure that the KV cache length is larger than one to
+        # rightfully pass certain controlflows (Example: https://github.com/huggingface/transformers/blob/5c8d941d66734811d2ef6f57f15b44f7fb7a98c4/src/transformers/modeling_attn_mask_utils.py#L162).
+        # After tracing, the model can then still be used with arbitrary lengths different than the one used during tracing.
+        kv_cache_length = 5
 
         if input_name in ["labels", "start_positions", "end_positions"]:
             batch_size = shape[0]
@@ -883,7 +890,14 @@ class HFTracer(Tracer):
             # Generating big sequence length for audio inputs.
             seq_length = _generate_random_int(low=10000, high=20000)
             inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
-        elif "mask" in input_name or "ids" in input_name:
+        elif "mask" in input_name:
+            if "past_key_values" in input_names:
+                mask_shape = [shape[0], shape[1] + kv_cache_length]
+            else:
+                mask_shape = shape
+
+            inputs_dict[input_name] = torch.zeros(mask_shape, dtype=torch.long, device=device)
+        elif "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         elif "past_key_values" in input_name:
             if model.config.model_type not in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
@@ -893,7 +907,7 @@ class HFTracer(Tracer):
             num_heads = model.config.num_attention_heads
             head_dim = model.config.hidden_size // model.config.num_attention_heads
 
-            cache_shape = (shape[0], num_heads, 0, head_dim)
+            cache_shape = (shape[0], num_heads, kv_cache_length, head_dim)
             pkv = tuple(
                 (
                     torch.rand(cache_shape, dtype=torch.float, device=device),
@@ -1095,7 +1109,7 @@ class HFTracer(Tracer):
             if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
                 ("_deserialize_graph_module", "_CodeOnlyModule")
             ):
-                inputs.update(self._generate_dummy_input(root, input_name, shape))
+                inputs.update(self._generate_dummy_input(root, input_name, shape, input_names=input_names))
             else:
                 raise RuntimeError(
                     f"Could not generate input named {input_name} for because root is not a"

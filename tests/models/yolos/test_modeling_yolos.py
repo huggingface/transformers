@@ -168,7 +168,9 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (YolosModel, YolosForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": YolosModel, "object-detection": YolosForObjectDetection} if is_torch_available() else {}
+        {"image-feature-extraction": YolosModel, "object-detection": YolosForObjectDetection}
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False

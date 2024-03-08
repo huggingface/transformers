@@ -38,11 +38,13 @@ class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
     AWQ = "awq"
+    AQLM = "aqlm"
 
 
 class AWQLinearVersion(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
+    EXLLAMA = "exllama"
 
     @staticmethod
     def from_str(version: str):
@@ -51,6 +53,8 @@ class AWQLinearVersion(str, Enum):
             return AWQLinearVersion.GEMM
         elif version == "gemv":
             return AWQLinearVersion.GEMV
+        elif version == "exllama":
+            return AWQLinearVersion.EXLLAMA
         else:
             raise ValueError(f"Unknown AWQLinearVersion {version}")
 
@@ -151,7 +155,6 @@ class QuantizationConfigMixin:
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    # Copied from transformers.generation.configuration_utils.GenerationConfig.update
     def update(self, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
@@ -170,7 +173,7 @@ class QuantizationConfigMixin:
                 setattr(self, key, value)
                 to_remove.append(key)
 
-        # remove all the attributes that were updated, without modifying the input dict
+        # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
@@ -392,8 +395,6 @@ class GPTQConfig(QuantizationConfigMixin):
             The tokenizer used to process the dataset. You can pass either:
                 - A custom tokenizer object.
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                    Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                    user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
         dataset (`Union[List[str]]`, *optional*):
@@ -608,7 +609,7 @@ class AwqConfig(QuantizationConfigMixin):
             Whether to use zero point quantization.
         version (`AWQLinearVersion`, *optional*, defaults to `AWQLinearVersion.GEMM`):
             The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise,
-            GEMV is better (e.g. < 8 )
+            GEMV is better (e.g. < 8 ). GEMM models are compatible with Exllama kernels.
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
@@ -622,6 +623,10 @@ class AwqConfig(QuantizationConfigMixin):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
             Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
+        exllama_config (`Dict[str, Any]`, *optional*):
+            You can specify the version of the exllama kernel through the `version` key, the maximum sequence
+            length through the `max_input_len` key, and the maximum batch size through the `max_batch_size` key.
+            Defaults to `{"version": 2, "max_input_len": 2048, "max_batch_size": 8}` if unset.
     """
 
     def __init__(
@@ -635,6 +640,7 @@ class AwqConfig(QuantizationConfigMixin):
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
         modules_to_not_convert: Optional[List] = None,
+        exllama_config: Optional[Dict[str, int]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -646,6 +652,7 @@ class AwqConfig(QuantizationConfigMixin):
         self.backend = backend
         self.fuse_max_seq_len = fuse_max_seq_len
         self.modules_to_not_convert = modules_to_not_convert
+        self.exllama_config = exllama_config
 
         self.modules_to_fuse = modules_to_fuse
         if do_fuse is None:
@@ -669,9 +676,9 @@ class AwqConfig(QuantizationConfigMixin):
             )
 
         self.version = AWQLinearVersion.from_str(self.version)
-        if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV]:
+        if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA]:
             raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV] - not recognized version {self.version}"
+                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA] - not recognized version {self.version}"
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
@@ -726,8 +733,93 @@ class AwqConfig(QuantizationConfigMixin):
                     f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
                 )
 
+        if self.version == AWQLinearVersion.EXLLAMA:
+            awq_version_supports_exllama = False
+            MIN_AWQ_VERSION = "0.2.0"
+            if is_auto_awq_available():
+                awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
+                    MIN_AWQ_VERSION
+                )
+
+            if not awq_version_supports_exllama:
+                raise ValueError(
+                    f"You current version of `autoawq` does not support exllama backend, "
+                    f"please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                )
+
+            if self.exllama_config is None:
+                self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
+            else:
+                if "version" not in self.exllama_config:
+                    raise ValueError("`exllama_config` needs to have a `version` key.")
+                elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                    exllama_version = self.exllama_config["version"]
+                    raise ValueError(
+                        f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
+                    )
+
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
+        loading_attibutes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
+
+
+@dataclass
+class AqlmConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `aqlm` parameters.
+
+    Args:
+        in_group_size (`int`, *optional*, defaults to 8):
+            The group size along the input dimension.
+        out_group_size (`int`, *optional*, defaults to 1):
+            The group size along the output dimension. It's recommended to always use 1.
+        num_codebooks (`int`, *optional*, defaults to 1):
+            Number of codebooks for the Additive Quantization procedure.
+        nbits_per_codebook (`int`, *optional*, defaults to 16):
+            Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
+        linear_weights_not_to_quantize (`Optional[List[str]]`, *optional*):
+            List of full paths of `nn.Linear` weight parameters that shall not be quantized.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        in_group_size: int = 8,
+        out_group_size: int = 1,
+        num_codebooks: int = 1,
+        nbits_per_codebook: int = 16,
+        linear_weights_not_to_quantize: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.AQLM
+        self.in_group_size = in_group_size
+        self.out_group_size = out_group_size
+        self.num_codebooks = num_codebooks
+        self.nbits_per_codebook = nbits_per_codebook
+        self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if not isinstance(self.in_group_size, int):
+            raise ValueError("in_group_size must be a float")
+        if not isinstance(self.out_group_size, int):
+            raise ValueError("out_group_size must be a float")
+        if not isinstance(self.num_codebooks, int):
+            raise ValueError("num_codebooks must be a float")
+        if not isinstance(self.nbits_per_codebook, int):
+            raise ValueError("nbits_per_codebook must be a float")
+
+        if self.linear_weights_not_to_quantize is not None and not isinstance(
+            self.linear_weights_not_to_quantize, list
+        ):
+            raise ValueError("linear_weights_not_to_quantize must be a list of strings")
+
+        if self.linear_weights_not_to_quantize is None:
+            self.linear_weights_not_to_quantize = []

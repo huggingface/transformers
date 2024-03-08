@@ -79,6 +79,13 @@ class FNetTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class GemmaTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class GPTSw3Tokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
@@ -206,6 +213,13 @@ class SpeechT5Tokenizer(metaclass=DummyObject):
 
 
 class T5Tokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
+class UdopTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

@@ -31,7 +31,7 @@ this paper, we aim to improve the existing SSL framework for speaker representat
 introduced for enhancing the unsupervised speaker information extraction. First, we apply the multi-task learning to
 the current SSL framework, where we integrate the utterance-wise contrastive loss with the SSL objective function.
 Second, for better speaker discrimination, we propose an utterance mixing strategy for data augmentation, where
-additional overlapped utterances are created unsupervisely and incorporate during training. We integrate the proposed
+additional overlapped utterances are created unsupervisedly and incorporate during training. We integrate the proposed
 methods into the HuBERT framework. Experiment results on SUPERB benchmark show that the proposed system achieves
 state-of-the-art performance in universal representation learning, especially for speaker identification oriented
 tasks. An ablation study is performed verifying the efficacy of each proposed method. Finally, we scale up training

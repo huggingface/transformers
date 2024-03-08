@@ -58,7 +58,7 @@ To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecode
 >>> from transformers import VisionEncoderDecoderModel
 
 >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "microsoft/swin-base-patch4-window7-224-in22k", "bert-base-uncased"
+...     "microsoft/swin-base-patch4-window7-224-in22k", "google-bert/bert-base-uncased"
 ... )
 ```
 
@@ -123,9 +123,9 @@ images) and `labels` (which are the `input_ids` of the encoded target sequence).
 >>> from datasets import load_dataset
 
 >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
+...     "google/vit-base-patch16-224-in21k", "google-bert/bert-base-uncased"
 ... )
 
 >>> model.config.decoder_start_token_id = tokenizer.cls_token_id

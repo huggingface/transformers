@@ -91,9 +91,9 @@ class TFBertTokenizer(keras.layers.Layer):
 
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case
-        self.cls_token_id = cls_token_id or vocab_list.index("[CLS]")
-        self.sep_token_id = sep_token_id or vocab_list.index("[SEP]")
-        self.pad_token_id = pad_token_id or vocab_list.index("[PAD]")
+        self.cls_token_id = vocab_list.index("[CLS]") if cls_token_id is None else cls_token_id
+        self.sep_token_id = vocab_list.index("[SEP]") if sep_token_id is None else sep_token_id
+        self.pad_token_id = vocab_list.index("[PAD]") if pad_token_id is None else pad_token_id
         self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3, axis=1)  # Allow room for special tokens
         self.max_length = max_length
         self.padding = padding
@@ -116,7 +116,7 @@ class TFBertTokenizer(keras.layers.Layer):
         ```python
         from transformers import AutoTokenizer, TFBertTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         tf_tokenizer = TFBertTokenizer.from_tokenizer(tokenizer)
         ```
         """
@@ -155,7 +155,7 @@ class TFBertTokenizer(keras.layers.Layer):
         ```python
         from transformers import TFBertTokenizer
 
-        tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
+        tf_tokenizer = TFBertTokenizer.from_pretrained("google-bert/bert-base-uncased")
         ```
         """
         try:

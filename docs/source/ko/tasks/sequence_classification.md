@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서 학습할 내용은:
 
-1. [IMDb](https://huggingface.co/datasets/imdb) 데이터셋에서 [DistilBERT](https://huggingface.co/distilbert-base-uncased)를 파인 튜닝하여 영화 리뷰가 긍정적인지 부정적인지 판단합니다.
+1. [IMDb](https://huggingface.co/datasets/imdb) 데이터셋에서 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)를 파인 튜닝하여 영화 리뷰가 긍정적인지 부정적인지 판단합니다.
 2. 추론을 위해 파인 튜닝 모델을 사용합니다.
 
 <Tip>
@@ -85,7 +85,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 `text`를 토큰화하고 시퀀스가 DistilBERT의 최대 입력 길이보다 길지 않도록 자르기 위한 전처리 함수를 생성하세요:
@@ -167,7 +167,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForSequenceClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -241,7 +241,7 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 >>> from transformers import TFAutoModelForSequenceClassification
 
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
 ... )
 ```
 

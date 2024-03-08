@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 이번 가이드에서 다룰 내용은 다음과 같습니다:
 
-1. [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트에서 [r/askscience](https://www.reddit.com/r/askscience/) 부분을 사용해 [DistilRoBERTa](https://huggingface.co/distilroberta-base) 모델을 미세 조정합니다.
+1. [ELI5](https://huggingface.co/datasets/eli5) 데이터 세트에서 [r/askscience](https://www.reddit.com/r/askscience/) 부분을 사용해 [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) 모델을 미세 조정합니다.
 2. 추론 시에 직접 미세 조정한 모델을 사용합니다.
 
 <Tip>
@@ -103,7 +103,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilroberta-base")
 ```
 
 위의 예제에서와 마찬가지로, `text` 필드는 `answers` 안에 중첩되어 있습니다. 
@@ -224,7 +224,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 ```py
 >>> from transformers import AutoModelForMaskedLM
 
->>> model = AutoModelForMaskedLM.from_pretrained("distilroberta-base")
+>>> model = AutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
 ```
 
 이제 세 단계가 남았습니다:
@@ -289,7 +289,7 @@ TensorFlow로 모델을 미세 조정하기 위해서는 옵티마이저(optimiz
 ```py
 >>> from transformers import TFAutoModelForMaskedLM
 
->>> model = TFAutoModelForMaskedLM.from_pretrained("distilroberta-base")
+>>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`] 메소드를 사용해 데이터 세트를 `tf.data.Dataset` 형식으로 변환하세요:

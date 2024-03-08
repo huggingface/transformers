@@ -677,7 +677,7 @@ def convert(source_dir: Path, dest_dir):
 def load_yaml(path):
     import yaml
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
 
 

@@ -28,7 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-# Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
+# Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with FacebookAI/roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
 class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Ignore copy
     tokenizer_class = LongformerTokenizer
