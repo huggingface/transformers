@@ -181,7 +181,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folder_path):
+def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folder_path, verify_imagenet_weights=False):
     """
     Copy/paste/tweak model's weights to our PVT structure.
     """
@@ -218,35 +218,40 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
     # load HuggingFace model
     model = PvtV2ForImageClassification(config).eval()
     model.load_state_dict(state_dict)
-
-    # Check outputs on an image, prepared by PvtImageProcessor
     image_processor = PvtImageProcessor(size=config.image_size)
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
-    logits = outputs.logits.detach().cpu()
 
-    if pvt_v2_size == "b0":
-        expected_slice_logits = torch.tensor([-1.1939, -1.4547, -0.1076])
-    elif pvt_v2_size == "b1":
-        expected_slice_logits = torch.tensor([-0.4716, -0.7335, -0.4600])
-    elif pvt_v2_size == "b2":
-        expected_slice_logits = torch.tensor([0.0795, -0.3170, 0.2247])
-    elif pvt_v2_size == "b2-linear":
-        expected_slice_logits = torch.tensor([0.0968, 0.3937, -0.4252])
-    elif pvt_v2_size == "b3":
-        expected_slice_logits = torch.tensor([-0.4595, -0.2870, 0.0940])
-    elif pvt_v2_size == "b4":
-        expected_slice_logits = torch.tensor([-0.1769, -0.1747, -0.0143])
-    elif pvt_v2_size == "b5":
-        expected_slice_logits = torch.tensor([-0.2943, -0.1008, 0.6812])
-    else:
-        raise ValueError(
-            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "
-            f"'{pvt_v2_size}' was given"
-        )
+    if verify_imagenet_weights:
+        # Check outputs on an image, prepared by PvtImageProcessor
+        print("Verifying conversion of pretrained ImageNet weights...")
+        encoding = image_processor(images=prepare_img(), return_tensors="pt")
+        pixel_values = encoding["pixel_values"]
+        outputs = model(pixel_values)
+        logits = outputs.logits.detach().cpu()
 
-    assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4)
+        if pvt_v2_size == "b0":
+            expected_slice_logits = torch.tensor([-1.1939, -1.4547, -0.1076])
+        elif pvt_v2_size == "b1":
+            expected_slice_logits = torch.tensor([-0.4716, -0.7335, -0.4600])
+        elif pvt_v2_size == "b2":
+            expected_slice_logits = torch.tensor([0.0795, -0.3170, 0.2247])
+        elif pvt_v2_size == "b2-linear":
+            expected_slice_logits = torch.tensor([0.0968, 0.3937, -0.4252])
+        elif pvt_v2_size == "b3":
+            expected_slice_logits = torch.tensor([-0.4595, -0.2870, 0.0940])
+        elif pvt_v2_size == "b4":
+            expected_slice_logits = torch.tensor([-0.1769, -0.1747, -0.0143])
+        elif pvt_v2_size == "b5":
+            expected_slice_logits = torch.tensor([-0.2943, -0.1008, 0.6812])
+        else:
+            raise ValueError(
+                f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "
+                f"'{pvt_v2_size}' was given"
+            )
+
+        assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4), \
+            "ImageNet weights not converted successfully."
+
+        print("ImageNet weights verified, conversion successful.")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model pytorch_model.bin to {pytorch_dump_folder_path}")
@@ -273,6 +278,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--verify-imagenet-weights",
+        action="store_true",
+        default=False,
+        help="Verifies the correct conversion of author-published pretrained ImageNet weights."
+    )
 
     args = parser.parse_args()
-    convert_pvt_v2_checkpoint(args.pvt_v2_size, args.pvt_v2_checkpoint, args.pytorch_dump_folder_path)
+    convert_pvt_v2_checkpoint(
+        pvt_v2_size=args.pvt_v2_size,
+        pvt_v2_checkpoint=args.pvt_v2_checkpoint,
+        pytorch_dump_folder_path=args.pytorch_dump_folder_path,
+        verify_imagenet_weights=args.verify_imagenet_weights,
+    )
