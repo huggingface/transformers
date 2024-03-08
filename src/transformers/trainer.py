@@ -914,6 +914,8 @@ class Trainer:
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
+        # accelerator.free_memory() will destroy the references, so 
+        # we need to store the non-prepared version
         eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
         if self.args.dataloader_persistent_workers:
             self._eval_dataloader = eval_dataloader
