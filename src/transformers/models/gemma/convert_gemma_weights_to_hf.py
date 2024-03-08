@@ -179,7 +179,7 @@ def main():
     parser.add_argument(
         "--dtype",
         default="float32",
-        help="Location to write HF model and tokenizer",
+        help="Target dtype of the converted model",
     )
     args = parser.parse_args()
 
