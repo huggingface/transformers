@@ -211,4 +211,3 @@ class Text2TextGenerationPipeline(Pipeline):
                 }
             records.append(record)
         return records
-

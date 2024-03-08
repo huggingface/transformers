@@ -74,7 +74,7 @@ from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnswer
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text2text_generation import Text2TextGenerationPipeline
 from .text_classification import TextClassificationPipeline
-from .text_generation import TextGenerationPipeline, SummarizationPipeline, TranslationPipeline
+from .text_generation import SummarizationPipeline, TextGenerationPipeline, TranslationPipeline
 from .text_to_audio import TextToAudioPipeline
 from .token_classification import (
     AggregationStrategy,
