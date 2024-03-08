@@ -114,8 +114,6 @@ class Text2TextGenerationPipeline(Pipeline):
         """
         return True
 
-
-
     def __call__(self, *args, **kwargs):
         r"""
         Generate the output text(s) using text(s) given as inputs.

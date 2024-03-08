@@ -258,12 +258,21 @@ class TextGenerationPipeline(Pipeline):
         if isinstance(text_inputs, (list, tuple)) and isinstance(text_inputs[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
             if isinstance(text_inputs[0], dict):
-                return super().__call__(Chat(text_inputs), **kwargs)
+                out = super().__call__(Chat(text_inputs), **kwargs)
             else:
                 chats = [Chat(chat) for chat in text_inputs]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
+                out = super().__call__(chats, **kwargs)
         else:
-            return super().__call__(text_inputs, **kwargs)
+            out = super().__call__(text_inputs, **kwargs)
+        if (
+            self.text2text
+            and isinstance(text_inputs, list)
+            and all(isinstance(el, str) for el in text_inputs)
+            and all(len(res) == 1 for res in out)
+        ):
+            return [res[0] for res in out]
+        else:
+            return out
 
     def preprocess(
         self,
@@ -519,7 +528,9 @@ class TranslationPipeline(TextGenerationPipeline):
             )
         return True
 
-    def preprocess(self, prompt_text, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None, **kwargs):
+    def preprocess(
+        self, prompt_text, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None, **kwargs
+    ):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
             out = self.tokenizer._build_translation_inputs(
                 prompt_text, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
@@ -541,9 +552,7 @@ class TranslationPipeline(TextGenerationPipeline):
             prompt_text = prefix + prompt_text
             padding = False
         else:
-            raise ValueError(
-                "prompt_text has the wrong format. This should be either of type `str` or type `list`"
-            )
+            raise ValueError("prompt_text has the wrong format. This should be either of type `str` or type `list`")
         inputs = self.tokenizer(prompt_text, padding=padding, truncation=truncation, return_tensors=self.framework)
         # This is produced by tokenizers but is an invalid generate kwargs
         if "token_type_ids" in inputs:
