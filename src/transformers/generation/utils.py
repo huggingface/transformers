@@ -22,9 +22,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 import torch
 import torch.distributed as dist
-from pygtrie import CharTrie
-from pygtrie import CharTrie
 from torch import nn
+try:
+    from pygtrie import CharTrie
+except ImportError as e:
+    CharTrie, pygtrie_import_error = None, e
 
 from ..cache_utils import Cache, DynamicCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -1827,6 +1829,9 @@ class GenerationMixin:
                 " When generating with token healing, you must pass the model's tokenizer to the `tokenizer` "
                 "argument of `generate`."
             )
+        if CharTrie is None:
+            raise pygtrie_import_error
+
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
         vocab_trie = CharTrie(tokenizer.get_vocab())
         gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
