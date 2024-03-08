@@ -416,7 +416,6 @@ class TextGenerationPipeline(Pipeline):
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )
-                breakpoint()
                 all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
                     if isinstance(prompt_text, str):
