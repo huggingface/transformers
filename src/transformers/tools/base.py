@@ -320,7 +320,7 @@ class Tool(metaclass=ToolMeta):
     ) -> str:
         """
         Upload the tool to the Hub.
-        
+
         For this method to work properly, your tool must have been defined in a separate module (not `__main__`).
         For instance:
         ```
@@ -670,7 +670,7 @@ def launch_gradio_demo(tool_class: Tool):
             gradio_inputs += "image"
         else:
             gradio_inputs += "audio"
-        
+
     if tool_class.output_type in [str, int, float]:
         gradio_output = "text"
     elif is_vision_available() and tool_class.output_type == PIL.Image.Image:
@@ -861,7 +861,7 @@ class ConvertedTool(Tool):
             if index<len(self.inputs):
                 input_key = next(iter(self.inputs))
                 kwargs[input_key] = argument
-        
+
         tool_input = {}
         for key, value in kwargs.items():
             tool_input[key] = value

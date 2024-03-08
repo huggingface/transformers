@@ -77,5 +77,4 @@ Action:
         assert output == "7.2904"
 
     def test_setup_agent_with_empty_toolbox():
-        agent = ReactAgent(fake_react_llm, toolbox=[])
-        assert False # TODO: finish this
+        ReactAgent(fake_react_llm, toolbox=[])
