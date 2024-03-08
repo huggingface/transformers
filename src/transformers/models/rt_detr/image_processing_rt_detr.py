@@ -1005,7 +1005,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         if annotations is not None:
             validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
 
-
         images = make_list_of_images(images)
         if not valid_images(images):
             raise ValueError(
