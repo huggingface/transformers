@@ -141,8 +141,10 @@ def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_toke
 
             sequences.append(sequence)
             max_total_length = max(max_total_length, len(sequences[-1]))
-        else:
+        elif bos_token_tensor is not None:
             sequences.append(bos_token_tensor)
+        else:
+            sequences.append(torch.tensor([]))
 
     for i in range(len(current_segments)):
         pad_length = max_total_length - len(sequences[i])
