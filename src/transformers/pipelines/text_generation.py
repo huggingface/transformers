@@ -7,12 +7,12 @@ from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 
 class ReturnType(enum.Enum):
@@ -82,9 +82,7 @@ class TextGenerationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        )
+
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
@@ -117,12 +115,25 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
-        add_special_tokens=False,
+        add_special_tokens=None,
         truncation=None,
         padding=False,
         max_length=None,
         **generate_kwargs,
     ):
+        if self.framework == "tf":
+            seq2seq_lm_map = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+        else:
+            seq2seq_lm_map = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+        if self.model.__class__.__name__ in seq2seq_lm_map.values():
+            self.text2text = True
+            if add_special_tokens is None:
+                add_special_tokens = True
+        else:
+            self.text2text = False
+            if add_special_tokens is None:
+                add_special_tokens = False
+
         preprocess_params = {
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
@@ -131,6 +142,8 @@ class TextGenerationPipeline(Pipeline):
         }
         if max_length is not None:
             generate_kwargs["max_length"] = max_length
+        if add_special_tokens is None:
+            add_special_tokens = self.text2text
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
