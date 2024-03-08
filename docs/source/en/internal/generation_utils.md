@@ -336,12 +336,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - process
     - finalize
 
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
-
 ## Streamers
 
 [[autodoc]] TextStreamer

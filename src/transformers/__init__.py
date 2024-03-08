@@ -1410,7 +1410,6 @@ else:
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
-            "top_k_top_p_filtering",
         ]
     )
     _import_structure["generation_utils"] = []
@@ -3815,7 +3814,6 @@ else:
             "TFTemperatureLogitsWarper",
             "TFTopKLogitsWarper",
             "TFTopPLogitsWarper",
-            "tf_top_k_top_p_filtering",
         ]
     )
     _import_structure["generation_tf_utils"] = []
@@ -6208,7 +6206,6 @@ if TYPE_CHECKING:
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
-            top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
         from .models.albert import (
@@ -8180,7 +8177,6 @@ if TYPE_CHECKING:
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
-            tf_top_k_top_p_filtering,
         )
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_utils import (
