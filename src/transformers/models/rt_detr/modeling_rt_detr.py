@@ -553,9 +553,7 @@ class RTDetrConvEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-
-        self.config = config
-
+    self._use_timm_backbone = config.use_timm_backbone
         if config.use_timm_backbone:
             requires_backends(self, ["timm"])
             kwargs = {}
