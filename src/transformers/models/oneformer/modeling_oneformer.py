@@ -204,7 +204,6 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
     loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
     loss = loss_pos + loss_neg
-    loss = loss
     return loss
 
 
