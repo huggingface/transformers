@@ -892,7 +892,7 @@ class Trainer:
         # If we have persistent workers, don't do a fork bomb especially as eval datasets
         # don't change during training
         if hasattr(self, "_eval_dataloader") and self.args.dataloader_persistent_workers:
-            return self._eval_dataloader
+            return self.accelerator.prepare(self._eval_dataloader)
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         data_collator = self.data_collator
 
@@ -914,11 +914,11 @@ class Trainer:
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
-        eval_dataloader = self.accelerator.prepare(DataLoader(eval_dataset, **dataloader_params))
+        eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
         if self.args.dataloader_persistent_workers:
             self._eval_dataloader = eval_dataloader
 
-        return eval_dataloader
+        return self.accelerator.prepare(eval_dataloader)
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         """
@@ -951,6 +951,7 @@ class Trainer:
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
+        # We use the same batch_size as for eval.
         return self.accelerator.prepare(DataLoader(test_dataset, **dataloader_params))
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
