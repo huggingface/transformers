@@ -50,7 +50,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    from timm.models import create_model
+    from timm import create_model
 
 if is_vision_available():
     from ...image_transforms import center_to_corners_format
@@ -338,8 +338,8 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder
-class DetrConvEncoder(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr >ConditionalDetr
+class ConditionalDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 

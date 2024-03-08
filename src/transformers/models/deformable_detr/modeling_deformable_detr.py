@@ -93,7 +93,7 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 if is_timm_available():
-    pass
+    from timm import create_model
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -420,13 +420,32 @@ class DeformableDetrConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        backbone = load_backbone(config)
+
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = getattr(config, "backbone_kwargs", {})
+            out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
+            if config.dilation:
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=out_indices,
+                in_chans=in_chans,
+                **kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
         backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
         if "resnet" in backbone_model_type:

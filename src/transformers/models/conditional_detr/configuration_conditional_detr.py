@@ -255,12 +255,6 @@ class ConditionalDetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_num_channels", None)
-        output.pop("_dilation", None)
-        return output
-
 
 class ConditionalDetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")

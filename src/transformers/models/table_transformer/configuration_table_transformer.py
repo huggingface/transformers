@@ -258,12 +258,6 @@ class TableTransformerConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_num_channels", None)
-        output.pop("_dilation", None)
-        return output
-
 
 # Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
 class TableTransformerOnnxConfig(OnnxConfig):

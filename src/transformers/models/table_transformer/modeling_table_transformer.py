@@ -46,7 +46,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    from timm.models import create_model
+    from timm import create_model
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format

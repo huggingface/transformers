@@ -270,12 +270,6 @@ class DetrConfig(PretrainedConfig):
         """
         return cls(backbone_config=backbone_config, **kwargs)
 
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_num_channels", None)
-        output.pop("_dilation", None)
-        return output
-
 
 class DetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
