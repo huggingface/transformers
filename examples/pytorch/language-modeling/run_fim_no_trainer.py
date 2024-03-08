@@ -497,44 +497,62 @@ def main():
     # Add the new tokens to the tokenizer
     tokenizer.add_tokens(special_tokens)
     original_embeddings = model.get_input_embeddings()
-    # Get the pre-expansion embeddings of the model and resize the embedding layer
-    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
-    embeddings = model.get_input_embeddings()
-
-    # Sample the embeddings for the new tokens from a multivariate normal distribution
-    # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
-    # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
-    mean = original_embeddings.mean(dim=0)
-    n = original_embeddings.size()[0]
-    sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(
-        mean,
-        covariance_matrix=1e-5 * sigma,
-    )
-    new_token_embeddings = torch.stack(
-        tuple((dist.sample() for _ in range(len(special_tokens)))),
-        dim=0,
-    )
 
     if is_deepspeed_zero3_enabled():
         import deepspeed
 
-        with deepspeed.zero.GatheredParameters(embeddings.weight, modifier_rank=None):
-            # Set the new tokens' embeddings to the newly sampled embeddings
-            new_embeddings = embeddings.weight.clone()
-            new_embeddings[-len(special_tokens) :] = new_token_embeddings
+        with deepspeed.zero.GatheredParameters(original_embeddings.weight, modifier_rank=0):
+            # Get the pre-expansion embeddings of the model and resize the embedding layer
+            model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
+            embeddings = model.get_input_embeddings()
 
-            # Update the model's embeddings with the new embeddings
-            embeddings.weight = torch.nn.Parameter(new_embeddings)
-            model.set_input_embeddings(embeddings)
+            # Sample the embeddings for the new tokens from a multivariate normal distribution
+            # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
+            # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            mean = original_embeddings.mean(dim=0)
+            n = original_embeddings.size()[0]
+            sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
+            dist = torch.distributions.multivariate_normal.MultivariateNormal(
+                mean,
+                covariance_matrix=1e-5 * sigma,
+            )
+            new_token_embeddings = torch.stack(
+                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                dim=0,
+            )
+    else:
+        original_embeddings = model.get_input_embeddings()
+        # Get the pre-expansion embeddings of the model and resize the embedding layer
+        model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
+        embeddings = model.get_input_embeddings()
+
+        # Sample the embeddings for the new tokens from a multivariate normal distribution
+        # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
+        # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+        mean = original_embeddings.mean(dim=0)
+        n = original_embeddings.size()[0]
+        sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
+        dist = torch.distributions.multivariate_normal.MultivariateNormal(
+            mean,
+            covariance_matrix=1e-5 * sigma,
+        )
+        new_token_embeddings = torch.stack(
+            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            dim=0,
+        )
+
+    if is_deepspeed_zero3_enabled():
+        import deepspeed
+
+        with deepspeed.zero.GatheredParameters(embeddings.weight, modifier_rank=0):
+            # Set the new tokens' embeddings to the newly sampled embeddings
+            embeddings.weight.data[-len(special_tokens) :] = new_token_embeddings
     else:
         # Set the new tokens' embeddings to the newly sampled embeddings
-        new_embeddings = embeddings.weight.clone()
-        new_embeddings[-len(special_tokens) :] = new_token_embeddings
+        embeddings.weight.data[-len(special_tokens) :] = new_token_embeddings
 
-        # Update the model's embeddings with the new embeddings
-        embeddings.weight = torch.nn.Parameter(new_embeddings)
-        model.set_input_embeddings(embeddings)
+    # Update the model's embeddings with the new embeddings
+    model.set_input_embeddings(embeddings)
 
     logger.info("Added special tokens to the tokenizer and resized model's embedding layer")
 
