@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [SWAG](https://huggingface.co/datasets/swag) データセットの「通常」構成で [BERT](https://huggingface.co/bert-base-uncased) を微調整して、最適なデータセットを選択します複数の選択肢と何らかのコンテキストを考慮して回答します。
+1. [SWAG](https://huggingface.co/datasets/swag) データセットの「通常」構成で [BERT](https://huggingface.co/google-bert/bert-base-uncased) を微調整して、最適なデータセットを選択します複数の選択肢と何らかのコンテキストを考慮して回答します。
 2. 微調整したモデルを推論に使用します。
 
 <Tip>
@@ -90,7 +90,7 @@ pip install transformers datasets evaluate
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 作成する前処理関数は次のことを行う必要があります。
@@ -254,7 +254,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> from transformers import AutoModelForMultipleChoice, TrainingArguments, Trainer
 
->>> model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 この時点で残っている手順は次の 3 つだけです。
@@ -318,7 +318,7 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 ```py
 >>> from transformers import TFAutoModelForMultipleChoice
 
->>> model = TFAutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。

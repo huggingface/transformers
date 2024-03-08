@@ -111,6 +111,7 @@ class VitMatteModelTester:
     def get_config(self):
         return VitMatteConfig(
             backbone_config=self.get_backbone_config(),
+            backbone=None,
             hidden_size=self.hidden_size,
             fusion_hidden_sizes=self.fusion_hidden_sizes,
         )

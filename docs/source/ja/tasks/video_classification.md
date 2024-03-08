@@ -490,7 +490,7 @@ def compute_metrics(eval_pred):
 
 次に、入力をモデルに渡し、`logits `を返します。
 
-```
+```py
 >>> logits = run_inference(trained_model, sample_test_video["video"])
 ```
 

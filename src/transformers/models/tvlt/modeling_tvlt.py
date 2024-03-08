@@ -88,8 +88,8 @@ class TvltModelOutput(ModelOutput):
     audio_label_masks: torch.LongTensor = None
     pixel_ids_restore: torch.LongTensor = None
     audio_ids_restore: torch.LongTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -111,8 +111,8 @@ class TvltDecoderOutput(ModelOutput):
     """
 
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -145,8 +145,8 @@ class TvltForPreTrainingOutput(ModelOutput):
     matching_logits: torch.FloatTensor = None
     pixel_logits: torch.FloatTensor = None
     audio_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):

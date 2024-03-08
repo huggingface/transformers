@@ -41,7 +41,7 @@ rendered properly in your Markdown viewer.
 ```py
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
 [`~PreTrainedModel.save_pretrained`]을 사용하여 모델을 저장하면, 모델의 구성과 가중치가 들어있는 두 개의 파일이 있는 새 폴더가 생성됩니다:

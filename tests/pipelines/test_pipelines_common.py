@@ -143,7 +143,7 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertIsInstance(text_classifier, MyPipeline)
 
     def test_check_task(self):
-        task = get_task("gpt2")
+        task = get_task("openai-community/gpt2")
         self.assertEqual(task, "text-generation")
 
         with self.assertRaises(RuntimeError):

@@ -66,7 +66,7 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
     alibi = torch.arange(1 - sequence_length, 1, dtype=torch.int32, device=device).view(1, 1, 1, sequence_length)
     num_heads_power_of_2 = 2 ** math.ceil(math.log2(num_heads))
 
-    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.float32, device=device)
+    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.int64, device=device).float()
     base = base * (alibi_bias_max / num_heads_power_of_2)
 
     slopes = 1.0 / torch.pow(2, base)

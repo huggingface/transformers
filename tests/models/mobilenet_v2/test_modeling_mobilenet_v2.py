@@ -195,7 +195,7 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MobileNetV2Model,
+            "image-feature-extraction": MobileNetV2Model,
             "image-classification": MobileNetV2ForImageClassification,
             "image-segmentation": MobileNetV2ForSemanticSegmentation,
         }

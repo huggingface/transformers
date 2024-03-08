@@ -74,7 +74,7 @@ class BaseModelOutputWithCLSToken(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     cls_token_value: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path

@@ -122,6 +122,7 @@ class ViTHybridModelTester:
             initializer_range=self.initializer_range,
             backbone_featmap_shape=self.backbone_featmap_shape,
             backbone_config=backbone_config,
+            backbone=None,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -155,7 +156,7 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     all_model_classes = (ViTHybridModel, ViTHybridForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
+        {"image-feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
         if is_torch_available()
         else {}
     )

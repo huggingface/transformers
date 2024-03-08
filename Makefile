@@ -5,12 +5,14 @@ export PYTHONPATH = src
 
 check_dirs := examples tests src utils
 
+exclude_folders := examples/research_projects
+
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
-		ruff check $(modified_py_files) --fix; \
-		ruff format $(modified_py_files);\
+		ruff check $(modified_py_files) --fix --exclude $(exclude_folders); \
+		ruff format $(modified_py_files) --exclude $(exclude_folders);\
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -65,8 +67,8 @@ extra_style_checks:
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	ruff check $(check_dirs) setup.py conftest.py --fix
-	ruff format $(check_dirs) setup.py conftest.py
+	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
+	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 

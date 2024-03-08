@@ -31,7 +31,7 @@ challenging. In this paper, we propose a new pre-trained model, WavLM, to solve 
 WavLM is built based on the HuBERT framework, with an emphasis on both spoken content modeling and speaker identity
 preservation. We first equip the Transformer structure with gated relative position bias to improve its capability on
 recognition tasks. For better speaker discrimination, we propose an utterance mixing training strategy, where
-additional overlapped utterances are created unsupervisely and incorporated during model training. Lastly, we scale up
+additional overlapped utterances are created unsupervisedly and incorporated during model training. Lastly, we scale up
 the training dataset from 60k hours to 94k hours. WavLM Large achieves state-of-the-art performance on the SUPERB
 benchmark, and brings significant improvements for various speech processing tasks on their representative benchmarks.*
 

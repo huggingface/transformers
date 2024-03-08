@@ -132,6 +132,7 @@ class AttentionMaskConverter:
         expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
             attention_mask_2d.device
         )
+
         if causal_4d_mask is not None:
             expanded_attn_mask = causal_4d_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(dtype).min)
 
@@ -186,7 +187,8 @@ class AttentionMaskConverter:
 
     @staticmethod
     def _unmask_unattended(
-        expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]
+        expanded_mask: torch.FloatTensor,
+        min_dtype: float,
     ):
         # fmt: off
         """
@@ -199,13 +201,7 @@ class AttentionMaskConverter:
 
         The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
 
-        For example, if `attention_mask` is
-        ```
-        [[0, 0, 1],
-         [1, 1, 1],
-         [0, 1, 1]]
-        ```
-        and `expanded_mask` is (e.g. here left-padding case)
+        For example, if `expanded_mask` is (e.g. here left-padding case)
         ```
         [[[[0, 0, 0],
            [0, 0, 0],
@@ -231,47 +227,12 @@ class AttentionMaskConverter:
         ```
         """
         # fmt: on
+        if expanded_mask.dtype == torch.bool:
+            raise ValueError(
+                "AttentionMaskConverter._unmask_unattended expects a float `expanded_mask`, got a BoolTensor."
+            )
 
-        # Get the index of the first non-zero value for every sample in the batch.
-        # In the above example, indices = [[2], [0], [1]]]
-        tmp = torch.arange(attention_mask.shape[1], 0, -1)
-        indices = torch.argmax(attention_mask.cpu() * tmp, 1, keepdim=True)
-
-        # Find the batch indexes that have unattended tokens on the leftmost side (e.g. [0, 0, 1, 1, 1]), for which the first rows of the
-        # expanded mask will be completely unattended.
-        left_masked_rows = torch.where(indices > 0)[0]
-
-        if left_masked_rows.shape[0] == 0:
-            return expanded_mask
-        indices = indices[left_masked_rows]
-
-        max_len = torch.max(indices)
-        range_tensor = torch.arange(max_len).unsqueeze(0)
-        range_tensor = range_tensor.repeat(indices.size(0), 1)
-
-        # Avoid unmasking tokens at relevant target positions (on the row axis), by rather unmasking possibly several times the first row that should always be unmasked as we filtered out the batch above.
-        range_tensor[range_tensor >= indices] = 0
-
-        # TODO: we may drop support for 3D attention mask as the refactor from Patrick maybe dropped this case
-        if expanded_mask.dim() == 4:
-            num_masks = expanded_mask.shape[1]
-            if num_masks == 1:
-                # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
-                mask_slice = (left_masked_rows[:, None], 0, range_tensor)
-            else:
-                # Broadcast [left_masked_rows, 1, 1], [1, num_masks, 1], [left_masked_rows, 1, max_len]
-                mask_slice = (
-                    left_masked_rows[:, None, None],
-                    torch.arange(num_masks)[None, :, None],
-                    range_tensor[:, None, :],
-                )
-        else:
-            # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
-            mask_slice = (left_masked_rows[:, None], range_tensor)
-
-        expanded_mask[mask_slice] = unmasked_value
-
-        return expanded_mask
+        return expanded_mask.mul(~torch.all(expanded_mask == min_dtype, dim=-1, keepdim=True))
 
 
 def _prepare_4d_causal_attention_mask(
@@ -346,10 +307,14 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     key_value_length = input_shape[-1] + past_key_values_length
     batch_size, query_length = input_shape
 
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
+    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+    is_tracing = (
+        torch.jit.is_tracing()
+        or isinstance(inputs_embeds, torch.fx.Proxy)
+        or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+    )
 
     if attention_mask is not None:
         # 4d mask is passed through
@@ -367,10 +332,8 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
                 )
                 return attention_mask
 
-        elif torch.all(attention_mask == 1):
-            if is_tracing:
-                pass
-            elif query_length == 1:
+        elif not is_tracing and torch.all(attention_mask == 1):
+            if query_length == 1:
                 # For query_length == 1, causal attention and bi-directional attention are the same.
                 attention_mask = None
             elif key_value_length == query_length:
@@ -403,11 +366,12 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
             key_value_length=key_value_length,
         )
 
-        # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-        # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        if query_length > 1:
+        # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+        # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+        # Details: https://github.com/pytorch/pytorch/issues/110213
+        if not is_tracing and expanded_4d_mask.device.type == "cuda":
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
-                expanded_4d_mask, attention_mask, unmasked_value=0.0
+                expanded_4d_mask, min_dtype=torch.finfo(inputs_embeds.dtype).min
             )
 
     return expanded_4d_mask
@@ -445,10 +409,14 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     batch_size, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
+    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+    is_tracing = (
+        torch.jit.is_tracing()
+        or isinstance(mask, torch.fx.Proxy)
+        or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+    )
 
     if torch.all(mask == 1):
         if is_tracing:

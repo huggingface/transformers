@@ -40,6 +40,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -149,7 +150,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->XGLM
-class TFXGLMAttention(tf.keras.layers.Layer):
+class TFXGLMAttention(keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -165,7 +166,7 @@ class TFXGLMAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -175,10 +176,10 @@ class TFXGLMAttention(tf.keras.layers.Layer):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
@@ -319,7 +320,7 @@ class TFXGLMAttention(tf.keras.layers.Layer):
                 self.out_proj.build([None, None, self.embed_dim])
 
 
-class TFXGLMDecoderLayer(tf.keras.layers.Layer):
+class TFXGLMDecoderLayer(keras.layers.Layer):
     def __init__(self, config: XGLMConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -330,9 +331,9 @@ class TFXGLMDecoderLayer(tf.keras.layers.Layer):
             is_decoder=True,
             name="self_attn",
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
 
         if config.add_cross_attention:
             self.encoder_attn = TFXGLMAttention(
@@ -342,14 +343,14 @@ class TFXGLMDecoderLayer(tf.keras.layers.Layer):
                 is_decoder=True,
                 name="encoder_attn",
             )
-            self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(
+            self.encoder_attn_layer_norm = keras.layers.LayerNormalization(
                 epsilon=1e-5, name="encoder_attn_layer_norm"
             )
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.fc1 = keras.layers.Dense(config.ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         self.config = config
 
     # Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartDecoderLayer.call
@@ -461,7 +462,7 @@ class TFXGLMDecoderLayer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFXGLMMainLayer(tf.keras.layers.Layer):
+class TFXGLMMainLayer(keras.layers.Layer):
     config_class = XGLMConfig
 
     def __init__(
@@ -488,10 +489,10 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             padding_idx=config.pad_token_id,
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.layers = [TFXGLMDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_layers)]
         self.layerdrop = config.layerdrop
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
     def get_input_embeddings(self) -> TFSharedEmbeddings:
         return self.embed_tokens
@@ -679,7 +680,7 @@ XGLM_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -883,7 +884,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
 
         self.model = TFXGLMMainLayer(config, embed_tokens=embed_tokens, name="model")
-        self.lm_head = tf.keras.layers.Dense(
+        self.lm_head = keras.layers.Dense(
             config.vocab_size,
             use_bias=False,
             kernel_initializer=get_initializer(config.init_std),

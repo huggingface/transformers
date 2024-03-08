@@ -35,62 +35,62 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlm-mlm-en-2048": "https://huggingface.co/xlm-mlm-en-2048/resolve/main/vocab.json",
-        "xlm-mlm-ende-1024": "https://huggingface.co/xlm-mlm-ende-1024/resolve/main/vocab.json",
-        "xlm-mlm-enfr-1024": "https://huggingface.co/xlm-mlm-enfr-1024/resolve/main/vocab.json",
-        "xlm-mlm-enro-1024": "https://huggingface.co/xlm-mlm-enro-1024/resolve/main/vocab.json",
-        "xlm-mlm-tlm-xnli15-1024": "https://huggingface.co/xlm-mlm-tlm-xnli15-1024/resolve/main/vocab.json",
-        "xlm-mlm-xnli15-1024": "https://huggingface.co/xlm-mlm-xnli15-1024/resolve/main/vocab.json",
-        "xlm-clm-enfr-1024": "https://huggingface.co/xlm-clm-enfr-1024/resolve/main/vocab.json",
-        "xlm-clm-ende-1024": "https://huggingface.co/xlm-clm-ende-1024/resolve/main/vocab.json",
-        "xlm-mlm-17-1280": "https://huggingface.co/xlm-mlm-17-1280/resolve/main/vocab.json",
-        "xlm-mlm-100-1280": "https://huggingface.co/xlm-mlm-100-1280/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-en-2048": "https://huggingface.co/FacebookAI/xlm-mlm-en-2048/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-ende-1024": "https://huggingface.co/FacebookAI/xlm-mlm-ende-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-enfr-1024": "https://huggingface.co/FacebookAI/xlm-mlm-enfr-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-enro-1024": "https://huggingface.co/FacebookAI/xlm-mlm-enro-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-tlm-xnli15-1024": "https://huggingface.co/FacebookAI/xlm-mlm-tlm-xnli15-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-xnli15-1024": "https://huggingface.co/FacebookAI/xlm-mlm-xnli15-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-clm-enfr-1024": "https://huggingface.co/FacebookAI/xlm-clm-enfr-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-clm-ende-1024": "https://huggingface.co/FacebookAI/xlm-clm-ende-1024/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-17-1280": "https://huggingface.co/FacebookAI/xlm-mlm-17-1280/resolve/main/vocab.json",
+        "FacebookAI/xlm-mlm-100-1280": "https://huggingface.co/FacebookAI/xlm-mlm-100-1280/resolve/main/vocab.json",
     },
     "merges_file": {
-        "xlm-mlm-en-2048": "https://huggingface.co/xlm-mlm-en-2048/resolve/main/merges.txt",
-        "xlm-mlm-ende-1024": "https://huggingface.co/xlm-mlm-ende-1024/resolve/main/merges.txt",
-        "xlm-mlm-enfr-1024": "https://huggingface.co/xlm-mlm-enfr-1024/resolve/main/merges.txt",
-        "xlm-mlm-enro-1024": "https://huggingface.co/xlm-mlm-enro-1024/resolve/main/merges.txt",
-        "xlm-mlm-tlm-xnli15-1024": "https://huggingface.co/xlm-mlm-tlm-xnli15-1024/resolve/main/merges.txt",
-        "xlm-mlm-xnli15-1024": "https://huggingface.co/xlm-mlm-xnli15-1024/resolve/main/merges.txt",
-        "xlm-clm-enfr-1024": "https://huggingface.co/xlm-clm-enfr-1024/resolve/main/merges.txt",
-        "xlm-clm-ende-1024": "https://huggingface.co/xlm-clm-ende-1024/resolve/main/merges.txt",
-        "xlm-mlm-17-1280": "https://huggingface.co/xlm-mlm-17-1280/resolve/main/merges.txt",
-        "xlm-mlm-100-1280": "https://huggingface.co/xlm-mlm-100-1280/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-en-2048": "https://huggingface.co/FacebookAI/xlm-mlm-en-2048/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-ende-1024": "https://huggingface.co/FacebookAI/xlm-mlm-ende-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-enfr-1024": "https://huggingface.co/FacebookAI/xlm-mlm-enfr-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-enro-1024": "https://huggingface.co/FacebookAI/xlm-mlm-enro-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-tlm-xnli15-1024": "https://huggingface.co/FacebookAI/xlm-mlm-tlm-xnli15-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-xnli15-1024": "https://huggingface.co/FacebookAI/xlm-mlm-xnli15-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-clm-enfr-1024": "https://huggingface.co/FacebookAI/xlm-clm-enfr-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-clm-ende-1024": "https://huggingface.co/FacebookAI/xlm-clm-ende-1024/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-17-1280": "https://huggingface.co/FacebookAI/xlm-mlm-17-1280/resolve/main/merges.txt",
+        "FacebookAI/xlm-mlm-100-1280": "https://huggingface.co/FacebookAI/xlm-mlm-100-1280/resolve/main/merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlm-mlm-en-2048": 512,
-    "xlm-mlm-ende-1024": 512,
-    "xlm-mlm-enfr-1024": 512,
-    "xlm-mlm-enro-1024": 512,
-    "xlm-mlm-tlm-xnli15-1024": 512,
-    "xlm-mlm-xnli15-1024": 512,
-    "xlm-clm-enfr-1024": 512,
-    "xlm-clm-ende-1024": 512,
-    "xlm-mlm-17-1280": 512,
-    "xlm-mlm-100-1280": 512,
+    "FacebookAI/xlm-mlm-en-2048": 512,
+    "FacebookAI/xlm-mlm-ende-1024": 512,
+    "FacebookAI/xlm-mlm-enfr-1024": 512,
+    "FacebookAI/xlm-mlm-enro-1024": 512,
+    "FacebookAI/xlm-mlm-tlm-xnli15-1024": 512,
+    "FacebookAI/xlm-mlm-xnli15-1024": 512,
+    "FacebookAI/xlm-clm-enfr-1024": 512,
+    "FacebookAI/xlm-clm-ende-1024": 512,
+    "FacebookAI/xlm-mlm-17-1280": 512,
+    "FacebookAI/xlm-mlm-100-1280": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "xlm-mlm-en-2048": {"do_lowercase_and_remove_accent": True},
-    "xlm-mlm-ende-1024": {
+    "FacebookAI/xlm-mlm-en-2048": {"do_lowercase_and_remove_accent": True},
+    "FacebookAI/xlm-mlm-ende-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {0: "de", 1: "en"},
         "lang2id": {"de": 0, "en": 1},
     },
-    "xlm-mlm-enfr-1024": {
+    "FacebookAI/xlm-mlm-enfr-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {0: "en", 1: "fr"},
         "lang2id": {"en": 0, "fr": 1},
     },
-    "xlm-mlm-enro-1024": {
+    "FacebookAI/xlm-mlm-enro-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {0: "en", 1: "ro"},
         "lang2id": {"en": 0, "ro": 1},
     },
-    "xlm-mlm-tlm-xnli15-1024": {
+    "FacebookAI/xlm-mlm-tlm-xnli15-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {
             0: "ar",
@@ -127,7 +127,7 @@ PRETRAINED_INIT_CONFIGURATION = {
             "zh": 14,
         },
     },
-    "xlm-mlm-xnli15-1024": {
+    "FacebookAI/xlm-mlm-xnli15-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {
             0: "ar",
@@ -164,17 +164,17 @@ PRETRAINED_INIT_CONFIGURATION = {
             "zh": 14,
         },
     },
-    "xlm-clm-enfr-1024": {
+    "FacebookAI/xlm-clm-enfr-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {0: "en", 1: "fr"},
         "lang2id": {"en": 0, "fr": 1},
     },
-    "xlm-clm-ende-1024": {
+    "FacebookAI/xlm-clm-ende-1024": {
         "do_lowercase_and_remove_accent": True,
         "id2lang": {0: "de", 1: "en"},
         "lang2id": {"de": 0, "en": 1},
     },
-    "xlm-mlm-17-1280": {
+    "FacebookAI/xlm-mlm-17-1280": {
         "do_lowercase_and_remove_accent": False,
         "id2lang": {
             0: "ar",
@@ -215,7 +215,7 @@ PRETRAINED_INIT_CONFIGURATION = {
             "zh": 16,
         },
     },
-    "xlm-mlm-100-1280": {
+    "FacebookAI/xlm-mlm-100-1280": {
         "do_lowercase_and_remove_accent": False,
         "id2lang": {
             0: "af",
@@ -512,7 +512,7 @@ def remove_non_printing_char(text):
 
 
 def romanian_preprocessing(text):
-    """Sennrich's WMT16 scripts for Romanian preprocessing, used by model `xlm-mlm-enro-1024`"""
+    """Sennrich's WMT16 scripts for Romanian preprocessing, used by model `FacebookAI/xlm-mlm-enro-1024`"""
     # https://github.com/rsennrich/wmt16-scripts/blob/master/preprocess/normalise-romanian.py
     text = text.replace("\u015e", "\u0218").replace("\u015f", "\u0219")
     text = text.replace("\u0162", "\u021a").replace("\u0163", "\u021b")
@@ -807,7 +807,7 @@ class XLMTokenizer(PreTrainedTokenizer):
             text = text.split()
         elif lang not in self.lang_with_custom_tokenizer:
             text = self.moses_pipeline(text, lang=lang)
-            # TODO: make sure we are using `xlm-mlm-enro-1024`, since XLM-100 doesn't have this step
+            # TODO: make sure we are using `FacebookAI/xlm-mlm-enro-1024`, since XLM-100 doesn't have this step
             if lang == "ro":
                 text = romanian_preprocessing(text)
             text = self.moses_tokenize(text, lang=lang)

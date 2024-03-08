@@ -428,7 +428,10 @@ class OwlViTModelTester:
 class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": OwlViTModel, "zero-shot-object-detection": OwlViTForObjectDetection}
+        {
+            "feature-extraction": OwlViTModel,
+            "zero-shot-object-detection": OwlViTForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )

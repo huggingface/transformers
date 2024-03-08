@@ -39,6 +39,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -53,6 +54,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
+from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
 from ..utils import (
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
@@ -94,6 +96,7 @@ def _generate_supported_model_class_names(
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
         "backbone": MODEL_FOR_BACKBONE_MAPPING_NAMES,
+        "image-feature-extraction": MODEL_FOR_IMAGE_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -131,6 +134,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "hubert",
     "layoutlm",
+    "llama",
     "lxmert",
     "m2m_100",
     "marian",
@@ -155,6 +159,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "wav2vec2",
     #    "xlnet",
 ]
+
+_FX_SUPPORTED_MODELS_WITH_KV_CACHE = ["llama", "opt"]
 
 _REGULAR_SUPPORTED_MODELS = []
 for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
@@ -514,6 +520,14 @@ def torch_nn_functional_one_hot(tensor, num_classes=-1):
     return torch.empty(shape, device="meta")
 
 
+def torch_nn_functional_scaled_dot_product_attention(
+    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None
+):
+    target_length = query.shape[-2]
+    head_dim = value.shape[-1]
+    return torch.empty((*query.shape[:-2], target_length, head_dim), device="meta")
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -602,6 +616,11 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
     operator.getitem: operator_getitem,
 }
+
+if is_torch_greater_or_equal_than_2_0:
+    _MANUAL_META_OVERRIDES[
+        torch.nn.functional.scaled_dot_product_attention
+    ] = torch_nn_functional_scaled_dot_product_attention
 
 
 class HFProxy(Proxy):
@@ -748,7 +767,7 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: PreTrainedModel, input_name: str, shape: List[int]
+        self, model: PreTrainedModel, input_name: str, shape: List[int], input_names: List[str]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
@@ -756,6 +775,11 @@ class HFTracer(Tracer):
         model_class_name = getattr(model, "class_for_deserialization", model.__class__).__name__
         device = model.device
         inputs_dict = {}
+
+        # when tracing a model with KV cache, we simply need to unsure that the KV cache length is larger than one to
+        # rightfully pass certain controlflows (Example: https://github.com/huggingface/transformers/blob/5c8d941d66734811d2ef6f57f15b44f7fb7a98c4/src/transformers/modeling_attn_mask_utils.py#L162).
+        # After tracing, the model can then still be used with arbitrary lengths different than the one used during tracing.
+        kv_cache_length = 5
 
         if input_name in ["labels", "start_positions", "end_positions"]:
             batch_size = shape[0]
@@ -866,8 +890,32 @@ class HFTracer(Tracer):
             # Generating big sequence length for audio inputs.
             seq_length = _generate_random_int(low=10000, high=20000)
             inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
-        elif "mask" in input_name or "ids" in input_name:
+        elif "mask" in input_name:
+            if "past_key_values" in input_names:
+                mask_shape = [shape[0], shape[1] + kv_cache_length]
+            else:
+                mask_shape = shape
+
+            inputs_dict[input_name] = torch.zeros(mask_shape, dtype=torch.long, device=device)
+        elif "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
+        elif "past_key_values" in input_name:
+            if model.config.model_type not in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
+                raise NotImplementedError(
+                    f"Symbolic trace with past_key_values input is not supported yet for the model {model.config.model_type}. Please open an issue or a PR in Transformers repository if you would like to see the support added."
+                )
+            num_heads = model.config.num_attention_heads
+            head_dim = model.config.hidden_size // model.config.num_attention_heads
+
+            cache_shape = (shape[0], num_heads, kv_cache_length, head_dim)
+            pkv = tuple(
+                (
+                    torch.rand(cache_shape, dtype=torch.float, device=device),
+                    torch.rand(cache_shape, dtype=torch.float, device=device),
+                )
+                for i in range(model.config.num_hidden_layers)
+            )
+            inputs_dict[input_name] = pkv
         else:
             shape_with_hidden_size = shape + [model.config.hidden_size]
             inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
@@ -1061,7 +1109,7 @@ class HFTracer(Tracer):
             if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
                 ("_deserialize_graph_module", "_CodeOnlyModule")
             ):
-                inputs.update(self._generate_dummy_input(root, input_name, shape))
+                inputs.update(self._generate_dummy_input(root, input_name, shape, input_names=input_names))
             else:
                 raise RuntimeError(
                     f"Could not generate input named {input_name} for because root is not a"

@@ -164,7 +164,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": ViTMAEModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": ViTMAEModel} if is_torch_available() else {}
 
     test_pruning = False
     test_torchscript = False

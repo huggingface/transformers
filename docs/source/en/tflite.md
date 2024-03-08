@@ -38,10 +38,10 @@ or view help in command line:
 optimum-cli export tflite --help
 ```
 
-To export a model's checkpoint from the 🤗 Hub, for example, `bert-base-uncased`, run the following command:
+To export a model's checkpoint from the 🤗 Hub, for example, `google-bert/bert-base-uncased`, run the following command:
 
 ```bash
-optimum-cli export tflite --model bert-base-uncased --sequence_length 128 bert_tflite/
+optimum-cli export tflite --model google-bert/bert-base-uncased --sequence_length 128 bert_tflite/
 ```
 
 You should see the logs indicating progress and showing where the resulting `model.tflite` is saved, like this:

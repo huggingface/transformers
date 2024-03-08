@@ -22,7 +22,7 @@ pip install accelerate>=0.12.0
 pip install transformers>=4.23.0
 ```
 if `transformers>=4.23.0` is not released yet, then use:
-```
+```bash
 pip install git+https://github.com/huggingface/transformers.git
 ```
 
@@ -72,15 +72,15 @@ Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe a
 ### `CUDA illegal memory error: an illegal memory access at line...`:
 
 Check the CUDA verisons with:
-```
+```bash
 nvcc --version
 ```
 and confirm it is the same version as the one detected by `bitsandbytes`. If not, run:
-```
+```bash
 ls -l $CONDA_PREFIX/lib/libcudart.so
 ```
 or 
-```
+```bash
 ls -l $LD_LIBRARY_PATH
 ```
 Check if `libcudart.so` has a correct symlink that is set. Sometimes `nvcc` detects the correct CUDA version but `bitsandbytes` doesn't. You have to make sure that the symlink that is set for the file `libcudart.so` is redirected to the correct CUDA file. 

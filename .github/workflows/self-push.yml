@@ -207,7 +207,7 @@ jobs:
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
@@ -302,7 +302,7 @@ jobs:
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
@@ -392,7 +392,7 @@ jobs:
         continue-on-error: true
         run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
@@ -482,7 +482,7 @@ jobs:
         continue-on-error: true
         run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:

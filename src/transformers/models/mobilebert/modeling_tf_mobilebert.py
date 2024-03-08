@@ -46,6 +46,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -98,9 +99,7 @@ class TFMobileBertPreTrainingLoss:
     """
 
     def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
 
         # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
         unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
@@ -120,11 +119,11 @@ class TFMobileBertPreTrainingLoss:
         return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
 
 
-class TFMobileBertIntermediate(tf.keras.layers.Layer):
+class TFMobileBertIntermediate(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(config.intermediate_size, name="dense")
+        self.dense = keras.layers.Dense(config.intermediate_size, name="dense")
 
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
@@ -147,7 +146,7 @@ class TFMobileBertIntermediate(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.config.true_hidden_size])
 
 
-class TFLayerNorm(tf.keras.layers.LayerNormalization):
+class TFLayerNorm(keras.layers.LayerNormalization):
     def __init__(self, feat_size, *args, **kwargs):
         self.feat_size = feat_size
         super().__init__(*args, **kwargs)
@@ -156,7 +155,7 @@ class TFLayerNorm(tf.keras.layers.LayerNormalization):
         super().build([None, None, self.feat_size])
 
 
-class TFNoNorm(tf.keras.layers.Layer):
+class TFNoNorm(keras.layers.Layer):
     def __init__(self, feat_size, epsilon=None, **kwargs):
         super().__init__(**kwargs)
         self.feat_size = feat_size
@@ -173,7 +172,7 @@ class TFNoNorm(tf.keras.layers.Layer):
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
-class TFMobileBertEmbeddings(tf.keras.layers.Layer):
+class TFMobileBertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -185,14 +184,14 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
+        self.embedding_transformation = keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.embedded_input_size = self.embedding_size * (3 if self.trigram_input else 1)
 
     def build(self, input_shape=None):
@@ -277,7 +276,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFMobileBertSelfAttention(tf.keras.layers.Layer):
+class TFMobileBertSelfAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         if config.hidden_size % config.num_attention_heads != 0:
@@ -292,17 +291,17 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         self.attention_head_size = int(config.true_hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.config = config
 
     def transpose_for_scores(self, x, batch_size):
@@ -378,18 +377,18 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
                 )
 
 
-class TFMobileBertSelfOutput(tf.keras.layers.Layer):
+class TFMobileBertSelfOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.true_hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
         if not self.use_bottleneck:
-            self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+            self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states, residual_tensor, training=False):
@@ -411,7 +410,7 @@ class TFMobileBertSelfOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build(None)
 
 
-class TFMobileBertAttention(tf.keras.layers.Layer):
+class TFMobileBertAttention(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.self = TFMobileBertSelfAttention(config, name="self")
@@ -451,14 +450,14 @@ class TFMobileBertAttention(tf.keras.layers.Layer):
                 self.mobilebert_output.build(None)
 
 
-class TFOutputBottleneck(tf.keras.layers.Layer):
+class TFOutputBottleneck(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.hidden_size, name="dense")
+        self.dense = keras.layers.Dense(config.hidden_size, name="dense")
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states, residual_tensor, training=False):
@@ -479,18 +478,18 @@ class TFOutputBottleneck(tf.keras.layers.Layer):
                 self.LayerNorm.build(None)
 
 
-class TFMobileBertOutput(tf.keras.layers.Layer):
+class TFMobileBertOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.true_hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
         if not self.use_bottleneck:
-            self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+            self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         else:
             self.bottleneck = TFOutputBottleneck(config, name="bottleneck")
         self.config = config
@@ -520,10 +519,10 @@ class TFMobileBertOutput(tf.keras.layers.Layer):
                 self.bottleneck.build(None)
 
 
-class TFBottleneckLayer(tf.keras.layers.Layer):
+class TFBottleneckLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.intra_bottleneck_size, name="dense")
+        self.dense = keras.layers.Dense(config.intra_bottleneck_size, name="dense")
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.intra_bottleneck_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
@@ -546,7 +545,7 @@ class TFBottleneckLayer(tf.keras.layers.Layer):
                 self.LayerNorm.build(None)
 
 
-class TFBottleneck(tf.keras.layers.Layer):
+class TFBottleneck(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.key_query_shared_bottleneck = config.key_query_shared_bottleneck
@@ -593,10 +592,10 @@ class TFBottleneck(tf.keras.layers.Layer):
                 self.attention.build(None)
 
 
-class TFFFNOutput(tf.keras.layers.Layer):
+class TFFFNOutput(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(config.true_hidden_size, name="dense")
+        self.dense = keras.layers.Dense(config.true_hidden_size, name="dense")
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
@@ -619,7 +618,7 @@ class TFFFNOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build(None)
 
 
-class TFFFNLayer(tf.keras.layers.Layer):
+class TFFFNLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.intermediate = TFMobileBertIntermediate(config, name="intermediate")
@@ -642,7 +641,7 @@ class TFFFNLayer(tf.keras.layers.Layer):
                 self.mobilebert_output.build(None)
 
 
-class TFMobileBertLayer(tf.keras.layers.Layer):
+class TFMobileBertLayer(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
@@ -723,7 +722,7 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFMobileBertEncoder(tf.keras.layers.Layer):
+class TFMobileBertEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
@@ -775,12 +774,12 @@ class TFMobileBertEncoder(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFMobileBertPooler(tf.keras.layers.Layer):
+class TFMobileBertPooler(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.do_activate = config.classifier_activation
         if self.do_activate:
-            self.dense = tf.keras.layers.Dense(
+            self.dense = keras.layers.Dense(
                 config.hidden_size,
                 kernel_initializer=get_initializer(config.initializer_range),
                 activation="tanh",
@@ -807,10 +806,10 @@ class TFMobileBertPooler(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
-class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
+class TFMobileBertPredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
@@ -838,7 +837,7 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
                 self.LayerNorm.build(None)
 
 
-class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
+class TFMobileBertLMPredictionHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.transform = TFMobileBertPredictionHeadTransform(config, name="transform")
@@ -887,7 +886,7 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFMobileBertMLMHead(tf.keras.layers.Layer):
+class TFMobileBertMLMHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.predictions = TFMobileBertLMPredictionHead(config, name="predictions")
@@ -906,7 +905,7 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFMobileBertMainLayer(tf.keras.layers.Layer):
+class TFMobileBertMainLayer(keras.layers.Layer):
     config_class = MobileBertConfig
 
     def __init__(self, config, add_pooling_layer=True, **kwargs):
@@ -1082,7 +1081,7 @@ MOBILEBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1434,10 +1433,10 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             return (tf_weight,)
 
 
-class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
+class TFMobileBertOnlyNSPHead(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.seq_relationship = tf.keras.layers.Dense(2, name="seq_relationship")
+        self.seq_relationship = keras.layers.Dense(2, name="seq_relationship")
         self.config = config
 
     def call(self, pooled_output):
@@ -1571,8 +1570,8 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1670,7 +1669,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         self.num_labels = config.num_labels
 
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config
@@ -1780,8 +1779,8 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         super().__init__(config, *inputs, **kwargs)
 
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1898,8 +1897,8 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config

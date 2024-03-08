@@ -247,14 +247,16 @@ class ImageToTextPipelineTests(unittest.TestCase):
     @require_torch
     def test_conditional_generation_llava(self):
         pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
 
         prompt = (
             "<image>\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT:"
         )
 
-        outputs = pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 200})
+        outputs = pipe(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
+            prompt=prompt,
+            generate_kwargs={"max_new_tokens": 200},
+        )
         self.assertEqual(
             outputs,
             [
@@ -262,4 +264,16 @@ class ImageToTextPipelineTests(unittest.TestCase):
                     "generated_text": "<image> \nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
                 }
             ],
+        )
+
+    @slow
+    @require_torch
+    def test_nougat(self):
+        pipe = pipeline("image-to-text", "facebook/nougat-base")
+
+        outputs = pipe("https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/nougat_paper.png")
+
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blec"}],
         )

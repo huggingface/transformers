@@ -904,7 +904,7 @@ RUN_SLOW=1 pytest tests
 
 
 ```python no-style
-@parameteriz ed.expand(...)
+@parameterized.expand(...)
 @slow
 def test_integration_foo():
 ```
