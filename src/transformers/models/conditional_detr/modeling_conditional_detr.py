@@ -343,7 +343,7 @@ class ConditionalDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
-    nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
+    nn.BatchNorm2d layers are replaced by ConditionalDetrFrozenBatchNorm2d as defined above.
 
     """
 

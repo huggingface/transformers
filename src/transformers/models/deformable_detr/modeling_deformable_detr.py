@@ -88,12 +88,29 @@ def load_cuda_kernels():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
 
+
 if is_timm_available():
     from timm import create_model
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "DeformableDetrConfig"
+_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
+
+DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "sensetime/deformable-detr",
+    # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
+]
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -142,19 +159,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "DeformableDetrConfig"
-_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
-
-
-from ..deprecated._archive_maps import DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -433,7 +437,7 @@ class DeformableDetrConvEncoder(nn.Module):
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
                 out_indices=out_indices,
-                in_chans=in_chans,
+                in_chans=num_channels,
                 **kwargs,
             )
         else:
