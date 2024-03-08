@@ -7,12 +7,18 @@ from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    )
 
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+    from ..models.auto.modeling_tf_auto import (
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    )
 
 
 class ReturnType(enum.Enum):
@@ -83,6 +89,22 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        if self.framework == "tf":
+            mapping_names = TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.copy()
+            update_names = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+        else:
+            mapping_names = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.copy()
+            update_names = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
+        for key, val in update_names.items():
+            # Combine the two dicts, merging matching keys as tuples
+            if key not in mapping_names:
+                mapping_names[key] = val
+            elif isinstance(mapping_names[key], str):
+                mapping_names[key] = (mapping_names[key], val)
+            else:
+                mapping_names[key] = mapping_names[key] + (val,)
+
+        self.check_model_type(mapping_names)
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
