@@ -521,8 +521,9 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
-        config.use_timm_backbone = True
         config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -542,7 +543,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             self.assertTrue(outputs)
 
             # Confirm out_indices was propogated to backbone
-            self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+            self.assertEqual(len(model.backbone.intermediate_channel_sizes), 4)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
