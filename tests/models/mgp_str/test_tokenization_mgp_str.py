@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class MgpstrTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "mgp-str"
     tokenizer_class = MgpstrTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {}
