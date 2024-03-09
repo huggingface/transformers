@@ -97,7 +97,7 @@ class ImageToTextPipeline(Pipeline):
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
-        Assign labels to the image(s) passed as inputs.
+        Generate text based on the image(s) passed as inputs.
 
         Args:
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
