@@ -1985,9 +1985,7 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                is_last_step_and_steps_less_than_grad_acc = (
-                    steps_in_epoch <= args.gradient_accumulation_steps and (step + 1) == steps_in_epoch
-                )
+                is_last_step_and_steps_less_than_grad_acc = self.accelerator.gradient_state.end_of_dataloader
 
                 if (
                     total_batched_samples % args.gradient_accumulation_steps == 0
