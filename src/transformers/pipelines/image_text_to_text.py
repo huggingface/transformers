@@ -126,11 +126,19 @@ class ImageTextToTextPipeline(Pipeline):
             model_inputs["input_ids"] = model_inputs["input_ids"][:, :-1]
             model_inputs["attention_mask"] = model_inputs["attention_mask"][:, :-1]
 
+        if model_type == "vision-encoder-decoder" and self.processor.__class__.__name__ == "DonutProcessor":
+            model_inputs["decoder_input_ids"] = self.processor.tokenizer(
+                text, add_special_tokens=False, return_tensors="pt"
+            ).input_ids
+
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
+
+        for k, v in model_inputs.items():
+            print(k, v.shape)
 
         model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         return model_outputs
