@@ -195,30 +195,35 @@ class FlaxLlamaAttention(nn.Module):
 
     def setup(self):
         config = self.config
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
         self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
-
-        dense = partial(
-            nn.Dense,
-            self.embed_dim,
-            use_bias=config.attention_bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
-        )
-
-        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
-        self.o_proj = dense()
+        self.rope_theta = config.rope_theta
+        if (self.head_dim * self.num_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+        self.q_proj = nn.Dense(self.num_heads * self.head_dim,
+                               kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+                               use_bias=False,
+                               dtype=self.dtype)
+        self.k_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype)
+        self.v_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype)
+        self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
 
-    def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+    def _split_heads(self, hidden_states, num_heads):
+        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
     def _merge_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
 
     @nn.compact
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
@@ -262,17 +267,17 @@ class FlaxLlamaAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        query = self._split_heads(query)
-        key = self._split_heads(key)
-        value = self._split_heads(value)
+        query_states = self._split_heads(query_states, self.num_heads)
+        key_states = self._split_heads(key_states, self.num_key_value_heads)
+        value_states = self._split_heads(value_states, self.num_key_value_heads)
 
-        key, query = self.rotary_emb(key, query, position_ids)
+        key_states, query_states = self.rotary_emb(key_states, query_states, position_ids)
 
-        query_length, key_length = query.shape[1], key.shape[1]
+        query_length, key_length = query_states.shape[1], key_states.shape[1]
 
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
@@ -296,7 +301,12 @@ class FlaxLlamaAttention(nn.Module):
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
-            key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
+            key_states, value_states, attention_mask = self._concatenate_to_cache(
+                key_states, value_states, query_states, attention_mask
+            )
+
+        key_states = jnp.repeat(key_states, self.num_key_value_groups, axis=2)
+        value_states = jnp.repeat(value_states, self.num_key_value_groups, axis=2)
 
         # transform boolean mask into float mask
         attention_bias = lax.select(
@@ -308,19 +318,19 @@ class FlaxLlamaAttention(nn.Module):
         # usual dot product attention
         attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
         attn_weights = dot_product_attention_weights(
-            query,
-            key,
+            query_states,
+            key_states,
             bias=attention_bias,
+            deterministic=deterministic,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_dropout,
-            deterministic=deterministic,
             dtype=attention_dtype,
         )
 
         if self.attention_softmax_in_fp32:
             attn_weights = attn_weights.astype(self.dtype)
 
-        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.o_proj(attn_output)
 
