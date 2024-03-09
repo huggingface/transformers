@@ -47,9 +47,9 @@ class ImageTextToTextPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> captioner = pipeline(model="ydshieh/vit-gpt2-coco-en")
-    >>> captioner("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
-    [{'generated_text': 'two birds are standing next to each other '}]
+    >>> pipe = pipeline(model="Salesforce/blip-image-captioning-base")
+    >>> pipe("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", text="A photo of")
+    [{'generated_text': 'two birds standing next to each other'}]
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
