@@ -635,6 +635,8 @@ class GenerationMixin:
         standardize_cache_format: bool = False,
         model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        if model_inputs is None:
+            model_inputs = {}
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
