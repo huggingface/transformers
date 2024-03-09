@@ -553,36 +553,18 @@ class RTDetrConvEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-
-        self._use_timm_backbone = config.use_timm_backbone
-
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            kwargs = {}
-            if config.dilation:
-                kwargs["output_stride"] = 16
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=(2, 3, 4),
-                in_chans=config.num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
