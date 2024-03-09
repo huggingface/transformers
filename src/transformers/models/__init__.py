@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    code_shell,
     albert,
     align,
     altclip,

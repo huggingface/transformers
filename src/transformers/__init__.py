@@ -130,6 +130,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.code_shell": ["CODE_SHELL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeShellConfig", "CodeShellTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1160,6 +1161,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.code_shell"].append("CodeShellTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1417,6 +1419,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.code_shell"].extend(
+        [
+            "CODE_SHELL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CodeShellForMaskedLM",
+            "CodeShellForCausalLM",
+            "CodeShellForMultipleChoice",
+            "CodeShellForQuestionAnswering",
+            "CodeShellForSequenceClassification",
+            "CodeShellForTokenClassification",
+            "CodeShellLayer",
+            "CodeShellModel",
+            "CodeShellPreTrainedModel",
+            "load_tf_weights_in_code_shell",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -4947,6 +4965,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.code_shell import CODE_SHELL_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeShellConfig, CodeShellTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -5955,6 +5974,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.code_shell import CodeShellTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -7657,6 +7677,20 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
+
+        from .models.code_shell import (
+            CODE_SHELL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CodeShellForMaskedLM,
+            CodeShellForCausalLM,
+            CodeShellForMultipleChoice,
+            CodeShellForQuestionAnswering,
+            CodeShellForSequenceClassification,
+            CodeShellForTokenClassification,
+            CodeShellLayer,
+            CodeShellModel,
+            CodeShellPreTrainedModel,
+            load_tf_weights_in_code_shell,
+        )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
