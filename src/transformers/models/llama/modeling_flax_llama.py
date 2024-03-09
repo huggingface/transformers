@@ -200,7 +200,6 @@ class FlaxLlamaAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
         self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
         dense = partial(
