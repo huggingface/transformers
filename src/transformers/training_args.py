@@ -1622,13 +1622,11 @@ class TrainingArguments:
                 # no need to assert on else
 
         # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex":
-            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            if self.fp16:
-                mixed_precision_dtype = "fp16"
-            elif self.bf16:
-                mixed_precision_dtype = "bf16"
-            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if self.fp16:
+            mixed_precision_dtype = "fp16"
+        elif self.bf16:
+            mixed_precision_dtype = "bf16"
 
         if self.report_to is None:
             logger.info(
@@ -1770,6 +1768,9 @@ class TrainingArguments:
                     self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+
+            self.accelerator_config.mixed_precision = mixed_precision_dtype
+
             if self.dispatch_batches is not None:
                 warnings.warn(
                     "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
@@ -1826,8 +1827,7 @@ class TrainingArguments:
             from accelerate.utils import DeepSpeedPlugin
 
             self.deepspeed_plugin = DeepSpeedPlugin()
-            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            self.deepspeed_plugin.set_mixed_precision(mixed_precision)
+            self.deepspeed_plugin.set_mixed_precision(mixed_precision_dtype)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
         if self.use_cpu:
