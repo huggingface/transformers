@@ -1212,9 +1212,7 @@ class AcceleratorConfig:
 
     mixed_precision: str = field(
         default="no",
-        metadata={
-            "help": "Whether or not use mixed precision. Generally already set by TrainerArguments."
-        },
+        metadata={"help": "Whether or not use mixed precision. Generally already set by TrainerArguments."},
     )
 
     @classmethod
