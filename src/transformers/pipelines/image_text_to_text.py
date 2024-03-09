@@ -137,9 +137,6 @@ class ImageTextToTextPipeline(Pipeline):
         if generate_kwargs is None:
             generate_kwargs = {}
 
-        for k, v in model_inputs.items():
-            print(k, v.shape)
-
         model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         return model_outputs
 

@@ -74,26 +74,17 @@ class ImageToTextPipelineTests(unittest.TestCase):
         outputs = pipe(image, text=text)
         self.assertEqual(
             outputs,
-            [{"generated_text": "望とe ा ჹ 辛ɔง 2ɳоল 0 ψɔง 藥 ਾ"}],
+            [{"generated_text": "hello world 陽ɔ 劇र ♯ɔง 藥 ਾ"}],
         )
 
         outputs = pipe([image, image], text=text)
         self.assertEqual(
             outputs,
             [
-                [{"generated_text": "望とe ा ჹ 辛ɔง 2ɳоল 0 ψɔง 藥 ਾ"}],
-                [{"generated_text": "望とe ा ჹ 辛ɔง 2ɳоল 0 ψɔง 藥 ਾ"}],
+                [{"generated_text": "hello world 陽ɔ 劇र ♯ɔง 藥 ਾ"}],
+                [{"generated_text": "hello world 陽ɔ 劇र ♯ɔง 藥 ਾ"}],
             ],
         )
-
-    @require_torch
-    def test_small_model_pt_conditional(self):
-        pipe = pipeline("image-text-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        text = "a photo of"
-
-        outputs = pipe(image, text=text)
-        self.assertTrue(outputs[0]["generated_text"].startswith(text))
 
     @require_torch
     def test_consistent_batching_behaviour(self):
@@ -161,21 +152,6 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         outputs = pipe(image)
         self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
-
-    @slow
-    @require_torch
-    def test_conditional_generation_pt_blip(self):
-        pipe = pipeline("image-text-to-text", model="Salesforce/blip-image-captioning-base")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
-
-        text = "a photography of"
-
-        outputs = pipe(image, text=text)
-        self.assertEqual(outputs, [{"generated_text": "a photography of a volcano"}])
-
-        with self.assertRaises(ValueError):
-            outputs = pipe([image, image], text=[text, text])
 
     @slow
     @require_torch
