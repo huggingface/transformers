@@ -153,6 +153,7 @@ from . import (
     mt5,
     musicgen,
     mvp,
+    narrow_bert,
     nat,
     nezha,
     nllb,

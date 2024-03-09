@@ -638,6 +638,7 @@ _import_structure = {
         "MusicgenDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.narrow_bert": ["NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NarrowBertConfig", "NarrowBertTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nllb": [],
@@ -1208,6 +1209,7 @@ else:
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
+    _import_structure["models.narrow_bert"].append("NarrowBertTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
     _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
@@ -2791,6 +2793,19 @@ else:
             "MvpForSequenceClassification",
             "MvpModel",
             "MvpPreTrainedModel",
+        ]
+    )
+    _import_structure["models.narrow_bert"].extend(
+        [
+            "NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NarrowBertForMaskedLM",
+            "NarrowBertForMultipleChoice",
+            "NarrowBertForSequenceClassification",
+            "NarrowBertForTokenClassification",
+            "NarrowBertLayer",
+            "NarrowBertModel",
+            "NarrowBertPreTrainedModel",
+            "load_tf_weights_in_narrow_bert",
         ]
     )
     _import_structure["models.nat"].extend(
@@ -5445,6 +5460,7 @@ if TYPE_CHECKING:
         MusicgenDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.narrow_bert import NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, NarrowBertConfig, NarrowBertTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
@@ -6001,6 +6017,7 @@ if TYPE_CHECKING:
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
+        from .models.narrow_bert import NarrowBertTokenizerFast
         from .models.nllb import NllbTokenizerFast
         from .models.nougat import NougatTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
@@ -7346,6 +7363,19 @@ if TYPE_CHECKING:
             MvpModel,
             MvpPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.narrow_bert import (
+            NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NarrowBertForMaskedLM,
+            NarrowBertForMultipleChoice,
+            NarrowBertForSequenceClassification,
+            NarrowBertForTokenClassification,
+            NarrowBertLayer,
+            NarrowBertModel,
+            NarrowBertPreTrainedModel,
+            load_tf_weights_in_narrow_bert,
+        )
         from .models.nat import (
             NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
             NatBackbone,
@@ -7655,8 +7685,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
