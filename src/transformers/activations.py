@@ -197,26 +197,72 @@ class ClassInstantier(OrderedDict):
         return cls(**kwargs)
 
 
+@torch.jit.script
+def _gelu_megatron_forward(x: torch.Tensor) -> torch.Tensor:
+    return x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
+
+
+@torch.jit.script
+def _gelu_megatron_backward(gradient: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    tanh_out = torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x))
+    ff = 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
+    return ff * gradient
+
+
+class _GELUMegatron(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input: torch.Tensor) -> torch.Tensor:
+        ctx.save_for_backward(input)
+        return _gelu_megatron_forward(input)
+
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
+        (input,) = ctx.saved_tensors
+        tmp = _gelu_megatron_backward(grad_output, input)
+        return tmp
+
+
+class GELUMegatron(torch.nn.Module):
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return _GELUMegatron.apply(input)
+
+
 ACT2CLS = {
+    "celu": nn.CELU,
+    "elu": nn.ELU,
     "gelu": GELUActivation,
     "gelu_10": (ClippedGELUActivation, {"min": -10, "max": 10}),
     "gelu_fast": FastGELUActivation,
+    "gelu_megatron": GELUMegatron,
     "gelu_new": NewGELUActivation,
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
     "gelu_pytorch_tanh": PytorchGELUTanh,
     "gelu_accurate": AccurateGELUActivation,
+    "hard_shrink": nn.Hardshrink,
+    "hard_sigmoid": nn.Hardsigmoid,
+    "hard_swish": nn.Hardswish,
+    "hard_tanh": nn.Hardtanh,
     "laplace": LaplaceActivation,
     "leaky_relu": nn.LeakyReLU,
     "linear": LinearActivation,
+    "log_sigmoid": nn.LogSigmoid,
     "mish": MishActivation,
+    "prelu": nn.PReLU,
     "quick_gelu": QuickGELUActivation,
     "relu": nn.ReLU,
     "relu2": ReLUSquaredActivation,
     "relu6": nn.ReLU6,
+    "rrelu": nn.RReLU,
+    "selu": nn.SELU,
     "sigmoid": nn.Sigmoid,
     "silu": nn.SiLU,
+    "softplus": nn.Softplus,
+    "soft_plus": nn.Softplus,
+    "soft_shrink": nn.Softshrink,
+    "soft_sign": nn.Softsign,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
+    "tanh_shrink": nn.Tanhshrink,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 
