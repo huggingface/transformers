@@ -210,15 +210,15 @@ class FlaxLlamaAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
+        self.q_proj = dense(self.num_heads * self.head_dim)
+        self.k_proj = dense(self.num_key_value_heads * self.head_dim)
+        self.v_proj = dense(self.num_key_value_heads * self.head_dim)
+        self.o_proj = dense(self.embed_dim)
         if (self.head_dim * self.num_heads) != self.embed_dim:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.embed_dim}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = dense(self.num_heads * self.head_dim)
-        self.k_proj = dense(self.num_key_value_heads * self.head_dim)
-        self.v_proj = dense(self.num_key_value_heads * self.head_dim)
-        self.o_proj = dense(self.embed_dim)
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
