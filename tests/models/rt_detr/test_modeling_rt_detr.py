@@ -360,7 +360,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 14
+            correct_outlen = 13
 
             # loss is at first position
             if "labels" in inputs_dict:
@@ -410,7 +410,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 added_hidden_states = self.model_tester.num_hidden_states_types
             else:
                 # RTDetr should maintin encoder_hidden_states output
-                added_hidden_states = 1
+                added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.encoder_attentions
@@ -437,7 +437,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.encoder_in_channels)
+                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.encoder_in_channels) - 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 

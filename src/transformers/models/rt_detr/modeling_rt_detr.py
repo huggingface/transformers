@@ -201,18 +201,6 @@ class RTDetrModelOutput(ModelOutput):
     Args:
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
-        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
-            Logits of predicted bounding boxes coordinates in the encoder stage.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -243,13 +231,23 @@ class RTDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+            picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
+            foreground and background).
+        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+            Logits of predicted bounding boxes coordinates in the encoder stage.
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+            foreground and background).
+        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the first stage.
+        dn_meta (`dict`):
+            Extra dictionary for the denoising related values
     """
 
     init_reference_points: torch.FloatTensor = None
-    enc_topk_logits: Optional[torch.FloatTensor] = None
-    enc_topk_bboxes: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
@@ -260,6 +258,10 @@ class RTDetrModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     dn_meta: Optional[Dict] = None
 
 
@@ -288,16 +290,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             `pred_boxes`) for each decoder layer.
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
-        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the encoder.
-        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the encoder.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -328,6 +320,16 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the encoder.
+        enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the encoder.
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+            foreground and background).
+        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+            Logits of predicted bounding boxes coordinates in the first stage.
         dn_meta (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
@@ -338,10 +340,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
     init_reference_points: Optional[Tuple[torch.FloatTensor]] = None
-    enc_topk_logits: Optional[torch.FloatTensor] = None
-    enc_topk_bboxes: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
@@ -352,6 +350,10 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    enc_topk_logits: Optional[torch.FloatTensor] = None
+    enc_topk_bboxes: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     dn_meta: Optional[Dict] = None
 
 
@@ -1867,10 +1869,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         return RTDetrModelOutput(
             init_reference_points=init_reference_points,
-            enc_topk_logits=enc_topk_logits,
-            enc_topk_bboxes=enc_topk_bboxes,
-            enc_outputs_class=enc_outputs_class,
-            enc_outputs_coord_logits=enc_outputs_coord_logits,
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
@@ -1881,6 +1879,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            enc_topk_logits=enc_topk_logits,
+            enc_topk_bboxes=enc_topk_bboxes,
+            enc_outputs_class=enc_outputs_class,
+            enc_outputs_coord_logits=enc_outputs_coord_logits,
             dn_meta=dn_meta,
         )
 
@@ -2369,8 +2371,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         dn_meta = outputs.dn_meta if return_dict else outputs[-1]
 
-        outputs_class = outputs.intermediate_logits if return_dict else outputs[7]
-        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[8]
+        outputs_class = outputs.intermediate_logits if return_dict else outputs[3]
+        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[4]
 
         if self.training and dn_meta is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
@@ -2389,8 +2391,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
-                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[1]
-                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[2]
+                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["aux_outputs"] = auxiliary_outputs
                 outputs_loss["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
@@ -2427,10 +2429,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
             init_reference_points=outputs.init_reference_points,
-            enc_topk_logits=outputs.enc_topk_logits,
-            enc_topk_bboxes=outputs.enc_topk_bboxes,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             last_hidden_state=outputs.last_hidden_state,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_logits=outputs.intermediate_logits,
@@ -2441,6 +2439,10 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            enc_topk_logits=outputs.enc_topk_logits,
+            enc_topk_bboxes=outputs.enc_topk_bboxes,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,            
             dn_meta=outputs.dn_meta,
         )
 
