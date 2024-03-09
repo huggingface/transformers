@@ -34,6 +34,7 @@ else:
     _import_structure["modeling_mamba"] = [
         "MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MambaForCausalLM",
+        "MambaForSequenceClassification",
         "MambaModel",
         "MambaPreTrainedModel",
     ]
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_mamba import (
             MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
             MambaForCausalLM,
+            MambaForSequenceClassification,
             MambaModel,
             MambaPreTrainedModel,
         )
