@@ -352,7 +352,7 @@ class SegGptImageProcessor(BaseImageProcessor):
             images = make_list_of_images(images)
         except ValueError:
             images = make_list_of_images(images, expected_ndims=2)
-            
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "

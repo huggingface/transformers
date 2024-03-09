@@ -30,6 +30,8 @@ if is_torch_available():
     from transformers.models.seggpt.modeling_seggpt import SegGptImageSegmentationOutput
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import SegGptImageProcessor
 
 
@@ -229,3 +231,33 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.allclose(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, atol=1e-4)
         )
         self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4))
+
+    def test_prompt_mask_equivalence(self):
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+
+        image_np_2d = np.ones((18, 18))
+        image_pt_2d = torch.ones((18, 18))
+        image_pil_2d = Image.fromarray(image_np_2d)
+
+        inputs_np_2d = image_processor(images=None, prompt_masks=image_np_2d, return_tensors="pt")
+        inputs_pt_2d = image_processor(images=None, prompt_masks=image_pt_2d, return_tensors="pt")
+        inputs_pil_2d = image_processor(images=None, prompt_masks=image_pil_2d, return_tensors="pt")
+
+        self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pt_2d["prompt_masks"]).all().item())
+        self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_pil_2d["prompt_masks"]).all().item())
+
+        image_np_3d = np.ones((3, 18, 18))
+        image_pt_3d = torch.ones((3, 18, 18))
+        image_pil_3d = Image.fromarray(image_np_3d.transpose(1, 2, 0).astype(np.uint8))
+
+        inputs_np_3d = image_processor(images=None, prompt_masks=image_np_3d, return_tensors="pt")
+        inputs_pt_3d = image_processor(images=None, prompt_masks=image_pt_3d, return_tensors="pt")
+        inputs_pil_3d = image_processor(images=None, prompt_masks=image_pil_3d, return_tensors="pt")
+
+        self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pt_3d["prompt_masks"]).all().item())
+        self.assertTrue((inputs_np_3d["prompt_masks"] == inputs_pil_3d["prompt_masks"]).all().item())
+
+        # 2D and 3D should be equal if we remove the channel dimension
+        self.assertTrue((inputs_np_2d["prompt_masks"] == inputs_np_3d["prompt_masks"][0]).all().item())
+        self.assertTrue((inputs_pt_2d["prompt_masks"] == inputs_pt_3d["prompt_masks"][0]).all().item())
+        self.assertTrue((inputs_pil_2d["prompt_masks"] == inputs_pil_3d["prompt_masks"][0]).all().item())
