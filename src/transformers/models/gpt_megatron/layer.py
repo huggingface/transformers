@@ -3,11 +3,11 @@ from typing import Tuple, Union
 import torch
 import torch.nn as nn
 
-from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation
 from .attention import get_attention_module
-from .normalization import get_normalization_function
 from .config import GPTMegatronConfig
+from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation
 from .mlp import MLP
+from .normalization import get_normalization_function
 
 
 class GPTMegatronBlock(nn.Module):

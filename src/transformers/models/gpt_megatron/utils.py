@@ -2,7 +2,9 @@ import os
 from typing import List, Tuple, Union
 
 import torch
+
 from transformers import AutoConfig, AutoTokenizer
+
 from ...utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, cached_file
 from ...utils.hub import get_checkpoint_shard_files
 

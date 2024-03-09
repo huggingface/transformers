@@ -10,18 +10,17 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from transformers import PreTrainedModel
-from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
-
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_utils import PreTrainedModel
+from .attention import Attention
+from .config import GPTMegatronConfig
 from .defaults import DEFAULT_ATTENTION_IMPLEMENTATION, DEFAULT_NORMALIZATION_IMPLEMENTATION
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
-from .position_embedding import Alibi, RoPE, YaRNScaledRoPE
-from .attention import Attention
-from .normalization import RMSNorm, get_normalization_function
-from .utils import check_list_type, flatten_and_convert_to_tensors
-from .config import GPTMegatronConfig
 from .layer import GPTMegatronBlock
 from .mlp import MLP
+from .normalization import RMSNorm, get_normalization_function
+from .position_embedding import Alibi, RoPE, YaRNScaledRoPE
+from .utils import check_list_type, flatten_and_convert_to_tensors
 
 
 class GPTMegatronPreTrainedModel(PreTrainedModel):

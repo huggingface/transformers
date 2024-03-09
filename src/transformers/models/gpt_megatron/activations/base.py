@@ -1,8 +1,8 @@
-import torch.nn as nn
 from copy import deepcopy
 
-from ....activations import ACT2CLS, ClassInstantier
+import torch.nn as nn
 
+from ....activations import ACT2CLS, ClassInstantier
 from .math_gelu import MathGELU
 
 

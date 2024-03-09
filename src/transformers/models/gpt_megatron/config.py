@@ -1,5 +1,5 @@
-from .enums import AttentionHeadType, PositionEmbeddingType
 from ...modeling_utils import PretrainedConfig
+from .enums import AttentionHeadType, PositionEmbeddingType
 
 
 class GPTMegatronConfig(PretrainedConfig):

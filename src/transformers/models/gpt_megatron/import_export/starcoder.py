@@ -2,8 +2,8 @@ import shutil
 
 from transformers import AutoConfig, AutoTokenizer, GPTBigCodeConfig
 
-from ..enums import AttentionHeadType, PositionEmbeddingType
 from ..config import GPTMegatronConfig
+from ..enums import AttentionHeadType, PositionEmbeddingType
 
 
 def import_from_huggingface_starcoder(pretrained_model_name_or_path: str, save_path: str) -> None:

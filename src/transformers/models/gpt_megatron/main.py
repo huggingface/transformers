@@ -3,9 +3,7 @@ from typing import List, Tuple, Union
 import torch
 import torch.nn as nn
 
-from transformers import GPTBigCodeForCausalLM
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-
+from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from .base import GPTMegatronModel, GPTMegatronPreTrainedModel
 from .config import GPTMegatronConfig
 
@@ -164,4 +162,4 @@ class GPTMegatronForCausalLM(GPTMegatronPreTrainedModel):
     def _reorder_cache(
         past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
     ) -> Tuple[Tuple[torch.Tensor]]:
-        return GPTBigCodeForCausalLM._reorder_cache(past_key_values=past_key_values, beam_idx=beam_idx)
+        return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
