@@ -17,7 +17,6 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -192,7 +191,10 @@ class RTDetrConfig(PretrainedConfig):
         num_channels=3,
         backbone="resnet50d",
         use_pretrained_backbone=True,
-        backbone_kwargs=None,
+        backbone_kwargs={
+            "features_only": True,
+            "out_indices": (2, 3, 4),
+        },
         dilation=False,
         # encoder HybridEncoder
         d_model=256,
@@ -263,23 +265,12 @@ class RTDetrConfig(PretrainedConfig):
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
-        if not use_timm_backbone:
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-            # set timm attributes to None
-            dilation, backbone, use_pretrained_backbone = None, None, None
-
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
+        self.backbone_kwargs = self.backbone_kwargs
         self.dilation = dilation
 
         # encoder

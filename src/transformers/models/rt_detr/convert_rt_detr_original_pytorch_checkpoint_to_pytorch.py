@@ -74,17 +74,17 @@ def create_rename_keys(config):
     # fmt: off
     last_key = ["weight", "bias", "running_mean", "running_var"]
 
-    rename_keys.append(("backbone.conv1.conv1_1.conv.weight", "model.backbone.model.conv1.0.weight"))
+    rename_keys.append(("backbone.conv1.conv1_1.conv.weight", "model.backbone.model._backbone.conv1.0.weight"))
     for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_1.norm.{last}", f"model.backbone.model.conv1.1.{last}"))
+        rename_keys.append((f"backbone.conv1.conv1_1.norm.{last}", f"model.backbone.model._backbone.conv1.1.{last}"))
 
-    rename_keys.append(("backbone.conv1.conv1_2.conv.weight", "model.backbone.model.conv1.3.weight"))
+    rename_keys.append(("backbone.conv1.conv1_2.conv.weight", "model.backbone.model._backbone.conv1.3.weight"))
     for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_2.norm.{last}", f"model.backbone.model.conv1.4.{last}"))
+        rename_keys.append((f"backbone.conv1.conv1_2.norm.{last}", f"model.backbone.model._backbone.conv1.4.{last}"))
 
-    rename_keys.append(("backbone.conv1.conv1_3.conv.weight", "model.backbone.model.conv1.6.weight"))
+    rename_keys.append(("backbone.conv1.conv1_3.conv.weight", "model.backbone.model._backbone.conv1.6.weight"))
     for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model.bn1.{last}"))
+        rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model._backbone.bn1.{last}"))
 
     # stages
     # TO DO : make this as function
@@ -97,53 +97,53 @@ def create_rename_keys(config):
                     rename_keys.append(
                         (
                             f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.weight",
-                            f"model.backbone.model.layer{stage_idx+1}.0.downsample.1.weight",
+                            f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.1.weight",
                         )
                     )
                     for last in last_key:
                         rename_keys.append(
                             (
                                 f"backbone.res_layers.{stage_idx}.blocks.0.short.norm.{last}",
-                                f"model.backbone.model.layer{stage_idx+1}.0.downsample.2.{last}",
+                                f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.2.{last}",
                             )
                         )
                 else:
                     rename_keys.append(
                         (
                             f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.conv.weight",
-                            f"model.backbone.model.layer{stage_idx+1}.0.downsample.1.weight",
+                            f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.1.weight",
                         )
                     )
                     for last in last_key:
                         rename_keys.append(
                             (
                                 f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.norm.{last}",
-                                f"model.backbone.model.layer{stage_idx+1}.0.downsample.2.{last}",
+                                f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.2.{last}",
                             )
                         )
 
             rename_keys.append(
                 (
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2a.conv.weight",
-                    f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.conv1.weight",
+                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.conv1.weight",
                 )
             )
             for last in last_key:
                 rename_keys.append((
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2a.norm.{last}",
-                    f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn1.{last}",
+                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.bn1.{last}",
                     ))
 
             rename_keys.append(
                 (
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2b.conv.weight",
-                    f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.conv2.weight",
+                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.conv2.weight",
                 )
             )
             for last in last_key:
                 rename_keys.append((
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2b.norm.{last}",
-                    f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn2.{last}",
+                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.bn2.{last}",
                     ))
 
             # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
@@ -151,13 +151,13 @@ def create_rename_keys(config):
                 rename_keys.append(
                     (
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
-                        f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.conv3.weight",
+                        f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.conv3.weight",
                     )
                 )
                 for last in last_key:
                     rename_keys.append((
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.norm.{last}",
-                        f"model.backbone.model.layer{stage_idx+1}.{layer_idx}.bn3.{last}",
+                        f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.bn3.{last}",
                         ))
     # fmt: on
 

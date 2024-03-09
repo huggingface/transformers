@@ -139,7 +139,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    from timm import create_model
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -555,7 +555,7 @@ class RTDetrConvEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        
+
         backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
@@ -2424,7 +2424,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             enc_topk_logits=outputs.enc_topk_logits,
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,            
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             dn_meta=outputs.dn_meta,
         )
 
