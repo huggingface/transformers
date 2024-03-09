@@ -157,10 +157,6 @@ GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-if is_timm_available():
-    pass
-
-
 @dataclass
 class GroundingDinoDecoderOutput(ModelOutput):
     """
