@@ -2,7 +2,7 @@ import shutil
 
 from transformers import AutoConfig, AutoTokenizer, GPTBigCodeConfig
 
-from ..config import GPTMegatronConfig
+from ..config import GraniteConfig
 from ..enums import AttentionHeadType, PositionEmbeddingType
 
 
@@ -20,10 +20,10 @@ def import_from_huggingface_starcoder(pretrained_model_name_or_path: str, save_p
         pass
 
 
-def _import_config_from_huggingface(original_config: GPTBigCodeConfig) -> GPTMegatronConfig:
+def _import_config_from_huggingface(original_config: GPTBigCodeConfig) -> GraniteConfig:
     assert original_config.activation_function == "gelu_pytorch_tanh"
 
-    config = GPTMegatronConfig(
+    config = GraniteConfig(
         vocab_size=original_config.vocab_size,
         n_positions=original_config.n_positions,
         n_embd=original_config.n_embd,
@@ -49,7 +49,7 @@ def _import_config_from_huggingface(original_config: GPTBigCodeConfig) -> GPTMeg
 def export_to_huggingface_starcoder(pretrained_model_name_or_path: str, save_path: str) -> None:
     shutil.copytree(pretrained_model_name_or_path, save_path)
 
-    config: GPTMegatronConfig = AutoConfig.from_pretrained(save_path)
+    config: GraniteConfig = AutoConfig.from_pretrained(save_path)
     original_config = _export_config_to_huggingface(config)
     original_config.save_pretrained(save_path)
 
@@ -60,7 +60,7 @@ def export_to_huggingface_starcoder(pretrained_model_name_or_path: str, save_pat
         pass
 
 
-def _export_config_to_huggingface(config: GPTMegatronConfig) -> GPTBigCodeConfig:
+def _export_config_to_huggingface(config: GraniteConfig) -> GPTBigCodeConfig:
     assert config.activation_function == "gelu_pytorch_tanh"
     assert config.normalization_function == "layernorm"
     assert AttentionHeadType(config.attention_head_type) in [AttentionHeadType.mha, AttentionHeadType.mqa]

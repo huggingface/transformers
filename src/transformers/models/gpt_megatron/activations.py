@@ -1,8 +1,6 @@
-import torch.nn as nn
-
-
 import torch
 import torch.nn as nn
+
 from ...activations import get_activation as get_base_activation
 
 

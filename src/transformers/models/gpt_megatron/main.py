@@ -4,16 +4,16 @@ import torch
 import torch.nn as nn
 
 from ...modeling_outputs import CausalLMOutputWithCrossAttentions
-from .base import GPTMegatronModel, GPTMegatronPreTrainedModel
-from .config import GPTMegatronConfig
+from .base import GraniteModel, GranitePreTrainedModel
+from .config import GraniteConfig
 
 
-class GPTMegatronForCausalLM(GPTMegatronPreTrainedModel):
+class GraniteForCausalLM(GranitePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
-    def __init__(self, config: GPTMegatronConfig, **kwargs) -> None:
+    def __init__(self, config: GraniteConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
-        self.transformer = GPTMegatronModel(config, **kwargs)
+        self.transformer = GraniteModel(config, **kwargs)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing

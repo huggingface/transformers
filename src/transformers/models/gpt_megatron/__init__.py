@@ -1,3 +1,3 @@
-from .base import GPTMegatronModel, GPTMegatronPreTrainedModel
-from .config import GPTMegatronConfig
-from .main import GPTMegatronForCausalLM
+from .base import GraniteModel, GranitePreTrainedModel
+from .config import GraniteConfig
+from .main import GraniteForCausalLM

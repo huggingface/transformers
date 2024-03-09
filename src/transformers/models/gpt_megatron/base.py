@@ -1,5 +1,5 @@
 """
-GPTMegatron classes form the basis for Megatron-based models. The code is derived from GPTBigCode classes.
+Granite classes form the basis for Megatron-based models. The code is derived from GPTBigCode classes.
 """
 
 import math
@@ -13,32 +13,32 @@ from torch.utils.checkpoint import checkpoint
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from .attention import Attention
-from .config import GPTMegatronConfig
+from .config import GraniteConfig
 from .defaults import DEFAULT_ATTENTION_IMPLEMENTATION, DEFAULT_NORMALIZATION_IMPLEMENTATION
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
-from .layer import GPTMegatronBlock
+from .layer import GraniteBlock
 from .mlp import MLP
 from .normalization import RMSNorm, get_normalization_function
 from .position_embedding import Alibi, RoPE, YaRNScaledRoPE
 from .utils import check_list_type, flatten_and_convert_to_tensors
 
 
-class GPTMegatronPreTrainedModel(PreTrainedModel):
+class GranitePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = GPTMegatronConfig
+    config_class = GraniteConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     causal = True
-    _no_split_modules = ["GPTMegatronBlock"]
+    _no_split_modules = ["GraniteBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
-    def __init__(self, config: GPTMegatronConfig, *inputs, **kwargs):
+    def __init__(self, config: GraniteConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.attention_implementation = AttentionImplementation(
@@ -49,7 +49,7 @@ class GPTMegatronPreTrainedModel(PreTrainedModel):
         )
 
     def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False) -> None:
-        if isinstance(module, GPTMegatronModel):
+        if isinstance(module, GraniteModel):
             module.gradient_checkpointing = value
 
     def _init_weights(self, module: nn.Module) -> None:
@@ -190,10 +190,10 @@ class GPTMegatronPreTrainedModel(PreTrainedModel):
         )
 
 
-class GPTMegatronModel(GPTMegatronPreTrainedModel):
+class GraniteModel(GranitePreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
-    def __init__(self, config: GPTMegatronConfig, **kwargs) -> None:
+    def __init__(self, config: GraniteConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
 
         self.attention_head_type = AttentionHeadType(config.attention_head_type)
@@ -212,7 +212,7 @@ class GPTMegatronModel(GPTMegatronPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
             [
-                GPTMegatronBlock(config, self.attention_implementation, self.normalization_implementation, layer_idx=i)
+                GraniteBlock(config, self.attention_implementation, self.normalization_implementation, layer_idx=i)
                 for i in range(config.num_hidden_layers)
             ]
         )
@@ -552,7 +552,7 @@ class GPTMegatronModel(GPTMegatronPreTrainedModel):
 
         if self.attention_implementation == AttentionImplementation.padding_free:
             assert position_ids is not None, (
-                "GPTMegatronModel needs position_ids from outside when using flash attention with List[List[int]] "
+                "GraniteModel needs position_ids from outside when using flash attention with List[List[int]] "
                 "inputs"
             )
         else:

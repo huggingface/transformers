@@ -4,20 +4,20 @@ import torch
 import torch.nn as nn
 
 from .attention import get_attention_module
-from .config import GPTMegatronConfig
+from .config import GraniteConfig
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation
 from .mlp import MLP
 from .normalization import get_normalization_function
 
 
-class GPTMegatronBlock(nn.Module):
+class GraniteBlock(nn.Module):
     """
     Layer implementation for the transformer block
     """
 
     def __init__(
         self,
-        config: GPTMegatronConfig,
+        config: GraniteConfig,
         attention_implementation: AttentionImplementation,
         normalization_implementation: NormalizationImplementation,
         layer_idx: int = None,

@@ -3,7 +3,7 @@ from typing import Tuple
 
 import torch
 
-from ..config import GPTMegatronConfig
+from ..config import GraniteConfig
 from ..enums import AttentionHeadType, AttentionImplementation, PositionEmbeddingType
 from .base import Attention
 from .flash import FlashAttention
@@ -44,7 +44,7 @@ _SPLIT_FUNCTIONS = {
 
 
 def get_attention_module(
-    config: GPTMegatronConfig,
+    config: GraniteConfig,
     causal: bool,
     layer_idx: int,
     attention_implementation: AttentionImplementation = AttentionImplementation.sdpa,

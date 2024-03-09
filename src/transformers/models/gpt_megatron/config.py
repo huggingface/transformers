@@ -2,7 +2,7 @@ from ...modeling_utils import PretrainedConfig
 from .enums import AttentionHeadType, PositionEmbeddingType
 
 
-class GPTMegatronConfig(PretrainedConfig):
+class GraniteConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
