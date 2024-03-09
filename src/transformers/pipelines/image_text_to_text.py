@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
 class ImageTextToTextPipeline(Pipeline):
     """
-    Image-text to text pipeline using an `AutoModelForImageTextToText`. This pipeline generates text given an image and text.
+    Image-text-to-text pipeline using an `AutoModelForImageTextToText`. This pipeline generates text given an image and text.
 
     Example:
 
@@ -82,7 +82,7 @@ class ImageTextToTextPipeline(Pipeline):
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
-        Assign labels to the image(s) passed as inputs.
+        Generate a text given text and the image(s) passed as inputs.
 
         Args:
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):

@@ -401,8 +401,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
-                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "pt": ("Salesforce/blip-image-captioning-base", "89b09ea"),
             }
         },
         "type": "multimodal",
@@ -1097,7 +1096,23 @@ def pipeline(
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if load_processor:
-        processor = AutoProcessor.from_pretrained(processor, **model_kwargs)
+        # Try to infer processor from model or config name (if provided as str)
+        if processor is None:
+            if isinstance(model_name, str):
+                processor = model_name
+            elif isinstance(config, str):
+                processor = config
+            else:
+                # Impossible to guess what is the right processor here
+                raise Exception(
+                    "Impossible to guess which processor to use. "
+                    "Please provide a ProcessorMixin class or a path/identifier "
+                    "to a pretrained processor."
+                )
+
+        # Instantiate processor if needed
+        if isinstance(processor, (str, tuple)):
+            processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

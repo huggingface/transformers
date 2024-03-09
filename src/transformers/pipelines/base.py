@@ -771,7 +771,11 @@ def build_pipeline_init_args(
 
 
 PIPELINE_INIT_ARGS = build_pipeline_init_args(
-    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, supports_binary_output=True
+    has_tokenizer=True,
+    has_feature_extractor=True,
+    has_image_processor=True,
+    has_processor=True,
+    supports_binary_output=True,
 )
 
 
@@ -946,6 +950,9 @@ class Pipeline(_ScikitCompat):
 
         if self.image_processor is not None:
             self.image_processor.save_pretrained(save_directory)
+
+        if self.processor is not None:
+            self.processor.save_pretrained(save_directory)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
