@@ -647,7 +647,7 @@ class Trainer:
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config["xla_fsdp_v2"]
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             # Prepare the SPMD mesh that is going to be used by the data loader and the FSDPv2 wrapper.
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
@@ -888,6 +888,11 @@ class Trainer:
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
+
+        # If we have persistent workers, don't do a fork bomb especially as eval datasets
+        # don't change during training
+        if hasattr(self, "_eval_dataloader") and self.args.dataloader_persistent_workers:
+            return self.accelerator.prepare(self._eval_dataloader)
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         data_collator = self.data_collator
 
@@ -909,7 +914,13 @@ class Trainer:
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
-        return self.accelerator.prepare(DataLoader(eval_dataset, **dataloader_params))
+        # accelerator.free_memory() will destroy the references, so
+        # we need to store the non-prepared version
+        eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
+        if self.args.dataloader_persistent_workers:
+            self._eval_dataloader = eval_dataloader
+
+        return self.accelerator.prepare(eval_dataloader)
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         """
@@ -2012,6 +2023,9 @@ class Trainer:
                             and self.accelerator.distributed_type == DistributedType.DEEPSPEED
                         ):
                             grad_norm = model.get_global_grad_norm()
+                            # In some cases the grad norm may not return a float
+                            if hasattr(grad_norm, "item"):
+                                grad_norm = grad_norm.item()
                         else:
                             grad_norm = _grad_norm.item() if _grad_norm is not None else None
 
@@ -2080,7 +2094,8 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
-        train_loss = self._total_loss_scalar / self.state.global_step
+        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
+        train_loss = self._total_loss_scalar / effective_global_step
 
         metrics = speed_metrics(
             "train",
@@ -2490,21 +2505,13 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
-        if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
-            logger.warning(
-                f"Checkpoint destination directory {output_dir} already exists and is non-empty. "
-                "Saving will proceed but saved results may be invalid."
-            )
-            staging_output_dir = output_dir
-        else:
-            staging_output_dir = os.path.join(run_dir, f"tmp-{checkpoint_folder}")
-        self.save_model(staging_output_dir, _internal_call=True)
+        self.save_model(output_dir, _internal_call=True)
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler
-            self._save_optimizer_and_scheduler(staging_output_dir)
+            self._save_optimizer_and_scheduler(output_dir)
             # Save RNG state
-            self._save_rng_state(staging_output_dir)
+            self._save_rng_state(output_dir)
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -2524,39 +2531,16 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            self.state.save_to_json(os.path.join(staging_output_dir, TRAINER_STATE_NAME))
+            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
-            self._push_from_checkpoint(staging_output_dir)
+            self._push_from_checkpoint(output_dir)
 
-        # Place checkpoint in final location after all saving is finished.
-        # First wait for everyone to finish writing
-        self.args.distributed_state.wait_for_everyone()
-
-        # Then go through the rewriting process, only renaming and rotating from main process(es)
-        if self.is_local_process_zero() if self.args.save_on_each_node else self.is_world_process_zero():
-            if staging_output_dir != output_dir:
-                if os.path.exists(staging_output_dir):
-                    os.rename(staging_output_dir, output_dir)
-
-                    # Ensure rename completed in cases where os.rename is not atomic
-                    # And can only happen on non-windows based systems
-                    if os.name != "nt":
-                        fd = os.open(output_dir, os.O_RDONLY)
-                        os.fsync(fd)
-                        os.close(fd)
-
-            # Maybe delete some older checkpoints.
-            if self.args.should_save:
-                # Solely rely on numerical checkpoint id for rotation.
-                # mtime is not reliable especially on some fuse fs in cloud environments.
-                self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
-        elif self.is_local_process_zero():
-            # Clean up the remaining staging checkpoint folders on other nodes
-            if staging_output_dir != output_dir and os.path.exists(staging_output_dir):
-                shutil.rmtree(staging_output_dir)
-
-        self.args.distributed_state.wait_for_everyone()
+        # Maybe delete some older checkpoints.
+        if self.args.should_save:
+            # Solely rely on numerical checkpoint id for rotation.
+            # mtime is not reliable especially on some fuse fs in cloud environments.
+            self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training

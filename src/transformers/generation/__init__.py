@@ -18,7 +18,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig"],
+    "configuration_utils": ["GenerationConfig", "GenerationMode"],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -88,7 +88,6 @@ else:
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
-        "top_k_top_p_filtering",
         "GreedySearchEncoderDecoderOutput",
         "GreedySearchDecoderOnlyOutput",
         "SampleEncoderDecoderOutput",
@@ -130,7 +129,6 @@ else:
     ]
     _import_structure["tf_utils"] = [
         "TFGenerationMixin",
-        "tf_top_k_top_p_filtering",
         "TFGreedySearchDecoderOnlyOutput",
         "TFGreedySearchEncoderDecoderOutput",
         "TFSampleEncoderDecoderOutput",
@@ -172,7 +170,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig
+    from .configuration_utils import GenerationConfig, GenerationMode
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -241,7 +239,6 @@ if TYPE_CHECKING:
             GreedySearchEncoderDecoderOutput,
             SampleDecoderOnlyOutput,
             SampleEncoderDecoderOutput,
-            top_k_top_p_filtering,
         )
 
     try:
@@ -279,7 +276,6 @@ if TYPE_CHECKING:
             TFGreedySearchEncoderDecoderOutput,
             TFSampleDecoderOnlyOutput,
             TFSampleEncoderDecoderOutput,
-            tf_top_k_top_p_filtering,
         )
 
     try:

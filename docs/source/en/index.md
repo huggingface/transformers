@@ -180,6 +180,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [M-CTC-T](model_doc/mctct)                        |       ✅        |         ❌         |      ❌      |
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
+|                         [Mamba](model_doc/mamba)                         |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -279,6 +280,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
 |                          [TVLT](model_doc/tvlt)                          |       ✅        |         ❌         |      ❌      |
 |                           [TVP](model_doc/tvp)                           |       ✅        |         ❌         |      ❌      |
+|                          [UDOP](model_doc/udop)                          |       ✅        |         ❌         |      ❌      |
 |                           [UL2](model_doc/ul2)                           |       ✅        |         ✅         |      ✅      |
 |                          [UMT5](model_doc/umt5)                          |       ✅        |         ❌         |      ❌      |
 |                     [UniSpeech](model_doc/unispeech)                     |       ✅        |         ❌         |      ❌      |
