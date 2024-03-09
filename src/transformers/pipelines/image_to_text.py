@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import List, Union
 
 from ..utils import (
@@ -128,6 +129,12 @@ class ImageToTextPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
 
         if prompt is not None:
+            warnings.warn(
+                "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.45"
+                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+                FutureWarning,
+            )
+
             if not isinstance(prompt, str):
                 raise ValueError(
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
