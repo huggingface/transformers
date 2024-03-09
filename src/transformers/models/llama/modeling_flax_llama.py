@@ -305,9 +305,7 @@ class FlaxLlamaAttention(nn.Module):
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
-            key, value, attention_mask = self._concatenate_to_cache(
-                key, value, query, attention_mask
-            )
+            key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
         key = jnp.repeat(key, self.num_key_value_groups, axis=2)
         value = jnp.repeat(value, self.num_key_value_groups, axis=2)
@@ -325,9 +323,9 @@ class FlaxLlamaAttention(nn.Module):
             query,
             key,
             bias=attention_bias,
-            deterministic=deterministic,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_dropout,
+            deterministic=deterministic,
             dtype=attention_dtype,
         )
 
