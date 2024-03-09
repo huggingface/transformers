@@ -1,0 +1,5 @@
+from .enums import AttentionImplementation, NormalizationImplementation
+
+
+DEFAULT_ATTENTION_IMPLEMENTATION = AttentionImplementation.sdpa
+DEFAULT_NORMALIZATION_IMPLEMENTATION = NormalizationImplementation.torch
