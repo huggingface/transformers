@@ -111,7 +111,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         if images is not None:
             encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
         else:
-            encoding_image_processor = {}
+            encoding_image_processor = BatchFeature()
 
         if text is not None:
             text_encoding = self.tokenizer(
