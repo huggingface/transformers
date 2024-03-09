@@ -1304,7 +1304,7 @@ class GenerationMixin:
 
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            or when `config.return_dict_in_generate=True`) or a `torch.LongTensor`.
 
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
