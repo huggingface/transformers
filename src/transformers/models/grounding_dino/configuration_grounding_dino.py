@@ -308,7 +308,7 @@ class GroundingDinoConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        if backbone_config is None:
+        if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage2", "stage3", "stage4"])
         elif isinstance(backbone_config, dict):
