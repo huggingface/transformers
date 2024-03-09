@@ -188,14 +188,12 @@ class RTDetrConfig(PretrainedConfig):
         # backbone
         use_timm_backbone=True,
         backbone_config=None,
-        num_channels=3,
         backbone="resnet50d",
         use_pretrained_backbone=True,
         backbone_kwargs={
             "features_only": True,
             "out_indices": (2, 3, 4),
         },
-        dilation=False,
         # encoder HybridEncoder
         d_model=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -267,11 +265,9 @@ class RTDetrConfig(PretrainedConfig):
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = self.backbone_kwargs
-        self.dilation = dilation
+        self.backbone_kwargs = backbone_kwargs
 
         # encoder
         self.d_model = d_model
