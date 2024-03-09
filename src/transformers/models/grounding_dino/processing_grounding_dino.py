@@ -133,7 +133,7 @@ class GroundingDinoProcessor(ProcessorMixin):
                 **kwargs,
             )
         else:
-            text_encoding = {}
+            text_encoding = BatchEncoding()
 
         text_encoding.update(encoding_image_processor)
 
