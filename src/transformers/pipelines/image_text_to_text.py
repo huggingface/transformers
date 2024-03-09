@@ -66,29 +66,21 @@ class ImageTextToTextPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None, timeout=None):
+    def _sanitize_parameters(self, generate_kwargs=None, text=None, timeout=None):
         forward_kwargs = {}
         preprocess_params = {}
 
-        if prompt is not None:
-            preprocess_params["prompt"] = prompt
+        if text is not None:
+            preprocess_params["text"] = text
         if timeout is not None:
             preprocess_params["timeout"] = timeout
 
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
-        if max_new_tokens is not None:
-            if "generate_kwargs" not in forward_kwargs:
-                forward_kwargs["generate_kwargs"] = {}
-            if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
-                raise ValueError(
-                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter,"
-                    " please use only one"
-                )
-            forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+
         return preprocess_params, forward_kwargs, {}
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], text: str, **kwargs):
+    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -120,7 +112,19 @@ class ImageTextToTextPipeline(Pipeline):
 
     def preprocess(self, image, text=None, timeout=None):
         image = load_image(image, timeout=timeout)
-        model_inputs = self.processor(images=image, text=text, return_tensors=self.framework)
+
+        model_type = self.model.config.model_type
+
+        kwargs = {}
+        if model_type == "pix2struct":
+            kwargs = {"add_special_tokens": False}
+
+        model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+
+        if model_type == "git":
+            # remove EOS token from input_ids and attention_mask
+            model_inputs["input_ids"] = model_inputs["input_ids"][:, :-1]
+            model_inputs["attention_mask"] = model_inputs["attention_mask"][:, :-1]
 
         return model_inputs
 
@@ -135,7 +139,7 @@ class ImageTextToTextPipeline(Pipeline):
         records = []
         for output_ids in model_outputs:
             record = {
-                "generated_text": self.tokenizer.decode(
+                "generated_text": self.processor.decode(
                     output_ids,
                     skip_special_tokens=True,
                 )
