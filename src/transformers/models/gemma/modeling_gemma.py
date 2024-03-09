@@ -87,8 +87,11 @@ class GemmaRMSNorm(nn.Module):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        return output * (1 + self.weight)
+        output = self._norm(x.float())
+        # Llama does x.to(float16) * w whilst Gemma is (x * w).to(float16)
+        # See https://github.com/huggingface/transformers/pull/29402
+        output = output * (1.0 + self.weight.float())
+        return output.type_as(x)
 
 
 ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
@@ -899,8 +902,11 @@ class GemmaModel(GemmaPreTrainedModel):
         hidden_states = inputs_embeds
 
         # normalized
-        hidden_states = hidden_states * (self.config.hidden_size**0.5)
-
+        # Gemma downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
+        # See https://github.com/huggingface/transformers/pull/29402
+        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype = hidden_states.dtype)
+        hidden_states = hidden_states * normalizer
+        
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
