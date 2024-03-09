@@ -1,7 +1,7 @@
 import torch.nn as nn
 from copy import deepcopy
 
-from transformers.activations import ACT2CLS, ClassInstantier
+from ....activations import ACT2CLS, ClassInstantier
 
 from .math_gelu import MathGELU
 

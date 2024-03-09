@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from ....enums import NormalizationImplementation
+from ...enums import NormalizationImplementation
 from .apex import ApexRMSNorm
 from .base import RMSNorm
 

@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from ....enums import NormalizationImplementation
+from ...enums import NormalizationImplementation
 from .apex import ApexLayerNorm
 from .apex_persistent import ApexPersistentLayerNorm
 

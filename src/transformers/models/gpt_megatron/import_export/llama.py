@@ -1,7 +1,7 @@
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, LlamaConfig
 
 from ..enums import AttentionHeadType
-from ..modeling_utils import (
+from ..attention import (
     interleave_query_key_value_tensor_for_attention,
     split_query_key_value_tensor_for_attention,
 )

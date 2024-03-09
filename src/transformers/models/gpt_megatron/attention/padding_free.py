@@ -2,7 +2,7 @@ from typing import Tuple
 
 import torch
 
-from ...enums import PositionEmbeddingType
+from ..enums import PositionEmbeddingType
 from .base import Attention
 
 
@@ -12,7 +12,7 @@ except ImportError:
     flash_attn_varlen_func = None
 
 
-class PackedFlashAttention(Attention):
+class PaddingFreeAttention(Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,

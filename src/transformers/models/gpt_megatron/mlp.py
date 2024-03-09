@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 
-from .modeling_utils import get_activation_function, is_glu
+from .activations import get_activation_function, is_glu
 
 
 class MLP(nn.Module):

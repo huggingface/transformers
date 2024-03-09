@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from transformers.models.gpt_bigcode.modeling_gpt_bigcode import upcast_masked_softmax, upcast_softmax
 
-from ...enums import AttentionHeadType, PositionEmbeddingType
+from ..enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
 
 

@@ -3,8 +3,8 @@ from typing import List, Tuple, Union
 
 import torch
 from transformers import AutoConfig, AutoTokenizer
-from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, cached_file
-from transformers.utils.hub import get_checkpoint_shard_files
+from ...utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, cached_file
+from ...utils.hub import get_checkpoint_shard_files
 
 
 def check_list_type(list_of_list: List[List[Union[int, float]]], error_message: str) -> None:

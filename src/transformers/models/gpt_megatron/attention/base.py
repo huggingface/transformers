@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 
-from ...enums import AttentionHeadType, PositionEmbeddingType
+from ..enums import AttentionHeadType, PositionEmbeddingType
 from ..position_embedding import rotate_half
 
 

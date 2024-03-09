@@ -3,12 +3,12 @@ from typing import Tuple
 
 import torch
 
-from ...config import GPTMegatronConfig
-from ...enums import AttentionHeadType, AttentionImplementation, PositionEmbeddingType
+from ..config import GPTMegatronConfig
+from ..enums import AttentionHeadType, AttentionImplementation, PositionEmbeddingType
 from .base import Attention
 from .flash import FlashAttention
 from .math import MathAttention
-from .padding_free import PackedFlashAttention
+from .padding_free import PaddingFreeAttention
 from .sdpa import SDPA
 from .utils import (
     interleave_query_key_value_tensor_for_gqa,
@@ -25,7 +25,7 @@ _ATTENTION_MODULES = {
     AttentionImplementation.math.value: MathAttention,
     AttentionImplementation.sdpa.value: SDPA,
     AttentionImplementation.flash.value: FlashAttention,
-    AttentionImplementation.padding_free.value: PackedFlashAttention,
+    AttentionImplementation.padding_free.value: PaddingFreeAttention,
 }
 
 

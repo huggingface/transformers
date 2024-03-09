@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation
-from .modeling_utils import get_attention_module, get_normalization_function
+from .attention import get_attention_module
+from .normalization import get_normalization_function
 from .config import GPTMegatronConfig
 from .mlp import MLP
 

@@ -15,8 +15,10 @@ from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttenti
 
 from .defaults import DEFAULT_ATTENTION_IMPLEMENTATION, DEFAULT_NORMALIZATION_IMPLEMENTATION
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
-from .modeling_utils import Alibi, Attention, RMSNorm, RoPE, YaRNScaledRoPE, get_normalization_function
-from ...utils import check_list_type, flatten_and_convert_to_tensors
+from .position_embedding import Alibi, RoPE, YaRNScaledRoPE
+from .attention import Attention
+from .normalization import RMSNorm, get_normalization_function
+from .utils import check_list_type, flatten_and_convert_to_tensors
 from .config import GPTMegatronConfig
 from .layer import GPTMegatronBlock
 from .mlp import MLP

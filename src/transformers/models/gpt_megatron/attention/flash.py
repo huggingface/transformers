@@ -1,13 +1,22 @@
 from typing import Tuple
 
 import torch
-import torch.nn.functional as F
 
-from ...enums import PositionEmbeddingType
+from ..enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
+from .utils import unpad_tensor
 
 
-class SDPA(Attention):
+try:
+    from flash_attn.bert_padding import IndexFirstAxis, pad_input
+    from flash_attn.flash_attn_interface import flash_attn_varlen_func
+except ImportError:
+    flash_attn_varlen_func = None
+    pad_input = None
+    IndexFirstAxis = None
+
+
+class FlashAttention(Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -22,9 +31,9 @@ class SDPA(Attention):
         cu_seqlens: torch.Tensor = None,
         max_seqlen: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # alibi_bias is already added in base model to the attention_mask
-        assert not output_attentions
+        assert alibi_bias is None
         assert head_mask is None
+        assert not output_attentions
 
         # ==========================================================================================
         # hidden_states -> (batch_size, query_length, num_heads * head_dim)
@@ -65,55 +74,81 @@ class SDPA(Attention):
         return attn_output, present
 
     def _attention(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        attention_mask: torch.Tensor,
+        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor
     ) -> torch.Tensor:
         # ==========================================================================================
         # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_key_value_heads, key_length, head_dim)
-        # value -> (batch_size, num_key_value_heads, key_length, head_dim)
+        # key -> (batch_size, num_key_value_heads, query_length, head_dim)
+        # value -> (batch_size, num_key_value_heads, query_length, head_dim)
         # ==========================================================================================
 
-        key, value = self._repeat_key_value(key, value)
+        # TODO avoid this extra transpose
+        query = query.transpose(1, 2)
+        if self.attention_head_type == AttentionHeadType.mqa:
+            key = key.squeeze(1).unsqueeze(2)
+            value = value.squeeze(1).unsqueeze(2)
+        else:
+            key = key.transpose(1, 2)
+            value = value.transpose(1, 2)
 
         # ==========================================================================================
-        # query -> (batch_size, num_heads, query_length, head_dim)
-        # key -> (batch_size, num_heads, key_length, head_dim)
-        # value -> (batch_size, num_heads, key_length, head_dim)
+        # query -> (batch_size, query_length, num_heads, head_dim)
+        # key -> (batch_size, key_length, num_heads, head_dim)
+        # value -> (batch_size, key_length, num_heads, head_dim)
         # ==========================================================================================
 
-        attn_output = F.scaled_dot_product_attention(
+        _, query_length, query_num_heads, _ = query.shape
+        _, indices_k, cu_seqlens_k, max_seqlen_k = unpad_tensor(None, attention_mask)
+        batch_size, kv_seq_len, kv_num_heads, head_dim = key.shape
+
+        key = IndexFirstAxis.apply(key.reshape(batch_size * kv_seq_len, kv_num_heads, head_dim), indices_k)
+        value = IndexFirstAxis.apply(value.reshape(batch_size * kv_seq_len, kv_num_heads, head_dim), indices_k)
+
+        if query_length == kv_seq_len:
+            query = IndexFirstAxis.apply(query.reshape(batch_size * kv_seq_len, query_num_heads, head_dim), indices_k)
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_q = max_seqlen_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query = query.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            attention_mask = attention_mask[:, -query_length:]
+            query, indices_q, cu_seqlens_q, max_seqlen_q = unpad_tensor(query, attention_mask)
+
+        # ==========================================================================================
+        # query -> (total_q, num_heads, head_dim)
+        # key -> (total_q, num_heads, head_dim)
+        # value -> (total_q, num_heads, head_dim)
+        # ==========================================================================================
+
+        attn_output = flash_attn_varlen_func(
             query,
             key,
             value,
-            attn_mask=attention_mask,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
             dropout_p=self.attn_pdrop if self.training else 0,
-            scale=None if self.scale_attn_weights else 1,
+            softmax_scale=None if self.scale_attn_weights else 1,
+            causal=self.causal,
         )
 
         # ==========================================================================================
-        # attn_output -> (batch_size, num_heads, query_length, head_dim)
+        # attn_output -> (total_q, num_heads, head_dim)
         # ==========================================================================================
 
-        batch_size = attn_output.shape[0]
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim)
+        attn_output = pad_input(attn_output, indices_q, batch_size, query_length)
+        attn_output = attn_output.view(batch_size, query_length, -1)
 
         # ==========================================================================================
         # attn_output -> (batch_size, query_length, num_heads * head_dim)
         # ==========================================================================================
 
         return attn_output
-
-    def _repeat_key_value(self, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.num_key_value_heads != 1:
-            num_groups = self.num_heads // self.num_key_value_heads
-
-            if num_groups != 1:
-                key = key.repeat_interleave(num_groups, dim=1)
-                value = value.repeat_interleave(num_groups, dim=1)
-
-        return key, value
