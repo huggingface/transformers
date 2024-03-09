@@ -84,8 +84,6 @@ class Qwen2MoeConfig(PretrainedConfig):
             Intermediate size of the routed expert.
         shared_expert_intermediate_size (`int`, *optional*, defaults to 5632):
             Intermediate size of the shared expert.
-        shared_expert_gate (`bool`, *optional*, defaults to `True`):
-            Whether to use gating mechinism for the shared expert.
         num_experts_per_tok (`int`, *optional*, defaults to 4):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 60):
@@ -136,7 +134,6 @@ class Qwen2MoeConfig(PretrainedConfig):
         expert_interval=1,
         moe_intermediate_size=1408,
         shared_expert_intermediate_size=5632,
-        shared_expert_gate=True,
         num_experts_per_tok=4,
         num_experts=60,
         norm_topk_prob=False,
@@ -170,7 +167,6 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.expert_interval = expert_interval
         self.moe_intermediate_size = moe_intermediate_size
         self.shared_expert_intermediate_size = shared_expert_intermediate_size
-        self.shared_expert_gate = shared_expert_gate
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
