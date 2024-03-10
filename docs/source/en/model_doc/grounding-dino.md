@@ -36,7 +36,7 @@ The original code can be found [here](https://github.com/IDEA-Research/Grounding
 
 - One can use [`GroundingDinoProcessor`] to prepare image-text pairs for the model.
 - To separate classes in the text use a period e.g. "a cat. a dog."
-- When using multiple classes, use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs.
+- When using multiple classes (e.g. `"a cat. a dog."`), use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs. Since, `post_process_object_detection` from [`GroundingDinoImageProcessor`] returned labels represent he indices from the model dimension where prob > threshold.
 
 Here's how to use the model for zero-shot object detection:
 
