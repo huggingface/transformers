@@ -1945,8 +1945,10 @@ class Trainer:
                 rng_to_sync = True
 
             step = -1
+            accumulation_step = 0
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
+                accumulation_step += 1
 
                 if self.args.include_num_input_tokens_seen:
                     main_input_name = getattr(self.model, "main_input_name", "input_ids")
@@ -2004,8 +2006,7 @@ class Trainer:
                 ):
                     # the `or` condition of `is_last_step_and_steps_less_than_grad_acc` is not covered
                     # in accelerate. So, explicitly enable sync gradients to True in that case.
-                    if is_last_step_and_steps_less_than_grad_acc:
-                        self.accelerator.gradient_state._set_sync_gradients(True)
+                    self.accelerator.gradient_state._set_sync_gradients(True)
 
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0:
@@ -2048,9 +2049,12 @@ class Trainer:
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-
-                    self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+                    self._maybe_log_save_evaluate(tr_loss * args.gradient_accumulation_steps / accumulation_step, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+                    tr_loss -= tr_loss
+                    accumulation_step = 0
+                    total_batched_samples = 0
                 else:
+                    self.accelerator.gradient_state._set_sync_gradients(False)
                     self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
