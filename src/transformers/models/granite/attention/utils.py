@@ -7,7 +7,7 @@ import torch.nn.functional as F
 try:
     from einops import rearrange
     from flash_attn.bert_padding import IndexFirstAxis
-except:
+except ImportError:
     rearrange = None
     IndexFirstAxis = None
 

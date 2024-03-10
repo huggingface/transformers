@@ -4,7 +4,7 @@ import torch.nn as nn
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNormAffineFunction
-except:
+except ImportError:
     FusedLayerNormAffineFunction = None
 
 

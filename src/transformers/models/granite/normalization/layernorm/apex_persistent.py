@@ -4,7 +4,7 @@ import torch.nn as nn
 
 try:
     from apex.contrib.layer_norm.layer_norm import FastLayerNormFN
-except:
+except ImportError:
     FastLayerNormFN = None
 
 

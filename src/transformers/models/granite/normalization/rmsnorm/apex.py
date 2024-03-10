@@ -5,7 +5,7 @@ from .base import RMSNorm
 
 try:
     from apex.normalization.fused_layer_norm import FusedRMSNormAffineMixedDtypesFunction
-except:
+except ImportError:
     FusedRMSNormAffineMixedDtypesFunction = None
 
 
