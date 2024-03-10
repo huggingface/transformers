@@ -43,7 +43,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, get_parameter_dtype
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import is_accelerate_available, is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
@@ -2052,7 +2052,15 @@ class GroundingDinoTextModel(nn.Module):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
-    
+
+    @property
+    # Copied from transformers.modeling_utils.ModuleUtilsMixin.dtype
+    def dtype(self) -> torch.dtype:
+        """
+        `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
+        """
+        return get_parameter_dtype(self)
+
     # Copied from transformers.modeling_utils.ModuleUtilsMixin.get_extended_attention_mask
     def get_extended_attention_mask(
         self, attention_mask: Tensor, input_shape: Tuple[int], device: torch.device = None, dtype: torch.float = None
