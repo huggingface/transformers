@@ -1677,9 +1677,16 @@ class Trainer:
         num_train_tokens = None
         if has_length(train_dataloader):
             len_dataloader = len(train_dataloader)
-            num_update_steps_per_epoch = math.ceil(len_dataloader / args.gradient_accumulation_steps)
-            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
             num_examples = self.num_examples(train_dataloader)
+            if args.dataloader_drop_last:
+                num_update_steps_per_epoch = math.floor(
+                    num_examples / (self._train_batch_size * args.gradient_accumulation_steps)
+                )
+            else:
+                num_update_steps_per_epoch = math.ceil(
+                    num_examples / (self._train_batch_size * args.gradient_accumulation_steps)
+                )
+            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
             if args.max_steps > 0:
                 max_steps = args.max_steps
                 num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(
@@ -1985,7 +1992,9 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                is_last_step_and_steps_less_than_grad_acc = self.accelerator.gradient_state.end_of_dataloader
+                is_last_step_and_steps_less_than_grad_acc = (
+                    self.accelerator.gradient_state.end_of_dataloader and not args.dataloader_drop_last
+                )
 
                 if (
                     total_batched_samples % args.gradient_accumulation_steps == 0
