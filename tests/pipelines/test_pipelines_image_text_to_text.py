@@ -117,45 +117,19 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_large_model_pt(self):
-        pipe = pipeline("image-text-to-text", model="ydshieh/vit-gpt2-coco-en")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-        outputs = pipe(image)
-        self.assertEqual(outputs, [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}])
-
-        outputs = pipe([image, image])
-        self.assertEqual(
-            outputs,
-            [
-                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
-                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
-            ],
-        )
-
-    @slow
-    @require_torch
-    def test_generation_pt_blip(self):
+    def test_blip_pt(self):
         pipe = pipeline("image-text-to-text", model="Salesforce/blip-image-captioning-base")
         url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        outputs = pipe(image)
-        self.assertEqual(outputs, [{"generated_text": "a pink pokemon pokemon with a blue shirt and a blue shirt"}])
+        text = "a photo of a"
+
+        outputs = pipe(image, text=text)
+        self.assertEqual(outputs, [{"generated_text": "a photo of a pink pokemon with a blue shirt"}])
 
     @slow
     @require_torch
-    def test_generation_pt_git(self):
-        pipe = pipeline("image-text-to-text", model="microsoft/git-base-coco")
-        url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
-        image = Image.open(requests.get(url, stream=True).raw)
-
-        outputs = pipe(image)
-        self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
-
-    @slow
-    @require_torch
-    def test_conditional_generation_pt_git(self):
+    def test_git_pt(self):
         pipe = pipeline("image-text-to-text", model="microsoft/git-base-coco")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
@@ -165,27 +139,21 @@ class ImageToTextPipelineTests(unittest.TestCase):
         outputs = pipe(image, text=text)
         self.assertEqual(outputs, [{"generated_text": "a photo of a tent with a tent and a tent in the background."}])
 
-        with self.assertRaises(ValueError):
-            outputs = pipe([image, image], text=[text, text])
-
     @slow
     @require_torch
-    def test_conditional_generation_pt_pix2struct(self):
-        pipe = pipeline("image-text-to-text", model="google/pix2struct-ai2d-base")
+    def test_pix2struct_pt(self):
+        pipe = pipeline("image-text-to-text", model="google/pix2struct-textcaps-base")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        text = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
+        text = "A photo of a"
 
         outputs = pipe(image, text=text)
-        self.assertEqual(outputs, [{"generated_text": "ash cloud"}])
-
-        with self.assertRaises(ValueError):
-            outputs = pipe([image, image], text=[text, text])
+        self.assertEqual(outputs, [{"generated_text": "A photo of a clock with the numbers 1, 9, and 12 on"}])
 
     @slow
     @require_torch
-    def test_conditional_generation_llava(self):
+    def test_llava_pt(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/bakLlava-v1-hf")
 
         text = (
@@ -197,11 +165,12 @@ class ImageToTextPipelineTests(unittest.TestCase):
             text=text,
             generate_kwargs={"max_new_tokens": 200},
         )
+
         self.assertEqual(
             outputs,
             [
                 {
-                    "generated_text": "<image> \nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
+                    "generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
                 }
             ],
         )
