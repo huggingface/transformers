@@ -476,6 +476,8 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.use_timm_backbone = True
+        config.backbone_config = None
 
         for model_class in self.all_model_classes:
             model = model_class(config)

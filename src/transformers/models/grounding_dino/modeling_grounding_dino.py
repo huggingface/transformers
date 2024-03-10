@@ -34,6 +34,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -155,6 +156,9 @@ GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+if is_timm_available():
+    from timm import create_model
 
 
 @dataclass
@@ -435,6 +439,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrConvEncoder with DeformableDetr->GroundingDino
 class GroundingDinoConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -447,23 +452,45 @@ class GroundingDinoConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        backbone = load_backbone(config)
+
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        backbone_model_type = config.backbone_config.model_type
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
+    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->GroundingDino
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -2061,7 +2088,36 @@ class GroundingDinoTextModel(nn.Module):
         """
         return get_parameter_dtype(self)
 
-    # Copied from transformers.modeling_utils.ModuleUtilsMixin.get_extended_attention_mask
+    @staticmethod
+    # Copied from transformers.modeling_utils.ModuleUtilsMixin.create_extended_attention_mask_for_decoder
+    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
+        if device is not None:
+            warnings.warn(
+                "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+        else:
+            device = attention_mask.device
+        batch_size, seq_length = input_shape
+        seq_ids = torch.arange(seq_length, device=device)
+        causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
+        # in case past_key_values are used we need to add a prefix ones mask to the causal mask
+        # causal and attention masks must have same type with pytorch version < 1.3
+        causal_mask = causal_mask.to(attention_mask.dtype)
+
+        if causal_mask.shape[1] < attention_mask.shape[1]:
+            prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
+            causal_mask = torch.cat(
+                [
+                    torch.ones((batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype),
+                    causal_mask,
+                ],
+                axis=-1,
+            )
+
+        extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+        return extended_attention_mask
+
+    # Copied from transformers.modeling_utils.ModuleUtilsMixin.get_extended_attention_mask with ModuleUtilsMixin->self
     def get_extended_attention_mask(
         self, attention_mask: Tensor, input_shape: Tuple[int], device: torch.device = None, dtype: torch.float = None
     ) -> Tensor:
@@ -2095,7 +2151,7 @@ class GroundingDinoTextModel(nn.Module):
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
+                extended_attention_mask = self.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask, device
                 )
             else:

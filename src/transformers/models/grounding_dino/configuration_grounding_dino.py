@@ -173,6 +173,11 @@ class GroundingDinoConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        dilation (`bool`, *optional*, defaults to `False`):
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+            `use_timm_backbone` = `True`.
         text_config (`str`, *optional*, defaults to `GroundingDinoTextConfig()`):
             The configuration of the text backbone model. Should be a BERT-like config.
         num_queries (`int`, *optional*, defaults to 900):
@@ -283,6 +288,8 @@ class GroundingDinoConfig(PretrainedConfig):
         use_pretrained_backbone=False,
         use_timm_backbone=False,
         backbone_kwargs=None,
+        num_channels=3,
+        dilation=False,
         text_config=None,
         num_queries=900,
         encoder_layers=6,
@@ -354,6 +361,8 @@ class GroundingDinoConfig(PretrainedConfig):
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
+        self.num_channels = num_channels
+        self.dilation = dilation
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
