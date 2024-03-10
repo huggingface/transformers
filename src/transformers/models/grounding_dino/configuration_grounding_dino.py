@@ -336,8 +336,8 @@ class GroundingDinoConfig(PretrainedConfig):
                 window_size=7,
                 image_size=224,
                 embed_dim=96,
-                depths=(2, 2, 6, 2),
-                num_heads=(3, 6, 12, 24),
+                depths=[2, 2, 6, 2],
+                num_heads=[3, 6, 12, 24],
                 out_indices=[2, 3, 4],
             )
         else:
