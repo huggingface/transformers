@@ -20,7 +20,7 @@ from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...activations import ACT2FN
+from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast, TFSequenceClassifierOutputWithPast
 from ...modeling_tf_utils import (
     TFPreTrainedModel, 
@@ -61,10 +61,13 @@ class TFGemmaRMSNorm(tf.keras.layers.Layer):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__(**kwargs)
         self.eps = eps
-        self.weight = self.add_weight(shape=(hidden_size,), initializer="zeros", trainable=True, name="weight")
+        self.hidden_size = hidden_size
 
     def _norm(self, x):
         return x * tf.math.rsqrt(tf.reduce_mean(tf.square(x), axis=-1, keepdims=True) + self.eps)
+
+    def build(self, input_shape=None):
+        self.weight = self.add_weight(shape=(self.hidden_size,), initializer="zeros", trainable=True, name="weight")
 
     def call(self, x):
         output = self._norm(tf.cast(x, tf.float32))
@@ -79,16 +82,20 @@ class TFGemmaRotaryEmbedding(tf.keras.layers.Layer):
         self.base = base
 
     def build(self, input_shape):
-        inv_freq = 1.0 / (self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim))
-        self.inv_freq = tf.expand_dims(tf.expand_dims(inv_freq, 0), 0)
+        self.inv_freq = 1.0 / (self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim))
+        #self.inv_freq = tf.expand_dims(tf.expand_dims(inv_freq, 0), 0)
         super().build(input_shape)
 
     def call(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        #TODO: Alazar Doesn't make sense
-        inv_freq_expanded = tf.cast(self.inv_freq, x.dtype)
-        position_ids_expanded = tf.expand_dims(tf.cast(position_ids, x.dtype), -1)
-        freqs = tf.transpose(inv_freq_expanded, perm=[0, 2, 1])
+        inv_freq_expanded = tf.expand_dims(tf.expand_dims(self.inv_freq, 0), -1)
+        inv_freq_expanded = tf.cast(inv_freq_expanded, tf.float32)
+        tile_multiples = [position_ids.shape[0], 1, 1]  # Define how many times to replicate along each axis
+        inv_freq_expanded = tf.tile(inv_freq_expanded, tile_multiples)
+
+        position_ids_expanded = tf.cast(tf.expand_dims(position_ids, axis=1), dtype=x.dtype)
+        freqs = tf.matmul(inv_freq_expanded, position_ids_expanded)
+        freqs = tf.transpose(freqs, perm=[0, 2, 1])
         emb = tf.concat([freqs, freqs], axis=-1)
         return tf.cos(emb), tf.sin(emb)
 
@@ -113,7 +120,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(tf.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    breakpoint()
     cos = tf.expand_dims(cos, unsqueeze_dim)
     sin = tf.expand_dims(sin, unsqueeze_dim)
     q_embed = tf.math.multiply(q, cos) + tf.math.multiply(rotate_half(q),  sin)
@@ -129,7 +135,7 @@ class TFGemmaMLP(tf.keras.layers.Layer):
         self.gate_proj = tf.keras.layers.Dense(config.intermediate_size, use_bias=False, name="gate_proj")
         self.up_proj = tf.keras.layers.Dense(config.intermediate_size, use_bias=False, name="up_proj")
         self.down_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False, name="down_proj")
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.act_fn = get_tf_activation(config.hidden_act)
 
     def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -198,17 +204,16 @@ class TFGemmaAttention(tf.keras.layers.Layer):
 
     def call(
         self,
-        hidden_states,
-        attention_mask=None,
-        position_ids=None,
-        past_key_value=None,
-        output_attentions=False,
-        use_cache=False,
-        cache_position=None,
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        past_key_value: Optional[tf.Tensor] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: bool = None,
         **kwargs,
     ):
         bsz, q_len = shape_list(hidden_states)[:2]
-
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
@@ -222,7 +227,6 @@ class TFGemmaAttention(tf.keras.layers.Layer):
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
-
         if past_key_value is not None:
             # cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             # key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -237,7 +241,11 @@ class TFGemmaAttention(tf.keras.layers.Layer):
 
         if attention_mask is not None:  # no matter the length, we just slice it
             if cache_position is not None:
-                causal_mask = attention_mask[:, :, cache_position, : tf.shape(key_states)[-2]]
+                start_position = cache_position[0]
+                end_position = cache_position[1]  # Assuming you want a slice until this position
+                # Generate a range of indices based on start and end positions
+                indices = tf.range(start=start_position, limit=end_position)
+                causal_mask = tf.gather(attention_mask, indices, axis=2)
             else:
                 causal_mask = attention_mask
             attn_weights = attn_weights + tf.cast(causal_mask, attn_weights.dtype)
@@ -245,7 +253,8 @@ class TFGemmaAttention(tf.keras.layers.Layer):
         # upcast attention to fp32
         attn_weights = stable_softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, query_states.dtype)
-        attn_weights = tf.nn.dropout(attn_weights, rate=self.config.attention_dropout if self.training else 0.0)
+        # TODO: use `training` to figure out value for rate
+        attn_weights = tf.nn.dropout(attn_weights, rate=0)
         attn_output = tf.matmul(attn_weights, value_states)
 
         attn_output_shape = shape_list(attn_output)
@@ -254,9 +263,8 @@ class TFGemmaAttention(tf.keras.layers.Layer):
             raise ValueError(
                 f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}"
             )
-
         attn_output = tf.transpose(attn_output, [0, 2, 1, 3])
-        attn_output = tf.reshape(attn_output, [bsz, q_len, self.hidden_size])
+        attn_output = tf.reshape(attn_output, [bsz, q_len, -1])
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -296,7 +304,6 @@ class TFGemmaDecoderLayer(tf.keras.layers.Layer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -445,19 +452,20 @@ class TFGemmaModel(TFGemmaPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.model = TFGemmaMainLayer(config, name="model")
 
+    @unpack_inputs
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        cache_position=None,
-        training=False,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        past_key_values: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
 
         outputs = self.model(
@@ -499,8 +507,13 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = tf.keras.layers.Embedding(
-            config.vocab_size, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range), name="embed_tokens"
+            input_dim=config.vocab_size,
+            output_dim=config.hidden_size,
+            mask_zero=True if self.padding_idx == 0 else False,
+            #embeddings_initializer=get_initializer(config.initializer_range),
+            name="embed_tokens",
         )
+
         self.decoder_layers = [TFGemmaDecoderLayer(config, layer_idx=i, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
         self.norm = TFGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
@@ -518,17 +531,18 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
     #@replace_return_docstrings(output_type=TFBaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        cache_position=None,
-        training=False,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        past_key_values: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[tf.Tensor] = None,
+        training: bool = False,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -572,7 +586,6 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
-
         for decoder_layer in self.decoder_layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -674,18 +687,18 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
     @replace_return_docstrings(output_type=TFCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        cache_position=None,
-        training=False,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        past_key_values: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[tf.Tensor] = None,
+        training: bool = False,
     ):
         r"""
         Args:
@@ -760,6 +773,7 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs):
         past_length = 0
+
         if past_key_values is not None:
             # Claude: The Cache class is not defined in this translation, so this code path is not fully implemented.
             # It would need to be adapted to work with the TensorFlow cache format.
@@ -848,17 +862,17 @@ class TFGemmaForSequenceClassification(TFGemmaPreTrainedModel):
     #@replace_return_docstrings(output_type=TFSequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        past_key_values: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
