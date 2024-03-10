@@ -1947,6 +1947,8 @@ class Trainer:
             step = -1
             accumulation_step = 0
             for step, inputs in enumerate(epoch_iterator):
+                if step >= num_update_steps_per_epoch * args.gradient_accumulation_steps:
+                    break
                 total_batched_samples += 1
                 accumulation_step += 1
 
@@ -1995,7 +1997,7 @@ class Trainer:
                 self.current_flos += float(self.floating_point_ops(inputs))
 
                 is_last_step_and_steps_less_than_grad_acc = (
-                    not args.dataloader_drop_last and (step + 1) == steps_in_epoch
+                    (step + 1) == steps_in_epoch
                 )
 
                 if (
