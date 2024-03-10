@@ -1996,9 +1996,7 @@ class Trainer:
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                is_last_step_and_steps_less_than_grad_acc = (
-                    (step + 1) == steps_in_epoch
-                )
+                is_last_step_and_steps_less_than_grad_acc = (step + 1) == steps_in_epoch
 
                 if (
                     total_batched_samples % args.gradient_accumulation_steps == 0
@@ -2051,7 +2049,14 @@ class Trainer:
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-                    self._maybe_log_save_evaluate(tr_loss * args.gradient_accumulation_steps / accumulation_step, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+                    self._maybe_log_save_evaluate(
+                        tr_loss * args.gradient_accumulation_steps / accumulation_step,
+                        grad_norm,
+                        model,
+                        trial,
+                        epoch,
+                        ignore_keys_for_eval,
+                    )
                     tr_loss -= tr_loss
                     accumulation_step = 0
                     total_batched_samples = 0
