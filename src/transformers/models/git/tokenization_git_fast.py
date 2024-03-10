@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GIT."""
-from typing import TYPE_CHECKING, List
+from typing import List
 
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils.generic import PaddingStrategy, TensorType
@@ -23,9 +23,8 @@ from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_git import GitTokenizer
 
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
