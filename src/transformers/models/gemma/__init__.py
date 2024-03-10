@@ -20,6 +20,7 @@ from ...utils import (
     is_sentencepiece_available,
     is_tokenizers_available,
     is_torch_available,
+    is_tf_available,
 )
 
 
@@ -69,6 +70,18 @@ else:
         "FlaxGemmaPreTrainedModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_gemma"] = [
+        "TFGemmaForCausalLM",
+        "TFGemmaModel",
+        "TFGemmaPreTrainedModel",
+        "TFGemmaForSequenceClassification",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_gemma import GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, GemmaConfig
