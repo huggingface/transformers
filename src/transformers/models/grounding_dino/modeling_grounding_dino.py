@@ -34,7 +34,6 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
-    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -156,6 +155,7 @@ GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
 
 @dataclass
 class GroundingDinoDecoderOutput(ModelOutput):

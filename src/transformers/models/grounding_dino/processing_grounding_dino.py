@@ -18,6 +18,7 @@ Processor class for Grounding DINO.
 
 from typing import List, Optional, Tuple, Union
 
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
