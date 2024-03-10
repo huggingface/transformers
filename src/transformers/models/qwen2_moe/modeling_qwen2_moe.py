@@ -44,6 +44,7 @@ from ...utils import (
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -63,8 +64,7 @@ QWEN2MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
-        gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2,
-        attention_mask: Optional[torch.Tensor] = None
+    gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
 ) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -112,9 +112,9 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
-                .expand((num_hidden_layers, batch_size, sequence_length, 2, num_experts))
-                .reshape(-1, 2, num_experts)
-                .to(compute_device)
+            .expand((num_hidden_layers, batch_size, sequence_length, 2, num_experts))
+            .reshape(-1, 2, num_experts)
+            .to(compute_device)
         )
 
         # Compute the percentage of tokens routed to each experts
@@ -125,9 +125,9 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
             attention_mask[None, :, :, None]
-                .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-                .reshape(-1, num_experts)
-                .to(compute_device)
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
         )
 
         # Compute the average probability of routing to these experts
@@ -211,7 +211,7 @@ class Qwen2MoeRotaryEmbedding(nn.Module):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -318,14 +318,14 @@ class Qwen2MoeAttention(nn.Module):
         )
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            **kwargs,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if "padding_mask" in kwargs:
             warnings.warn(
@@ -419,14 +419,14 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
-            **kwargs,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
     ):
         if "padding_mask" in kwargs:
             warnings.warn(
@@ -462,10 +462,10 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         use_sliding_windows = (
-                _flash_supports_window_size
-                and getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-                and self.config.use_sliding_window
+            _flash_supports_window_size
+            and getattr(self.config, "sliding_window", None) is not None
+            and kv_seq_len > self.config.sliding_window
+            and self.config.use_sliding_window
         )
 
         if not _flash_supports_window_size:
@@ -478,9 +478,9 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
             if (
-                    getattr(self.config, "sliding_window", None) is not None
-                    and kv_seq_len > self.config.sliding_window
-                    and cache_has_contents
+                getattr(self.config, "sliding_window", None) is not None
+                and kv_seq_len > self.config.sliding_window
+                and cache_has_contents
             ):
                 slicing_tokens = 1 - self.config.sliding_window
 
@@ -555,15 +555,15 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            query_length,
-            dropout=0.0,
-            softmax_scale=None,
-            use_sliding_windows=False,
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
+        use_sliding_windows=False,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -666,7 +666,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         # by slicing it on the proper place
         if kv_seq_len != attention_mask.shape[-1]:
             attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len:]
+            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
 
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
 
@@ -712,13 +712,13 @@ class Qwen2MoeSdpaAttention(Qwen2MoeAttention):
 
     # Adapted from Qwen2MoeAttention.forward
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Cache] = None,
-            output_attentions: bool = False,
-            use_cache: bool = False,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -887,15 +887,15 @@ class Qwen2MoeDecoderLayer(nn.Module):
         self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_value: Optional[Tuple[torch.Tensor]] = None,
-            output_attentions: Optional[bool] = False,
-            output_router_logits: Optional[bool] = False,
-            use_cache: Optional[bool] = False,
-            **kwargs,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if "padding_mask" in kwargs:
             warnings.warn(
@@ -1112,17 +1112,17 @@ class Qwen2MoeModel(Qwen2MoePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            output_router_logits: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1309,18 +1309,18 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            output_router_logits: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1416,7 +1416,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-            self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
@@ -1433,7 +1433,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length):]
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
             elif past_length < input_ids.shape[1]:
@@ -1442,9 +1442,9 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
 
             # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
             if (
-                    max_cache_length is not None
-                    and attention_mask is not None
-                    and cache_length + input_ids.shape[1] > max_cache_length
+                max_cache_length is not None
+                and attention_mask is not None
+                and cache_length + input_ids.shape[1] > max_cache_length
             ):
                 attention_mask = attention_mask[:, -max_cache_length:]
 
@@ -1454,7 +1454,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1]:]
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1515,17 +1515,17 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
