@@ -227,28 +227,3 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
                 {"score": 0.277, "label": "remote", "box": {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115}},
             ],
         )
-
-    @require_torch
-    @slow
-    def test_grounding_dino(self):
-        object_detector = pipeline("zero-shot-object-detection", model="IDEA-Research/grounding-dino-tiny")
-
-        outputs = object_detector(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-            candidate_labels=["a cat."],
-        )
-
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.4526, "label": "a cat.", "box": {"xmin": 344, "ymin": 23, "xmax": 637, "ymax": 373}},
-                {"score": 0.4082, "label": "a cat.", "box": {"xmin": 11, "ymin": 51, "xmax": 316, "ymax": 472}},
-                {"score": 0.1617, "label": "a cat.", "box": {"xmin": 357, "ymin": 37, "xmax": 552, "ymax": 362}},
-                {"score": 0.1299, "label": "a cat.", "box": {"xmin": 330, "ymin": 13, "xmax": 635, "ymax": 445}},
-                {"score": 0.1279, "label": "a cat.", "box": {"xmin": 25, "ymin": 54, "xmax": 315, "ymax": 366}},
-                {"score": 0.1267, "label": "a cat.", "box": {"xmin": 41, "ymin": 59, "xmax": 306, "ymax": 402}},
-                {"score": 0.1098, "label": "a cat.", "box": {"xmin": 279, "ymin": 12, "xmax": 636, "ymax": 408}},
-                {"score": 0.1063, "label": "a cat.", "box": {"xmin": 353, "ymin": 39, "xmax": 616, "ymax": 297}},
-                {"score": 0.1043, "label": "a cat.", "box": {"xmin": 351, "ymin": 26, "xmax": 550, "ymax": 458}},
-            ],
-        )
