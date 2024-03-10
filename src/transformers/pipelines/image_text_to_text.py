@@ -66,7 +66,7 @@ class ImageTextToTextPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, generate_kwargs=None, text=None, timeout=None):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, text=None, timeout=None):
         forward_kwargs = {}
         preprocess_params = {}
 
@@ -77,6 +77,15 @@ class ImageTextToTextPipeline(Pipeline):
 
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
+        if max_new_tokens is not None:
+            if "generate_kwargs" not in forward_kwargs:
+                forward_kwargs["generate_kwargs"] = {}
+            if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
+                raise ValueError(
+                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter,"
+                    " please use only one"
+                )
+            forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
         return preprocess_params, forward_kwargs, {}
 
@@ -96,6 +105,9 @@ class ImageTextToTextPipeline(Pipeline):
 
             text (`str`):
                 The text to be used as a prompt for the generation.
+
+            max_new_tokens (`int`, *optional*):
+                The amount of maximum tokens to generate. By default it will use `generate` default.
 
             generate_kwargs (`Dict`, *optional*):
                 Pass it to send all of these arguments directly to `generate` allowing full control of this function.
