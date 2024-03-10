@@ -4118,6 +4118,15 @@ else:
             "TFFunnelPreTrainedModel",
         ]
     )
+    _import_structure["models.gemma"].extend(
+        [
+            "TFGemmaForCausalLM",
+            "TFGemmaForSequenceClassification",
+            "TFGemmaModel",
+            "TFGemmaPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.gpt2"].extend(
         [
             "TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -8410,6 +8419,12 @@ if TYPE_CHECKING:
             TFFunnelForTokenClassification,
             TFFunnelModel,
             TFFunnelPreTrainedModel,
+        )
+        from .models.gemma import (
+            TFGemmaForCausalLM,
+            TFGemmaForSequenceClassification,
+            TFGemmaModel,
+            TFGemmaPreTrainedModel,
         )
         from .models.gpt2 import (
             TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
