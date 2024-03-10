@@ -70,7 +70,6 @@ PRIVATE_MODELS = [
     "Pop2PianoStack",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
-    "GroundingDinoTextModel",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
