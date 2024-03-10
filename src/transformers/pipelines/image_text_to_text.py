@@ -58,7 +58,7 @@ class ImageTextToTextPipeline(Pipeline):
     "image-text-to-text".
 
     See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-to-text).
+    [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-text-to-text).
     """
 
     def __init__(self, *args, **kwargs):
