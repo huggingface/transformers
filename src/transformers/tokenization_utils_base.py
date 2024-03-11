@@ -1730,7 +1730,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*, defaults to `None`):
+            return_dict (`bool`, *optional*):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
