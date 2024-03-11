@@ -70,6 +70,7 @@ from .utils import (
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
+    is_galore_torch_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -322,6 +323,14 @@ def require_bs4(test_case):
     Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
     """
     return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
+
+
+def require_galore_torch(test_case):
+    """
+    Decorator marking a test that requires Galore. These tests are skipped when Galore isn't installed.
+    https://github.com/jiaweizzhao/GaLore
+    """
+    return unittest.skipUnless(is_galore_torch_available(), "test requires Galore")(test_case)
 
 
 def require_cv2(test_case):
