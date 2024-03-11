@@ -110,7 +110,7 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 231
+        self.encoder_seq_length = 342
         self.image_grid_pinpoints = [[32, 32]]
 
     def get_config(self):
@@ -189,6 +189,14 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Feedforward chunking is not yet supported")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="CPU offload is not yet supported")
+    def test_cpu_offload(self):
         pass
 
 
