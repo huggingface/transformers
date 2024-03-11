@@ -1762,6 +1762,18 @@ class Trainer:
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
+        if self.is_fsdp_enabled and _is_peft_model(self.model):
+            from peft.utils.other import fsdp_auto_wrap_policy
+
+            fsdp_plugin = self.accelerator.state.fsdp_plugin
+            fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
+            if (
+                getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+                and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
+            ):
+                fsdp_plugin.set_mixed_precision(
+                    self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
+                )
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
