@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert LLaVa 1.6 checkpoints from the original repository.
+"""Convert LLaVa-NeXT (LLaVa-1.6) checkpoints from the original repository.
 
 URL: https://github.com/haotian-liu/LLaVA/tree/main.
 

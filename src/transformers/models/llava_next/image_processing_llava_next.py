@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for LLaVa."""
+"""Image processor class for LLaVa-NeXT."""
 
 import math
 from typing import Dict, List, Optional, Union

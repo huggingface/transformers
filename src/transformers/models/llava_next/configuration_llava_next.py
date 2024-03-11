@@ -54,9 +54,9 @@ class LlavaNextConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LlavaNext model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~LlavaNextForConditionalGeneration`]
-        image_grid_pinpoints (`List`, *optional*):
+        image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`. Only used by the newer LLaVa 1.6 variant..
+            of the form `(height, width)`.
 
     Example:
 
@@ -69,10 +69,10 @@ class LlavaNextConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a LlavaNext llava_next-1.5-7b style configuration
+    >>> # Initializing a Llava-Next llava-next-mistral-7b-hf style configuration
     >>> configuration = LlavaNextConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the llava_next-1.5-7b style configuration
+    >>> # Initializing a model from the llava-next-mistral-hf style configuration
     >>> model = LlavaNextForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

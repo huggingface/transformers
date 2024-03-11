@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LlavaNext model."""
+""" PyTorch Llava-NeXT model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -40,7 +41,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LlavaNextConfig"
 
 LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.6-mistral-7b",
+    "llava-hf/llava-next-mistral-7b",
     # See all LLaVA-NeXT models at https://huggingface.co/models?filter=llava_next
 ]
 
@@ -450,8 +451,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
-        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-next-mistral-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-next-mistral-7b-hf")
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
