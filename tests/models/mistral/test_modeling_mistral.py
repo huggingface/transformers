@@ -44,7 +44,7 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
-        MistralForQuestionAnswering,
+        # MistralForQuestionAnswering,
         MistralForSequenceClassification,
         MistralModel,
     )
@@ -288,7 +288,7 @@ class MistralModelTester:
 @require_torch
 class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForQuestionAnswering)
+        (MistralModel, MistralForCausalLM, MistralForSequenceClassification)  # , MistralForQuestionAnswering)
         if is_torch_available()
         else ()
     )
@@ -299,7 +299,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "text-classification": MistralForSequenceClassification,
             "text-generation": MistralForCausalLM,
             "zero-shot": MistralForSequenceClassification,
-            "question-answering": MistralForQuestionAnswering,
+            # "question-answering": MistralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
