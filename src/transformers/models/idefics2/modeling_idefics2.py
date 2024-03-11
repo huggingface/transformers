@@ -692,11 +692,7 @@ class Idefics2VisionTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=(
-                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not self._use_flash_attention_2
-                else patch_attention_mask
-            ),
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
