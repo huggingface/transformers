@@ -1102,6 +1102,8 @@ def pipeline(
                 processor = model_name
             elif isinstance(config, str):
                 processor = config
+            elif load_image_processor or load_feature_extractor:
+                pass
             else:
                 # Impossible to guess what is the right processor here
                 raise Exception(
