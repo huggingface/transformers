@@ -208,6 +208,7 @@ class Agent:
 
         self.system_prompt = format_prompt(self.toolbox, self.prompt_template, self.tool_description_template)
         self.memory = []
+        self.prompt = None
 
 
     @property
@@ -342,10 +343,10 @@ class CodeAgent(Agent):
         ```
         """
         # Run LLM
-        prompt = self.system_prompt + f"\nTask: {task}"
-        llm_output = self.llm_callable(prompt, stop=["Task:"])
+        self.prompt = self.system_prompt + f"\nTask: {task}"
+        llm_output = self.llm_callable(self.prompt, stop=["Task:"])
         self.log("====Executing with this prompt====")
-        self.log(prompt)
+        self.log(self.prompt)
 
 
         # Parse
@@ -460,9 +461,10 @@ class ReactAgent(Agent):
         """
         self.log("=====Calling LLM with these messages:=====")
         memory_as_text = '\n'.join(self.memory)
-        self.log(memory_as_text)
+        self.prompt = memory_as_text
+        self.log(self.prompt)
 
-        llm_output = self.llm_callable(memory_as_text, stop=["Observation:"])
+        llm_output = self.llm_callable(self.prompt, stop=["Observation:"])
         self.log("=====Output message of the LLM:=====")
         self.log(llm_output)
 
