@@ -1764,9 +1764,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
         ):
             conversations = conversation
-            it_batched = True
+            is_batched = True
         else:
-            it_batched = False
+            is_batched = False
             conversations = [conversation]
 
         rendered = []
