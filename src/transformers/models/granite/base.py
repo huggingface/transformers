@@ -14,7 +14,6 @@ from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from .attention import Attention
 from .config import GraniteConfig
-from .defaults import DEFAULT_ATTENTION_IMPLEMENTATION, DEFAULT_NORMALIZATION_IMPLEMENTATION
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
 from .layer import GraniteBlock
 from .mlp import MLP
@@ -42,10 +41,10 @@ class GranitePreTrainedModel(PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.attention_implementation = AttentionImplementation(
-            kwargs.get("attention_implementation", DEFAULT_ATTENTION_IMPLEMENTATION.value)
+            kwargs.get("attention_implementation", "sdpa")
         )
         self.normalization_implementation = NormalizationImplementation(
-            kwargs.get("normalization_implementation", DEFAULT_NORMALIZATION_IMPLEMENTATION.value)
+            kwargs.get("normalization_implementation", "torch")
         )
 
     def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False) -> None:
