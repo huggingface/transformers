@@ -23,6 +23,7 @@ from PIL import Image
 from torchvision import transforms as T
 
 from transformers import (
+    AddedToken,
     LayoutLMv3ImageProcessor,
     UdopConfig,
     UdopForConditionalGeneration,
@@ -119,13 +120,40 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     assert missing_keys == ["encoder.embed_patches.proj.weight", "encoder.embed_patches.proj.bias"]
     assert unexpected_keys == ["pos_embed"]
 
-    # prepare dummy inputs
-    tokenizer = UdopTokenizer.from_pretrained("t5-base", legacy=True)
+    extra_ids = 100
+    loc_extra_ids = 501
+    other_extra_ids = 200
+
+    # Add extra_ids to the special token list
+    additional_special_tokens = []
+    if extra_ids > 0 and "<extra_id_0>" not in additional_special_tokens:
+        additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
+        additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids)])
+        additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids)])
+        additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids)])
+        additional_special_tokens.extend(["</extra_t_id_{}>".format(i) for i in range(extra_ids)])
+
+    if loc_extra_ids > 0 and "<loc_0>" not in additional_special_tokens:
+        additional_special_tokens.extend(["<loc_{}>".format(i) for i in range(loc_extra_ids)])
+
+    if other_extra_ids > 0 and "<other_0>" not in additional_special_tokens:
+        additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids)])
+
+    additional_special_tokens = [
+        AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
+        for token in additional_special_tokens
+    ]
+
+    tokenizer = UdopTokenizer.from_pretrained(
+        "t5-base", legacy=True, additional_special_tokens=additional_special_tokens
+    )
     size = {"height": image_size, "width": image_size}
     image_processor = LayoutLMv3ImageProcessor(
         image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD, size=size
     )
     processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
+    # prepare dummy inputs
     input_ids, bbox, image = prepare_dummy_inputs(tokenizer, image_processor)
     prompt = "Question answering. In which year is the report made?"
     encoding = processor(images=get_image(), text=prompt, return_tensors="pt")
@@ -186,8 +214,8 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"microsoft/{model_name}")
-        processor.push_to_hub(f"microsoft/{model_name}")
+        model.push_to_hub(f"nielsr/{model_name}-test")
+        processor.push_to_hub(f"nielsr/{model_name}-test")
         # BIG note here: to save the fast tokenizer files in the repo on the hub, you need to do the following:
         # see https://discuss.huggingface.co/t/convert-slow-xlmrobertatokenizer-to-fast-one/20876
 
