@@ -1,5 +1,5 @@
 from ...modeling_utils import PretrainedConfig
-from .enums import AttentionHeadType, PositionEmbeddingType
+from .modeling_granite.enums import AttentionHeadType, PositionEmbeddingType
 
 
 class GraniteConfig(PretrainedConfig):
@@ -68,6 +68,7 @@ class GraniteConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
 
+        # just to test if attention head type and position embedding type is supported
         attention_head_type = AttentionHeadType(attention_head_type)
         position_embedding_type = PositionEmbeddingType(position_embedding_type)
 

@@ -1,4 +1,4 @@
-from ..config import GraniteConfig
+from ...configuration_granite import GraniteConfig
 from ..enums import AttentionHeadType, AttentionImplementation, PositionEmbeddingType
 from .base import Attention
 from .flash import FlashAttention

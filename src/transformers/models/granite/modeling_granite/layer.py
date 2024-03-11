@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from .attention import get_attention_module
-from .config import GraniteConfig
+from ..configuration_granite import GraniteConfig
 from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation
 from .mlp import MLP
 from .normalization import get_normalization_function
