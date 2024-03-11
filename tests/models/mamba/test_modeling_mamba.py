@@ -205,9 +205,13 @@ class MambaModelTester:
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
 
-        # creating and using cache
-        _ = model(input_ids[:, :-1], use_cache=True)
-        outputs = model._slow_forward(input_ids[:, :-1], use_cache=True).last_hidden_state
+        # create cache
+        cache = model(input_ids, use_cache=True).cache_params
+        cache.seqlen_offset = 0
+
+        # use cache
+        token_emb = model.embeddings(input_ids)
+        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
