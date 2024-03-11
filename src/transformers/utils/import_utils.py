@@ -76,6 +76,7 @@ _accelerate_available, _accelerate_version = _is_package_available("accelerate",
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_galore_torch_available = _is_package_available("galore_torch")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -280,6 +281,10 @@ def is_torch_sdpa_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_galore_torch_available():
+    return _galore_torch_available
 
 
 def is_pyctcdecode_available():

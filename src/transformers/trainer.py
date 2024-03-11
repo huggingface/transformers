@@ -140,6 +140,7 @@ from .utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_datasets_available,
+    is_galore_torch_available,
     is_in_notebook,
     is_ipex_available,
     is_peft_available,
@@ -1182,6 +1183,12 @@ class Trainer:
             OptimizerNames.GALORE_ADAMW_8BIT,
             OptimizerNames.GALORE_ADAFACTOR,
         ]:
+            if not is_galore_torch_available():
+                raise ValueError(
+                    "You need to insall `galore_torch` in order to use GaLore optimizers"
+                    " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
+                )
+
             from galore_torch import GaLoreAdafactor, GaLoreAdamW, GaLoreAdamW8bit
 
             optimizer_mapping = {
