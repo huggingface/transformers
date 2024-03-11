@@ -37,8 +37,9 @@ logger = logging.get_logger(__name__)
 class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
-    AWQ = "awq"
+    AWQ  = "awq"
     AQLM = "aqlm"
+    HQQ  = "hqq"
 
 
 class AWQLinearVersion(str, Enum):
@@ -176,6 +177,73 @@ class QuantizationConfigMixin:
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+
+@dataclass
+class HQQConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        quant_config=None, #TODO: make default value
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.HQQ 
+
+        #TODO: convert inputs to quant_config 
+
+        self.quant_config = quant_config
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        # TODO: implement post_init checks
+
+
+    def is_quantizable(self):
+        r"""
+        Returns `True` if the model is quantizable, `False` otherwise.
+        """
+        # TODO: check if quantizable 
+        return True
+
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return self.quant_config
+
+    def __repr__(self):
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+    def to_diff_dict(self) -> Dict[str, Any]:
+        """
+        Removes all attributes from config which correspond to the default config attributes for better readability and
+        serializes to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        config_dict = self.to_dict()
+
+        # get the default config dict
+        default_config_dict = HQQConfig().to_dict()
+
+        serializable_config_dict = {}
+
+        # only serialize values that differ from the default config
+        for key, value in config_dict.items():
+            if value != default_config_dict[key]:
+                serializable_config_dict[key] = value
+
+        return serializable_config_dict
+
+
+
 
 
 @dataclass
