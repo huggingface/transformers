@@ -4,13 +4,19 @@ import torch
 
 from ..enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
-from .utils import unpad_tensor
 
+from typing import Tuple
+
+import torch
+import torch.nn.functional as F
 
 try:
+    from einops import rearrange
+    from flash_attn.bert_padding import IndexFirstAxis
     from flash_attn.bert_padding import IndexFirstAxis, pad_input
     from flash_attn.flash_attn_interface import flash_attn_varlen_func
 except ImportError:
+    rearrange = None
     flash_attn_varlen_func = None
     pad_input = None
     IndexFirstAxis = None
@@ -152,3 +158,17 @@ class FlashAttention(Attention):
         # ==========================================================================================
 
         return attn_output
+
+
+def unpad_tensor(
+    hidden_states: torch.Tensor, attention_mask: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+
+    if hidden_states is not None:
+        hidden_states = IndexFirstAxis.apply(rearrange(hidden_states, "b s ... -> (b s) ..."), indices)
+
+    return hidden_states, indices, cu_seqlens, max_seqlen

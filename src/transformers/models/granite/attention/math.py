@@ -3,8 +3,6 @@ from typing import Tuple, Union
 import torch
 import torch.nn as nn
 
-from transformers.models.gpt_bigcode.modeling_gpt_bigcode import upcast_masked_softmax, upcast_softmax
-
 from ..enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
 
@@ -197,3 +195,27 @@ class MathAttention(Attention):
                 value = value.repeat_interleave(num_groups, dim=1)
 
         return key, value
+
+
+
+# Fused kernels
+# Use separate functions for each case because conditionals prevent kernel fusion.
+# TODO: Could have better fused kernels depending on scaling, dropout and head mask.
+#  Is it doable without writing 32 functions?
+@torch.jit.script
+def upcast_masked_softmax(
+    x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
+):
+    input_dtype = x.dtype
+    x = x.to(softmax_dtype) * scale
+    x = torch.where(mask, x, mask_value)
+    x = torch.nn.functional.softmax(x, dim=-1).to(input_dtype)
+    return x
+
+
+@torch.jit.script
+def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
+    input_dtype = x.dtype
+    x = x.to(softmax_dtype) * scale
+    x = torch.nn.functional.softmax(x, dim=-1).to(input_dtype)
+    return x
