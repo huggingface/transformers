@@ -213,23 +213,14 @@ class CommonPipelineTest(unittest.TestCase):
         pipe.model.to(torch.bfloat16)
         self.assertEqual(pipe.torch_dtype, torch.bfloat16)
 
-        # Even if the model dtype is the default one, we can safely assume the pipeline supports torch_dtype
-        # as it is constructed with torch_dtype specified
-        pipe.model.to(torch.float32)
+        # If dtype is NOT specified in the pipeline constructor, the property should just return
+        # the dtype of the underlying model (default)
+        pipe = pipeline(model=model_id)
         self.assertEqual(pipe.torch_dtype, torch.float32)
 
-        # If dtype is NOT specified in the pipeline constructor, the property should NOT return type
-        # as we don't know if the pipeline supports torch_dtype
-        pipe = pipeline(model=model_id)
-        self.assertEqual(pipe.torch_dtype, None)
-
-        # If the model changes to non default dtype, we assume the pipeline supports torch_dtype
-        pipe.model.to(torch.float16)
-        self.assertEqual(pipe.torch_dtype, torch.float16)
-
-        # If the model dtype is the default, we conservatively assume the pipeline doesn't support torch_dtype
-        pipe.model.to(torch.float32)
-        self.assertEqual(pipe.torch_dtype, None)
+        # If underlying model doesn't have dtype property, simply return None
+        pipe.model = None
+        self.assertIsNone(pipe.torch_dtype)
 
 
 @is_pipeline_test

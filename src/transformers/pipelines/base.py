@@ -862,8 +862,6 @@ class Pipeline(_ScikitCompat):
         else:
             self.device = device if device is not None else -1
 
-        self._initial_torch_dtype = torch_dtype
-
         self.binary_output = binary_output
 
         # We shouldn't call `model.to()` for models loaded with accelerate
@@ -957,20 +955,11 @@ class Pipeline(_ScikitCompat):
         return self(X)
 
     @property
-    def torch_dtype(self):
-        if hasattr(self.model, "dtype"):
-            # NB: We extract dtype from the underlying model, but it is possible that the model has dtype
-            # but the pipeline subclass doesn't support it. In such case we should not return anything,
-            # but it is not straightforward to detect it in a generic way. Therefore, we assume that the
-            # pipeline support torch_dtype if (1) the extracted dtype is not default one (float32), or
-            # (2) the torch_dtype argument was set by the user when creating the pipeline.
-            if self._initial_torch_dtype is not None or self.model.dtype not in (
-                torch.float32,
-                "float32",
-                "torch.float32",
-            ):
-                return self.model.dtype
-        return self._initial_torch_dtype
+    def torch_dtype(self) -> Optional["torch.dtype"]:
+        """
+        Torch dtype of the model (if it's Pytorch model), `None` otherwise.
+        """
+        return getattr(self.model, "dtype", None)
 
     @contextmanager
     def device_placement(self):
