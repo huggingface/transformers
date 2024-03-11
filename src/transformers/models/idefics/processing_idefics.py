@@ -149,7 +149,7 @@ class IdeficsProcessor(ProcessorMixin):
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
-        padding: Union[bool, str, PaddingStrategy] = "longest",
+        padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         transform: Callable = None,
@@ -165,7 +165,7 @@ class IdeficsProcessor(ProcessorMixin):
             prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `longest`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single

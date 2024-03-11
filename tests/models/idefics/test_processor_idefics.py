@@ -124,7 +124,7 @@ class IdeficsProcessorTest(TestCasePlus):
         prompts = self.prepare_prompts()
 
         # test that all prompts succeeded
-        input_processor = processor(prompts, return_tensors="pt")
+        input_processor = processor(prompts, return_tensors="pt", padding='longest')
         for key in self.input_keys:
             assert torch.is_tensor(input_processor[key])
 
@@ -158,19 +158,15 @@ class IdeficsProcessorTest(TestCasePlus):
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
         max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
         longest = processor(prompts, padding="longest", truncation=True, max_length=30)
-        default_padding = processor(prompts, truncation=True)
 
         decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
         decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
-        decoded_default_padding = processor.tokenizer.decode(default_padding["input_ids"][-1])
 
         self.assertEqual(decoded_max_length, predicted_tokens[1])
         self.assertEqual(decoded_longest, predicted_tokens[0])
-        self.assertEqual(decoded_default_padding, predicted_tokens[0])
 
         self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
         self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
-        self.assertListEqual(default_padding["attention_mask"][-1].tolist(), predicted_attention_masks[0])
 
     def test_tokenizer_left_padding(self):
         """Identical to test_tokenizer_padding, but with padding_side not explicitly set."""
@@ -190,19 +186,15 @@ class IdeficsProcessorTest(TestCasePlus):
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
         max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
         longest = processor(prompts, padding="longest", truncation=True, max_length=30)
-        default_padding = processor(prompts, truncation=True)
 
         decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
         decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
-        decoded_default_padding = processor.tokenizer.decode(default_padding["input_ids"][-1])
 
         self.assertEqual(decoded_max_length, predicted_tokens[1])
         self.assertEqual(decoded_longest, predicted_tokens[0])
-        self.assertEqual(decoded_default_padding, predicted_tokens[0])
 
         self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
         self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
-        self.assertListEqual(default_padding["attention_mask"][-1].tolist(), predicted_attention_masks[0])
 
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
@@ -211,7 +203,7 @@ class IdeficsProcessorTest(TestCasePlus):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
         prompts = self.prepare_prompts()
 
-        inputs = processor(prompts)
+        inputs = processor(prompts, padding='longest')
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
