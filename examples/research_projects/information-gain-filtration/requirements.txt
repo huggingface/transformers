@@ -1,0 +1,6 @@
+matplotlib
+numpy>=1.17.2
+joblib>=0.13.2
+scipy
+torch>=1.10.1
+transformers>=3.5

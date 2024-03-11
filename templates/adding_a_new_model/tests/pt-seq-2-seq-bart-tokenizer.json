@@ -1,0 +1,11 @@
+{
+  "modelname": "PTNewENCDEC",
+  "uppercase_modelname": "PT_NEW_ENC_DEC",
+  "lowercase_modelname": "pt_new_enc_dec_template",
+  "camelcase_modelname": "PtNewEncDec",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "pt-new-enc-dec-base",
+  "tokenizer_type": "Based on BART",
+  "generate_tensorflow_pytorch_and_flax": "PyTorch",
+  "is_encoder_decoder_model": "True"
+}

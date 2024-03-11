@@ -1,0 +1,11 @@
+{
+  "modelname": "TemplateBI",
+  "uppercase_modelname": "TEMPLATE_BI",
+  "lowercase_modelname": "template_bi",
+  "camelcase_modelname": "TemplateBi",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "bi-brand-new-bert-base-cased",
+  "tokenizer_type": "Standalone",
+  "generate_tensorflow_pytorch_and_flax": "PyTorch, TensorFlow and Flax",
+  "is_encoder_decoder_model": "False"
+}
