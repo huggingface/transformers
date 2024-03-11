@@ -1735,8 +1735,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
         Returns:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
-            output is ready to pass to the model, either directly or via methods like `generate()`.
+            `Union[List[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
+            set, will return a dict of tokenizer output instead.
         """
 
         if return_dict is None and tokenize:
