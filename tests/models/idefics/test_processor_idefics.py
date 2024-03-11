@@ -124,7 +124,7 @@ class IdeficsProcessorTest(TestCasePlus):
         prompts = self.prepare_prompts()
 
         # test that all prompts succeeded
-        input_processor = processor(prompts, return_tensors="pt", padding='longest')
+        input_processor = processor(prompts, return_tensors="pt", padding="longest")
         for key in self.input_keys:
             assert torch.is_tensor(input_processor[key])
 
@@ -203,7 +203,7 @@ class IdeficsProcessorTest(TestCasePlus):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
         prompts = self.prepare_prompts()
 
-        inputs = processor(prompts, padding='longest')
+        inputs = processor(prompts, padding="longest")
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
