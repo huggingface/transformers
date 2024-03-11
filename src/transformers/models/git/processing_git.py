@@ -78,8 +78,6 @@ class GitProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        print("Text:", text)
-
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
