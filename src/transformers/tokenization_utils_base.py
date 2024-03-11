@@ -1766,7 +1766,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = conversation
             batched = True
         else:
-            batched = False
+            it_batched = False
             conversations = [conversation]
 
         rendered = []
