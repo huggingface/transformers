@@ -706,6 +706,7 @@ def main():
             model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
 
         else:
+            # Optimizer doesn't matter as it won't be used anyway
             model.compile(optimizer="sgd", jit_compile=training_args.xla, metrics=["accuracy"])
             training_dataset = None
 
