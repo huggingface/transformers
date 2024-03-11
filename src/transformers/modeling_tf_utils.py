@@ -78,6 +78,8 @@ if is_safetensors_available():
 if TYPE_CHECKING:
     from . import PreTrainedTokenizerBase
 
+os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Compatibility fix to make sure tf.keras stays at Keras 2
+
 try:
     import tf_keras as keras
     from tf_keras import backend as K
