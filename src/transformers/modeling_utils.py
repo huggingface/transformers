@@ -1084,7 +1084,9 @@ class ModuleUtilsMixin:
                 # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
                 # used for the 4bit quantization (uint8 tensors are stored)
                 if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
-                    total_numel.append(param.numel() * 2 * dtype2bytes[self.hf_quantizer.quantization_config.bnb_4bit_quant_storage])
+                    total_numel.append(
+                        param.numel() * 2 * dtype2bytes[self.hf_quantizer.quantization_config.bnb_4bit_quant_storage]
+                    )
                 else:
                     total_numel.append(param.numel())
 
