@@ -29,7 +29,6 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
-from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from zipfile import is_zipfile
 
@@ -506,7 +505,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax"]:
+        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
@@ -3223,39 +3222,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
-
-                    if resolved_archive_file is not None:
-                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
-                            # If the PyTorch file was found, check if there is a safetensors file on the repository
-                            # If there is no safetensors file on the repositories, start an auto conversion
-                            safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
-                            has_file_kwargs = {
-                                "revision": revision,
-                                "proxies": proxies,
-                                "token": token,
-                            }
-                            cached_file_kwargs = {
-                                "cache_dir": cache_dir,
-                                "force_download": force_download,
-                                "resume_download": resume_download,
-                                "local_files_only": local_files_only,
-                                "user_agent": user_agent,
-                                "subfolder": subfolder,
-                                "_raise_exceptions_for_gated_repo": False,
-                                "_raise_exceptions_for_missing_entries": False,
-                                "_commit_hash": commit_hash,
-                                **has_file_kwargs,
-                            }
-                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                                Thread(
-                                    target=auto_conversion,
-                                    args=(pretrained_model_name_or_path,),
-                                    kwargs=cached_file_kwargs,
-                                    name="Thread-autoconversion",
-                                ).start()
-                    else:
-                        # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
-                        # We try those to give a helpful error message.
+                    if resolved_archive_file is None:
+                        # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
+                        # message.
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
