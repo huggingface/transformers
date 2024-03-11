@@ -495,7 +495,7 @@ def is_g2p_en_available():
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     warnings.warn(
-        "`is_torch_tpu_available` is deprecated and will be removed in 4.39.0. "
+        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
         "Please use the `is_torch_xla_available` instead.",
         FutureWarning,
     )
@@ -513,6 +513,7 @@ def is_torch_tpu_available(check_device=True):
             except RuntimeError:
                 return False
         return True
+    return False
 
 
 @lru_cache
