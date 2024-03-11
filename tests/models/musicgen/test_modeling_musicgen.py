@@ -55,8 +55,6 @@ if is_torch_available():
     from transformers.generation import (
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
-        InfNanRemoveLogitsProcessor,
-        LogitsProcessorList,
     )
 
 
