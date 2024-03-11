@@ -55,6 +55,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -98,7 +99,6 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-from .quantizers.quantizers_utils import get_module_from_name
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -513,9 +513,10 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool
             )
         return safe_load_file(checkpoint_file)
     try:
-        if ((
-            is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
-        ) or (is_fsdp_enabled() and not is_local_dist_rank_0())) and not is_quantized:
+        if (
+            (is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0)
+            or (is_fsdp_enabled() and not is_local_dist_rank_0())
+        ) and not is_quantized:
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -807,11 +808,11 @@ def _load_state_dict_into_meta_model(
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
             hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            # if is_fsdp_enabled():
-            module, tensor_name = get_module_from_name(model, param_name)
-            value = getattr(module, tensor_name)
-            value = type(value)(value.data.to("cpu"), **value.__dict__)
-            setattr(module, tensor_name, value)
+            if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                module, tensor_name = get_module_from_name(model, param_name)
+                value = getattr(module, tensor_name)
+                value = type(value)(value.data.to("cpu"), **value.__dict__)
+                setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
@@ -1815,7 +1816,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
                 import deepspeed
 
                 with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
@@ -1889,7 +1890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_embeddings
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
@@ -1928,7 +1929,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # numbers of tokens to copy
         n = min(old_num_tokens, new_num_tokens)
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
             import deepspeed
 
             params = [old_embeddings.weight, new_embeddings.weight]
@@ -1965,7 +1966,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
@@ -2007,7 +2008,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
             import deepspeed
 
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
@@ -2949,10 +2950,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
-            # if is_deepspeed_zero3_enabled():
-            #     raise ValueError(
-            #         "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
-            #     )
+            if is_deepspeed_zero3_enabled():
+                raise ValueError(
+                    "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
+                )
             if not is_accelerate_available():
                 raise ImportError(
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
@@ -3399,7 +3400,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
-        if is_deepspeed_zero3_enabled():
+        if is_deepspeed_zero3_enabled() and hf_quantizer is None:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3598,7 +3599,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
-            # dispatch_model(model, **device_map_kwargs)
+            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+                dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model)
@@ -3799,7 +3801,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() and hf_quantizer is None:
                 import deepspeed
 
                 not_initialized_parameters = list(
