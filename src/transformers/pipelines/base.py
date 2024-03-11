@@ -1040,7 +1040,7 @@ class Pipeline(_ScikitCompat):
             supported_models = supported_models_names
         if "Peft" in self.model.__class__.__name__ and hasattr(self.model, "base_model"):
             # Peft models wrap a base model class, so let's look at the base class instead in that case
-            class_name = self.model.base_model.__class__.__name__
+            class_name = self.model.base_model.model.__class__.__name__
         else:
             class_name = self.model.__class__.__name__
         if class_name not in supported_models:
