@@ -785,8 +785,13 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0)
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                position_ids = position_ids[..., -input_shape[-1]:].view(-1, input_shape[-1])
+            else:
+                position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+                position_ids = position_ids.unsqueeze(0)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
