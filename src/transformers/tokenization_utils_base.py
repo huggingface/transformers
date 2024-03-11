@@ -1781,7 +1781,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
             )
 
-        if not batched:
+        if not is_batched:
             rendered = rendered[0]
 
         if tokenize:
