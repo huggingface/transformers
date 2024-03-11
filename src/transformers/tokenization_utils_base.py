@@ -1774,12 +1774,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(chat, "messages"):
                 # Indicates it's a Conversation object
                 chat = chat.messages
-
-            rendered.append(
-                compiled_template.render(
-                    messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
-                )
-            )
+            rendered_chat = compiled_template.render(messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map)
+            rendered.append(rendered_chat)
 
         if not is_batched:
             rendered = rendered[0]
