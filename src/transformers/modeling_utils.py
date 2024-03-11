@@ -84,7 +84,7 @@ from .utils import (
     is_remote_url,
     is_safetensors_available,
     is_torch_sdpa_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     logging,
     replace_return_docstrings,
     strtobool,
@@ -246,10 +246,10 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             # Adding fix for https://github.com/pytorch/xla/issues/4152
             # Fixes issue where the model code passes a value that is out of range for XLA_USE_BF16=1
             # and XLA_DOWNCAST_BF16=1 so the conversion would cast it to -inf
-            # NOTE: `is_torch_tpu_available()` is checked last as it induces a graph break in torch dynamo
-            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+            # NOTE: `is_torch_xla_available()` is checked last as it induces a graph break in torch dynamo
+            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_xla_available():
                 return torch.bfloat16
-            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_xla_available():
                 if t.dtype == torch.float:
                     return torch.bfloat16
                 if t.dtype == torch.double:
