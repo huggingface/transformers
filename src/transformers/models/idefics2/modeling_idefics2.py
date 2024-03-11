@@ -689,6 +689,17 @@ class Idefics2VisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
 
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
+        # The call to `_upad_input` in `_flash_attention_forward` is expensive
+        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
+        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
+        if not torch.any(~patch_attention_mask):
+            attention_mask=None
+        else:
+            attention_mask = (
+                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+                if not self.config._flash_attn_2_enabled
+                else patch_attention_mask
+            )        
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
