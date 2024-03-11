@@ -116,7 +116,7 @@ from .utils import (
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
@@ -742,11 +742,11 @@ def require_torch_up_to_2_accelerators(test_case):
     (test_case)
 
 
-def require_torch_tpu(test_case):
+def require_torch_xla(test_case):
     """
-    Decorator marking a test that requires a TPU (in PyTorch).
+    Decorator marking a test that requires TorchXLA (in PyTorch).
     """
-    return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
+    return unittest.skipUnless(is_torch_xla_available(), "test requires TorchXLA")(test_case)
 
 
 def require_torch_neuroncore(test_case):
