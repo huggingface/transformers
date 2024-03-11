@@ -1009,7 +1009,12 @@ class Trainer:
                 },
             ]
 
-            optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
+            optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args, opt_model)
+
+            # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
+            # e.g. for GaLoRe optimizer.
+            if "params" in optimizer_kwargs:
+                optimizer_grouped_parameters = optimizer_kwargs.pop("params")
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
             if optimizer_cls.__name__ == "Adam8bit":
@@ -1032,7 +1037,9 @@ class Trainer:
         return self.optimizer
 
     @staticmethod
-    def get_optimizer_cls_and_kwargs(args: TrainingArguments) -> Tuple[Any, Any]:
+    def get_optimizer_cls_and_kwargs(
+        args: TrainingArguments, model: Optional[PreTrainedModel] = None
+    ) -> Tuple[Any, Any]:
         """
         Returns the optimizer class and optimizer parameters based on the training arguments.
 
@@ -1170,6 +1177,63 @@ class Trainer:
             optimizer_cls = torch.optim.Adagrad
         elif args.optim == OptimizerNames.RMSPROP:
             optimizer_cls = torch.optim.RMSprop
+        elif args.optim in [
+            OptimizerNames.GALORE_ADAMW,
+            OptimizerNames.GALORE_ADAMW_8BIT,
+            OptimizerNames.GALORE_ADAFACTOR,
+        ]:
+            from galore_torch import GaLoreAdafactor, GaLoreAdamW, GaLoreAdamW8bit
+
+            optimizer_mapping = {
+                OptimizerNames.GALORE_ADAMW: GaLoreAdamW,
+                OptimizerNames.GALORE_ADAMW_8BIT: GaLoreAdamW8bit,
+                OptimizerNames.GALORE_ADAFACTOR: GaLoreAdafactor,
+            }
+
+            optimizer_cls = optimizer_mapping[args.optim]
+
+            if args.galore_target_modules is None:
+                raise ValueError(
+                    "You need to define a `galore_target_modules` in order to properly use GaLoRe optimizers"
+                )
+
+            if not isinstance(args.galore_target_modules, list):
+                raise ValueError(
+                    f"`galore_target_modules` has to be a list of strings, you passed {args.galore_target_modules}"
+                )
+
+            if model is None:
+                raise ValueError("You need to pass a model in order to correctly initialize a GaLore optimizer.")
+
+            galore_params = []
+            for module_name, module in model.named_modules():
+                if not isinstance(module, nn.Linear):
+                    continue
+
+                if not any(target_key in module_name for target_key in args.galore_target_modules):
+                    continue
+
+                galore_params.append(module.weight)
+
+            if len(galore_params) == 0:
+                raise ValueError("Target modules not found ! Please make sure to pass a valid target_modules.")
+
+            id_galore_params = [id(p) for p in galore_params]
+            non_galore_params = [p for p in model.parameters() if id(p) not in id_galore_params]
+
+            # The default args are from the official repository: https://github.com/jiaweizzhao/GaLore
+            param_groups = [
+                {"params": non_galore_params},
+                {
+                    "params": galore_params,
+                    "rank": optim_args.pop("rank", 128),
+                    "update_proj_gap": optim_args.pop("update_proj_gap", 200),
+                    "scale": optim_args.pop("scale", 0.25),
+                    "proj_type": optim_args.pop("proj_type", "std"),
+                },
+            ]
+
+            optimizer_kwargs.update({"params": param_groups})
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs

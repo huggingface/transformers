@@ -162,6 +162,9 @@ class OptimizerNames(ExplicitEnum):
     RMSPROP_BNB = "rmsprop_bnb"
     RMSPROP_8BIT = "rmsprop_bnb_8bit"
     RMSPROP_32BIT = "rmsprop_bnb_32bit"
+    GALORE_ADAMW = "galore_adamw"
+    GALORE_ADAMW_8BIT = "galore_adamw_8bit"
+    GALORE_ADAFACTOR = "galore_adafactor"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -694,6 +697,11 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
+        galore_target_modules (`Optional[List[str]]`):
+            The GaLoRe target modules, i.e. the module names that you would like to train, using GaLoRe algorithm
+            https://arxiv.org/abs/2403.03507
+            See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
+            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor"
     """
 
     framework = "pt"
@@ -1349,6 +1357,13 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+        },
+    )
+
+    galore_target_modules: Optional[list] = field(
+        default=None,
+        metadata={
+            "help": "Target modules for GaLoRE optimizer. See https://github.com/jiaweizzhao/GaLore for more details."
         },
     )
 
