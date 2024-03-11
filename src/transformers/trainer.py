@@ -1223,7 +1223,9 @@ class Trainer:
                 galore_params.append(module.weight)
 
             if len(galore_params) == 0:
-                raise ValueError(f"None of the target modules were found! ({args.galore_target_modules}). Please make sure to pass a valid `target_modules`.")
+                raise ValueError(
+                    f"None of the target modules were found! ({args.galore_target_modules}). Please make sure to pass a valid `target_modules`."
+                )
 
             id_galore_params = [id(p) for p in galore_params]
             non_galore_params = [p for p in model.parameters() if id(p) not in id_galore_params]
