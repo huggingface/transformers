@@ -1700,13 +1700,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **tokenizer_kwargs,
     ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
         determine the format and control tokens to use when converting. When chat_template is None, it will fall back
         to the default_chat_template specified at the class level.
 
         Args:
-            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
