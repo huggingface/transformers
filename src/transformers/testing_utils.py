@@ -90,6 +90,7 @@ from .utils import (
     is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_safetensors_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -560,6 +561,13 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
+
+
+def require_sacremoses(test_case):
+    """
+    Decorator marking a test that requires Sacremoses. These tests are skipped when Sacremoses isn't installed.
+    """
+    return unittest.skipUnless(is_sacremoses_available(), "test requires Sacremoses")(test_case)
 
 
 def require_seqio(test_case):
