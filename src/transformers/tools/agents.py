@@ -439,7 +439,7 @@ class ReactAgent(Agent):
         final_answer = None
         iteration = 0
 
-        while not final_answer and iteration < self.max_iterations:
+        while final_answer is None and iteration < self.max_iterations:
             try:
                 final_answer = self.step()
             except Exception as e:
