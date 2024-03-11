@@ -2,7 +2,7 @@ from typing import Tuple
 
 import torch
 
-from ..enums import AttentionHeadType, PositionEmbeddingType
+from ...enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
 
 from typing import Tuple

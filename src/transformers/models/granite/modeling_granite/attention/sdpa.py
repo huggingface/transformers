@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn.functional as F
 
-from ..enums import PositionEmbeddingType
+from ...enums import PositionEmbeddingType
 from .base import Attention
 
 

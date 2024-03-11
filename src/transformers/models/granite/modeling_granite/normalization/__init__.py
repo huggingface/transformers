@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from ..enums import NormalizationImplementation
+from ...enums import NormalizationImplementation
 from .layernorm import get_layernorm
 from .rmsnorm import RMSNorm, get_rmsnorm
 

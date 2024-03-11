@@ -1,5 +1,5 @@
 from ...modeling_utils import PretrainedConfig
-from .modeling_granite.enums import AttentionHeadType, PositionEmbeddingType
+from .enums import AttentionHeadType, PositionEmbeddingType
 
 
 class GraniteConfig(PretrainedConfig):

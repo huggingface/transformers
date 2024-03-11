@@ -14,7 +14,7 @@ from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from .attention import Attention
 from ..configuration_granite import GraniteConfig
-from .enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
+from ..enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
 from .layer import GraniteBlock
 from .mlp import MLP
 from .normalization import RMSNorm, get_normalization_function

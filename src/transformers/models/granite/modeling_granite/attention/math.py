@@ -3,7 +3,7 @@ from typing import Tuple, Union
 import torch
 import torch.nn as nn
 
-from ..enums import AttentionHeadType, PositionEmbeddingType
+from ...enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
 
 
