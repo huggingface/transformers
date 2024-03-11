@@ -48,12 +48,17 @@ def _replace_with_hqq_linear(model, quantization_config, modules_to_not_convert,
 			if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
 
 				#TODO: FIGURE ACCELERATE THING
-				print('Processing ', name)
+				#print('Processing ', name)
 
 				#with init_empty_weights():
-				model._modules[name] = HQQLinear(module, quantization_config.to_dict(), compute_dtype=compute_dtype, device=device)
 
-				has_been_replaced = True
+				# hqq_layer            = HQQLinear(module, quantization_config.to_dict(), compute_dtype=compute_dtype, device=device, initialize=False)
+				# hqq_layer.state_dict = lambda *args, **kwargs: {'W_q':torch.tensor([0], device='meta')}
+				# model._modules[name] = hqq_layer
+
+				model._modules[name].quant_config = quantization_config.to_dict()
+
+				has_been_replaced                 = True
 
 				# Store the module class in case we need to transpose the weight later
 				model._modules[name].source_cls = type(module)
