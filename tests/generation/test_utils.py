@@ -52,7 +52,6 @@ if is_torch_available():
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
-        top_k_top_p_filtering,
     )
     from transformers.cache_utils import DynamicCache
     from transformers.generation import (
@@ -1074,6 +1073,9 @@ class GenerationTesterMixin:
     @require_torch_multi_accelerator
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
+            if "xpu" in torch_device:
+                return unittest.skip("device_map='auto' does not work with XPU devices")
+
             if model_class._no_split_modules is None:
                 continue
 
@@ -1834,49 +1836,68 @@ class GenerationTesterMixin:
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     def test_left_padding_compatibility(self):
-        # The check done in this test is fairly difficult -- depending on the model architecture, passing the right
-        # position index for the position embeddings can still result in a different output, due to numerical masking.
-        # On the other hand, for some types of position embeddings, an incorrect position index can have a minimal
-        # impact on the output.
-        # There are two tricks employed to check whether left-padding compatibility is in place:
-        # 1 - To reduce the negative impact of the numerical attention mask on a correct position index, we set the
-        # padding size to 1.
-        # 2 - To reduce the chance of false positives (i.e. passing when it should be failing), we run the check
-        # multiple times with random inputs, and it has to pass with all of them.
-        # NOTE: because of 2), there is some chance of false positives in this test.
+        # NOTE: left-padding results in small numerical differences. This is expected.
+        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
 
+        # First, filter out models that don't support left padding
+        # - The model must have generative capabilities
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(reason="No generative architecture available for this model.")
+
+        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
+        decoder_only_classes = []
         for model_class in self.all_generative_model_classes:
             config, _, _, _ = self._get_input_ids_and_config()
             if config.is_encoder_decoder:
-                continue  # skip for encoder-decoder models -- they don't need left-padding compatibility
+                continue
+            else:
+                decoder_only_classes.append(model_class)
+        if len(decoder_only_classes) == 0:
+            self.skipTest(reason="No decoder-only architecture available for this model.")
+
+        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
+        #   added support for it yet. We skip these models for now.
+        has_encoder_attributes = any(
+            attr_name
+            for attr_name in config.to_dict().keys()
+            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+        )
+        if has_encoder_attributes:
+            self.skipTest(
+                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
+            )
+
+        # Then, test left-padding
+        def _prepare_model_kwargs(input_ids, attention_mask, signature):
+            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+            if "position_ids" in signature:
+                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                model_kwargs["position_ids"] = position_ids
+            if "cache_position" in signature:
+                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
+                model_kwargs["cache_position"] = cache_position
+            return model_kwargs
+
+        for model_class in decoder_only_classes:
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
-            no_failures = True
-            for _ in range(10):  # there may be false positives with 10 runs, we rely on the CI to catch the flakiness
-                _, input_ids, attention_mask, _ = self._get_input_ids_and_config()
-                model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-                if "position_ids" in signature:
-                    position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                    position_ids.masked_fill_(attention_mask == 0, 1)
-                    model_kwargs["position_ids"] = position_ids
-                next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
+            # Without padding
+            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
+            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
 
-                pad_size = (input_ids.shape[0], 1)
-                padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
-                padded_input_ids = torch.cat((padding, input_ids), dim=1)
-                padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-                model_kwargs = {"input_ids": padded_input_ids, "attention_mask": padded_attention_mask}
-                if "position_ids" in signature:
-                    position_ids = torch.cumsum(padded_attention_mask, dim=-1) - 1
-                    position_ids.masked_fill_(padded_attention_mask == 0, 1)
-                    model_kwargs["position_ids"] = position_ids
-                next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-                if not torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-7):
-                    no_failures = False
-                    break
+            # With left-padding (length 32)
+            pad_size = (input_ids.shape[0], 32)
+            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
+            padded_input_ids = torch.cat((padding, input_ids), dim=1)
+            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
-            self.assertTrue(no_failures)
+            # They should result in very similar logits
+            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
 
     def test_past_key_values_format(self):
         # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
@@ -2345,133 +2366,6 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
-    # tests whether the top_k_top_p function behaves as expected
-    def test_top_k_top_p_filtering(self):
-        logits = torch.tensor(
-            [
-                [
-                    8.2220991,  # 3rd highest value; idx. 0
-                    -0.5620044,
-                    5.23229752,
-                    4.0386393,
-                    -6.8798378,
-                    -0.54785802,
-                    -3.2012153,
-                    2.92777176,
-                    1.88171953,
-                    7.35341276,
-                    8.43207833,  # 2nd highest value; idx. 10
-                    -9.85711836,
-                    -5.96209236,
-                    -1.13039161,
-                    -7.1115294,
-                    -0.8369633,
-                    -5.3186408,
-                    7.06427407,
-                    0.81369344,
-                    -0.82023817,
-                    -5.9179796,
-                    0.58813443,
-                    -6.99778438,
-                    4.71551189,
-                    -0.18771637,
-                    7.44020759,  # 4th highest value; idx. 25
-                    9.38450987,  # 1st highest value; idx. 26
-                    2.12662941,
-                    -9.32562038,
-                    2.35652522,
-                ],  # cummulative prob of 4 highest values <= 0.6
-                [
-                    0.58425518,
-                    4.53139238,
-                    -5.57510464,
-                    -6.28030699,
-                    -7.19529503,
-                    -4.02122551,
-                    1.39337037,
-                    -6.06707057,
-                    1.59480517,
-                    -9.643119,
-                    0.03907799,
-                    0.67231762,
-                    -8.88206726,
-                    6.27115922,  # 4th highest value; idx. 13
-                    2.28520723,
-                    4.82767506,
-                    4.30421368,
-                    8.8275313,  # 2nd highest value; idx. 17
-                    5.44029958,
-                    -4.4735794,
-                    7.38579536,  # 3rd highest value; idx. 20
-                    -2.91051663,
-                    2.61946077,
-                    -2.5674762,
-                    -9.48959302,
-                    -4.02922645,
-                    -1.35416918,
-                    9.67702323,  # 1st highest value; idx. 27
-                    -5.89478553,
-                    1.85370467,
-                ],  # cummulative prob of 4 highest values <= 0.6
-            ],
-            dtype=torch.float,
-            device=torch_device,
-        )
-
-        non_inf_expected_idx = torch.tensor(
-            [[0, 0], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 20], [1, 27]],
-            dtype=torch.long,
-            device=torch_device,
-        )  # expected non filtered idx as noted above
-
-        non_inf_expected_output = torch.tensor(
-            [
-                8.2221,
-                8.4321,
-                7.4402,
-                9.3845,
-                6.2712,
-                8.8275,
-                7.3858,
-                9.6770,
-            ],  # expected non filtered values as noted above
-            dtype=torch.float,
-            device=torch_device,
-        )
-
-        output = top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
-        non_inf_output = output[output != -float("inf")].to(device=torch_device)
-        non_inf_idx = (output != -float("inf")).nonzero().to(device=torch_device)
-
-        self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
-        self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
-
-    # tests whether the function uses filter_value instead of default -inf
-    def test_top_k_top_p_filtering_with_filter_value(self):
-        logits = torch.tensor(
-            [
-                [
-                    1,
-                    1,
-                    1,
-                    0.99,  # get filtered by top-p filtering
-                    0.98,  # get filtered by top-k filtering
-                ]
-            ],
-            dtype=torch.float,
-            device=torch_device,
-        )
-
-        expected_output = torch.tensor(
-            [[1, 1, 1, 0, 0]],
-            dtype=torch.float,
-            device=torch_device,
-        )
-
-        output = top_k_top_p_filtering(logits, top_k=4, top_p=0.5, filter_value=0.0)
-
-        self.assertTrue(torch.allclose(expected_output, output, atol=1e-12))
-
     def test_speculative_sampling(self):
         # assume vocab size 10, input length 5 + 3 generated candidates
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens

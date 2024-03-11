@@ -31,6 +31,7 @@ import time
 import unittest
 from collections import defaultdict
 from collections.abc import Mapping
+from functools import wraps
 from io import StringIO
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
@@ -89,6 +90,7 @@ from .utils import (
     is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_safetensors_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -136,9 +138,9 @@ if is_pytest_available():
         _is_mocked,
         _patch_unwrap_mock_aware,
         get_optionflags,
-        import_path,
     )
     from _pytest.outcomes import skip
+    from _pytest.pathlib import import_path
     from pytest import DoctestItem
 else:
     Module = object
@@ -460,6 +462,20 @@ def require_torch_sdpa(test_case):
     return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
 
 
+def require_read_token(fn):
+    """
+    A decorator that loads the HF token for tests that require to load gated models.
+    """
+    token = os.getenv("HF_HUB_READ_TOKEN")
+
+    @wraps(fn)
+    def _inner(*args, **kwargs):
+        with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+            return fn(*args, **kwargs)
+
+    return _inner
+
+
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
@@ -545,6 +561,13 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
+
+
+def require_sacremoses(test_case):
+    """
+    Decorator marking a test that requires Sacremoses. These tests are skipped when Sacremoses isn't installed.
+    """
+    return unittest.skipUnless(is_sacremoses_available(), "test requires Sacremoses")(test_case)
 
 
 def require_seqio(test_case):

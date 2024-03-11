@@ -348,7 +348,11 @@ class StaticCache(Cache):
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+
         self.dtype = dtype if dtype is not None else torch.float32
         self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
@@ -357,7 +361,6 @@ class StaticCache(Cache):
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-        self.seen_tokens = 0
 
     def update(
         self,
@@ -391,15 +394,20 @@ class StaticCache(Cache):
         k_out[:, :, new_cache_positions] = key_states
         v_out[:, :, new_cache_positions] = value_states
 
-        self.seen_tokens += key_states.shape[2]
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
-        return self.seen_tokens
+        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
+        raise ValueError(
+            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
+        )
 
     def get_usable_length(self, new_sequence_length=None, layer_idx: Optional[int] = 0) -> int:
-        return self.seen_tokens
+        # TODO: Fix once the stateful `int` bug in PyTorch is fixed.
+        raise ValueError(
+            "get_seq_length is not implemented for StaticCache. Please refer to https://github.com/huggingface/transformers/pull/29114."
+        )
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
