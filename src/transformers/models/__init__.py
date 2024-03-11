@@ -103,6 +103,7 @@ from . import (
     gpt_sw3,
     gptj,
     gptsan_japanese,
+    granite,
     graphormer,
     groupvit,
     herbert,

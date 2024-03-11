@@ -33,8 +33,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_granite"] = [
         "GraniteForCausalLM",
-        "GraniteForSequenceClassification",
-        "GraniteForTokenClassification",
         "GraniteModel",
         "GranitePreTrainedModel",
     ]
@@ -50,8 +48,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_granite import (
             GraniteForCausalLM,
-            GraniteForSequenceClassification,
-            GraniteForTokenClassification,
             GraniteModel,
             GranitePreTrainedModel,
         )

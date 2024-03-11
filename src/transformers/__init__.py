@@ -486,6 +486,7 @@ _import_structure = {
         "GPTSanJapaneseConfig",
         "GPTSanJapaneseTokenizer",
     ],
+    "models.granite": ["GraniteConfig"],
     "models.graphormer": [
         "GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GraphormerConfig",
@@ -2353,6 +2354,14 @@ else:
             "GPTSanJapaneseForConditionalGeneration",
             "GPTSanJapaneseModel",
             "GPTSanJapanesePreTrainedModel",
+        ]
+    )
+    _import_structure["models.granite"].extend(
+        [
+            "GraniteConfig",
+            "GranitePreTrainedModel",
+            "GraniteModel",
+            "GraniteForCausalLM",
         ]
     )
     _import_structure["models.graphormer"].extend(
@@ -5287,6 +5296,9 @@ if TYPE_CHECKING:
         GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTNeoXJapaneseConfig,
     )
+    from .models.granite import (
+        GraniteConfig,
+    )
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gptsan_japanese import (
         GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6990,6 +7002,11 @@ if TYPE_CHECKING:
             GPTSanJapaneseForConditionalGeneration,
             GPTSanJapaneseModel,
             GPTSanJapanesePreTrainedModel,
+        )
+        from .models.granite import (
+            GraniteForCausalLM,
+            GraniteModel,
+            GranitePreTrainedModel,
         )
         from .models.graphormer import (
             GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
