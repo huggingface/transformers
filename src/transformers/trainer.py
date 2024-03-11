@@ -1184,8 +1184,8 @@ class Trainer:
             OptimizerNames.GALORE_ADAFACTOR,
         ]:
             if not is_galore_torch_available():
-                raise ValueError(
-                    "You need to insall `galore_torch` in order to use GaLore optimizers"
+                raise ImportError(
+                    "You need to install `galore_torch` in order to use GaLore optimizers"
                     " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
                 )
 
@@ -1223,7 +1223,7 @@ class Trainer:
                 galore_params.append(module.weight)
 
             if len(galore_params) == 0:
-                raise ValueError("Target modules not found ! Please make sure to pass a valid target_modules.")
+                raise ValueError(f"None of the target modules were found! ({args.galore_target_modules}). Please make sure to pass a valid `target_modules`.")
 
             id_galore_params = [id(p) for p in galore_params]
             non_galore_params = [p for p in model.parameters() if id(p) not in id_galore_params]
