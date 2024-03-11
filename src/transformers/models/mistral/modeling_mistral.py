@@ -39,6 +39,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torch_version_greater_or_equal_than_2_2_0,
     logging,
     replace_return_docstrings,
 )
@@ -1006,6 +1007,7 @@ class MistralModel(MistralPreTrainedModel):
                 (batch_size, seq_length),
                 inputs_embeds,
                 past_key_values_length,
+                sliding_window=self.config.sliding_window if is_torch_version_greater_or_equal_than_2_2_0 else None,
             )
         else:
             # 4d mask is passed through the layers

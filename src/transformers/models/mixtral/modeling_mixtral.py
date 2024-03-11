@@ -47,6 +47,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torch_version_greater_or_equal_than_2_2_0,
     logging,
     replace_return_docstrings,
 )
@@ -59,6 +60,7 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
@@ -1190,6 +1192,7 @@ class MixtralModel(MixtralPreTrainedModel):
                 (batch_size, seq_length),
                 inputs_embeds,
                 past_key_values_length,
+                sliding_window=self.config.sliding_window if is_torch_version_greater_or_equal_than_2_2_0 else None,
             )
         else:
             # 4d mask is passed through the layers

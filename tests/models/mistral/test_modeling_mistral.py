@@ -484,6 +484,31 @@ class MistralIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
+    @require_flash_attn
+    @require_torch_sdpa
+    def test_model_7b_logits_long_with_sdpa_and_flash2(self):
+        input_ids = [1] + [306, 338] * 2048
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map="auto", attn_implementation="flash_attention_2"
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        with torch.no_grad():
+            out = model(input_ids).logits.cpu()
+
+        input_ids = [1] + [306, 338] * 2048
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map="auto", attn_implementation="sdpa"
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        with torch.no_grad():
+            out1 = model(input_ids).logits.cpu()
+        torch.testing.assert_close(out.mean(-1), out1.mean(-1), atol=1e-2, rtol=1e-2)
+
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @slow
     def test_model_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
