@@ -91,7 +91,7 @@ class GitProcessor(ProcessorMixin):
         if images is not None:
             image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
-        return BatchEncoding(data=dict(**image_features, **text_features), tensor_type=return_tensors)
+        return BatchEncoding(data=dict(**text_features, **image_features), tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
