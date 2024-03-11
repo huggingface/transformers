@@ -764,7 +764,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
@@ -807,7 +807,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
@@ -1188,12 +1188,14 @@ class ModelUtilsTest(TestCasePlus):
         # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
+        model = AutoModelForCausalLM.from_pretrained(
+            "joaogante/tiny-random-gpt2-with-generation-config", use_safetensors=False
+        )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
         # 2. Load with `device_map`
         model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto"
+            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto", use_safetensors=False
         )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
@@ -1671,7 +1673,7 @@ class AttentionMaskTester(unittest.TestCase):
     def compute_num_context_mask(self, kv_len, context, q_len):
         # This function computes the # of attention tokens that are added for
         # the sliding window
-        c_mask_len = kv_len - context
+        c_mask_len = kv_len - context - 1
         num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
         cut_mask_len = max(c_mask_len - q_len, 0)
         num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
