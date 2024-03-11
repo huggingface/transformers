@@ -1888,3 +1888,13 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding_p["attention_mask"], [1, 1, 1])
         self.assertDictEqual(dict(encoding_p), dict(encoding_r))
         self.assertEqual(tokenizer_p.decode(encoding_p["input_ids"]), expected_decoding)
+
+    def test_special_tokens(self):
+        tokenizer_r = UdopTokenizerFast.from_pretrained("microsoft/udop-large")
+
+        ids = [0, 8986, 32942, 32966, 32554, 32551, 1]
+        decoding = tokenizer_r.decode(ids)
+
+        excepted_decoding = "<pad> paragraph<loc_58><loc_34><loc_446><loc_449></s>"
+
+        assert decoding == excepted_decoding
