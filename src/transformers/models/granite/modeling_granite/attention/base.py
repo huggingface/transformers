@@ -8,8 +8,6 @@ from ..position_embedding import rotate_half
 
 
 class Attention(nn.Module):
-    """Attention class used by all Megatron models"""
-
     def __init__(
         self,
         hidden_size: int,

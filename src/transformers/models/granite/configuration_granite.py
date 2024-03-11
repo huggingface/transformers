@@ -10,7 +10,7 @@ class GraniteConfig(PretrainedConfig):
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
     }
-    model_type = "gpt_megatron"
+    model_type = "granite"
 
     def __init__(
         self,

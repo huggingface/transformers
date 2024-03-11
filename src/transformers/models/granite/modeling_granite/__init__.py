@@ -1,5 +1,5 @@
 """
-Granite classes form the basis for Megatron-based models. The code is derived from GPTBigCode classes.
+Granite classes form the basis for Megatron-based models used by IBM. The code is derived from GPTBigCode classes.
 """
 
 import math
