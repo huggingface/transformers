@@ -3252,6 +3252,28 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             model.generate(input_ids)
             self.assertEqual(len(warning_list), 0)
 
+    def test_length_warning_assisted_generation(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model.config.pad_token_id = tokenizer.eos_token_id
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+
+        # This should not raise any warning that min length is not feasible in candidate generation
+        with warnings.catch_warnings(record=True) as warning_list:
+            model.generate(
+                input_ids,
+                assistant_model=assistant,
+                min_new_tokens=10,
+                max_length=20,
+            )
+            self.assertEqual(len(warning_list), 0)
+
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

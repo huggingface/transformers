@@ -1501,7 +1501,7 @@ class GenerationMixin:
             )
 
             # 12. run assisted generate
-            result = self.assisted_decoding(
+            result = self._assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
