@@ -70,7 +70,9 @@ class GraniteConfig(PretrainedConfig):
 
         # just to test if attention head type and position embedding type is supported
         assert attention_head_type in AttentionHeadType, f"unsupported attention_head_type ({attention_head_type})"
-        assert position_embedding_type in PositionEmbeddingType, f"unsupported position_embedding_type ({position_embedding_type})"
+        assert (
+            position_embedding_type in PositionEmbeddingType
+        ), f"unsupported position_embedding_type ({position_embedding_type})"
 
         # for compatibility with some features
         self.multi_query = attention_head_type == AttentionHeadType.mqa

@@ -2359,9 +2359,9 @@ else:
     _import_structure["models.granite"].extend(
         [
             "GraniteConfig",
-            "GranitePreTrainedModel",
-            "GraniteModel",
             "GraniteForCausalLM",
+            "GraniteModel",
+            "GranitePreTrainedModel",
         ]
     )
     _import_structure["models.graphormer"].extend(
@@ -5296,14 +5296,14 @@ if TYPE_CHECKING:
         GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTNeoXJapaneseConfig,
     )
-    from .models.granite import (
-        GraniteConfig,
-    )
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gptsan_japanese import (
         GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTSanJapaneseConfig,
         GPTSanJapaneseTokenizer,
+    )
+    from .models.granite import (
+        GraniteConfig,
     )
     from .models.graphormer import (
         GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,

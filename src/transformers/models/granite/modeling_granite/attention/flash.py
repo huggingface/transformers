@@ -1,18 +1,14 @@
 from typing import Tuple
 
 import torch
+import torch.nn.functional as F
 
 from ...enums import AttentionHeadType, PositionEmbeddingType
 from .base import Attention
 
-from typing import Tuple
-
-import torch
-import torch.nn.functional as F
 
 try:
     from einops import rearrange
-    from flash_attn.bert_padding import IndexFirstAxis
     from flash_attn.bert_padding import IndexFirstAxis, pad_input
     from flash_attn.flash_attn_interface import flash_attn_varlen_func
 except ImportError:

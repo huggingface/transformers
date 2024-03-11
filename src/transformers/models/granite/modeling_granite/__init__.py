@@ -4,23 +4,33 @@ Granite classes form the basis for Megatron-based models used by IBM. The code i
 
 import math
 import warnings
-from typing import List, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from transformers.generation.configuration_utils import GenerationConfig
+from transformers.generation.logits_process import LogitsProcessorList
+from transformers.generation.stopping_criteria import StoppingCriteriaList
+from transformers.generation.streamers import BaseStreamer
+
+from ....generation.utils import (
+    GenerateBeamDecoderOnlyOutput,
+    GenerateBeamEncoderDecoderOutput,
+    GenerateDecoderOnlyOutput,
+    GenerateEncoderDecoderOutput,
+)
+from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ....modeling_utils import PreTrainedModel
-from .attention import Attention
 from ..configuration_granite import GraniteConfig
 from ..enums import AttentionHeadType, AttentionImplementation, NormalizationImplementation, PositionEmbeddingType
+from .attention import Attention
 from .layer import GraniteBlock
 from .mlp import MLP
 from .normalization import RMSNorm, get_normalization_function
 from .position_embedding import Alibi, RoPE, YaRNScaledRoPE
 from .utils import check_list_type, flatten_and_convert_to_tensors
-from ....modeling_outputs import CausalLMOutputWithCrossAttentions
 
 
 class GranitePreTrainedModel(PreTrainedModel):
@@ -41,9 +51,7 @@ class GranitePreTrainedModel(PreTrainedModel):
     def __init__(self, config: GraniteConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.attention_implementation = AttentionImplementation(
-            kwargs.get("attention_implementation", "sdpa")
-        )
+        self.attention_implementation = AttentionImplementation(kwargs.get("attention_implementation", "sdpa"))
         self.normalization_implementation = NormalizationImplementation(
             kwargs.get("normalization_implementation", "torch")
         )
@@ -187,6 +195,44 @@ class GranitePreTrainedModel(PreTrainedModel):
         return (
             f"attention_implementation = {self.attention_implementation.value}, "
             f"normalization_implementation = {self.normalization_implementation.value}"
+        )
+
+    def generate(
+        self,
+        inputs: torch.Tensor = None,
+        generation_config: GenerationConfig = None,
+        logits_processor: LogitsProcessorList = None,
+        stopping_criteria: StoppingCriteriaList = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
+        synced_gpus: bool = None,
+        assistant_model: PreTrainedModel = None,
+        streamer: BaseStreamer = None,
+        negative_prompt_ids: torch.Tensor = None,
+        negative_prompt_attention_mask: torch.Tensor = None,
+        **kwargs,
+    ) -> Union[
+        GenerateDecoderOnlyOutput,
+        GenerateEncoderDecoderOutput,
+        GenerateBeamDecoderOnlyOutput,
+        GenerateBeamEncoderDecoderOutput,
+        torch.LongTensor,
+    ]:
+        assert (
+            self.attention_implementation != AttentionImplementation.padding_free
+        ), "padding_free attention implementation doesn't support generation"
+
+        return super().generate(
+            inputs,
+            generation_config,
+            logits_processor,
+            stopping_criteria,
+            prefix_allowed_tokens_fn,
+            synced_gpus,
+            assistant_model,
+            streamer,
+            negative_prompt_ids,
+            negative_prompt_attention_mask,
+            **kwargs,
         )
 
 
