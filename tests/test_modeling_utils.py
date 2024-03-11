@@ -1256,6 +1256,26 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(len(logs.output), 1)
             self.assertIn("Your generation config was originally created from the model config", logs.output[0])
 
+    @require_safetensors
+    def test_model_from_pretrained_from_mlx(self):
+        from safetensors import safe_open
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-mistral-mlx")
+        self.assertIsNotNone(model)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            with safe_open(os.path.join(tmp_dir, "model.safetensors"), framework="pt") as f:
+                metadata = f.metadata()
+                self.assertEqual(metadata.get("format"), "pt")
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+
+        input_ids = torch.randint(100, 1000, (1, 10))
+        with torch.no_grad():
+            outputs = model(input_ids)
+            outputs_from_saved = new_model(input_ids)
+            self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
+
 
 @slow
 @require_torch
