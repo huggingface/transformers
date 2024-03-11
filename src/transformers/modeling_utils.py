@@ -504,7 +504,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata.get("format") not in ["pt", "tf", "flax"]:
+        if metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
@@ -795,7 +795,7 @@ def _load_state_dict_into_meta_model(
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
+            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif (
             hf_quantizer is None
             or (not hf_quantizer.requires_parameters_quantization)
@@ -2696,6 +2696,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 [pull request 11471](https://github.com/huggingface/transformers/pull/11471) for more information.
 
                 </Tip>
+            attn_implementation (`str`, *optional*):
+                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
             > Parameters for big model inference
 
@@ -2743,6 +2745,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
                 RAM if the weight of the CPU state dict + the biggest shard of the checkpoint does not fit. Defaults to
                 `True` when there is some disk offload.
+            offload_buffers (`bool`, *optional*):
+                Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
                 bitsandbytes, gptq). There may be other quantization-related kwargs, including `load_in_4bit` and
@@ -2833,6 +2837,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
+        offload_buffers = kwargs.pop("offload_buffers", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
@@ -3552,6 +3557,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "device_map": device_map,
                 "offload_dir": offload_folder,
                 "offload_index": offload_index,
+                "offload_buffers": offload_buffers,
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
