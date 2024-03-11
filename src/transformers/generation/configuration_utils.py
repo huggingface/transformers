@@ -284,15 +284,15 @@ class GenerationConfig(PushToHubMixin):
 
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
-            
-        
+
+
         > Gneration parameters for Pagedattention
 
         num_blocks (`int`, *optional*, defaults to 256):
             The number of blocks in the paged attention mechanism.
         block_size (`int`, *optional*, defaults to 8):
             The size of each block in the paged attention mechanism.
-            
+
 
         > Parameters specific to the caching mechanism:
 
