@@ -33,9 +33,9 @@ if is_torch_available():
 
     from transformers import AutoModelForCausalLM
 
-# for debugging only
-import lovely_tensors as lt
-lt.monkey_patch()
+## for debugging only
+# import lovely_tensors as lt
+# lt.monkey_patch()
 
 @require_torch
 class StreamerTester(unittest.TestCase):
