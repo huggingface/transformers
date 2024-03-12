@@ -197,7 +197,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
             self.assertEqual(os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP")
             self.assertEqual(
-                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], fsdp_config["transformer_layer_cls_to_wrap"]
+                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
             )
             self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"].upper())
             self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
