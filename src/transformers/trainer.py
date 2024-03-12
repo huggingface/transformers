@@ -4094,27 +4094,41 @@ class Trainer:
             self.repo.git_push()
 
     def create_accelerator_and_postprocess(self):
-
         grad_acc_kwargs = {}
         if self.args.accelerator_config.gradient_accumulation_kwargs is not None:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
         if "num_steps" in grad_acc_kwargs:
-            warnings.warn("\"num_steps\" passed in gradient_accumulation_kwargs will be ignored in favour of TrainingArguments.gradient_accumulation_steps.")
-        grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
+            if self.args.gradient_accumulation_steps > 1:
+                # raise because we do not know which setting is intended.
+                raise ValueError(
+                    "AccelerateConfig.gradient_accumulation_kwargs['num_steps'] is specified but TrainingArguments.gradient_accumulation_steps > 1. "
+                    "If the gradient_accumulation_kwargs['num_steps'] is desired, set TrainingArguments.gradient_accumulation_steps == 1."
+                )
+            elif grad_acc_kwargs["num_steps"] > 1 and self.args.gradient_accumulation_steps == 1:
+                # give a warning that grad_acc_kwargs["num_steps"] > 1 will passthrough
+                warnings.warn(
+                    '"num_steps" in AccelerateConfig.gradient_accumulation_kwargs takes precedence over TrainingArguments.gradient_accumulation_steps.'
+                )
+            else:
+                # the case grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps = 1
+                # passthrough without warning
+                pass
+        else:
+            # take the gradient_accumulation_steps setting from TrainingArguments.
+            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
 
         # this is legacy code. Are we sure is a good idea to overwrite without any warning?
-        grad_acc_kwargs["sync_with_dataloader"] = False 
+        grad_acc_kwargs["sync_with_dataloader"] = False
 
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
-        # convert AcceleratorConfig to Accelerator kwargs, but first 
-        # remove the grad accumulation kwargs that should not be passed in 
+        # convert AcceleratorConfig to Accelerator kwargs, but first
+        # remove the grad accumulation kwargs that should not be passed in
         accelerator_config = {
-            k:v for k,v in self.args.accelerator_config.to_dict().items()
-            if k != 'gradient_accumulation_kwargs'
+            k: v for k, v in self.args.accelerator_config.to_dict().items() if k != "gradient_accumulation_kwargs"
         }
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
