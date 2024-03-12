@@ -53,7 +53,7 @@ is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
 
-_CHECKPOINT_FOR_DOC = "ArthurZ/mamba-130m"
+_CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
 _CONFIG_FOR_DOC = "MambaConfig"
 
 MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = []  # See all Mamba models at https://huggingface.co/models?filter=mamba
@@ -605,7 +605,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def _update_model_kwargs_for_generation(
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
-        model_kwargs["cache_params"] = outputs["cache_params"]
+        model_kwargs["cache_params"] = outputs.get("cache_params", None)
         return model_kwargs
 
     def prepare_inputs_for_generation(

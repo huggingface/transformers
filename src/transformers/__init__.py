@@ -1078,6 +1078,7 @@ _import_structure = {
         "is_psutil_available",
         "is_py3nvml_available",
         "is_pyctcdecode_available",
+        "is_sacremoses_available",
         "is_safetensors_available",
         "is_scipy_available",
         "is_sentencepiece_available",
@@ -1092,6 +1093,7 @@ _import_structure = {
         "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
+        "is_torch_xla_available",
         "is_torch_xpu_available",
         "is_vision_available",
         "logging",
@@ -5882,6 +5884,7 @@ if TYPE_CHECKING:
         is_psutil_available,
         is_py3nvml_available,
         is_pyctcdecode_available,
+        is_sacremoses_available,
         is_safetensors_available,
         is_scipy_available,
         is_sentencepiece_available,
@@ -5895,6 +5898,7 @@ if TYPE_CHECKING:
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
+        is_torch_xla_available,
         is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
@@ -9082,7 +9086,7 @@ else:
 
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
-    logger.warning(
+    logger.warning_advice(
         "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
