@@ -325,8 +325,8 @@ def _stop_string_create_embedding_vec(tok_list, tok_indices, stop_strings) -> Di
         tok_list, tok_indices, stop_strings
     )
 
-    max_valid_positions = max([len(val) for positions in token_valid_positions.values() for val in positions.values()])
-    max_valid_end_lens = max([len(val) for positions in token_end_overlaps.values() for val in positions.values()])
+    max_valid_positions = max(len(val) for positions in token_valid_positions.values() for val in positions.values())
+    max_valid_end_lens = max(len(val) for positions in token_end_overlaps.values() for val in positions.values())
     vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
     gather_vec = np.full((len(tok_list), vec_size), dtype=np.int32, fill_value=-1)
 
