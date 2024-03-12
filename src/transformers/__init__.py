@@ -292,6 +292,7 @@ _import_structure = {
         "CodeGenConfig",
         "CodeGenTokenizer",
     ],
+    "models.cohere": ["COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CohereConfig"],
     "models.conditional_detr": [
         "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ConditionalDetrConfig",
@@ -1173,6 +1174,7 @@ else:
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
+    _import_structure["models.cohere"].append("CohereTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
@@ -1816,6 +1818,7 @@ else:
             "CodeGenPreTrainedModel",
         ]
     )
+    _import_structure["models.cohere"].extend(["CohereForCausalLM", "CoherePreTrainedModel"])
     _import_structure["models.conditional_detr"].extend(
         [
             "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5109,6 +5112,7 @@ if TYPE_CHECKING:
         CodeGenConfig,
         CodeGenTokenizer,
     )
+    from .models.cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
     from .models.conditional_detr import (
         CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConditionalDetrConfig,

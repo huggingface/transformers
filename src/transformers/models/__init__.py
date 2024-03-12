@@ -49,6 +49,7 @@ from . import (
     clvp,
     code_llama,
     codegen,
+    cohere,
     conditional_detr,
     convbert,
     convnext,
