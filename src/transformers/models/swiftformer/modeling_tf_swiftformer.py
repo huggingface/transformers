@@ -154,6 +154,9 @@ class TFSwiftFormerDropPath(keras.layers.Layer):
 
     def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
         super().__init__(**kwargs)
+        if config.drop_path_rate > 0.0:
+            raise ValueError("Drop path is not implemented in TF port")
+
         self.drop_prob = config.drop_path_rate
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
