@@ -78,11 +78,14 @@ if is_safetensors_available():
 if TYPE_CHECKING:
     from . import PreTrainedTokenizerBase
 
+logger = logging.get_logger(__name__)
+
 if "TF_USE_LEGACY_KERAS" not in os.environ:
     os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Compatibility fix to make sure tf.keras stays at Keras 2
 elif os.environ["TF_USE_LEGACY_KERAS"] != "1":
-    raise RuntimeError(
-        "Transformers is only compatible with Keras 2, but you have explicitly set " "`TF_USE_LEGACY_KERAS` to `0`."
+    logger.warning(
+        "Transformers is only compatible with Keras 2, but you have explicitly set `TF_USE_LEGACY_KERAS` to `0`. "
+        "This may result in unexpected behaviour or errors if Keras 3 objects are passed to Transformers models."
     )
 
 try:
@@ -100,7 +103,6 @@ except (ModuleNotFoundError, ImportError):
         )
 
 
-logger = logging.get_logger(__name__)
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
