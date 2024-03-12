@@ -184,7 +184,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
-        min_new_tokens = max(self.min_length - new_cur_len, 0)
+        min_new_tokens = min(max_new_tokens, max(self.min_length - new_cur_len, 0))
         if max_new_tokens == 0:
             return input_ids, None
 
