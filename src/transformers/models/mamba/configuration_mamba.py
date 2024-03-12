@@ -12,11 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MAMBA configuration"""
+"""MAMBA configuration"""
+
 import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -142,11 +144,7 @@ class MambaConfig(PretrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.time_step_rank = (
-            math.ceil(self.hidden_size / 16)
-            if time_step_rank == "auto"
-            else time_step_rank
-        )
+        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
         self.time_step_scale = time_step_scale
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
