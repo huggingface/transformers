@@ -278,7 +278,11 @@ class CanonicalHFIndex(HFIndexBase):
         self.dataset_revision = dataset_revision
         logger.info(f"Loading passages from {self.dataset_name}")
         dataset = load_dataset(
-            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset, revision=dataset_revision
+            self.dataset_name,
+            with_index=False,
+            split=self.dataset_split,
+            dummy=self.use_dummy_dataset,
+            revision=dataset_revision,
         )
         super().__init__(vector_size, dataset, index_initialized=False)
 
