@@ -728,6 +728,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         hidden_states = mamba_outputs[0]
 
