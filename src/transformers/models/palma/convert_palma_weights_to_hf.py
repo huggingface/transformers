@@ -242,10 +242,10 @@ def verify_logits(model):
     # First load intermediates given, and test prompt
 
     # all intermediates activations
-    # intermediates_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
-    intermediates_path = "/home/pablo/Downloads/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
-    # cow_on_beach_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/cow_beach_1.png"
-    cow_on_beach_path = "/home/pablo/Downloads/gvhf/cow_beach_1.png"
+    intermediates_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
+    # intermediates_path = "/home/pablo/Downloads/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
+    cow_on_beach_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/cow_beach_1.png"
+    # cow_on_beach_path = "/home/pablo/Downloads/gvhf/cow_beach_1.png"
     intermediates = np.load(intermediates_path)
 
     # These steps mimic what should be taken in the processor - for an image we don't resize (given image is already 224px)
