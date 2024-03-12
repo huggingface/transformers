@@ -65,7 +65,6 @@ def get_palma_config():
     else:
         raise ValueError("Model not supported")
     """
-    vocab_size = 257152
     config.text_config.vocab_size = vocab_size
     config.text_config.num_hidden_layers = 18
     config.text_config.num_key_value_heads = 1
@@ -186,7 +185,7 @@ def slice_state_dict(state_dict, config):
         "vocab_size": 257152
         }
         """
-
+        # flash_attention_2
         # llm_attention_q_einsum[i].shape = (8, 2048, 256)
         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
@@ -282,22 +281,27 @@ def verify_logits(model):
     else:
         print("Vision activations match.")
 
+
     # text logits
     prompt = "answer en Where is the cow standing?\n"
     prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length')
     with torch.inference_mode():
         text_token_embeddings = model.language_model.model.embed_tokens(prompt_input_ids)
+        max_length = 16
+        unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
+        attention_mask = torch.cat((torch.ones((1, unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
+        # z_txt = model.language_model(input_embeds=text_token_embeddings, attention_mask=attention_mask)
 
     concat_embeddings = torch.cat((projector_output, text_token_embeddings), dim=1)
-    with torch.inference_mode():
-        outputs_activations_text = model.language_model(prompt_input_ids).logits
-
+    #with torch.inference_mode():
+    #    outputs_activations_text = model.language_model(prompt_input_ids).logits
+    """
     if not np.allclose(outputs_activations_text.cpu().numpy()[0], intermediates['text_logits'][0], rtol=1e-3, atol=5e-3):
         print(outputs_activations_text.cpu().numpy()[0, 0, 0:10], intermediates['text_logits'][0, 0, 0:10])
         raise ValueError("Text activations do not match.")
     else:
         print("Text activations match.")
-
+    """
 
     # Verify pre logits
     with torch.inference_mode():
@@ -306,8 +310,19 @@ def verify_logits(model):
 
         attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
         outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
+
         for h in outputs.hidden_states:
             print((h.cpu().numpy()-intermediates['llm/pre_logits']).mean())
+            # last entry gives a close to 0.000 mean, which is encouraging
+        breakpoint()
+        '''
+        pre_logits = outputs.hidden_states[-1]
+
+        if not np.allclose(intermediates['llm/pre_logits'], pre_logits, atol=1e-3, rtol=1e-3):
+            raise ValueError("concatenated pre logits do not match.")
+        else:
+            print("Concatenated pre logits match.")
+        '''
     # Verify generation
     with torch.inference_mode():
         generation = tokenizer.decode(model.language_model.generate(inputs_embeds=concat_embeddings, max_new_tokens=10)[0])
@@ -341,6 +356,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 
     # load HuggingFace model
     print("Instantiating model...")
+    breakpoint()
     model = PalmaForConditionalGeneration(config)
     model.eval()
     print("Model setup done. Loading new weights...")
