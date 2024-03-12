@@ -238,7 +238,7 @@ class TFSwiftFormerConvEncoder(keras.layers.Layer):
         self.built = True
         self.layer_scale = self.add_weight(
             name="layer_scale",
-            shape=(self.dim),  # TODO: check this
+            shape=self.dim,
             initializer="ones",
             trainable=True,
         )
@@ -477,13 +477,13 @@ class TFSwiftFormerEncoderBlock(keras.layers.Layer):
 
         self.layer_scale_1 = self.add_weight(
             name="layer_scale_1",
-            shape=(self.dim),
+            shape=self.dim,
             initializer=keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
         self.layer_scale_2 = self.add_weight(
             name="layer_scale_2",
-            shape=(self.dim),
+            shape=self.dim,
             initializer=keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
