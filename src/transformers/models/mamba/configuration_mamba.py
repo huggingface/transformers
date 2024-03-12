@@ -18,7 +18,6 @@ import math
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -54,7 +53,7 @@ class MambaConfig(PretrainedConfig):
             The id of the beginning of sentence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 0):
             The id of the end of sentence token in the vocabulary.
-        expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
+        expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
         conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
@@ -143,7 +142,11 @@ class MambaConfig(PretrainedConfig):
         self.use_conv_bias = use_conv_bias
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.time_step_rank = math.ceil(self.hidden_size / 16) if time_step_rank == "auto" else time_step_rank
+        self.time_step_rank = (
+            math.ceil(self.hidden_size / 16)
+            if time_step_rank == "auto"
+            else time_step_rank
+        )
         self.time_step_scale = time_step_scale
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
@@ -153,4 +156,9 @@ class MambaConfig(PretrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
