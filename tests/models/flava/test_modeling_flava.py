@@ -836,6 +836,7 @@ class FlavaModelTester:
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def test_config(self):
         self.config_tester.run_common_tests()
