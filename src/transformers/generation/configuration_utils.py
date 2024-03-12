@@ -19,7 +19,7 @@ import json
 import os
 import warnings
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -459,7 +459,9 @@ class GenerationConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
-    def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
+    def get_generation_mode(
+        self, assistant_model: Optional["PreTrainedModel"] = None, dola_layers: Optional[List[int]] = None
+    ) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
 

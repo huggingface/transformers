@@ -2321,7 +2321,7 @@ class GenerationMixin:
     def dola_decoding(
         self,
         input_ids: torch.LongTensor,
-        dola_layers: Optional[Union[str, List[int]]] = 'low',
+        dola_layers: Optional[Union[str, List[int]]] = "low",
         relative_top: float = 0.1,
         do_sample: bool = False,
         logits_processor: Optional[LogitsProcessorList] = None,
@@ -2508,10 +2508,16 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
         mature_layer = self.config.num_hidden_layers
-        if isinstance(dola_layers, str) and dola_layers == 'low':
-            candidate_premature_layers = list(range(0, mature_layer//2, 2)) if mature_layer <= 40 else list(range(0, 20, 2))
-        elif isinstance(dola_layers, str) and dola_layers == 'high':
-            candidate_premature_layers = list(range(mature_layer//2, mature_layer, 2)) if mature_layer <= 40 else list(range(mature_layer - 20, mature_layer, 2))
+        if isinstance(dola_layers, str) and dola_layers == "low":
+            candidate_premature_layers = (
+                list(range(0, mature_layer // 2, 2)) if mature_layer <= 40 else list(range(0, 20, 2))
+            )
+        elif isinstance(dola_layers, str) and dola_layers == "high":
+            candidate_premature_layers = (
+                list(range(mature_layer // 2, mature_layer, 2))
+                if mature_layer <= 40
+                else list(range(mature_layer - 20, mature_layer, 2))
+            )
         elif isinstance(dola_layers, list):
             candidate_premature_layers = [i for i in dola_layers if i < mature_layer]
         else:
@@ -2542,7 +2548,9 @@ class GenerationMixin:
             final_logits = outputs.logits[:, -1, :]
             candidate_premature_logits = {}
             for candidate_premature_layer in candidate_premature_layers:
-                candidate_premature_logits[candidate_premature_layer] = self.lm_head(outputs.hidden_states[candidate_premature_layer][:, -1, :])
+                candidate_premature_logits[candidate_premature_layer] = self.lm_head(
+                    outputs.hidden_states[candidate_premature_layer][:, -1, :]
+                )
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
@@ -2558,22 +2566,34 @@ class GenerationMixin:
                 next_token_logits = logits
             else:
                 # 1. Stacking all premature_layers into a new dimension
-                stacked_premature_layers = torch.stack([candidate_premature_logits[i] for i in candidate_premature_layers], dim=0)
+                stacked_premature_layers = torch.stack(
+                    [candidate_premature_logits[i] for i in candidate_premature_layers], dim=0
+                )
 
                 # 2. Calculate the softmax values for mature_layer and all premature_layers
                 softmax_mature_layer = F.softmax(final_logits, dim=-1)  # shape: (batch_size, vocab_size)
-                softmax_premature_layers = F.softmax(stacked_premature_layers, dim=-1)  # shape: (num_premature_layers, batch_size, vocab_size)
+                softmax_premature_layers = F.softmax(
+                    stacked_premature_layers, dim=-1
+                )  # shape: (num_premature_layers, batch_size, vocab_size)
 
                 # 3. Calculate M, the average distribution
-                M = 0.5 * (softmax_mature_layer[None, :, :] + softmax_premature_layers)  # shape: (num_premature_layers, batch_size, vocab_size)
+                M = 0.5 * (
+                    softmax_mature_layer[None, :, :] + softmax_premature_layers
+                )  # shape: (num_premature_layers, batch_size, vocab_size)
 
                 # 4. Calculate log-softmax for the KL divergence
                 log_softmax_mature_layer = F.log_softmax(final_logits, dim=-1)  # shape: (batch_size, vocab_size)
-                log_softmax_premature_layers = F.log_softmax(stacked_premature_layers, dim=-1)  # shape: (num_premature_layers, batch_size, vocab_size)
+                log_softmax_premature_layers = F.log_softmax(
+                    stacked_premature_layers, dim=-1
+                )  # shape: (num_premature_layers, batch_size, vocab_size)
 
                 # 5. Calculate the KL divergences and then the JS divergences
-                kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction='none').mean(-1)  # shape: (num_premature_layers, batch_size)
-                kl2 = F.kl_div(log_softmax_premature_layers, M, reduction='none').mean(-1)  # shape: (num_premature_layers, batch_size)
+                kl1 = F.kl_div(log_softmax_mature_layer[None, :, :], M, reduction="none").mean(
+                    -1
+                )  # shape: (num_premature_layers, batch_size)
+                kl2 = F.kl_div(log_softmax_premature_layers, M, reduction="none").mean(
+                    -1
+                )  # shape: (num_premature_layers, batch_size)
                 js_divs = 0.5 * (kl1 + kl2)  # shape: (num_premature_layers, batch_size)
 
                 # 6. Reduce the batchmean
@@ -2590,7 +2610,7 @@ class GenerationMixin:
                 next_token_logits = logits
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
-            if do_sample: # sample
+            if do_sample:  # sample
                 next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # Store scores, attentions and hidden_states when required
@@ -2613,10 +2633,10 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            if do_sample: # sample
+            if do_sample:  # sample
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-            else: # argmax
+            else:  # argmax
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token
@@ -4685,11 +4705,17 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
     # Return a new object of the inferred class with the concatenated attributes
     return model_output_cls(**concatenated_data)
 
-def relative_top_filter(scores: torch.FloatTensor, relative_top: float = 0.1, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1) -> torch.FloatTensor:
-    '''Reference: https://github.com/XiangLi1999/ContrastiveDecoding/blob/170e9142e92159c1237d731e240f5eb14aabf428/transformers/src/transformers/generation_logits_process.py#L235'''
+
+def relative_top_filter(
+    scores: torch.FloatTensor,
+    relative_top: float = 0.1,
+    filter_value: float = -float("Inf"),
+    min_tokens_to_keep: int = 1,
+) -> torch.FloatTensor:
+    """Reference: https://github.com/XiangLi1999/ContrastiveDecoding/blob/170e9142e92159c1237d731e240f5eb14aabf428/transformers/src/transformers/generation_logits_process.py#L235"""
     scores_normalized = scores.log_softmax(dim=-1)
     sorted_logits, sorted_indices = torch.sort(scores_normalized, descending=True)
-    min_thresh = sorted_logits[..., min_tokens_to_keep-1]
+    min_thresh = sorted_logits[..., min_tokens_to_keep - 1]
     probs_max = torch.max(scores_normalized, dim=-1).values
     probs_thresh = probs_max + np.log(relative_top)
     probs_thresh = torch.min(min_thresh, probs_thresh)
