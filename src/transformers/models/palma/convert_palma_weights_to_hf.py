@@ -259,6 +259,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     items = [] 
 
     for k, v in params.items():
+        print(k)
         new_key = parent_key + sep + k if parent_key else k
 
         if isinstance(v, collections.abc.MutableMapping):
@@ -301,7 +302,7 @@ def verify_logits(model):
         for image in images
     ]
 
-    image_tensor = BatchFeature(data={"pixel_values": images}, tensor_type="pt")
+    image_tensor = BatchFeature(data={"pixel_values": images}, tensor_type="pt").to(device)
 
     with torch.inference_mode():
         vision_outputs = model.vision_model(
@@ -318,7 +319,7 @@ def verify_logits(model):
     # text logits
         
     prompt = "answer en Where is the cow standing?\n"
-    prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length')
+    prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length').to(device)
     with torch.inference_mode():
         text_token_embeddings = model.language_model.model.embed_tokens(prompt_input_ids)
 
@@ -362,13 +363,11 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     config = get_palma_config()
 
     # get checkpoint (move to args)
-    checkpoint_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.bv.params.npz"  # model_name_to_checkpoint[model_name]
+    checkpoint_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.bv.params.npz" 
     # load original state dict
     print("Loading original jax state dict...")
-    breakpoint()
     data = load(checkpoint_path)
     print("State dict loaded. Flattening...")
-    breakpoint()
     state_dict = flatten_nested_dict(data)
     print("Flattened state dict. Starting slice and replace...")
     print(state_dict.keys())
@@ -377,7 +376,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 
     # load HuggingFace model
     print("Instantiating model...")
-    model = PalmaForConditionalGeneration(config).eval()
+    model = PalmaForConditionalGeneration(config).to(device).eval()
     print("Model setup done. Loading new weights...")
     # load jax-imported state dictionary to model
     model.load_state_dict(state_dict_transformers)
