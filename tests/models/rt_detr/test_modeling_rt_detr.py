@@ -50,15 +50,16 @@ class RTDetrModelTester:
         use_labels=True,
         n_targets=3,
         num_labels=10,
+        num_channels=3,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
-        use_timm_backbone=True,
+        use_timm_backbone=False,
         backbone_config=None,
-        num_channels=3,
         backbone="resnet18d",
-        use_pretrained_backbone=True,
+        use_pretrained_backbone=True, 
+        backbone_kwargs=None,       
         # encoder HybridEncoder
         d_model=32,
         encoder_in_channels=[128, 256, 512],
@@ -100,14 +101,15 @@ class RTDetrModelTester:
         self.use_labels = use_labels
         self.n_targets = n_targets
         self.num_labels = num_labels
+        self.num_channels = num_channels
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.d_model = d_model
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
@@ -183,9 +185,9 @@ class RTDetrModelTester:
             batch_norm_eps=self.batch_norm_eps,
             use_timm_backbone=use_timm_backbone,
             backbone_config=resnet_config,
-            num_channels=self.num_channels,
             backbone=None,
             use_pretrained_backbone=False,
+            backbone_kwargs=self.backbone_kwargs,
             d_model=self.d_model,
             encoder_in_channels=hidden_sizes[1:],
             feat_strides=self.feat_strides,
@@ -442,7 +444,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
+                list(hidden_states[1].shape[-2:]),
                 [self.model_tester.image_size // 8, self.model_tester.image_size // 8],
             )
 

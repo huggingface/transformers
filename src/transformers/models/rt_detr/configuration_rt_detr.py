@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -47,18 +48,13 @@ class RTDetrConfig(PretrainedConfig):
             Whether the model use timm backbone.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         backbone (`str`, *optional*, defaults to `"resnet50d"`):
             Type of the backbone based on timm.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weight for backbone model.
-        backbone_kwargs (`dict`, *optional*):
+        backbone_kwargs (`dict`, *optional*, defaults to `{'features_only': True, 'out_indices': (2, 3, 4)}`):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -257,8 +253,14 @@ class RTDetrConfig(PretrainedConfig):
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
+        if backbone_config is None and backbone is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage2", "stage3", "stage4"])
+        else:
+            if isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.pop("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
 
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")

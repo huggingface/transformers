@@ -199,8 +199,6 @@ class RTDetrModelOutput(ModelOutput):
     Base class for outputs of the RTDETR encoder-decoder model.
 
     Args:
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -231,6 +229,8 @@ class RTDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.        
         enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
@@ -247,7 +247,6 @@ class RTDetrModelOutput(ModelOutput):
             Extra dictionary for the denoising related values
     """
 
-    init_reference_points: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
@@ -258,6 +257,7 @@ class RTDetrModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    init_reference_points: torch.FloatTensor = None
     enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
@@ -288,8 +288,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -320,6 +318,8 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.        
         enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the encoder.
         enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
@@ -339,7 +339,6 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    init_reference_points: Optional[Tuple[torch.FloatTensor]] = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_logits: torch.FloatTensor = None
@@ -350,6 +349,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    init_reference_points: Optional[Tuple[torch.FloatTensor]] = None
     enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
@@ -1153,6 +1153,15 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             if hasattr(module, "bias"):
                 module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        # if hasattr(module, "class_embed"):
+        #     prior_prob = 0.01
+        #     bias_value = -math.log((1 - prior_prob) / prior_prob)
+        #     if module.class_embed is not None:
+        #         module.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
+        # if hasattr(module, "bbox_embed"):
+        #     if module.bbox_embed is not None:
+        #         nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
+        #         nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
 
 
 RTDETR_START_DOCSTRING = r"""
@@ -1345,7 +1354,7 @@ class RTDetrHybridEncoder(nn.Module):
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
                 if output_hidden_states:
-                    encoder_states = encoder_states + (hidden_states,)
+                    encoder_states = encoder_states + (hidden_states[enc_ind],)
                 height, width = hidden_states[enc_ind].shape[2:]
                 # flatten [batch, channel, height, width] to [batch, height*width, channel]
                 src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
@@ -1369,7 +1378,7 @@ class RTDetrHybridEncoder(nn.Module):
                     all_attentions = all_attentions + (layer_outputs[1],)
 
             if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+                encoder_states = encoder_states + (hidden_states[enc_ind],)
 
         # broadcasting and fusion
         fpn_feature_maps = [hidden_states[-1]]
@@ -1845,12 +1854,11 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 if value is not None
             )
             dn_outputs = tuple(value for value in [dn_meta] if value is not None)
-            tuple_outputs = (init_reference_points,) + enc_outputs + decoder_outputs + encoder_outputs + dn_outputs
+            tuple_outputs = decoder_outputs + encoder_outputs + (init_reference_points,) + enc_outputs + dn_outputs
 
             return tuple_outputs
 
         return RTDetrModelOutput(
-            init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
@@ -1861,6 +1869,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            init_reference_points=init_reference_points,
             enc_topk_logits=enc_topk_logits,
             enc_topk_bboxes=enc_topk_bboxes,
             enc_outputs_class=enc_outputs_class,
@@ -2226,30 +2235,20 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
-
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
         if config.with_box_refine:
             self.class_embed = _get_clones(self.class_embed, num_pred)
             self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
             # hack implementation for iterative bounding box refinement
             self.model.decoder.bbox_embed = self.bbox_embed
         else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
             self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
 
         self.model.decoder.bbox_embed = self.bbox_embed
         # hack implementation for two-stage
         self.model.decoder.class_embed = self.class_embed
-        for box_embed in self.bbox_embed:
-            nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2353,8 +2352,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         dn_meta = outputs.dn_meta if return_dict else outputs[-1]
 
-        outputs_class = outputs.intermediate_logits if return_dict else outputs[3]
-        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[4]
+        outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
+        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
 
         if self.training and dn_meta is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, dn_meta["dn_num_split"], dim=2)
@@ -2410,7 +2409,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
-            init_reference_points=outputs.init_reference_points,
             last_hidden_state=outputs.last_hidden_state,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_logits=outputs.intermediate_logits,
@@ -2421,6 +2419,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            init_reference_points=outputs.init_reference_points,
             enc_topk_logits=outputs.enc_topk_logits,
             enc_topk_bboxes=outputs.enc_topk_bboxes,
             enc_outputs_class=outputs.enc_outputs_class,
