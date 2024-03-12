@@ -19,9 +19,8 @@ Processor class for IDEFICS2.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import is_valid_image
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType
 
@@ -51,20 +50,21 @@ def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_
         image_token (`str`): The image token.
         fake_image_token (`str`): The fake image token.
     """
-    s = f"{bos_token}"
+    input_strings = []
+    input_strings.append(f"{bos_token}")
     open_image_tag = False
     for elem in prompt:
         if is_valid_image(elem):
-            s += f"{fake_image_token}{image_token * image_seq_len}"
+            input_strings.append(f"{fake_image_token}{image_token * image_seq_len}")
             open_image_tag = True
         else:
             if open_image_tag:
-                s += f"{fake_image_token}"
+                input_strings.append(f"{fake_image_token}")
                 open_image_tag = False
-            s += elem
+            input_strings.append(elem)
     if open_image_tag:
-        s += f"{fake_image_token}"
-    return s
+        input_strings.append(f"{fake_image_token}")
+    return "".join(input_strings)
 
 
 class Idefics2Processor(ProcessorMixin):
@@ -99,11 +99,8 @@ class Idefics2Processor(ProcessorMixin):
         self.image_token = "<image>"
         self.image_seq_len = image_seq_len
 
-        tokens_to_add = [
-            AddedToken(self.fake_image_token, lstrip=True, rstrip=False, normalized=False),
-            AddedToken(self.image_token, lstrip=True, rstrip=False, normalized=False),
-        ]
-        tokenizer.add_tokens(tokens_to_add)
+        tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}
+        tokenizer.add_special_tokens(tokens_to_add)
 
         bad_words_ids = tokenizer.convert_tokens_to_ids([self.image_token, self.fake_image_token])
         self.bad_words_ids = [[id_] for id_ in bad_words_ids]
@@ -112,7 +109,7 @@ class Idefics2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        prompts: Union[List[TextInput], List[List[TextInput]]],
+        prompts: Union[List[Union[TextInput, ImageInput]], List[List[Union[TextInput, ImageInput]]]],
         image_seq_len: Optional[int] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -122,11 +119,17 @@ class Idefics2Processor(ProcessorMixin):
         """ """
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
-        if not isinstance(prompts, list):
+        if not isinstance(prompts, list) and isinstance(prompts, (TextInput, ImageInput)):
             prompts = [[prompts]]
 
         elif isinstance(prompts, list) and not isinstance(prompts[0], list):
             prompts = [prompts]
+
+        else:
+            raise ValueError(
+                "Invalid input prompts. Please provide a string or image, a list of strings and images or "
+                "a list of list of strings and images."
+            )
 
         # Build the string from the input prompt and image tokens
         prompt_strings = [

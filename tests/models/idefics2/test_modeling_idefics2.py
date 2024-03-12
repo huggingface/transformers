@@ -270,7 +270,6 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_integration_test(self):
-        torch_device = "cuda"
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "amyeroberts/idefics2",
             torch_dtype=torch.bfloat16,
@@ -314,7 +313,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2", load_in_4bit=True)
+        model = Idefics2ForConditionalGeneration.from_pretrained("amyeroberts/idefics2", load_in_4bit=True)
 
         # Create pixel inputs
         image1 = Image.open(
