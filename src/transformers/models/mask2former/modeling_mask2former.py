@@ -2011,7 +2011,7 @@ class Mask2FormerMaskPredictor(nn.Module):
             or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
         )
         # Sum up over the channels
-        if is_tracing and not is_torch_greater_or_equal_than_2_1():
+        if is_tracing and not is_torch_greater_or_equal_than_2_1:
             # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
             batch_size, num_queries, num_channels = mask_embeddings.shape
             _, _, height, width = pixel_embeddings.shape

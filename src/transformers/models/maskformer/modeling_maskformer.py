@@ -1777,7 +1777,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             # get the masks
             mask_embeddings = self.mask_embedder(stacked_transformer_decoder_outputs)
 
-            if is_tracing and not is_torch_greater_or_equal_than_2_1():
+            if is_tracing and not is_torch_greater_or_equal_than_2_1:
                 # Equivalent to einsum('lbqc, bchw -> lbqhw') but jit friendly
                 num_embeddings, batch_size, num_queries, num_channels = mask_embeddings.shape
                 _, _, height, width = pixel_embeddings.shape
@@ -1804,7 +1804,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             mask_embeddings = self.mask_embedder(transformer_decoder_hidden_states)
             # sum up over the channels
 
-            if is_tracing and not is_torch_greater_or_equal_than_2_1():
+            if is_tracing and not is_torch_greater_or_equal_than_2_1:
                 # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
                 batch_size, num_queries, num_channels = mask_embeddings.shape
                 _, _, height, width = pixel_embeddings.shape
