@@ -1051,7 +1051,7 @@ def main():
     if not os.path.isdir(os.path.join(training_args.output_dir)):
         os.makedirs(os.path.join(training_args.output_dir), exist_ok=True)
 
-    def save_ckpt(ckpt_dir: str, commit_msg: str):
+    def save_ckpt(ckpt_dir: str, commit_msg: str = ""):
         """save checkpoints and push to Hugging Face Hub if specified"""
 
         # save checkpoint after each epoch and push checkpoint to the hub

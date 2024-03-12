@@ -10,7 +10,7 @@ from accelerate import Accelerator, DistributedType
 from accelerate.utils import ProjectConfiguration
 from arguments import TrainingArguments
 from datasets import load_dataset
-from huggingface_hub import HfApi
+from huggingface_hub import Repository
 from torch.optim import AdamW
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
@@ -204,14 +204,17 @@ args = Namespace(**vars(args), **acc_state)
 samples_per_step = accelerator.state.num_processes * args.train_batch_size
 set_seed(args.seed)
 
+# Clone model repository
+if accelerator.is_main_process:
+    hf_repo = Repository(args.save_dir, clone_from=args.model_ckpt)
+
 # Logging
 logger, run_name = setup_logging(args)
 logger.info(accelerator.state)
 
 # Checkout new branch on repo
 if accelerator.is_main_process:
-    api = HfApi()
-    api.create_branch(branch=run_name, repo_id=args.model_ckpt, create_branch_ok=True)
+    hf_repo.git_checkout(run_name, create_branch_ok=True)
 
 # Load model and tokenizer
 model = AutoModelForCausalLM.from_pretrained(args.save_dir)
@@ -307,7 +310,7 @@ for step, batch in enumerate(train_dataloader, start=1):
         save_dir = os.path.join(args.save_dir, f"step_{step}")
         accelerator.save_state(save_dir)
         if accelerator.is_main_process:
-            api.upload_folder(commit_message=f"step {step}", repo_id=args.model_ckpt, folder_path=args.save_dir)
+            hf_repo.push_to_hub(commit_message=f"step {step}")
         model.train()
     if completed_steps >= args.max_train_steps:
         break
@@ -322,4 +325,4 @@ unwrapped_model.save_pretrained(args.save_dir, save_function=accelerator.save)
 save_dir = os.path.join(args.save_dir, f"step_{step}")
 accelerator.save_state(save_dir)
 if accelerator.is_main_process:
-    api.upload_folder(commit_message="final model", repo_id=args.model_ckpt, folder_path=args.save_dir)
+    hf_repo.push_to_hub(commit_message="final model")
