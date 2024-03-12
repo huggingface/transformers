@@ -39,13 +39,17 @@ Inference support for AQLM is realised in the `aqlm` library. Make sure to insta
 pip install aqlm[gpu,cpu]
 ```
 
-The library provides efficient kernels for both GPU and CPU inference.
+The library provides efficient kernels for both GPU and CPU inference and training.
 
 The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM).
 
+### PEFT
+
+Starting with version `aqlm 1.0.2`, AQLM supports Parameter-Efficient Fine-Tuning in a form of [LoRA](https://huggingface.co/docs/peft/package_reference/lora) integrated into the [PEFT](https://huggingface.co/blog/peft) library.
+
 ### AQLM configurations
 
-AQLM quantization setpus vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
+AQLM quantization setups vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
  
 | Kernel | Number of codebooks | Codebook size, bits | Notation | Accuracy | Speedup     | Fast GPU inference | Fast CPU inference |
 |---|---------------------|---------------------|----------|-------------|-------------|--------------------|--------------------|
@@ -191,6 +195,45 @@ The parameter `modules_to_fuse` should include:
 
 </hfoption>
 </hfoptions>
+
+### Exllama-v2 support
+
+Recent versions of `autoawq` supports exllama-v2 kernels for faster prefill and decoding. To get started, first install the latest version of `autoawq` by running:
+
+```bash
+pip install git+https://github.com/casper-hansen/AutoAWQ.git
+```
+
+Get started by passing an `AwqConfig()` with `version="exllama"`.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
+
+quantization_config = AwqConfig(version="exllama")
+
+model = AutoModelForCausalLM.from_pretrained(
+    "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
+    quantization_config=quantization_config,
+    device_map="auto",
+)
+
+input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cuda")
+output = model(input_ids)
+print(output.logits)
+
+tokenizer = AutoTokenizer.from_pretrained("TheBloke/Mistral-7B-Instruct-v0.1-AWQ")
+input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(model.device)
+output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=50256)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+<Tip warning={true}>
+
+Note this feature is supported on AMD GPUs.
+
+</Tip>
+
 
 ## AutoGPTQ
 

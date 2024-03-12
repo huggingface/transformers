@@ -123,9 +123,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         model_inputs.update(image_features)
         return model_inputs
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, **generate_kwargs):
         if self.model.can_generate():
-            model_outputs = self.model.generate(**model_inputs)
+            model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)
         return model_outputs

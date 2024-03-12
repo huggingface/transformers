@@ -178,6 +178,13 @@ else:
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "gemma",
+                (
+                    "GemmaTokenizer" if is_sentencepiece_available() else None,
+                    "GemmaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -226,6 +233,7 @@ else:
             ("luke", ("LukeTokenizer", None)),
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
+            ("mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             (
                 "mbart",
@@ -392,6 +400,7 @@ else:
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
             ("stablelm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("starcoder2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "switch_transformers",
                 (
@@ -410,6 +419,13 @@ else:
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             ("tvp", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "udop",
+                (
+                    "UdopTokenizer" if is_sentencepiece_available() else None,
+                    "UdopTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "umt5",
                 (

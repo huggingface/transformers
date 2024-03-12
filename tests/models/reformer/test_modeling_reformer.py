@@ -687,12 +687,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def test_left_padding_compatibility(self):
         pass
 
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
 
 @require_torch
 class ReformerLSHAttnModelTest(
@@ -852,12 +846,6 @@ class ReformerLSHAttnModelTest(
 
     @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
-        pass
-
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
         pass
 
 
