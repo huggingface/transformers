@@ -1741,15 +1741,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
 
         if return_dict is None and tokenize:
-            logger.warning_once(
-                "In version 4.40, `return_dict` will be set to `True` by default. "
-                "Please explicitly set `return_dict` to `False` to maintain the current behaviour, "
-                "or set it to `True` to get the new behaviour immediately."
-            )
             return_dict = False
 
         if return_dict and not tokenize:
-            raise ValueError("`return_dict=True` is incompatible with `tokenize=False`")
+            raise ValueError(
+                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
+                "of tokenizer outputs to return."
+            )
 
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
@@ -1775,7 +1773,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(chat, "messages"):
                 # Indicates it's a Conversation object
                 chat = chat.messages
-            rendered_chat = compiled_template.render(messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map)
+            rendered_chat = compiled_template.render(
+                messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
+            )
             rendered.append(rendered_chat)
 
         if not is_batched:
