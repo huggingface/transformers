@@ -716,6 +716,7 @@ class MambaClassificationHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.activation = ACT2FN[config.hidden_act]
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
@@ -726,7 +727,7 @@ class MambaClassificationHead(nn.Module):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
-        x = ACT2FN[self.config.hidden_act](x)
+        x = self.activation(x)
         x = self.dropout(x)
         x = self.out_proj(x)
         return x

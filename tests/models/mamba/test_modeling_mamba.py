@@ -35,6 +35,7 @@ if is_torch_available():
 
     from transformers import (
         MambaForCausalLM,
+        MambaForSequenceClassification,
         MambaModel,
     )
     from transformers.models.mamba.modeling_mamba import MambaCache
@@ -135,6 +136,7 @@ class MambaModelTester:
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
             tie_word_embeddings=self.tie_word_embeddings,
+            hidden_dropout_prob=self.hidden_dropout_prob,
         )
 
     def get_pipeline_config(self):
@@ -178,6 +180,15 @@ class MambaModelTester:
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_for_sequence_classification(self, config, input_ids, *args):
+        config.num_labels = self.num_labels
+        model = MambaForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        result = model(input_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_state_equivalency(self, config, input_ids, *args):
         model = MambaModel(config=config)
@@ -226,7 +237,7 @@ class MambaModelTester:
 )
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
+    all_model_classes = (MambaModel, MambaForCausalLM, MambaForSequenceClassification) if is_torch_available() else ()
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
@@ -235,7 +246,13 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_head_masking = False  # Mamba does not have attention heads
     test_model_parallel = False
     pipeline_model_mapping = (
-        {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": MambaModel,
+            "text-generation": MambaForCausalLM,
+            "text-classification": MambaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
@@ -305,6 +322,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_mamba_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causl_lm(*config_and_inputs)
+
+    def test_model_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
