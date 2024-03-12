@@ -2341,7 +2341,7 @@ class GenerationMixin:
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
         Generates sequences of token ids for models with a language modeling head using **dola decoding** and
-        can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        can be used for decoder-only text models.
         The method is based on the paper "DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models" (https://arxiv.org/abs/2309.03883) in ICLR 2024.
 
         <Tip warning={true}>
@@ -2456,7 +2456,7 @@ class GenerationMixin:
         ... )
 
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today is a beautiful day, and we must do everything possible to make it a day of celebration.']
+        ['Today is a beautiful day, and you\'re welcome to enjoy it!"\n\nAfterwards, she']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -2508,11 +2508,11 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
         mature_layer = self.config.num_hidden_layers
-        if type(dola_layers) == str and dola_layers == 'low':
+        if isinstance(dola_layers, str) and dola_layers == 'low':
             candidate_premature_layers = list(range(0, mature_layer//2, 2)) if mature_layer <= 40 else list(range(0, 20, 2))
-        elif type(dola_layers) == str and dola_layers == 'high':
+        elif isinstance(dola_layers, str) and dola_layers == 'high':
             candidate_premature_layers = list(range(mature_layer//2, mature_layer, 2)) if mature_layer <= 40 else list(range(mature_layer - 20, mature_layer, 2))
-        elif type(dola_layers) == list:
+        elif isinstance(dola_layers, list):
             candidate_premature_layers = [i for i in dola_layers if i < mature_layer]
         else:
             raise ValueError("dola_layers must be either 'low', 'high' or a list of integers.")

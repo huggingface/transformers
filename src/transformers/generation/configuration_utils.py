@@ -505,6 +505,16 @@ class GenerationConfig(PushToHubMixin):
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample."
                 )
+
+        # DoLa generation may extend some generation modes
+        if dola_layers is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.DOLA_GENERATION
+            else:
+                raise ValueError(
+                    "You've set `dola_layers`, which triggers DoLa generate. Currently, DoLa generate "
+                    "is only supported with Greedy Search and Sample."
+                )
         return generation_mode
 
     def validate(self, is_init=False):
