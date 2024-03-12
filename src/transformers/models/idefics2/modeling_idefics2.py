@@ -693,13 +693,13 @@ class Idefics2VisionTransformer(nn.Module):
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
-            attention_mask=None
+            attention_mask = None
         else:
             attention_mask = (
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
                 if not self.config._flash_attn_2_enabled
                 else patch_attention_mask
-            )        
+            )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -2192,6 +2192,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_usable_length(seq_length)
 
+        if inputs_embeds is not None and input_ids is None and past_key_values_length == 0:
+            raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
+
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
@@ -2421,16 +2424,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
 
         if getattr(self.config, "tie_word_embeddings", True):
             output_embeddings.weight = input_embeddings.weight
-            if input_embeddings.num_additional_embeddings > 0:
-                assert output_embeddings.out_additional_features == input_embeddings.num_additional_embeddings
-                output_embeddings.additional_fc.weight = input_embeddings.additional_embedding.weight
-
-        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
-            output_embeddings.out_features = input_embeddings.num_embeddings
-            if hasattr(output_embeddings, "out_additional_features") and hasattr(
-                input_embeddings, "num_additional_embeddings"
-            ):
-                output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
     @add_start_docstrings_to_model_forward(IDEFICS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
