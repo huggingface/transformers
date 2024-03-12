@@ -573,7 +573,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 raise ValueError("You have to specify pixel_values")
 
             encoder_outputs = self.encoder(
-                pixel_values,
+                pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,

@@ -279,6 +279,10 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_determinism(self):
         pass
 
+    @unittest.skip("randomly selects U keys while calculating attentions")
+    def test_batching_equivalence(self):
+        pass
+
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )

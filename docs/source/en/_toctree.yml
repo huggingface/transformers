@@ -73,6 +73,8 @@
       title: Depth estimation
     - local: tasks/image_to_image
       title: Image-to-Image
+    - local: tasks/image_feature_extraction
+      title: Image Feature Extraction
     - local: tasks/mask_generation
       title: Mask Generation
     - local: tasks/knowledge_distillation_for_image_classification
@@ -396,6 +398,8 @@
         title: M2M100
       - local: model_doc/madlad-400
         title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -482,6 +486,8 @@
         title: SqueezeBERT
       - local: model_doc/stablelm
         title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
       - local: model_doc/switch_transformers
         title: SwitchTransformers
       - local: model_doc/t5
@@ -766,6 +772,8 @@
         title: TVLT
       - local: model_doc/tvp
         title: TVP
+      - local: model_doc/udop
+        title: UDOP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava
