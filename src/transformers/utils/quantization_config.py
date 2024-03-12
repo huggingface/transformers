@@ -24,12 +24,17 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_torch_available, logging
+from ..utils import is_hqq_available, is_auto_awq_available, is_torch_available, logging
 
 
 if is_torch_available():
     import torch
 
+if is_hqq_available():
+    from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+    hqq_default_config = HQQBaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False)
+else:
+    hqq_default_config = None
 
 logger = logging.get_logger(__name__)
 
@@ -181,16 +186,31 @@ class QuantizationConfigMixin:
 
 @dataclass
 class HQQConfig(QuantizationConfigMixin):
+    """
+    Main HQQConfig.
+
+    Args:
+        quant_config (`HQQBaseQuantizeConfig, Dict[HQQBaseQuantizeConfig]`):
+            Dictionaries used for detailed quantization config. If it's a single HQQBaseQuantizeConfig, linear layers will the same config.
+            If the dictionary contains linear tags, each linear tag will use the corresponding config
+        skip_modules (List[str])::
+            nn,Linear layers to skip.
+        show_progress (bool):
+            Show tqdm quantization for each shard
+        kwargs (`Dict[str, Any]`):
+            Additional parameters from which to initialize the configuration object.
+    """
     def __init__(
         self,
-        quant_config=None, #TODO: make default value
+        quant_config=hqq_default_config,
+        skip_modules=["lm_head"], 
+        show_progress=True,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.HQQ 
-
-        #TODO: convert inputs to quant_config 
-
-        self.quant_config = quant_config
+        self.quant_config  = quant_config
+        self.skip_modules  = skip_modules
+        self.show_progress = show_progress
 
         self.post_init()
 
@@ -198,14 +218,13 @@ class HQQConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        # TODO: implement post_init checks
+        pass
 
 
     def is_quantizable(self):
         r"""
         Returns `True` if the model is quantizable, `False` otherwise.
         """
-        # TODO: check if quantizable 
         return True
 
 
@@ -241,8 +260,6 @@ class HQQConfig(QuantizationConfigMixin):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
-
-
 
 
 

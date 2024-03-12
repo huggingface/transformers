@@ -18,7 +18,7 @@ from ..utils import _LazyModule
 
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
-    "hqq": ["replace_with_hqq_linear"],
+    "hqq": ["prepare_for_hqq_linear"],
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
