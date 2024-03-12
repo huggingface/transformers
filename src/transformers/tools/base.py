@@ -100,7 +100,7 @@ class ToolMeta(type):
         return super().__new__(cls, name, bases, dct)
 
 
-class Tool(metaclass=ToolMeta):
+class Tool():
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
     following class attributes:
@@ -361,6 +361,7 @@ class Tool(metaclass=ToolMeta):
                 create_pr=create_pr,
                 repo_type="space",
             )
+            
 
     @staticmethod
     def from_gradio(gradio_tool):
@@ -376,6 +377,36 @@ class Tool(metaclass=ToolMeta):
 
         GradioToolWrapper.__call__ = gradio_tool.run
         return GradioToolWrapper(gradio_tool)
+    
+
+    @staticmethod
+    def from_langchain(langchain_tool):
+        """
+        Creates a [`Tool`] from a langchain tool.
+        """
+        class LangChainToolWrapper(Tool):
+            def __init__(self, _langchain_tool):
+                super().__init__()
+                self.name = _langchain_tool.name
+                self.description = _langchain_tool.description
+                self.inputs = parse_langchain_args(_langchain_tool.args)
+                self.output_type = str
+                self.langchain_tool = _langchain_tool
+
+            def __call__(self, *args, **kwargs):
+                # This lets the user type args either as kwargs or positional arguments
+                for index,argument in enumerate(args):
+                    if index<len(self.inputs):
+                        input_key = next(iter(self.inputs))
+                        kwargs[input_key] = argument
+                
+                tool_input = {}
+                for key, value in kwargs.items():
+                    tool_input[key] = value
+
+                return self.langchain_tool.run(tool_input)
+
+        return LangChainToolWrapper(langchain_tool)
 
 
 DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
@@ -840,34 +871,3 @@ def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
         if 'title' in arg_details:
             arg_details.pop("title")
     return inputs
-
-class ConvertedTool(Tool):
-    description =""
-    name =""
-    inputs={}
-    output_type=str
-    langchain_tool=None
-    
-    def __init__(self,langchain_tool):
-        description = langchain_tool.description
-        name = langchain_tool.name
-        inputs = parse_langchain_args(langchain_tool.args)
-        output_type = str
-        langchain_tool=langchain_tool
-
-    def __call__(self, *args, **kwargs):
-        # This lets the user type args either as kwargs or positional arguments
-        for index,argument in enumerate(args):
-            if index<len(self.inputs):
-                input_key = next(iter(self.inputs))
-                kwargs[input_key] = argument
-
-        tool_input = {}
-        for key, value in kwargs.items():
-            tool_input[key] = value
-
-        return self.langchain_tool.run(tool_input)
-
-
-def from_langchain(langchain_tool):
-    return ConvertedTool(langchain_tool)

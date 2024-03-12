@@ -15,11 +15,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-import numexpr
 from .base import Tool
 
 
 class CalculatorTool(Tool):
+    try:
+        import numexpr
+    except ImportError:
+        raise ImportError("Please install numexpr to use this tool.")
+    
     name = "calculator"
     description = "This is a tool that calculates. It can be used to perform simple arithmetic operations."
 
