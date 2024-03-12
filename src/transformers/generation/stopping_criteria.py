@@ -151,11 +151,11 @@ class StopStringCriteria(StoppingCriteria):
             stop_strings = [stop_strings]
 
         self.vocab = tokenizer.get_vocab()
-        self.tok_list, self.tok_indices = tuple(self.vocab.keys()), tuple(self.vocab.values())
+        self.token_list, self.tok_indices = tuple(self.vocab.keys()), tuple(self.vocab.values())
         self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
 
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = _stop_string_create_embedding_vec(
-            self.tok_list, self.tok_indices, self.stop_strings
+            self.token_list, self.tok_indices, self.stop_strings
         )
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
@@ -270,7 +270,7 @@ def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_leng
 
 
 def _stop_string_get_matching_positions(
-    tok_list, tok_indices, stop_strings
+    token_list, tok_indices, stop_strings
 ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
     """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
     validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
@@ -284,14 +284,14 @@ def _stop_string_get_matching_positions(
             token = token[2:]
         return token
 
-    reversed_filtered_tok_list = [_cleanup_token(token)[::-1] for token in tok_list]
+    reversed_filtered_token_list = [_cleanup_token(token)[::-1] for token in token_list]
     token_valid_positions = {}
     token_end_overlaps = {}
     for stop_string in stop_strings:
         reversed_stop_string = stop_string[::-1]
         token_valid_positions[stop_string] = {}
         token_end_overlaps[stop_string] = {}
-        for token, reversed_filtered_token, tok_idx in zip(tok_list, reversed_filtered_tok_list, tok_indices):
+        for token, reversed_filtered_token, tok_idx in zip(token_list, reversed_filtered_token_list, tok_indices):
             matching_positions = []
             possible_end_lengths = []
             for i in range(1 - len(token), len(stop_string)):
@@ -315,20 +315,20 @@ def _stop_string_get_matching_positions(
 
 
 @lru_cache(8)
-def _stop_string_create_embedding_vec(tok_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
+def _stop_string_create_embedding_vec(token_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
     """
     This function builds an embedding matrix for each stop string, consisting of possible valid positions
     and possible end lengths for each token, and the total length of the token string. When tokens have
     fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
     """
     token_valid_positions, token_end_overlaps = _stop_string_get_matching_positions(
-        tok_list, tok_indices, stop_strings
+        token_list, tok_indices, stop_strings
     )
 
     max_valid_positions = max(len(val) for positions in token_valid_positions.values() for val in positions.values())
     max_valid_end_lens = max(len(val) for positions in token_end_overlaps.values() for val in positions.values())
     vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
-    gather_vec = np.full((len(tok_list), vec_size), dtype=np.int32, fill_value=-1)
+    gather_vec = np.full((len(token_list), vec_size), dtype=np.int32, fill_value=-1)
 
     for i, stop_string in enumerate(stop_strings):
         positions = token_valid_positions[stop_string]
@@ -348,7 +348,7 @@ def _stop_string_create_embedding_vec(tok_list, tok_indices, stop_strings) -> Di
                 + max_valid_end_lens * i
                 + len(possible_end_lens),
             ] = possible_end_lens
-        for token, token_idx in zip(tok_list, tok_indices):
+        for token, token_idx in zip(token_list, tok_indices):
             gather_vec[token_idx, -1] = len(token)
 
     gather_vec = torch.tensor(gather_vec, dtype=torch.int32)
