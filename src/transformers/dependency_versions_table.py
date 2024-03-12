@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
-    "accelerate": "accelerate>=0.21.0",
+    "accelerate": "accelerate>=0.26.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "codecarbon": "codecarbon==1.2.0",
