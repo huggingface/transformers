@@ -58,8 +58,8 @@ class RTDetrModelTester:
         use_timm_backbone=False,
         backbone_config=None,
         backbone="resnet18d",
-        use_pretrained_backbone=True, 
-        backbone_kwargs=None,       
+        use_pretrained_backbone=True,
+        backbone_kwargs=None,
         # encoder HybridEncoder
         d_model=32,
         encoder_in_channels=[128, 256, 512],

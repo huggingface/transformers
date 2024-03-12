@@ -230,7 +230,7 @@ class RTDetrModelOutput(ModelOutput):
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.        
+            Initial reference points sent through the Transformer decoder.
         enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
@@ -319,7 +319,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.        
+            Initial reference points sent through the Transformer decoder.
         enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the encoder.
         enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
