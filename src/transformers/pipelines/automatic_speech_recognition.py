@@ -496,6 +496,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             else:
                 generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
 
+            # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
+            if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
+                generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
+
             tokens = self.model.generate(
                 attention_mask=attention_mask,
                 **generate_kwargs,

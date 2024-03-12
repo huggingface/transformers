@@ -181,6 +181,11 @@ class ImageToTextPipeline(Pipeline):
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
         #  in the `_prepare_model_inputs` method.
         inputs = model_inputs.pop(self.model.main_input_name)
+
+        # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
+        if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
+            generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
+
         model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
         return model_outputs
 

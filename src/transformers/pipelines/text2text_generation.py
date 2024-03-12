@@ -188,6 +188,11 @@ class Text2TextGenerationPipeline(Pipeline):
             generate_kwargs.get("min_length", self.model.config.min_length),
             generate_kwargs.get("max_length", self.model.config.max_length),
         )
+
+        # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
+        if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
+            generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
+
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":
