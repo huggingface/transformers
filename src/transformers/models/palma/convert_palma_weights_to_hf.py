@@ -65,13 +65,20 @@ def get_palma_config():
     else:
         raise ValueError("Model not supported")
     """
-    vocab_size = 257152
     config.text_config.vocab_size = vocab_size
     config.text_config.num_hidden_layers = 18
-    config.text_config.num_key_value_heads = 1 
+    config.text_config.num_key_value_heads = 1
     config.text_config.head_dim = 256
     config.text_config.hidden_size = 2048
     return config
+
+
+def numpy_adapted_permute(w, num_heads, head_dim, hidden_size):
+    #reshaped = w.transpose(0, 2, 1).reshape(num_heads, head_dim, hidden_size).reshape(hidden_size, hidden_size)
+    #permuted = reshaped.reshape(num_heads, -1, 2, hidden_size).transpose(0, 2, 1, 3).reshape(hidden_size, hidden_size)
+
+    interleaved = np.transpose(w, (1, 0, 2)).reshape(-1, num_heads * head_dim)
+    return interleaved
 
 
 def slice_state_dict(state_dict, config):
@@ -105,7 +112,6 @@ def slice_state_dict(state_dict, config):
     encoderblock_attention_0_query_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/query/bias")
     encoderblock_attention_0_out_kernel = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/kernel")
     encoderblock_attention_0_out_bias = state_dict.pop("img/Transformer/encoderblock/MultiHeadDotProductAttention_0/out/bias")
-
 
     for i in range(config.vision_config.num_hidden_layers):
         state_dict[f"vision_model.encoder.layers.{i}.layer_norm1.weight"] = encoderblock_layernorm0_scale[i].transpose()
@@ -155,9 +161,6 @@ def slice_state_dict(state_dict, config):
     llm_post_attention_layernorm = state_dict.pop("llm/layers/pre_ffw_norm/scale")
 
     for i in range(config.text_config.num_hidden_layers):
-        # not transposing anything ==> close early logits, wrong others
-        # transpose q after reshape ==> close early logits, meaningless after
-        # 
         """
         GemmaConfig {
         "attention_bias": false,
@@ -182,27 +185,11 @@ def slice_state_dict(state_dict, config):
         "vocab_size": 257152
         }
         """
-
+        # flash_attention_2
         # llm_attention_q_einsum[i].shape = (8, 2048, 256)
-        # q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        
-        # Query permutations
-        
-        # with o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(0, 1, 2).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # first 10 logits: [  -8.888214    -1.1660166 -261.9         -8.905804    -0.6377907 -8.845684    -8.921371    -9.267902    -8.782795    -8.922642 ]
         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
-        # with o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(0, 1, 2).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # first 10 logits : [  -8.888214    -1.1660166 -261.9 -8.905804    -0.6377907-8.845684    -8.921371    -9.267902    -8.782795    -8.922642 ]
-        # q_proj_weight_reshaped = llm_attention_q_einsum[i].reshape(config.text_config.num_attention_heads, config.text_config.head_dim, config.text_config.hidden_size).transpose((2, 0, 1)).reshape(config.text_config.hidden_size, config.text_config.num_attention_heads * config.text_config.head_dim)
-
-        # with o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(0, 1, 2).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # first 10 logits : [  -8.888214    -1.1660166 -261.9         -8.905804    -0.6377907 -8.845684    -8.921371    -9.267902    -8.782795    -8.922642 ]
-        # q_proj_weight_reshaped = llm_attention_q_einsum[i].reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-
         state_dict[f"language_model.model.layers.{i}.self_attn.q_proj.weight"] = q_proj_weight_reshaped
-
-        # Key and value permutations - simple transposition
 
         # llm_attention_kv_einsum[i, 0, 0].shape = (2048, 256)
         k_proj_weight_reshaped = llm_attention_kv_einsum[i, 0, 0].transpose()
@@ -214,27 +201,7 @@ def slice_state_dict(state_dict, config):
         # output projection.
 
         # llm_attention_attn_vec_einsum[i].shape = (8, 256, 2048)
-
-
-        # with         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # logits are [-17.128052   -3.7449627 -50.946304  -17.148792  -12.399181  -17.062878 -17.16243   -17.087578  -17.053444  -17.166103 ]
-        # o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(2, 0, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-
-        # with         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # logits are [  -4.0869637    4.940091  -311.7863      -4.115959     4.259094 -4.0600166   -4.1318703   -4.7535744   -3.9687996   -4.121994 ]
-        # o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(2, 1, 0).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-
-        # with         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # logits are [  -2.0779686    2.7768116 -304.70212     -2.099804     5.504364 -2.0562706   -2.1148186   -2.6308746   -1.9677963   -2.110096 ]
-        # o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(1, 2, 0).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-
-        # with         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-        # logits are [  -8.888214    -1.1660166 -261.9         -8.905804    -0.6377907  -8.845684    -8.921371    -9.267902    -8.782795    -8.922642 ]
-        # o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(0, 1, 2).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-
-
-        o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(2, 0, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
-
+        o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
         state_dict[f"language_model.model.layers.{i}.self_attn.o_proj.weight"] = o_proj_weight_reshaped
         # mlp layers
@@ -247,7 +214,7 @@ def slice_state_dict(state_dict, config):
         state_dict[f"language_model.model.layers.{i}.post_attention_layernorm.weight"] = llm_post_attention_layernorm[i]
 
     state_dict["language_model.model.norm.weight"] = state_dict.pop("llm/final_norm/scale")
-    state_dict["language_model.lm_head.weight"] = embedding_vector # weights are tied ?
+    state_dict["language_model.lm_head.weight"] = embedding_vector # weights are tied.
 
     # fmt: on
     for key, value in state_dict.items():
@@ -256,7 +223,7 @@ def slice_state_dict(state_dict, config):
 
 
 def flatten_nested_dict(params, parent_key="", sep="/"):
-    items = [] 
+    items = []
 
     for k, v in params.items():
         print(k)
@@ -275,10 +242,10 @@ def verify_logits(model):
     # First load intermediates given, and test prompt
 
     # all intermediates activations
-    intermediates_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
-
-    cow_on_beach_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/cow_beach_1.png"
-
+    # intermediates_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
+    intermediates_path = "/home/pablo/Downloads/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
+    # cow_on_beach_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/cow_beach_1.png"
+    cow_on_beach_path = "/home/pablo/Downloads/gvhf/cow_beach_1.png"
     intermediates = np.load(intermediates_path)
 
     # These steps mimic what should be taken in the processor - for an image we don't resize (given image is already 224px)
@@ -314,25 +281,28 @@ def verify_logits(model):
         raise ValueError("image activations do not match.")
     else:
         print("Vision activations match.")
-    
+
 
     # text logits
-        
     prompt = "answer en Where is the cow standing?\n"
     prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length').to(device)
     with torch.inference_mode():
         text_token_embeddings = model.language_model.model.embed_tokens(prompt_input_ids)
+        max_length = 16
+        unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
+        attention_mask = torch.cat((torch.ones((1, unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
+        # z_txt = model.language_model(input_embeds=text_token_embeddings, attention_mask=attention_mask)
 
     concat_embeddings = torch.cat((projector_output, text_token_embeddings), dim=1)
-    with torch.inference_mode():
-        outputs_activations_text = model.language_model(prompt_input_ids).logits
-
+    #with torch.inference_mode():
+    #    outputs_activations_text = model.language_model(prompt_input_ids).logits
+    """
     if not np.allclose(outputs_activations_text.cpu().numpy()[0], intermediates['text_logits'][0], rtol=1e-3, atol=5e-3):
         print(outputs_activations_text.cpu().numpy()[0, 0, 0:10], intermediates['text_logits'][0, 0, 0:10])
         raise ValueError("Text activations do not match.")
     else:
         print("Text activations match.")
-    
+    """
 
     # Verify pre logits
     with torch.inference_mode():
@@ -341,8 +311,19 @@ def verify_logits(model):
 
         attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
         outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
+
         for h in outputs.hidden_states:
             print((h.cpu().numpy()-intermediates['llm/pre_logits']).mean())
+            # last entry gives a close to 0.000 mean, which is encouraging
+        breakpoint()
+        '''
+        pre_logits = outputs.hidden_states[-1]
+
+        if not np.allclose(intermediates['llm/pre_logits'], pre_logits, atol=1e-3, rtol=1e-3):
+            raise ValueError("concatenated pre logits do not match.")
+        else:
+            print("Concatenated pre logits match.")
+        '''
     # Verify generation
     with torch.inference_mode():
         generation = tokenizer.decode(model.language_model.generate(inputs_embeds=concat_embeddings, max_new_tokens=10)[0])
@@ -351,7 +332,6 @@ def verify_logits(model):
             raise ValueError("Generation does not match.")
         else:
             print("Generation matches. You're almost done!")
-    
 
 
 @torch.no_grad()
@@ -380,6 +360,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     print("Model setup done. Loading new weights...")
     # load jax-imported state dictionary to model
     model.load_state_dict(state_dict_transformers)
+    del state_dict_transformers
     print("New weights loaded. Verifying logits...")
 
     do_verify_logits = True
@@ -388,8 +369,6 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         print("Verifying logits...")
         verify_logits(model)
     model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
-
-
 
 
 if __name__ == "__main__":
