@@ -159,7 +159,7 @@ class CogvlmConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
@@ -201,7 +201,7 @@ class CogvlmConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        rms_norm_eps=1e-5,
+        rms_norm_eps=1e-6,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,

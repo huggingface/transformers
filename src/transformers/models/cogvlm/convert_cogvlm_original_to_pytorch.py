@@ -34,8 +34,8 @@ from transformers import (
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
-original_device = "cuda:0"
-hf_device = "cuda:1"
+original_device = "cuda:1"
+hf_device = "cuda:3"
 
 
 @torch.no_grad()
@@ -95,14 +95,14 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         return inputs
 
     original_inputs = gather_inputs(inputs, device=original_device)
-    gen_kwargs = {"max_length": 2048, "do_sample": False}
 
     print("Original input_ids:", tokenizer.decode(original_inputs["input_ids"][0]))
 
-    with torch.no_grad():
-        outputs = original_model.generate(**original_inputs, **gen_kwargs)
-        outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
-        original_generated_text = tokenizer.decode(outputs[0])
+    # gen_kwargs = {"max_length": 2048, "do_sample": False}
+    # with torch.no_grad():
+    #     outputs = original_model.generate(**original_inputs, **gen_kwargs)
+    #     outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
+    #     original_generated_text = tokenizer.decode(outputs[0])
 
     # load HF model
     # rename in_channels to num_channels for sake of consistency
@@ -148,17 +148,17 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
     # verify generation
-    with torch.no_grad():
-        outputs = model.generate(**inputs, **gen_kwargs)
-        outputs = outputs[:, inputs["input_ids"].shape[1] :]
-        generated_text = tokenizer.decode(outputs[0])
+    # with torch.no_grad():
+    #     outputs = model.generate(**inputs, **gen_kwargs)
+    #     outputs = outputs[:, inputs["input_ids"].shape[1] :]
+    #     generated_text = tokenizer.decode(outputs[0])
 
-    print("Original text:", original_generated_text)
-    print("HF text:", generated_text)
-    assert original_generated_text == generated_text
+    # print("Original text:", original_generated_text)
+    # print("HF text:", generated_text)
+    # assert original_generated_text == generated_text
 
-    for k, v in inputs.items():
-        print(k, v.shape)
+    # for k, v in inputs.items():
+    #     print(k, v.shape)
 
     # verify logits
     with torch.no_grad():

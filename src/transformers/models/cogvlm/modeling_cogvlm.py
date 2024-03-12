@@ -771,6 +771,10 @@ class CogvlmModel(CogvlmPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            if idx in [0, 31]:
+                print(f"Hidden states before layer {idx}", hidden_states[0, :3, :3])
+                print("Dtype of hidden states:", hidden_states.type())
+
             past_key_value = past_key_values[idx] if past_key_values is not None else None
             layer_outputs = decoder_layer(
                 hidden_states,
