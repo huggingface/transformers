@@ -31,8 +31,9 @@ class Idefics2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2VisionModel`]. It is used to instantiate a
     Idefics2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Idefics2
-    [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
+    configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
+    [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics2 model
+    [amyeroberts/idefics2](https://huggingface.co/amyeroberts/idefics2).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -50,7 +51,7 @@ class Idefics2VisionConfig(PretrainedConfig):
             Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -59,6 +60,8 @@ class Idefics2VisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        intializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation for initializing all weight matrices in the model.
 
     Example:
 
@@ -129,38 +132,38 @@ class Idefics2PerceiverConfig(PretrainedConfig):
     r"""
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        resampler_n_latents (`int`, *optional*, defaults to ):
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the perceiver block.
+        resampler_n_latents (`int`, *optional*, defaults to 64):
             Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
-        resampler_depth (`int`, *optional*, defaults to 6):
-            Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
+        resampler_depth (`int`, *optional*, defaults to 3):
+            Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (<= 3).
         resampler_n_heads (`int`, *optional*, defaults to 16):
             Number of heads in each Transformer block (for multi-headed self-attention).
         resampler_head_dim (`int`, *optional*, defaults to 96):
             Dimensionality of each head projection in the Transformer block.
-        qk_layer_norms_perceiver (`bool`, *optional*, defaults to `False`):
+        num_key_value_heads (`int`, *optional*, defaults to 4):
+            Number of key-value heads in the perceiver attention block.
+        qk_layer_norms_perceiver (`bool`, *optional*, defaults to `True`):
             Whether or not to use qk layer norms in perceiver
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
     """
 
     model_type = "idefics2"
 
     def __init__(
         self,
-        hidden_size=4096,
         hidden_act="silu",
         resampler_n_latents=64,
-        resampler_depth=6,
+        resampler_depth=3,
         resampler_n_heads=16,
-        num_key_value_heads=1,
         resampler_head_dim=96,
-        qk_layer_norms_perceiver=False,
+        num_key_value_heads=4,
+        qk_layer_norms_perceiver=True,
         attention_dropout=0.0,
-        # Default values from checkpoint - make default for the config here?
-        # resampler_depth=3,
-        # num_key_value_heads=4,
-        # qk_layer_norms_perceiver=True,
         **kwargs,
     ):
         self.hidden_act = hidden_act
@@ -176,7 +179,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
                 f"num_key_value_heads={self.num_key_value_heads} must be less than or equal to"
                 f" resampler_n_heads={self.resampler_n_heads}"
             )
-
         super().__init__(**kwargs)
 
 
@@ -185,15 +187,14 @@ class Idefics2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
     Idefics2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics2
-    [HuggingFaceM4/idefics2](https://huggingface.co/HuggingFaceM4/idefics2) architecture.
+    [amyeroberts/idefics2](https://huggingface.co/amyeroberts/idefics2) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        additional_vocab_size (`int`, *optional*, defaults to 0):
-            Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
-            are always trainable whereas regular vocab tokens can be frozen or not.
+        additional_vocab_size (`int`, *optional*, defaults to 2):
+            Additional vocabulary size of the model, typically for the special "<img>" token.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Idefics2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Idefics2Model`]
@@ -211,7 +212,7 @@ class Idefics2Config(PretrainedConfig):
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            paper](https://arxiv.org/pdf/2305.13245.pdf).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -219,7 +220,7 @@ class Idefics2Config(PretrainedConfig):
             allows sequence of up to 4096*32 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -238,13 +239,13 @@ class Idefics2Config(PretrainedConfig):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
-        qk_layer_norms (`bool`, *optional*, defaults to `False`):
+        qk_layer_norms (`bool`, *optional*, defaults to `True`):
             Whether to add layer norm after q and k
-        freeze_text_layers (`bool`, *optional*, defaults to `True`):
+        freeze_text_layers (`bool`, *optional*, defaults to `False`):
             Whether to freeze text layers
         freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing text layers when `freeze_text_layers` is `True`
-        freeze_vision_layers (`bool`, *optional*, defaults to `True`):
+        freeze_vision_layers (`bool`, *optional*, defaults to `False`):
             Whether to freeze vision layers
         freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
@@ -271,7 +272,7 @@ class Idefics2Config(PretrainedConfig):
 
     def __init__(
         self,
-        additional_vocab_size=0,
+        additional_vocab_size=2,
         vocab_size=32000,
         hidden_size=4096,
         intermediate_size=14336,
@@ -281,7 +282,7 @@ class Idefics2Config(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=4096 * 8,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=0,  # None in the original configuration_mistral, we set it to the unk_token_id
         bos_token_id=1,
@@ -290,10 +291,10 @@ class Idefics2Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         sliding_window=4096,
-        qk_layer_norms=False,
-        freeze_text_layers=True,
+        qk_layer_norms=True,
+        freeze_text_layers=False,
         freeze_text_module_exceptions=[],
-        freeze_vision_layers=True,
+        freeze_vision_layers=False,
         freeze_vision_module_exceptions=[],
         attention_dropout=0.0,
         vision_config=None,
@@ -332,6 +333,7 @@ class Idefics2Config(PretrainedConfig):
 
         if perceiver_config is None:
             self.perceiver_config = Idefics2PerceiverConfig()
+            logger.info("perciver_config is None, using default perceiver config")
         elif isinstance(perceiver_config, dict):
             self.perceiver_config = Idefics2PerceiverConfig(**perceiver_config)
         elif isinstance(perceiver_config, Idefics2PerceiverConfig):
@@ -339,6 +341,7 @@ class Idefics2Config(PretrainedConfig):
 
         if vision_config is None:
             self.vision_config = Idefics2VisionConfig()
+            logger.info("vision_config is None, using default vision config")
         elif isinstance(vision_config, dict):
             self.vision_config = Idefics2VisionConfig(**vision_config)
         elif isinstance(vision_config, Idefics2VisionConfig):
