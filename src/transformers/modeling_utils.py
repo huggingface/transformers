@@ -98,6 +98,7 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
+from .utils.hqq_utils import *
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -2360,6 +2361,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
+
+        #Temporary HQQ logic. Unfortunately, we can't get state_dict directly, so we actually save module dicts instead as used in hqq repo
+        if(hasattr(model_to_save, 'is_hqq_quantized')):
+            logger.info(f"safe_serialization parameter is set to False for HQQ-quantized models.")
+            from hqq.models.base import BaseHQQModel
+            BaseHQQModel.get_ignore_layers = get_ignore_layers
+            weights = BaseHQQModel.serialize_weights(model_to_save, verbose=False)
+            BaseHQQModel.save_weights(weights, save_directory)
+            logger.info(f"HQQ model weights saved in {save_directory}")
+
+            if push_to_hub:
+                # Eventually create an empty model card
+                model_card = create_and_tag_model_card(
+                    repo_id, self.model_tags, token=token, ignore_metadata_errors=ignore_metadata_errors
+                )
+
+                # Update model card if needed:
+                model_card.save(os.path.join(save_directory, "README.md"))
+
+                self._upload_modified_files(
+                    save_directory,
+                    repo_id,
+                    files_timestamps,
+                    commit_message=commit_message,
+                    token=token,
+                )
+            return 
+
+
         # Save the model
         if state_dict is None:
             state_dict = model_to_save.state_dict()
@@ -2537,6 +2567,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
+            raise ValueError(
+                "`.to` is not supported for HQQ-quantized models."
+            )
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
@@ -3020,6 +3055,58 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if kwarg_attn_imp is not None and config._attn_implementation != kwarg_attn_imp:
                 config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
+
+        #HQQ-logic adapted from https://github.com/mobiusml/hqq/blob/master/hqq/models/base.py#L175
+        #-------------------------------------------------------------------------------------------------------
+        quant_config = getattr(config, "quantization_config", None)
+
+        if check_if_hqq_quant_config(quant_config):
+            from hqq.models.base import BaseHQQModel, BasePatch
+            from hqq.core.quantize import HQQLinear
+        
+            save_dir = BaseHQQModel.try_snapshot_download(pretrained_model_name_or_path, cache_dir)
+
+            with init_empty_weights():
+                # Let's make sure we don't run the init function of buffer modules
+                model = cls(config, *model_args, **model_kwargs)
+            
+            #Set layers to ignore
+            BaseHQQModel.get_ignore_layers = get_ignore_layers
+
+            #Name modules for loading
+            BasePatch.autoname_modules(model)
+
+            #Load weights
+            try:
+                loaded_weights = BaseHQQModel.load_weights(save_dir)
+            except Exception as error:
+                logger.warning("Failed to load the HQQ weights")
+                return
+
+            compute_dtype = torch_dtype if (torch_dtype is not None) else None 
+            hqq_device    = 'cuda'
+            if(type(device_map)==dict):
+                hqq_device = [device_map[k] for k in device_map][0]
+
+            #loop over modules
+            model.eval();
+            ignore_layers = BaseHQQModel.get_ignore_layers(model)
+
+            #Can't replace modules directly in this loop, so creating a tmp dictionary 
+            name_to_module = {}
+            for name, module in model.named_modules():
+                if(name in ignore_layers): continue
+                name_to_module[name] = module
+
+            for name in logging.tqdm(name_to_module.keys(), "Loading"):
+                module = name_to_module[name]
+                parent = find_parent(model, name)
+                node   = name.split('.')[-1]
+                setattr(parent, node, load_hqq_module(module, loaded_weights, compute_dtype, hqq_device))
+
+            return model
+        #-------------------------------------------------------------------------------------------------------
+
 
         pre_quantized = getattr(config, "quantization_config", None) is not None
         if pre_quantized or quantization_config is not None:

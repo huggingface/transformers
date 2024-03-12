@@ -14,6 +14,7 @@
 "HQQ (Half-Quadratic Quantization) integration file"
 
 from ..utils import is_accelerate_available, is_hqq_available, logging
+from ..utils.hqq_utils import *
 
 import torch
 import torch.nn as nn
@@ -28,21 +29,6 @@ else:
     HQQLinear = None
 
 logger = logging.get_logger(__name__)
-
-#Add name to module
-def autoname_modules(model):
-	for name, module in model.named_modules():
-		module.name = name
-
-def name_to_linear_tag(name):
-	return '.'.join([n for n in name.split('.') if ((n not in ['model', 'layers']) and (not n.isnumeric()))])
-
-def get_linear_tags(model):
-	linear_tags = set()
-	for name, module in model.named_modules():
-		if(type(module) in [torch.nn.Linear, HQQLinear]):
-			linear_tags.add(name_to_linear_tag(name))
-	return list(linear_tags)
 
 def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_name=None):
 	if not is_hqq_available():

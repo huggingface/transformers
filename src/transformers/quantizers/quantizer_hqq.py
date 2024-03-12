@@ -19,8 +19,10 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_torch_available, is_hqq_available, logging
-from ..integrations import prepare_for_hqq_linear
 from .quantizers_utils import get_module_from_name
+
+from ..integrations import prepare_for_hqq_linear
+from ..utils.hqq_utils import *
 
 if is_torch_available():
     import torch
@@ -32,12 +34,6 @@ else:
 
 logger = logging.get_logger(__name__)
 
-def find_parent(model, name):
-    module_tree = name.split('.')[:-1]
-    parent = model
-    for m in module_tree:
-        parent = parent._modules[m]
-    return parent
 
 class HQQHfQuantizer(HfQuantizer):
     """
@@ -133,7 +129,6 @@ class HQQHfQuantizer(HfQuantizer):
         del tmp_linear_layer
 
         torch.cuda.empty_cache()
-
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
