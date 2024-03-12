@@ -730,6 +730,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
+            dataset_revision="b24a417",
         )
 
     @slow
@@ -1063,6 +1064,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
+            dataset_revision="b24a417",
         )
 
     @slow
