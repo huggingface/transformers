@@ -135,6 +135,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     PushInProgress,
+    PushToHubMixin,
     can_return_loss,
     find_labels,
     is_accelerate_available,
@@ -3035,7 +3036,7 @@ class Trainer:
 
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
+        supported_classes = (PushToHubMixin,)
         xm.rendezvous("saving_checkpoint")
         if not isinstance(model, supported_classes):
             if isinstance(unwrap_model(model), supported_classes):
