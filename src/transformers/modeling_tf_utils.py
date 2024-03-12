@@ -81,8 +81,9 @@ if TYPE_CHECKING:
 if "TF_USE_LEGACY_KERAS" not in os.environ:
     os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Compatibility fix to make sure tf.keras stays at Keras 2
 elif os.environ["TF_USE_LEGACY_KERAS"] != "1":
-    raise RuntimeError("Transformers is only compatible with Keras 2, but you have explicitly set "
-                       "`TF_USE_LEGACY_KERAS` to `0`.")
+    raise RuntimeError(
+        "Transformers is only compatible with Keras 2, but you have explicitly set " "`TF_USE_LEGACY_KERAS` to `0`."
+    )
 
 try:
     import tf_keras as keras
