@@ -3465,7 +3465,7 @@ class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
         self,
         keep_report_to=False,
         adapter_name="default",
-        adapter_args=None,
+        adapter_kwargs=None,
         **kwargs,
     ):
         # from transformers import OPTForCausalLM
@@ -3473,7 +3473,7 @@ class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
         pretrained_base_model = AutoModelForCausalLM.from_pretrained(base_model_id).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(base_model_id)
 
-        def m(sample):
+        def tokenize_sample(sample):
             return tokenizer(
                 sample["quote"],
                 return_tensors="pt",
@@ -3485,12 +3485,12 @@ class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
         from datasets import load_dataset
 
         data = load_dataset("Abirate/english_quotes")
-        data = data["train"].filter(lambda example, indice: indice < 9, with_indices=True).map(m, batched=True)
+        data = data["train"].filter(lambda example, indice: indice < 9, with_indices=True).map(tokenize_sample, batched=True)
 
         # generate peft
         from peft import LoraConfig, get_peft_model
 
-        adapter_args = adapter_args or {
+        adapter_kwargs = adapter_kwargs if adapter_kwargs is not None else {
             "r": 8,
             "lora_alpha": 16,
             "lora_dropout": 0.05,
@@ -3499,7 +3499,7 @@ class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
             "task_type": "CAUSAL_LM",
         }
 
-        lora_config = LoraConfig(**adapter_args)
+        lora_config = LoraConfig(**adapter_kwargs)
 
         peft_model = get_peft_model(
             model=pretrained_base_model,
@@ -3552,7 +3552,7 @@ class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
             # resume training from last checkpoint
             trainer.train(resume_from_checkpoint=checkpoint)
 
-            adapter_state_dict1 = get_peft_model_state_dict(model=trainer.model, adapter_name=adapter_name)
-            state1 = dataclasses.asdict(trainer.state)
-            self.check_state_dict_are_the_same(adapter_state_dict, adapter_state_dict1)
-            self.check_trainer_state_are_the_same(state, state1)
+            adapter_state_dict_resumed = get_peft_model_state_dict(model=trainer.model, adapter_name=adapter_name)
+            state_resumed = dataclasses.asdict(trainer.state)
+            self.check_state_dict_are_the_same(adapter_state_dict, adapter_state_dict_resumed)
+            self.check_trainer_state_are_the_same(state, state_resumed)
