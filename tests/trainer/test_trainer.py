@@ -3485,19 +3485,27 @@ class TrainerPeftTest(unittest.TestCase, TrainerIntegrationCommon):
         from datasets import load_dataset
 
         data = load_dataset("Abirate/english_quotes")
-        data = data["train"].filter(lambda example, indice: indice < 9, with_indices=True).map(tokenize_sample, batched=True)
+        data = (
+            data["train"]
+            .filter(lambda example, indice: indice < 9, with_indices=True)
+            .map(tokenize_sample, batched=True)
+        )
 
         # generate peft
         from peft import LoraConfig, get_peft_model
 
-        adapter_kwargs = adapter_kwargs if adapter_kwargs is not None else {
-            "r": 8,
-            "lora_alpha": 16,
-            "lora_dropout": 0.05,
-            "bias": "none",
-            "target_modules": ["q_proj"],
-            "task_type": "CAUSAL_LM",
-        }
+        adapter_kwargs = (
+            adapter_kwargs
+            if adapter_kwargs is not None
+            else {
+                "r": 8,
+                "lora_alpha": 16,
+                "lora_dropout": 0.05,
+                "bias": "none",
+                "target_modules": ["q_proj"],
+                "task_type": "CAUSAL_LM",
+            }
+        )
 
         lora_config = LoraConfig(**adapter_kwargs)
 
