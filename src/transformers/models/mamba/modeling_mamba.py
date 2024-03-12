@@ -157,7 +157,9 @@ class MambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params=None):
+    def cuda_kernels_forward(
+        self, hidden_states: torch.Tensor, cache_params: Optional[MambaCache] = None
+    ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -325,7 +327,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
-    def forward(self, hidden_states, cache_params=None):
+    def forward(self, hidden_states, cache_params: Optional[MambaCache] = None):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
@@ -357,7 +359,7 @@ class MambaBlock(nn.Module):
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = MambaMixer(config, layer_idx=layer_idx)
 
-    def forward(self, hidden_states, cache_params=None):
+    def forward(self, hidden_states, cache_params: Optional[MambaCache] = None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -438,11 +440,11 @@ class MambaOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        cache_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+        cache_params (`MambaCache`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
 
-            Includes both the State space model states weights after the selective scan, and the Convolutional states
+            Includes both the State space model state matrices after the selective scan, and the Convolutional states
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -465,9 +467,11 @@ class MambaCausalLMOutput(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        cache_params (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+        cache_params (`MambaCache`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
+
+            Includes both the State space model state matrices after the selective scan, and the Convolutional states
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -675,7 +679,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        cache_params=None,
+        cache_params: Optional[MambaCache] = None,
         inputs_embeds=None,
         attention_mask=None,
         **kwargs,
