@@ -462,11 +462,16 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            elif model_class.__name__ == "DetrForSegmentation":
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
-
-            # Confirm out_indices was propogated to backbone
-            self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
     def test_greyscale_images(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

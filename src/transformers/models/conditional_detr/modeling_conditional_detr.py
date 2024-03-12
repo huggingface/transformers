@@ -356,7 +356,7 @@ class ConditionalDetrConvEncoder(nn.Module):
         if config.use_timm_backbone:
             requires_backends(self, ["timm"])
             kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs
+            kwargs = {} if kwargs is None else kwargs.copy()
             out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
             num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
