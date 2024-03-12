@@ -108,7 +108,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
             state_dict[k] = v
 
     torch.set_default_dtype(dtype)
-    
+
     print("Loading the checkpoint in a Gemma model.")
     with init_empty_weights():
         model = GemmaForCausalLM(config)
