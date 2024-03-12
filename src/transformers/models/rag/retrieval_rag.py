@@ -430,7 +430,7 @@ class RagRetriever:
                 index_name=config.index_name,
                 index_path=config.index_path,
                 use_dummy_dataset=config.use_dummy_dataset,
-                dataset_revision=config.dataset_revision,
+                dataset_revision=config.dataset_revision if hasattr(config, "dataset_revision") else None
             )
 
     @classmethod
