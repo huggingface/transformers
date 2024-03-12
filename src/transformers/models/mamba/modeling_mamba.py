@@ -66,6 +66,36 @@ MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = (
 )  # See all Mamba models at https://huggingface.co/models?filter=mamba
 
 
+class MambaCache:
+    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
+        self.seqlen_offset = 0
+        self.dtype = dtype
+        intermediate_size = config.intermediate_size
+        ssm_state_size = config.state_size
+        conv_kernel_size = config.conv_kernel
+
+        self.conv_states = {
+            i: torch.zeros(
+                batch_size,
+                intermediate_size,
+                conv_kernel_size,
+                device=device,
+                dtype=dtype,
+            )
+            for i in range(config.num_hidden_layers)
+        }
+        self.ssm_states = {
+            i: torch.zeros(
+                batch_size,
+                intermediate_size,
+                ssm_state_size,
+                device=device,
+                dtype=dtype,
+            )
+            for i in range(config.num_hidden_layers)
+        }
+
+
 class MambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -229,7 +259,7 @@ class MambaMixer(nn.Module):
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params=None):
+    def slow_forward(self, input_states, cache_params: Optional[MambaCache]=None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -299,36 +329,6 @@ class MambaMixer(nn.Module):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
-
-
-class MambaCache:
-    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
-        self.seqlen_offset = 0
-        self.dtype = dtype
-        intermediate_size = config.intermediate_size
-        ssm_state_size = config.state_size
-        conv_kernel_size = config.conv_kernel
-
-        self.conv_states = {
-            i: torch.zeros(
-                batch_size,
-                intermediate_size,
-                conv_kernel_size,
-                device=device,
-                dtype=dtype,
-            )
-            for i in range(config.num_hidden_layers)
-        }
-        self.ssm_states = {
-            i: torch.zeros(
-                batch_size,
-                intermediate_size,
-                ssm_state_size,
-                device=device,
-                dtype=dtype,
-            )
-            for i in range(config.num_hidden_layers)
-        }
 
 
 class MambaRMSNorm(nn.Module):
@@ -450,8 +450,8 @@ class MambaOutput(ModelOutput):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    cache_params: Optional[List[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -476,8 +476,8 @@ class MambaCausalLMOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    cache_params: Optional[List[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -563,7 +563,7 @@ class MambaModel(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[List[torch.FloatTensor]] = None,
+        cache_params: Optional[MambaCache] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -702,7 +702,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[torch.FloatTensor] = None,
+        cache_params: Optional[MambaCache] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
