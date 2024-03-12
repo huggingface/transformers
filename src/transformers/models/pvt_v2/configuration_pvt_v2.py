@@ -36,7 +36,7 @@ PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
+class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate a Pvt V2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -159,7 +159,5 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self.linear_attention = linear_attention
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features if out_features is not None else getattr(self, "out_features", None),
-            out_indices=out_indices if out_indices is not None else getattr(self, "out_indices", None),
-            stage_names=self.stage_names,
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
