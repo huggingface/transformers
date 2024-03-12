@@ -2342,7 +2342,7 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **dola decoding** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-        The method is based on the paper "DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models" (https://openreview.net/pdf?id=Th6NyL07na) in ICLR 2024.
+        The method is based on the paper "DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models" (https://arxiv.org/abs/2309.03883) in ICLR 2024.
 
         <Tip warning={true}>
 

@@ -487,7 +487,7 @@ to model based assisted decoding. You can read more about it [here](https://twit
 ### DoLa Decoding
 
 **D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
-hallucinations of LLMs, as described in this paper [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://openreview.net/pdf?id=Th6NyL07na).
+hallucinations of LLMs, as described in this paper of ICLR 2024 [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://arxiv.org/abs/2309.03883).
 DoLa is achieved by contrasting the differences in logits obtained from final
 layers versus earlier layers, thus amplify the factual knowledge localized to particular part of transformer layers.
 To activate DoLa decoding, set the `dola_layers` argument when calling the `model.generate` function.
@@ -528,3 +528,5 @@ See the following example for DoLa decoding with the 32-layer LLaMA-7B model.
 >>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
 ['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
 ```
+
+The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, VicunaQA.
