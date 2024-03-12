@@ -26,13 +26,6 @@ _import_structure = {
     "configuration_cohere": ["COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CohereConfig"],
 }
 
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_cohere"] = ["CohereTokenizer"]
 
 try:
     if not is_tokenizers_available():
@@ -58,14 +51,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
 
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_cohere import CohereTokenizer
-
+    
     try:
         if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
