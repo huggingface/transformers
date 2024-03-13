@@ -111,6 +111,7 @@ from .trainer_utils import (
     RemoveColumnsCollator,
     TrainerMemoryTracker,
     TrainOutput,
+    check_target_module_exists,
     default_compute_objective,
     denumpify_detensorize,
     enable_full_determinism,
@@ -1204,13 +1205,18 @@ class Trainer:
                     "You need to define a `optim_target_modules` in order to properly use GaLoRe optimizers"
                 )
 
-            if not isinstance(args.optim_target_modules, list):
+            if not isinstance(args.optim_target_modules, (list, str)):
                 raise ValueError(
-                    f"`optim_target_modules` has to be a list of strings, you passed {args.optim_target_modules}"
+                    f"`optim_target_modules` has to be a list of strings, a string corresponding to a regex, or a specific module or 'all-linear', you passed {args.optim_target_modules}"
                 )
 
             if model is None:
                 raise ValueError("You need to pass a model in order to correctly initialize a GaLore optimizer.")
+
+            all_linear = (
+                isinstance(args.optim_target_modules, str)
+                and args.optim_target_modules.replace("_", "-") == "all-linear"
+            )
 
             galore_params = []
             galore_params_names = []
@@ -1218,7 +1224,7 @@ class Trainer:
                 if not isinstance(module, nn.Linear):
                     continue
 
-                if not any(target_key in module_name for target_key in args.optim_target_modules):
+                if not check_target_module_exists(args.optim_target_modules, module_name) and not all_linear:
                     continue
 
                 galore_params.append(module.weight)

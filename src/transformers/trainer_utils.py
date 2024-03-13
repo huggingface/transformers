@@ -785,3 +785,32 @@ class RemoveColumnsCollator:
     def __call__(self, features: List[dict]):
         features = [self._remove_columns(feature) for feature in features]
         return self.data_collator(features)
+
+
+def check_target_module_exists(optim_target_modules, key: str):
+    """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
+
+    Args:
+        optim_target_modules (`Union[str, List[str]]`):
+            A list of strings to try to match. Can be also a full string.
+        key (`str`):
+            A key to search any matches in optim_target_modules
+
+    Returns:
+        `bool` | `re.Match[str]` | `None`: True of match object if key matches any target modules from config, False or
+        None if no match found
+    """
+    if isinstance(optim_target_modules, str):
+        target_module_found = re.fullmatch(optim_target_modules, key)
+    elif key in optim_target_modules:
+        # this module is specified directly in target_modules
+        target_module_found = True
+    else:
+        target_module_found = any(key.endswith(f".{target_key}") for target_key in optim_target_modules)
+        # Check also if the user passed a list of regex
+        if not target_module_found:
+            target_module_found = any(
+                bool(re.fullmatch(optim_target_module, key)) for optim_target_module in optim_target_modules
+            )
+
+    return target_module_found
