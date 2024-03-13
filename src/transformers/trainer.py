@@ -4099,23 +4099,13 @@ class Trainer:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
-        if "num_steps" in grad_acc_kwargs:
-            if self.args.gradient_accumulation_steps > 1:
-                # raise because we do not know which setting is intended.
-                raise ValueError(
-                    "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
-                    "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
-                )
-            elif grad_acc_kwargs["num_steps"] > 1 and self.args.gradient_accumulation_steps == 1:
-                # give a warning that grad_acc_kwargs["num_steps"] > 1 will passthrough
-                warnings.warn(
-                    '"num_steps" in AccelerateConfig.gradient_accumulation_kwargs takes precedence over TrainingArguments.gradient_accumulation_steps.'
-                )
-            else:
-                # the case grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps = 1
-                # passthrough without warning
-                pass
-        else:
+        if "num_steps" in grad_acc_kwargs and self.args.gradient_accumulation_steps > 1:
+            # raise because we do not know which setting is intended.
+            raise ValueError(
+                "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
+                "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
+            )
+        elif "num_steps" not in grad_acc_kwargs:
             # take the gradient_accumulation_steps setting from TrainingArguments.
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
 

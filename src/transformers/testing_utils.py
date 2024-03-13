@@ -52,6 +52,7 @@ from .integrations import (
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
+    ACCELERATE_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_aqlm_available,
@@ -354,11 +355,11 @@ def require_nltk(test_case):
     return unittest.skipUnless(is_nltk_available(), "test requires NLTK")(test_case)
 
 
-def require_accelerate(test_case):
+def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     """
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
     """
-    return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
+    return unittest.skipUnless(is_accelerate_available(min_version), "test requires accelerate")(test_case)
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):
