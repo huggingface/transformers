@@ -1364,7 +1364,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 hard_check_only=False,
                 check_device_map=check_device_map,
             )
-        elif requested_attn_implementation in [None, "sdpa"]:
+        elif requested_attn_implementation in [None, "sdpa"] and not is_torch_xla_available():
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
                 config,
