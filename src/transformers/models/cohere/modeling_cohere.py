@@ -1088,8 +1088,8 @@ class CohereForCausalLM(CoherePreTrainedModel):
         ```python
         >> from transformers import AutoTokenizer, CohereForCausalLM
 
-        >> model = CohereForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01") 
-        >> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01") 
+        >> model = CohereForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01")
+        >> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
 
         >> prompt = "Hey, are you conscious? Can you talk to me?"
         >> inputs = tokenizer(prompt, return_tensors="pt")
