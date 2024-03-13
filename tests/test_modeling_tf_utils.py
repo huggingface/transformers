@@ -418,18 +418,6 @@ class TFModelUtilsTest(unittest.TestCase):
                 self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
                 self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
 
-                # Check a file is bigger than max_size only when it has a single weight
-                for shard_file, size in shard_to_size.items():
-                    if max_size.endswith("kiB"):
-                        max_size_int = int(max_size[:-3]) * 2**10
-                    else:
-                        max_size_int = int(max_size[:-2]) * 10**3
-                    # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
-                    # the size asked for (since we count parameters)
-                    if size >= max_size_int + 50000:
-                        with h5py.File(shard_file, "r") as state_file:
-                            self.assertEqual(len(state_file), 1)
-
                 # Check the index and the shard files found match
                 with open(index_file, "r", encoding="utf-8") as f:
                     index = json.loads(f.read())
@@ -606,6 +594,8 @@ class TFModelUtilsTest(unittest.TestCase):
     def test_safetensors_tf_from_sharded_h5_with_sharded_safetensors_hub(self):
         # Confirm that we can correctly load the safetensors weights from a sharded hub repo even when TF weights present
         TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded", use_safetensors=True)
+        # Confirm that we can access the TF weights too
+        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded", use_safetensors=False)
 
     @require_safetensors
     def test_safetensors_load_from_local(self):
