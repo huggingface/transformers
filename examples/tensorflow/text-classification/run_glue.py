@@ -477,7 +477,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = "adam"  # Just write anything because we won't be using it
+            optimizer = "sgd"  # Just write anything because we won't be using it
         if is_regression:
             metrics = []
         else:

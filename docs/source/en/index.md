@@ -180,6 +180,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [M-CTC-T](model_doc/mctct)                        |       ✅        |         ❌         |      ❌      |
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
+|                         [Mamba](model_doc/mamba)                         |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -233,6 +234,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [Pop2Piano](model_doc/pop2piano)                     |       ✅        |         ❌         |      ❌      |
 |                    [ProphetNet](model_doc/prophetnet)                    |       ✅        |         ❌         |      ❌      |
 |                           [PVT](model_doc/pvt)                           |       ✅        |         ❌         |      ❌      |
+|                        [PVTv2](model_doc/pvt_v2)                         |       ✅        |         ❌         |      ❌      |
 |                       [QDQBert](model_doc/qdqbert)                       |       ✅        |         ❌         |      ❌      |
 |                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
@@ -279,6 +281,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
 |                          [TVLT](model_doc/tvlt)                          |       ✅        |         ❌         |      ❌      |
 |                           [TVP](model_doc/tvp)                           |       ✅        |         ❌         |      ❌      |
+|                          [UDOP](model_doc/udop)                          |       ✅        |         ❌         |      ❌      |
 |                           [UL2](model_doc/ul2)                           |       ✅        |         ✅         |      ✅      |
 |                          [UMT5](model_doc/umt5)                          |       ✅        |         ❌         |      ❌      |
 |                     [UniSpeech](model_doc/unispeech)                     |       ✅        |         ❌         |      ❌      |

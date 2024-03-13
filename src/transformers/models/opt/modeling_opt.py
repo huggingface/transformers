@@ -120,27 +120,10 @@ class OPTAttention(nn.Module):
     ):
         super().__init__()
         self.config = config
-
-        def _handle_deprecated_argument(config_arg_name, config, fn_arg_name, kwargs):
-            """
-            If a the deprecated argument `fn_arg_name` is passed, raise a deprecation
-            warning and return that value, otherwise take the equivalent config.config_arg_name
-            """
-            val = None
-            if fn_arg_name in kwargs:
-                logging.warning(
-                    "Passing in {fn_arg_name} to {self.__class__.__name__} is deprecated and won't be supported from "
-                    "v4.39. Please set it in the config instead"
-                )
-                val = kwargs.pop(fn_arg_name)
-            else:
-                val = getattr(config, config_arg_name)
-            return val
-
-        self.embed_dim = _handle_deprecated_argument("hidden_size", config, "embed_dim", kwargs)
-        self.num_heads = _handle_deprecated_argument("num_attention_heads", config, "num_heads", kwargs)
-        self.dropout = _handle_deprecated_argument("attention_dropout", config, "dropout", kwargs)
-        self.enable_bias = _handle_deprecated_argument("enable_bias", config, "bias", kwargs)
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.attention_dropout
+        self.enable_bias = config.enable_bias
 
         self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = True
@@ -411,7 +394,7 @@ class OptFlashAttention2(OPTAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)

@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_det
 
 @require_tokenizers
 class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "RUCAIBox/mvp"
     tokenizer_class = MvpTokenizer
     rust_tokenizer_class = MvpTokenizerFast
     test_rust_tokenizer = True
