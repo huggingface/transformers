@@ -186,15 +186,16 @@ class StopStringCriteria(StoppingCriteria):
     consistent with the stop string.
 
     How do we do that? Let's say the stop string is N characters long, and the initial overlap covers the final
-    M characters. Then, we have N - M characters left to match. If the next token is less than M - N tokens long, then
-    the entire token must match: token == stop_string[-(M + len(token)): -M]. If the next token is longer than M - N
-    tokens, then we consider only the final M - N characters of the token. This allows for the token to have an overhang
+    M characters. Then, we have N - M characters left to match. If the next token is less than N - M tokens long, then
+    the entire token must match: token == stop_string[-M - len(token): -M]. If the next token is longer than N - M
+    tokens, then we consider only the final N - M characters of the token. This allows for the token to have an overhang
     off the start of the stop string.
 
     Again, let's make this concrete with a worked example. We'll use the stop string "stop" and the token sequence
     ["las", "topper"]. The length of the stop string is 4. The final token is "topper", and its overlap with the stop
     string is "top", which has length 3. We continue to the next token, "las", and we have 4 - 3 = 1 character left to
-    match. We check that "las"[-1:] == stop[:1], which is true. We have now matched 4 characters, which is the length of
+    match. This is less than the length of "las", so we only need a partial match for this token to complete the string.
+    We check that "las"[-1:] == stop[:1], which is true. We have now matched 4 characters, which is the length of
     the stop string, and we are done.
 
     At this point, hopefully you agree that we have an algorithm that detects the presence of a stop string, but you
@@ -221,7 +222,7 @@ class StopStringCriteria(StoppingCriteria):
       we would match after each token, assuming that token is a valid fit for the sequence at that point.
     - To determine if the tokens are valid at each position, we check that the cumulative length so far matches
       one of the values in their valid positions vector. Where it does not, we mask that token and all tokens
-      following it.
+      preceding it.
     - We then check the highest unmasked value in the cumulative sum. This represents the length of the total string
       match before we reached a token that did not match the stop string. If it is equal to or greater than the length
       of the stop string, the stop string is matched.
@@ -374,9 +375,12 @@ def _stop_string_get_matching_positions(
     token_list, tok_indices, stop_strings
 ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
     """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
-    validly appear in the stop strings. For each stop string, it returns a dictionary mapping tokens to a list of
-    valid positions, as well as a dictionary mapping tokens to a list of possible overlap lengths at the
-    end of the stop string."""
+    validly appear in the stop strings. For each token, it computes a list of positions in the stop string where the
+    token appears, as well as a list of the possible "end overlaps" for that token - that is, the number of characters
+    from the end of the stop string that overlap with the start of the token, which can have more than one value.
+
+    The reason for computing these may seem a bit cryptic - please see the docstring for StopStringCriteria for a full
+    explanation of what these values are for!"""
 
     def _cleanup_token(token: str) -> str:
         if token[0] in ["▁", "Ġ"]:
@@ -417,6 +421,9 @@ def _stop_string_get_matching_positions(
 
 @lru_cache(8)
 def _stop_string_create_embedding_vec(token_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
+    """This function precomputes everything needed for the run-time checks in StopStringCriteria, and packs
+    them into an embedding tensor that can be accessed with pure tensor operations. For the specifics of the values
+    that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!"""
     token_valid_positions, token_end_overlaps = _stop_string_get_matching_positions(
         token_list, tok_indices, stop_strings
     )
