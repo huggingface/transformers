@@ -1751,7 +1751,7 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
         if not _has_warned:
             # TODO(Sanchit): remove this processor entirely in v4.40
             warnings.warn(
-                "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Please pass `input_ids` or `decoder_input_ids` to the generate method directly.",
+                "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Should you need to provide prompt ids for generation, specify `input_ids` to the generate method for decoder-only models, or `decoder_input_ids` for encoder-decoder models.",
                 FutureWarning,
             )
 

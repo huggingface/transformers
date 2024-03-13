@@ -867,7 +867,7 @@ class GenerationMixin:
         if generation_config.forced_decoder_ids is not None:
             # TODO(Sanchit): deprecate in v4.40 by removing this logic
             warnings.warn(
-                "You have explicitly specified`forced_decoder_ids`. This functionality has been deprecated and will throw an error in v4.40. Please use `input_ids` or `decoder_input_ids` respectively.",
+                "You have explicitly specified `forced_decoder_ids`. This functionality has been deprecated and will throw an error in v4.40. Please remove the `forced_decoder_ids` argument in favour of `input_ids` or `decoder_input_ids` respectively.",
                 FutureWarning,
             )
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
