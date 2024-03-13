@@ -1180,8 +1180,6 @@ class AcceleratorConfig:
               sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
 
-            The following key has no effect and will be treated as if it is not passed.
-                sync_with_dataloader (`bool`): Will be ignored and always set to `False`.
     """
 
     # Data related arguments
@@ -1223,7 +1221,6 @@ class AcceleratorConfig:
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see GradientAccumulationPlugin. The "
-            "This should exclude GradientAccumulationPlugin.num_steps that will be set to TrainingArguments.gradient_accumulation_steps."
         },
     )
 

@@ -4103,8 +4103,8 @@ class Trainer:
             if self.args.gradient_accumulation_steps > 1:
                 # raise because we do not know which setting is intended.
                 raise ValueError(
-                    "AccelerateConfig.gradient_accumulation_kwargs['num_steps'] is specified but TrainingArguments.gradient_accumulation_steps > 1. "
-                    "If the gradient_accumulation_kwargs['num_steps'] is desired, set TrainingArguments.gradient_accumulation_steps == 1."
+                    "The `AcceleratorConfig`'s `num_steps` is set but `gradient_accumulation_steps` is greater than 1 in the passed `TrainingArguments`"
+                    "If using the passed `AcceleratorConfig` is desired, do not set the `TrainingArguments` `gradient_accumulation_steps`."
                 )
             elif grad_acc_kwargs["num_steps"] > 1 and self.args.gradient_accumulation_steps == 1:
                 # give a warning that grad_acc_kwargs["num_steps"] > 1 will passthrough
