@@ -211,7 +211,7 @@ class GemmaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
-        self.is_causal = True
+        self.is_causal = False
 
         if self.hidden_size % self.num_heads != 0:
             raise ValueError(
@@ -263,12 +263,13 @@ class GemmaAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
+        breakpoint()
         if attention_mask is not None:  # no matter the length, we just slice it
             if cache_position is not None:
                 causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
             else:
                 causal_mask = attention_mask
+            breakpoint()
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -550,6 +551,7 @@ class GemmaSdpaAttention(GemmaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
+            breakpoint()
             causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
@@ -558,7 +560,7 @@ class GemmaSdpaAttention(GemmaAttention):
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
-
+        breakpoint()
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -566,6 +568,7 @@ class GemmaSdpaAttention(GemmaAttention):
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
         )
+        breakpoint()
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
@@ -627,8 +630,10 @@ class GemmaDecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
+        # so far so good layer 1 at least
+        breakpoint()
         # Self Attention
+
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -639,6 +644,7 @@ class GemmaDecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
+        breakpoint()
         hidden_states = residual + hidden_states
 
         # Fully Connected
@@ -882,14 +888,14 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-
+        breakpoint()
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
-
+        causal_mask[:, :, :256, :256] = 0
         # embed positions
         hidden_states = inputs_embeds
 
         # normalized
-        hidden_states = hidden_states * (self.config.hidden_size**0.5)
+        # hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -921,6 +927,7 @@ class GemmaModel(GemmaPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                 )
+                breakpoint()
 
             hidden_states = layer_outputs[0]
 

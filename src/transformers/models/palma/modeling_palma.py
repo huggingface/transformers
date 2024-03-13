@@ -353,7 +353,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
     """
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        # Probably not needed for Palma
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))

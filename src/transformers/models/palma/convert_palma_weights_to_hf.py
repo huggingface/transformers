@@ -37,7 +37,7 @@ from transformers.image_utils import (
 )
 from transformers.utils import logging
 
-device = 'cuda'
+device = 'cpu'
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -250,6 +250,7 @@ def verify_logits(model):
 
     # These steps mimic what should be taken in the processor - for an image we don't resize (given image is already 224px)
     # TODO replace by a proper Processor() call when tests pass
+
     img = np.array(Image.open(cow_on_beach_path))
     img = img
     img = np.expand_dims(img, 0)
@@ -293,7 +294,9 @@ def verify_logits(model):
         attention_mask = torch.cat((torch.ones((1, unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
         # z_txt = model.language_model(input_embeds=text_token_embeddings, attention_mask=attention_mask)
 
-    concat_embeddings = torch.cat((projector_output, text_token_embeddings), dim=1)
+    concat_embeddings = torch.cat((projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
+    # This matches exactly the gemma embeddings
+    
     #with torch.inference_mode():
     #    outputs_activations_text = model.language_model(prompt_input_ids).logits
     """
@@ -341,7 +344,6 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     """
     # define default SigLIP configuration
     config = get_palma_config()
-
     # get checkpoint (move to args)
     checkpoint_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.bv.params.npz" 
     # load original state dict
