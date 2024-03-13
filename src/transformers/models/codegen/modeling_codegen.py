@@ -266,6 +266,7 @@ class CodeGenMLP(nn.Module):
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(nn.Module):
+    # Ignore copy
     def __init__(self, config):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
