@@ -1130,9 +1130,8 @@ class TokenizerTesterMixin:
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
                 output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
-                tokenizer.apply_chat_template(
-                    dummy_conversation, tokenize=True, return_dict=False
-                )  # Check that no error raised
+                # Check that no error raised
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
     @require_jinja
     def test_chat_template_batched(self):
