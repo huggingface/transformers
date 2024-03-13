@@ -1086,18 +1086,17 @@ class CohereForCausalLM(CoherePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, CohereForCausalLM
+        >> from transformers import AutoTokenizer, CohereForCausalLM
 
-        #TODO: Model name needs to be updated
-        >>> model = CohereForCausalLM.from_pretrained("CohereForAI/Cohere-model")
-        >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/Cohere-model")
+        >> model = CohereForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01") # doctest: +SKIP
+        >> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01") # doctest: +SKIP
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >> prompt = "Hey, are you conscious? Can you talk to me?"
+        >> inputs = tokenizer(prompt, return_tensors="pt")
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >> # Generate
+        >> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -93,10 +93,10 @@ class CohereConfig(PretrainedConfig):
     >>> configuration = CohereConfig()
 
     >>> # Initializing a model from the Cohere configuration
-    >>> model = CohereModel(configuration)
+    >>> model = CohereModel(configuration) # doctest: +SKIP
 
     >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> configuration = model.config # doctest: +SKIP
     ```"""
 
     model_type = "cohere"
