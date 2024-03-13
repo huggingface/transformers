@@ -22,6 +22,7 @@ from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
 from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_torch_mlu_available
 
 
 if is_torch_available():
@@ -38,6 +39,9 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
+            if is_torch_mlu_available():
+                _ = importlib_metadata.metadata("deepspeed-mlu")
+                return True
             _ = importlib_metadata.metadata("deepspeed")
             return True
         except importlib_metadata.PackageNotFoundError:
