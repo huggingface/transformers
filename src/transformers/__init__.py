@@ -48,6 +48,8 @@ from .utils import (
     logging,
 )
 
+from .models.deprecated._archive_maps import *
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
