@@ -247,7 +247,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
                 all_logits.append(logits)
 
-                probabilities = tf.math.sigmoid(logits) * tf.cast(attention_mask_example, tf.float32)
+                probabilities = tf.math.sigmoid(tf.cast(logits, tf.float32)) * tf.cast(
+                    attention_mask_example, tf.float32
+                )
 
                 coords_to_probs = collections.defaultdict(list)
                 token_type_ids_example = token_type_ids_example
