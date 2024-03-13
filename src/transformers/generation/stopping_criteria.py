@@ -165,20 +165,19 @@ class StopStringCriteria(StoppingCriteria):
     How is the match actually performed, though? We do it in quite a confusing way, because we want the entire match
     process to be compilable with Torch or XLA, which means we cannot use standard string methods. However, it is possible,
     with some work, to do string matching with pure tensor operations. We'll begin by describing the algorithm we use
-    with standard string operations, and then at the end we'll explain how this is converted to pure tensor operations
-    at generation time.
+    with standard string operations, and then at the end we'll explain how this is converted to pure tensor operations.
 
     The key to the algorithm is an observation: Because the stop string must overlap with the end of the token sequence, we can start at
-    the end of the sequence and work backwards. Specifically, we check that there is an overlap between the *start* of
-    the final token and the *end* of the stop_string, or to put it another way, stop_string[-i:] == token[:i] for
+    the end of the sequence and work backwards. Specifically, we check that there is an overlap between the start of
+    the final token and the end of the stop_string, or to put it another way, stop_string[-i:] == token[:i] for
     some i > 0. If you look at the positive examples above, you'll see the last token in all of them fulfills this
     property:
 
-    - ["st", "op"] (overlap is "op")
-    - ["stop"]  (overlap is "stop")
-    - ["st", "opera"]  (overlap is "op")
-    - ["sto", "pper"]  (overlap is "p")
-    - ["las", "topper"]  (overlap is "top")
+    - ["st", "op"] (overlap is "op", overlap length == 2)
+    - ["stop"]  (overlap is "stop", overlap length == 4)
+    - ["st", "opera"]  (overlap is "op", overlap length == 2)
+    - ["sto", "pper"]  (overlap is "p", overlap length == 1)
+    - ["las", "topper"]  (overlap is "top", overlap length == 3)
 
     It's impossible to construct a matching sequence that does not have this property (feel free to verify this
     yourself). However, although this overlap between the start of the final token and the end of the stop string is
@@ -239,6 +238,15 @@ class StopStringCriteria(StoppingCriteria):
     We then perform the above algorithm, starting from each value, and test whether each results in a match.
     Thanks to vectorization, we can run these tests in parallel (in fact, we can run the test for every possible
     overlap length and all stop strings in parallel).
+
+    The second detail is how we handle cases when the token sequence has an overhang off the start of the stop string,
+    as in the case of ["las", "top"], since we do not store "start overlaps" in the same way we do for end overlaps.
+    Instead, we simply store (in the valid_positions vector) that the token "las" is valid before "top", in the same
+    way that the token "s" is. Therefore, the total length it computes in the case of ["las", "top"] is 6 rather than 4,
+    because it doesn't truncate the match to the length of the stop string. However, since the algorithm concludes by
+    checking that the maximum match length is equal to or greater than the length of the stop string, this does not
+    affect the correctness of its final answer; both ["las", "top"] with a total length of 6, and ["s", "top"] with a
+    total length of 4, will be correctly identified as matches, because both are >= 4.
 
     Args:
         tokenizer (`PreTrainedTokenizer`):
