@@ -20,7 +20,7 @@ if is_torch_available():
 if is_hqq_available():
     from hqq.core.quantize import HQQLinear
 else:
-    HQQLinear = None	
+    HQQLinear = None    
 
 #Name all modules inside the model
 def autoname_modules(model):
@@ -49,22 +49,22 @@ def find_parent(model, name):
 
 #checks if a module is a leaf: doesn't have another module inside
 def is_leaf_module(module):
-	return len(module._modules)==0
+    return len(module._modules)==0
 
 #Returns layers to ignores. These layers are typically not leaves we are interested in for storage and loading
 def get_ignore_layers(model):
-	layers  = set([''])
-	for name, module in model.named_modules():
-		if(not is_leaf_module(module)):
-			layers.add(name)
-	return list(layers)
+    layers  = {''}
+    for name, module in model.named_modules():
+        if(not is_leaf_module(module)):
+            layers.add(name)
+    return list(layers)
 
 #Checks if a quant config is an HQQ quant config
 def check_if_hqq_quant_config(quant_config):
     if(quant_config is None): return False
     q_keys = list(quant_config.keys()) 
     q_vals = [quant_config[k] for k in quant_config][0]
-    if(type(q_vals)==dict):
+    if(isinstance(q_vals, dict)):
         q_keys = q_keys + list([quant_config[k] for k in quant_config][0].keys())
     return ('weight_quant_params' in q_keys)
 

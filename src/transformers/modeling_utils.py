@@ -98,7 +98,11 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-from .utils.hqq_utils import *
+from .utils.hqq_utils import (
+    check_if_hqq_quant_config,
+    get_ignore_layers,
+    find_parent,
+    load_hqq_module)
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -3063,8 +3067,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         
             save_dir = BaseHQQModel.try_snapshot_download(pretrained_model_name_or_path, cache_dir)
 
+            #Load model with meta device
             with init_empty_weights():
-                # Let's make sure we don't run the init function of buffer modules
                 model = cls(config, *model_args, **model_kwargs)
             
             #Set layers to ignore
@@ -3082,7 +3086,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             compute_dtype = torch_dtype if (torch_dtype is not None) else None 
             hqq_device    = 'cuda'
-            if(type(device_map)==dict):
+            if(isinstance(device_map, dict)):
                 hqq_device = [device_map[k] for k in device_map][0]
 
             #loop over modules
@@ -3092,7 +3096,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             #Can't replace modules directly in this loop, so creating a tmp dictionary 
             name_to_module = {}
             for name, module in model.named_modules():
-                if(name in ignore_layers): continue
+                if(name in ignore_layers): 
+                    continue
                 name_to_module[name] = module
 
             #load modules

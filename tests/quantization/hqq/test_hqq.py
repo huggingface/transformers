@@ -54,15 +54,15 @@ class HQQConfigTest(unittest.TestCase):
 
 
 class HQQLLMRunner():
-	def __init__(self, model_id, quant_config=None, compute_dtype=torch.float16, device='cuda', cache_dir=None):
-		self.model     = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=compute_dtype, device_map=device, quantization_config=quant_config, cache_dir=cache_dir) 
-		self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir) 
-		self.device    = self.model.device
-		HQQLinear.set_backend(HQQBackend.ATEN_BACKPROP)
+    def __init__(self, model_id, quant_config=None, compute_dtype=torch.float16, device='cuda', cache_dir=None):
+        self.model     = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=compute_dtype, device_map=device, quantization_config=quant_config, cache_dir=cache_dir) 
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir) 
+        self.device    = self.model.device
+        HQQLinear.set_backend(HQQBackend.ATEN_BACKPROP)
 
 def cleanup():
-	torch.cuda.empty_cache()
-	gc.collect()
+    torch.cuda.empty_cache()
+    gc.collect()
 
 @slow
 @require_torch_gpu
@@ -84,10 +84,10 @@ class HQQTest(unittest.TestCase):
 
         quant_config = BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False)
         hqq_runner  =  HQQLLMRunner(model_id="mistralai/Mistral-7B-Instruct-v0.2",
-        						  quant_config=HQQConfig(quant_config),
-        						  compute_dtype=compute_dtype,
-        						  cache_dir=cache_dir,
-        						  device=device)
+                                  quant_config=HQQConfig(quant_config),
+                                  compute_dtype=compute_dtype,
+                                  cache_dir=cache_dir,
+                                  device=device)
 
         batch_size, context_size = 1, 1024
 
@@ -104,7 +104,7 @@ class HQQTest(unittest.TestCase):
 
         #Test forward pass 
         with torch.no_grad():
-        	out = hqq_runner.model(torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)).logits
+            out = hqq_runner.model(torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)).logits
         self.assertEqual(out.shape[0], batch_size)
         self.assertEqual(out.shape[1], context_size)
 
@@ -118,21 +118,21 @@ class HQQTest(unittest.TestCase):
         cache_dir     = None
 
         quant_config  = {
-        		'self_attn.q_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
-        		'self_attn.k_proj':BaseQuantizeConfig(nbits=3, group_size=64, offload_meta=True),
-        		'self_attn.v_proj':BaseQuantizeConfig(nbits=2, group_size=64, offload_meta=True),
-        		'self_attn.o_proj':BaseQuantizeConfig(nbits=2, group_size=64, offload_meta=True),
+                'self_attn.q_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+                'self_attn.k_proj':BaseQuantizeConfig(nbits=3, group_size=64, offload_meta=True),
+                'self_attn.v_proj':BaseQuantizeConfig(nbits=2, group_size=64, offload_meta=True),
+                'self_attn.o_proj':BaseQuantizeConfig(nbits=2, group_size=64, offload_meta=True),
 
-        		'mlp.gate_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
-        		'mlp.up_proj':  BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
-        		'mlp.down_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
-        		}
+                'mlp.gate_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+                'mlp.up_proj':  BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+                'mlp.down_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+                }
 
         hqq_runner  =  HQQLLMRunner(model_id="mistralai/Mistral-7B-Instruct-v0.2",
-        						  quant_config=HQQConfig(quant_config),
-        						  compute_dtype=compute_dtype,
-        						  cache_dir=cache_dir,
-        						  device=device)
+                                  quant_config=HQQConfig(quant_config),
+                                  compute_dtype=compute_dtype,
+                                  cache_dir=cache_dir,
+                                  device=device)
 
         batch_size, context_size = 1, 1024
 
@@ -153,6 +153,6 @@ class HQQTest(unittest.TestCase):
 
         #Test forward pass 
         with torch.no_grad():
-        	out = hqq_runner.model(torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)).logits
+            out = hqq_runner.model(torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)).logits
         self.assertEqual(out.shape[0], batch_size)
         self.assertEqual(out.shape[1], context_size)

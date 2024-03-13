@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List
 from .base import HfQuantizer
 
 if TYPE_CHECKING:
@@ -22,7 +22,7 @@ from ..utils import is_torch_available, is_hqq_available, logging
 from .quantizers_utils import get_module_from_name
 
 from ..integrations import prepare_for_hqq_linear
-from ..utils.hqq_utils import *
+from ..utils.hqq_utils import find_parent
 
 if is_torch_available():
     import torch
@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 class HQQHfQuantizer(HfQuantizer):
     """
-	HQQ quantizer base HF class. 
+    HQQ quantizer base HF class. 
     nn.Linear modules are first tagged with quant_config in _process_model_before_weight_loading().
     The actually quantization and offloading to the GPU is done in check_quantized_param().
     self.show_progress (bool) is used to show quantization progress in each shard.
@@ -104,7 +104,7 @@ class HQQHfQuantizer(HfQuantizer):
         node          = layer_name.split('.')[-1]
 
         # Step 0: set module state_dict
-        module_state_dict = dict([(key.split('.')[-1], state_dict[key]) for key in state_dict if (layer_name in key)])
+        module_state_dict = {key.split('.')[-1]: state_dict[key] for key in state_dict if layer_name in key}
 
         #Step 1: Check if the state_dict of the module already contains quantized parameters
         if(('W_q' in module_state_dict) and ('meta' in module_state_dict)):
