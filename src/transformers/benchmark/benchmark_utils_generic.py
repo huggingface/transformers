@@ -20,7 +20,6 @@ import timeit
 
 class BenchMark:
     def __init__(self, *arg, **kwargs):
-
         self._buffer = {
             "init_kwargs": {},
             "inputs_kwargs": {},
@@ -66,7 +65,6 @@ class BenchMark:
         return report
 
     def run(self, measure_kwargs=None, target_kwargs=None, inputs_kwargs=None, report_kwargs=None):
-
         self._reset_buffer()
 
         if measure_kwargs is None:
@@ -97,7 +95,6 @@ class BenchMark:
 
 class SpeedBenchMark(BenchMark):
     def measure(self, func, number=3, repeat=1):
-
         self._buffer["measure_kwargs"]["number"] = number
         self._buffer["measure_kwargs"]["repeat"] = repeat
 
