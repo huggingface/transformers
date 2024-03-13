@@ -1838,4 +1838,16 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             **generate_kwargs,
         )
 
+        # this is a temporary workaround to be consistent with other generation models and
+        # have BOS as the first token, even though under the hood we are calling LM with embeds
+        if not self.language_model.config.is_encoder_decoder:
+            bos_tokens = (
+                torch.LongTensor([[self.config.text_config.bos_token_id]])
+                .repeat(batch_size, 1)
+                .to(image_embeds.device)
+            )
+            if not isinstance(outputs, torch.Tensor):
+                outputs.sequences = torch.cat([bos_tokens, outputs.sequences], dim=-1)
+            else:
+                outputs = torch.cat([bos_tokens, outputs], dim=-1)
         return outputs
