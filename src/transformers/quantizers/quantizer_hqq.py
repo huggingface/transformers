@@ -45,10 +45,10 @@ class HQQHfQuantizer(HfQuantizer):
     self.show_progress (bool) is used to show quantization progress in each shard.
     """
 
-    use_keep_in_fp32_modules         = False
+    use_keep_in_fp32_modules = False
     requires_parameters_quantization = True
-    requires_calibration             = False
-    required_packages                = ["hqq"]
+    requires_calibration = False
+    required_packages = ["hqq"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -56,7 +56,9 @@ class HQQHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         if not (is_hqq_available()):
-            raise ImportError("HQQ is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`")
+            raise ImportError(
+                "HQQ is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`"
+            )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
@@ -67,7 +69,7 @@ class HQQHfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
-        self.device_map  = kwargs.get("device_map", None)
+        self.device_map = kwargs.get("device_map", None)
         self.torch_dtype = kwargs.get("torch_dtype", None)
 
     def check_quantized_param(
@@ -99,24 +101,28 @@ class HQQHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
 
-        if(type(module) is not torch.nn.Linear):
+        if type(module) is not torch.nn.Linear:
             return
 
-        layer_name    = param_name.replace('.weight', '').replace('.bias', '')
+        layer_name = param_name.replace(".weight", "").replace(".bias", "")
         parent_module = find_parent(model, layer_name)
-        node          = layer_name.split('.')[-1]
+        node = layer_name.split(".")[-1]
 
         # Step 0: set module state_dict
-        module_state_dict = {key.split('.')[-1]: state_dict[key] for key in state_dict if layer_name in key}
+        module_state_dict = {key.split(".")[-1]: state_dict[key] for key in state_dict if layer_name in key}
 
-        #Step 1: Check if the state_dict of the module already contains quantized parameters
-        if(('W_q' in module_state_dict) and ('meta' in module_state_dict)):
-            module = HQQLinear(linear_layer=None, quant_config=None, compute_dtype=self.torch_dtype, device=target_device)
+        # Step 1: Check if the state_dict of the module already contains quantized parameters
+        if ("W_q" in module_state_dict) and ("meta" in module_state_dict):
+            module = HQQLinear(
+                linear_layer=None, quant_config=None, compute_dtype=self.torch_dtype, device=target_device
+            )
             module.load_state_dict(module_state_dict)
             return
 
         # Step 2: Create tmp linear layer on CPU
-        tmp_linear_layer = torch.nn.Linear(in_features=module.in_features, out_features=module.out_features, bias=module.bias)
+        tmp_linear_layer = torch.nn.Linear(
+            in_features=module.in_features, out_features=module.out_features, bias=module.bias
+        )
         tmp_linear_layer.load_state_dict(module_state_dict)
 
         """
@@ -124,8 +130,18 @@ class HQQHfQuantizer(HfQuantizer):
         directly doesn't work.
         """
 
-        if(hasattr(module, 'quant_config')):
-            setattr(parent_module, node, HQQLinear(tmp_linear_layer, module.quant_config, compute_dtype=self.torch_dtype, device=target_device, del_orig=True))
+        if hasattr(module, "quant_config"):
+            setattr(
+                parent_module,
+                node,
+                HQQLinear(
+                    tmp_linear_layer,
+                    module.quant_config,
+                    compute_dtype=self.torch_dtype,
+                    device=target_device,
+                    del_orig=True,
+                ),
+            )
         else:
             setattr(parent_module, node, tmp_linear_layer.to(self.torch_dtype).to(target_device))
 
@@ -145,14 +161,13 @@ class HQQHfQuantizer(HfQuantizer):
         keep_in_fp32_modules: List[str] = [],
         **kwargs,
     ):
-
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear > HQQLinear in create_quantized_param()
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
-        #model.config.quantization_config is done inside prepare_for_hqq_linear
+        # model.config.quantization_config is done inside prepare_for_hqq_linear
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_hqq_quantized    = True
+        model.is_hqq_quantized = True
         model.is_hqq_serializable = self.is_serializable
         return model
 

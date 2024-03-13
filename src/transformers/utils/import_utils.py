@@ -695,6 +695,7 @@ def is_bitsandbytes_available():
 
     return _bitsandbytes_available and torch.cuda.is_available()
 
+
 def is_hqq_available():
     if not is_torch_available():
         return False
@@ -704,6 +705,7 @@ def is_hqq_available():
     import torch
 
     return _hqq_available and torch.cuda.is_available()
+
 
 def is_flash_attn_2_available():
     if not is_torch_available():

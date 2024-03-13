@@ -38,7 +38,7 @@ AUTO_QUANTIZER_MAPPING = {
     "bitsandbytes_8bit": Bnb8BitHfQuantizer,
     "gptq": GptqHfQuantizer,
     "aqlm": AqlmHfQuantizer,
-    "hqq": HQQHfQuantizer
+    "hqq": HQQHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -47,7 +47,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitsandbytes_8bit": BitsAndBytesConfig,
     "gptq": GPTQConfig,
     "aqlm": AqlmConfig,
-    "hqq": HQQConfig
+    "hqq": HQQConfig,
 }
 
 

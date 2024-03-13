@@ -32,6 +32,7 @@ if is_torch_available():
 
 if is_hqq_available():
     from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
     hqq_default_config = HQQBaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False)
 else:
     hqq_default_config = None
@@ -42,9 +43,9 @@ logger = logging.get_logger(__name__)
 class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
-    AWQ  = "awq"
+    AWQ = "awq"
     AQLM = "aqlm"
-    HQQ  = "hqq"
+    HQQ = "hqq"
 
 
 class AWQLinearVersion(str, Enum):
@@ -200,6 +201,7 @@ class HQQConfig(QuantizationConfigMixin):
         kwargs (`Dict[str, Any]`):
             Additional parameters from which to initialize the configuration object.
     """
+
     def __init__(
         self,
         quant_config=hqq_default_config,
@@ -208,8 +210,8 @@ class HQQConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.HQQ
-        self.quant_config  = quant_config
-        self.skip_modules  = skip_modules
+        self.quant_config = quant_config
+        self.skip_modules = skip_modules
         self.show_progress = show_progress
 
         self.post_init()
@@ -220,13 +222,11 @@ class HQQConfig(QuantizationConfigMixin):
         """
         pass
 
-
     def is_quantizable(self):
         r"""
         Returns `True` if the model is quantizable, `False` otherwise.
         """
         return True
-
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -260,7 +260,6 @@ class HQQConfig(QuantizationConfigMixin):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
-
 
 
 @dataclass
