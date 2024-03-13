@@ -22,18 +22,18 @@ class BenchMark:
     def __init__(self, *arg, **kwargs):
 
         self._buffer = {
-            "init_kwargs": dict(),
-            "inputs_kwargs": dict(),
-            "target_kwargs": dict(),
-            "measure_kwargs": dict(),
-            "report_kwargs": dict(),
+            "init_kwargs": {},
+            "inputs_kwargs": {},
+            "target_kwargs": {},
+            "measure_kwargs": {},
+            "report_kwargs": {},
         }
 
     def _reset_buffer(self):
-        self._buffer["inputs_kwargs"] = dict()
-        self._buffer["target_kwargs"] = dict()
-        self._buffer["measure_kwargs"] = dict()
-        self._buffer["report_kwargs"] = dict()
+        self._buffer["inputs_kwargs"] = {}
+        self._buffer["target_kwargs"] = {}
+        self._buffer["measure_kwargs"] = {}
+        self._buffer["report_kwargs"] = {}
 
     def measure(self, func, **measure_kwargs):
         raise NotImplementedError
