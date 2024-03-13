@@ -1818,7 +1818,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings_requires_grad = old_embeddings.weight.requires_grad
         new_embeddings.requires_grad_(old_embeddings_requires_grad)
         self.set_input_embeddings(new_embeddings)
-        is_quantized = self.hf_quantizer is not None
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
 
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
@@ -1896,7 +1896,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_embeddings
 
-        is_quantized = self.hf_quantizer is not None
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
@@ -1973,7 +1973,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        is_quantized = self.hf_quantizer is not None
+        is_quantized = hasattr(self, "hf_quantizer") and self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
