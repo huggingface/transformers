@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     repo_id = "bert-base-uncased"
 
-    benchmakr = FromPretrainedSpeedBenchMark()
+    benchmark = FromPretrainedSpeedBenchMark()
 
     run_kwargs = {
         "measure_kwargs": {"number": 2, "repeat": 3},
