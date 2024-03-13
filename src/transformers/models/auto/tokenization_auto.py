@@ -106,12 +106,6 @@ else:
                 ),
             ),
             ("canine", ("CanineTokenizer", None)),
-            (
-                "cohere",
-                (
-                    "CohereTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
             ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "clap",
@@ -145,8 +139,9 @@ else:
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "cohere",
-                ("CohereTokenizerFast" if is_tokenizers_available() else None,),
+                (None, "CohereTokenizerFast" if is_tokenizers_available() else None),
             ),
+
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "cpm",

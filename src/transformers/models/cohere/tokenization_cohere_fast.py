@@ -16,14 +16,13 @@
 # This file is based on the tokenization_llama_fast.py file in transformers
 
 
-import os
-from typing import Optional, Tuple, Dict, Union, List, Literal
+from typing import Dict, List, Literal, Optional, Union
 
 from tokenizers import processors
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...tokenization_utils_base import TensorType
 from ...pipelines.conversational import Conversation
+from ...tokenization_utils_base import TensorType
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ...utils.versions import require_version
 
@@ -190,8 +189,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
     @property
     def default_chat_template(self):
         """
-        Cohere Tokenizer uses <|START_OF_TURN_TOKEN|> and <|END_OF_TURN_TOKEN|> to indicate each turn in a chat. 
-        Additioanlly, to indicate the source of the message, <|USER_TOKEN|>, <|CHATBOT_TOKEN|> and <|SYSTEM_TOKEN|> 
+        Cohere Tokenizer uses <|START_OF_TURN_TOKEN|> and <|END_OF_TURN_TOKEN|> to indicate each turn in a chat.
+        Additioanlly, to indicate the source of the message, <|USER_TOKEN|>, <|CHATBOT_TOKEN|> and <|SYSTEM_TOKEN|>
         for user, assitant and system messages respectively.
 
         The output should look something like:
@@ -251,7 +250,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
     @property
     def default_tool_use_template(self):
         template = (
-            "{{ bos_token }}"    
+            "{{ bos_token }}"
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
             "{% set system_message = messages[0]['content'] %}"
@@ -266,7 +265,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             "{{ '\n## Basic Rules' }}"
             "{{ '\nYou are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user\\'s requests, you cite your sources in your answers, according to those instructions.' }}"
             "{{ '\n\n# User Preamble' }}"
-            "{{ '\n' + system_message }}" 
+            "{{ '\n' + system_message }}"
             "{{'\n\n## Available Tools\nHere is a list of tools that you have available to you:\n\n'}}"
             "{% for tool in tools %}"
             "{% if loop.index0 != 0 %}"
@@ -283,7 +282,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             "{% else %}"
             "{{ param_fields.type }}"
             "{% endif %}"
-            "{% endfor %}" 
+            "{% endfor %}"
             "{{ ') -> List[Dict]:\n    \"\"\"'}}"
             "{{ tool.description }}"
             "{% if tool.parameter_definitions|length != 0 %}"
@@ -299,7 +298,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             "{{ param_fields.type }}"
             "{% endif %}"
             "{{ '): ' + param_fields.description }}"
-            "{% endfor %}" 
+            "{% endfor %}"
             "{% endif %}"
             "{{ '\n    \"\"\"\n    pass\n```' }}"
             "{% endfor %}"
@@ -326,7 +325,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
     @property
     def default_grounded_generation_template(self):
         template = (
-            "{{ bos_token }}"    
+            "{{ bos_token }}"
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
             "{% set system_message = messages[0]['content'] %}"
@@ -368,7 +367,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             "{{ 'Firstly, Decide which of the retrieved documents are relevant to the user\\'s last input by writing \\'Relevant Documents:\\' followed by comma-separated list of document numbers. If none are relevant, you should instead write \\'None\\'.\n' }}"
             "{{ 'Secondly, Decide which of the retrieved documents contain facts that should be cited in a good answer to the user\\'s last input by writing \\'Cited Documents:\\' followed a comma-separated list of document numbers. If you dont want to cite any of them, you should instead write \\'None\\'.\n' }}"
             "{% if citation_mode=='accurate' %}"
-                "{{ 'Thirdly, Write \\'Answer:\\' followed by a response to the user\\'s last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.\n' }}"
+            "{{ 'Thirdly, Write \\'Answer:\\' followed by a response to the user\\'s last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.\n' }}"
             "{% endif %}"
             "{{ 'Finally, Write \\'Grounded answer:\\' followed by a response to the user\\'s last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.' }}"
             "{{ '<|END_OF_TURN_TOKEN|>' }}"
@@ -402,10 +401,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         compiled_template = self._compile_jinja_template(template)
 
         rendered = compiled_template.render(
-            messages=conversation,
-            add_generation_prompt=add_generation_prompt,
-            **kwargs,
-            **self.special_tokens_map
+            messages=conversation, add_generation_prompt=add_generation_prompt, **kwargs, **self.special_tokens_map
         )
 
         if padding is True:
@@ -439,17 +435,17 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         conversation: Union[List[Dict[str, str]], "Conversation"],
         tools: List[Dict],
         tool_use_template: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[str, List[int]]:
         """Create a Command-R tool-use prompt.
 
-        Once rendered, the prompt instructs the model to generate a list of actions to perform on a set of user supplied tools 
+        Once rendered, the prompt instructs the model to generate a list of actions to perform on a set of user supplied tools
         to help carry out the user's requests.
 
         Conceptually, this works in the same way as `apply_chat_format`, but takes an additional `tools` parameter.
 
         Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys and a list of available
-        tools for the model to use into a prompt string, or a list of token ids. 
+        tools for the model to use into a prompt string, or a list of token ids.
         This method will use the tokenizer's `default_tool_use_template` template specified at the class level.
         You can override the default template using the `tool_use_template` kwarg but the quality of your results may decrease.
 
@@ -461,11 +457,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
                 The format should be:
                    * name (str): The name of the tool to be called. Valid names contain only the characters a-z,
                         A-Z, 0-9, _ and must not begin with a digit.
-                   * description (str): The description of what the tool does, the model uses the description to 
+                   * description (str): The description of what the tool does, the model uses the description to
                         choose when and how to call the function.
-                   * parameter_definitions (List[Dict]): The input parameters of the tool. Accepts a dictionary 
+                   * parameter_definitions (List[Dict]): The input parameters of the tool. Accepts a dictionary
                         where the key is the name of the parameter and the value is the parameter spec.
-                        Valid parameter names contain only the characters a-z, A-Z, 0-9, _ and must not begin with a digit. 
+                        Valid parameter names contain only the characters a-z, A-Z, 0-9, _ and must not begin with a digit.
                         Parameter specs are as follows:
                        * description (str): The description of the parameter.
                        * type (str): the type of the parameter - most effective for python builtin data types, such as 'str', 'bool'
@@ -501,7 +497,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             or if tokenize=True:
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
-        
+
         Examples:
 
         ```python
@@ -537,7 +533,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         >>> print(prompt)
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
         The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
- 
+
         # System Preamble
         ## Basic Rules
         You are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user's requests, you cite your sources in your answers, according to those instructions.
@@ -552,7 +548,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         ## Available Tools
         Here is a list of tools that you have available to you:
 
-        \`\`\`python
+        \\`\\`\\`python
         def internet_search(query: str) -> List[Dict]:
             \"\"\"Returns a list of relevant document snippets for a textual query retrieved from the internet
 
@@ -560,21 +556,21 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
                 query (str): Query to search the internet with
             \"\"\"
             pass
-        \`\`\`
+        \\`\\`\\`
 
-        \`\`\`python
+        \\`\\`\\`python
         def directly_answer() -> List[Dict]:
             \"\"\"Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
             \"\"\"
             pass
-        \`\`\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Whats the biggest penguin in the world?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Write 'Action:' followed by a json-formatted list of actions that you want to perform in order to produce a good response to the user's last input. You can use any of the supplied tools any number of times, but you should aim to execute the minimum number of necessary actions for the input. You should use the `directly-answer` tool if calling the other tools is unnecessary. The list of actions you want to call should be formatted as a list of json objects, for example:
-        \`\`\`json
+        \\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Whats the biggest penguin in the world?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Write 'Action:' followed by a json-formatted list of actions that you want to perform in order to produce a good response to the user's last input. You can use any of the supplied tools any number of times, but you should aim to execute the minimum number of necessary actions for the input. You should use the `directly-answer` tool if calling the other tools is unnecessary. The list of actions you want to call should be formatted as a list of json objects, for example:
+        \\`\\`\\`json
         [
             {
                 "tool_name": title of the tool in the specification,
                 "parameters": a dict of parameters to input into the tool as they are defined in the specs, or {} if it takes no parameters
             }
-        ]\`\`\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
+        ]\\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
         ```
         >>> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         >>> outputs = model.generate(inputs, max_new_tokens=128)
@@ -594,9 +590,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         if tool_use_template is None:
             if self.tool_use_template is not None:
                 tool_use_template = self.tool_use_template
-            else:  
+            else:
                 tool_use_template = self.default_tool_use_template
-        
+
         return self._apply_template_with_arguments(
             conversation,
             tools=tools,
@@ -610,7 +606,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         documents: List[Dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         grounded_generation_template: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[str, List[int]]:
         """Create a Command-R grounded generation (aka RAG) prompt.
 
@@ -619,18 +615,18 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Conceptually, this works in the same way as `apply_chat_format`, but takes additional `documents`
         and parameter `citation_mode` parameters.
 
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys and a list of 
-        documents for the model to ground its response on into a prompt string, or a list of token ids. 
+        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys and a list of
+        documents for the model to ground its response on into a prompt string, or a list of token ids.
         This method will use the tokenizer's `grounded_generation_template` template specified at the class level.
         You can override the default template using the `grounded_generation_template` kwarg but the quality of your results may decrease.
 
         Args:
             conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your 
+            documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
                 generation on. A document is a semistructured dict, wiht a string to string mapping. Common fields are
                 `url`, `title`, `snippet` etc but should be descriptive of the key. They will get rendered into the prompt.
-            citation_mode: either "accurate" (prompt the model to generate an answer first, then rewrite it with citation 
+            citation_mode: either "accurate" (prompt the model to generate an answer first, then rewrite it with citation
                 spans in) or "fast", where the prompt instructs the model to generate an answer with citations in directly.
                 The former has higher quality citations, the latter requires fewer tokens to be generated.
             grounded_generation_template (str, *optional*): A Jinja template to use for this conversion. If
@@ -664,15 +660,15 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             or if tokenize=True:
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
-        
+
         Examples:
 
         ```python
         >>> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-0.1')
-        
+
         >>> # define documents:
         >>> documents = [
-            { "title": "Tall penguins", "text": "Emperor penguins are the tallest." }, 
+            { "title": "Tall penguins", "text": "Emperor penguins are the tallest." },
             { "title": "Penguin habitats", "text": "Emperor penguins only live in Antarctica."}
         ]
         >>> # define a conversation:
@@ -689,7 +685,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         >>> print(grounded_generation_prompt)
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
         The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
- 
+
         ## Basic Rules
         You are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user's requests, you cite your sources in your answers, according to those instructions.
 
@@ -724,9 +720,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         if grounded_generation_template is None:
             if self.grounded_generation_template is not None:
                 grounded_generation_template = self.grounded_generation_template
-            else:  
+            else:
                 grounded_generation_template = self.default_grounded_generation_template
-        
+
         return self._apply_template_with_arguments(
             conversation,
             documents=documents,

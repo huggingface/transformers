@@ -143,6 +143,7 @@ def rotate_half(x):
     return rot_x
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -201,6 +202,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention Llama->Cohere
 class CohereAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -235,6 +237,10 @@ class CohereAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self._init_rope()
+
+    # Ignore copy
+    def _init_rope(self):
         self.rotary_emb = CohereRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
@@ -309,7 +315,7 @@ class CohereAttention(nn.Module):
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 Llama->Cohere
 class CohereFlashAttention2(CohereAttention):
     """
-    CohereFlash attention module. This module inherits from `CohereAttention` as the weights of the module stays
+    Cohere flash attention module. This module inherits from `CohereAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -322,7 +328,6 @@ class CohereFlashAttention2(CohereAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -367,11 +372,12 @@ class CohereFlashAttention2(CohereAttention):
 
         dropout_rate = self.attention_dropout if self.training else 0.0
 
+        # Ignore copy
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32.
+        # in fp32. (CohereLayerNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -422,7 +428,7 @@ class CohereFlashAttention2(CohereAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -506,12 +512,12 @@ class CohereFlashAttention2(CohereAttention):
 # Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
 class CohereSdpaAttention(CohereAttention):
     """
-    Cohere Attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    Cohere attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
     `CohereAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from Attention.forward
+    # Adapted from CohereAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -525,7 +531,7 @@ class CohereSdpaAttention(CohereAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "CohereModel is using SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "CohereModel is using CohereSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -596,9 +602,7 @@ COHERE_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Cohere
 class CohereDecoderLayer(nn.Module):
-    # Ignore copy
     def __init__(self, config: CohereConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -608,7 +612,6 @@ class CohereDecoderLayer(nn.Module):
         self.mlp = CohereMLP(config)
         self.input_layernorm = CohereLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -854,6 +857,7 @@ class CohereModel(CoherePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Ignore copy
     @add_start_docstrings_to_model_forward(COHERE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1018,7 +1022,6 @@ class CohereModel(CoherePreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM Llama->Cohere
 class CohereForCausalLM(CoherePreTrainedModel):
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
@@ -1051,7 +1054,6 @@ class CohereForCausalLM(CoherePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(COHERE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
