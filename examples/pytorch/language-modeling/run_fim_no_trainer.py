@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...)
-on a text file or a dataset without using HuggingFace Trainer.
+Fine-tuning the library models for causal language modeling using
+Fill-in-the middle (FIM) objective on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=text-generation
 """
-# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
+# You can also adapt this script on your own fim causal language modeling task. Pointers for this are left as comments.
 
 import argparse
 import json
@@ -32,12 +32,13 @@ from itertools import chain
 from pathlib import Path
 
 import datasets
+import numpy as np
 import torch
 from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -51,13 +52,15 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
+    is_deepspeed_zero3_enabled,
+    is_torch_tpu_available,
 )
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.36.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -68,7 +71,9 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a causal language modeling task")
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a causal language modeling task using fill-in-the middle objective"
+    )
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -158,7 +163,7 @@ def parse_args():
         "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
-    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
+    parser.add_argument("--seed", type=int, default=42, help="A seed for reproducible training.")
     parser.add_argument(
         "--model_type",
         type=str,
@@ -174,6 +179,63 @@ def parse_args():
             "Optional input sequence length after tokenization. The training dataset will be truncated in block of"
             " this size for training. Default to the model max input length for single sentence inputs (take into"
             " account special tokens)."
+        ),
+    )
+    parser.add_argument(
+        "--fim_rate",
+        type=float,
+        default=0.5,
+        help=(
+            " Optional probability with which the FIM transformation is applied to the example."
+            " Default is 0.5. A rate of 1.0 means every example will undergo FIM transformation,"
+            " while a rate of 0.0 means no example will."
+        ),
+    )
+    parser.add_argument(
+        "--fim_spm_rate",
+        type=float,
+        default=0.5,
+        help=(
+            "Within the examples undergoing FIM transformation, this rate determines the probability"
+            " of applying the Sentence Permutation Mode (SPM)."
+            " Default is 0.5. A rate of 1.0 means all FIM transformations will use SPM,"
+            " while a rate of 0.0 means none will."
+        ),
+    )
+    parser.add_argument(
+        "--truncate_or_pad",
+        type=bool,
+        default=True,
+        help=(
+            "Indicates whether the transformed example should be truncated or padded to maintain"
+            " the same length as the original example."
+            " Default is True. If False, the function will not truncate or pad the examples."
+        ),
+    )
+    parser.add_argument(
+        "--fim_prefix_token",
+        type=str,
+        default="<fim_prefix>",
+        help="Fill-in-Middle Prefix token. Defaults to '<fim_prefix>'.",
+    )
+    parser.add_argument(
+        "--fim_middle_token",
+        type=str,
+        default="<fim_middle>",
+        help="Fill-in-Middle Middle token. Defaults to '<fim_middle>'.",
+    )
+    parser.add_argument(
+        "--fim_suffix_token",
+        type=str,
+        default="<fim_suffix>",
+        help="Fill-in-Middle Middle token. Defaults to '<fim_suffix>'.",
+    )
+    parser.add_argument(
+        "--fim_pad_token",
+        type=str,
+        default="<fim_pad>",
+        help=(
+            "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True." " Defaults to '<fim_pad>'."
         ),
     )
     parser.add_argument(
@@ -198,7 +260,7 @@ def parse_args():
         type=bool,
         default=False,
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
             "execute code present on the Hub on your local machine."
         ),
@@ -265,7 +327,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_clm_no_trainer", args)
+    send_example_telemetry("run_fim_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
@@ -295,6 +357,11 @@ def main():
     # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
+        # Set a numpy random state for FIM transformations
+        np_rng = np.random.RandomState(seed=args.seed)
+    else:
+        # Still set a random state for FIM transformations
+        np_rng = np.random.RandomState(seed=42)
 
     # Handle the repository creation
     if accelerator.is_main_process:
@@ -304,8 +371,9 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            api = HfApi()
-            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -344,10 +412,9 @@ def main():
         dataset_args = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
-            extension = args.train_file.split(".")[-1]
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-            extension = args.validation_file.split(".")[-1]
+        extension = args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
             dataset_args["keep_linebreaks"] = not args.no_keep_linebreaks
@@ -368,7 +435,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.
+    # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     # Load pretrained model and tokenizer
     #
@@ -414,11 +481,80 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=args.trust_remote_code)
 
-    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
-    # on a small vocab and want a smaller embedding size, remove this test.
-    embedding_size = model.get_input_embeddings().weight.shape[0]
-    if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
+    # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
+    special_tokens = [args.fim_prefix_token, args.fim_middle_token, args.fim_suffix_token]
+    if args.truncate_or_pad:
+        special_tokens.append(args.fim_pad_token)
+
+    # Get the factor by which the embedding layer should be padded based on the device
+    pad_factor = 1
+    if torch.cuda.is_availble():
+        pad_factor = 8
+
+    elif is_torch_tpu_available():
+        pad_factor = 128
+
+    # Add the new tokens to the tokenizer
+    tokenizer.add_tokens(special_tokens)
+    original_embeddings = model.get_input_embeddings()
+
+    if is_deepspeed_zero3_enabled():
+        import deepspeed
+
+        with deepspeed.zero.GatheredParameters(original_embeddings.weight, modifier_rank=0):
+            # Get the pre-expansion embeddings of the model and resize the embedding layer
+            model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
+            embeddings = model.get_input_embeddings()
+
+            # Sample the embeddings for the new tokens from a multivariate normal distribution
+            # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
+            # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+            mean = original_embeddings.mean(dim=0)
+            n = original_embeddings.size()[0]
+            sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
+            dist = torch.distributions.multivariate_normal.MultivariateNormal(
+                mean,
+                covariance_matrix=1e-5 * sigma,
+            )
+            new_token_embeddings = torch.stack(
+                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                dim=0,
+            )
+    else:
+        original_embeddings = model.get_input_embeddings()
+        # Get the pre-expansion embeddings of the model and resize the embedding layer
+        model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
+        embeddings = model.get_input_embeddings()
+
+        # Sample the embeddings for the new tokens from a multivariate normal distribution
+        # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
+        # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+        mean = original_embeddings.mean(dim=0)
+        n = original_embeddings.size()[0]
+        sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
+        dist = torch.distributions.multivariate_normal.MultivariateNormal(
+            mean,
+            covariance_matrix=1e-5 * sigma,
+        )
+        new_token_embeddings = torch.stack(
+            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            dim=0,
+        )
+
+    if is_deepspeed_zero3_enabled():
+        import deepspeed
+
+        with deepspeed.zero.GatheredParameters(embeddings.weight, modifier_rank=0):
+            # Set the new tokens' embeddings to the newly sampled embeddings
+            embeddings.weight.data[-len(special_tokens) :] = new_token_embeddings
+    else:
+        # Set the new tokens' embeddings to the newly sampled embeddings
+        embeddings.weight.data[-len(special_tokens) :] = new_token_embeddings
+
+    # Update the model's embeddings with the new embeddings
+    model.set_input_embeddings(embeddings)
+
+    logger.info("Added special tokens to the tokenizer and resized model's embedding layer")
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -470,6 +606,63 @@ def main():
         result["labels"] = result["input_ids"].copy()
         return result
 
+    # Get the FIM-specific token ids
+    prefix_tok_id = tokenizer.convert_tokens_to_ids(args.fim_prefix_token)
+    middle_tok_id = tokenizer.convert_tokens_to_ids(args.fim_middle_token)
+    suffix_tok_id = tokenizer.convert_tokens_to_ids(args.fim_suffix_token)
+    pad_tok_id = None
+
+    # If truncate_or_pad is on, also get pad token id
+    if args.truncate_or_pad:
+        pad_tok_id = tokenizer.convert_tokens_to_ids(args.fim_pad_token)
+
+    # The two functions below perform the FIM transformation on the data (either PSM or SPM or PSM+SPM)
+    # Don't call fim_transform directly in .map()
+    # Adapted from https://github.com/loubnabnl/santacoder-finetuning/blob/main/fim.py#L22C13-L83
+    def fim_transform(example):
+        """
+        This function performs FIM transformation on a single example (list of tokens)
+        """
+        if np_rng.binomial(1, args.fim_rate):
+            boundaries = sorted(np_rng.randint(low=0, high=len(example) + 1, size=2))
+
+            prefix = example[: boundaries[0]]
+            middle = example[boundaries[0] : boundaries[1]]
+            suffix = example[boundaries[1] :]
+
+            if args.truncate_or_pad:
+                total_length = len(prefix) + len(middle) + len(suffix) + 3
+                diff = total_length - len(example)
+                if diff > 0:
+                    suffix = suffix[: max(0, len(suffix) - diff)]
+                elif diff < 0:
+                    suffix.extend([pad_tok_id] * (-diff))
+
+            if np_rng.binomial(1, args.fim_spm_rate):
+                # Apply Suffix-Prefix-Middle (SPM) transformation
+                transformed_example = [prefix_tok_id, suffix_tok_id] + suffix + [middle_tok_id] + prefix + middle
+            else:
+                # Apply Prefix-Suffix-Middle (PSM) transformation
+                transformed_example = [prefix_tok_id] + prefix + [suffix_tok_id] + suffix + [middle_tok_id] + middle
+        else:
+            transformed_example = example
+
+        return transformed_example
+
+    # Below function is the one you are supposed to call in the .map() function
+    def apply_fim(examples):
+        """
+        Apply FIM transformation to a batch of examples
+        """
+        fim_transform_ids = [fim_transform(ids) for ids in examples["input_ids"]]
+        examples["input_ids"] = fim_transform_ids
+        examples["labels"] = fim_transform_ids
+        # If your application requires custom attention mask, please adjust this function's below line.
+        # Since FIM transformation increases the number of tokens in input_ids and labels
+        # but leaves the number of tokens unchanged in attention_masks which would cause problems
+        examples["attention_mask"] = [[1] * len(mask) for mask in examples["input_ids"]]
+        return examples
+
     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
     # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
     # to preprocess.
@@ -477,8 +670,17 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/process#map
 
+    # FIM transformations are only supposed to be applied before group_texts processing otherwise some sentences will
+    # have 3-4 more tokens than others due to probabilistic addition of FIM-specific tokens which will raise errors
     with accelerator.main_process_first():
-        lm_datasets = tokenized_datasets.map(
+        fim_datasets = tokenized_datasets.map(
+            apply_fim,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Performing FIM transformation",
+        )
+        lm_datasets = fim_datasets.map(
             group_texts,
             batched=True,
             num_proc=args.preprocessing_num_workers,
@@ -526,10 +728,8 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps
-        if overrode_max_train_steps
-        else args.max_train_steps * accelerator.num_processes,
+        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
     # Prepare everything with our `accelerator`.
@@ -559,7 +759,7 @@ def main():
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("clm_no_trainer", experiment_config)
+        accelerator.init_trackers("fim_no_trainer", experiment_config)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -681,12 +881,8 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                api.upload_folder(
-                    commit_message=f"Training in progress epoch {epoch}",
-                    folder_path=args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=args.hub_token,
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -707,13 +903,8 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                api.upload_folder(
-                    commit_message="End of training",
-                    folder_path=args.output_dir,
-                    repo_id=repo_id,
-                    repo_type="model",
-                    token=args.hub_token,
-                )
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump({"perplexity": perplexity}, f)
 
