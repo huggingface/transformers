@@ -31,5 +31,5 @@ if __name__ == "__main__":
         "inputs_kwargs": [{}],
         "report_kwargs": {"output_path": "benchmark_report.json"},
     }
-    result = benchmakr.run(**run_kwargs)
+    result = benchmark.run(**run_kwargs)
     print(json.dumps(result, indent=4))
