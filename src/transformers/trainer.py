@@ -198,7 +198,6 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
-    from accelerate.data_loader import SeedableRandomSampler
     from accelerate.utils import (
         DistributedDataParallelKwargs,
         DistributedType,
@@ -209,7 +208,11 @@ if is_accelerate_available():
         save_fsdp_optimizer,
     )
 
-    DATA_SAMPLERS = [RandomSampler, SeedableRandomSampler]
+    DATA_SAMPLERS = [RandomSampler]
+    if version.parse(accelerate_version) > version.parse("0.23.0"):
+        from accelerate.data_loader import SeedableRandomSampler
+
+        DATA_SAMPLERS += [SeedableRandomSampler]
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -1893,7 +1896,9 @@ class Trainer:
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
                 sampler = get_dataloader_sampler(train_dataloader)
-                sampler_kinds = [RandomSampler, SeedableRandomSampler]
+                sampler_kinds = [RandomSampler]
+                if version.parse(accelerate_version) > version.parse("0.23.0"):
+                    sampler_kinds.append(SeedableRandomSampler)
                 is_random_sampler = isinstance(sampler, tuple(sampler_kinds))
                 if not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
@@ -2972,7 +2977,9 @@ class Trainer:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
-            if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
+            if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
+                version.parse(accelerate_version) > version.parse("0.24.1")
+            ):
                 state_dict = self.accelerator.get_state_dict(self.model)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)

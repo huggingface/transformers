@@ -720,6 +720,7 @@ def _load_state_dict_into_meta_model(
 
     old_keys = []
     new_keys = []
+    is_quantized = hf_quantizer is None
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
@@ -799,7 +800,7 @@ def _load_state_dict_into_meta_model(
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif (
-            hf_quantizer is None
+            not is_quantized
             or (not hf_quantizer.requires_parameters_quantization)
             or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
         ):
@@ -807,6 +808,9 @@ def _load_state_dict_into_meta_model(
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
             hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+            # and then cast it to CPU to avoid excessive memory usage on each GPU
+            # in comparison to the sharded model across GPUs.
             if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
                 module, tensor_name = get_module_from_name(model, param_name)
                 value = getattr(module, tensor_name)
@@ -1814,10 +1818,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         old_embeddings_requires_grad = old_embeddings.weight.requires_grad
         new_embeddings.requires_grad_(old_embeddings_requires_grad)
         self.set_input_embeddings(new_embeddings)
+        is_quantized = self.hf_quantizer is not None
 
         # Update new_num_tokens with the actual size of new_embeddings
         if pad_to_multiple_of is not None:
-            if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
+            if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
                 with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
@@ -1891,7 +1896,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_embeddings
 
-        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
+        is_quantized = self.hf_quantizer is None
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
@@ -1930,7 +1936,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # numbers of tokens to copy
         n = min(old_num_tokens, new_num_tokens)
 
-        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             params = [old_embeddings.weight, new_embeddings.weight]
@@ -1967,7 +1973,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
+        is_quantized = self.hf_quantizer is None
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=None):
@@ -2009,7 +2016,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
-        if is_deepspeed_zero3_enabled() and self.hf_quantizer is None:
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
@@ -3045,6 +3052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
                 logger.warning("`low_cpu_mem_usage` was None, now set to True since model is quantized.")
+        is_quantized = hf_quantizer is None
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -3371,7 +3379,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
-        if is_deepspeed_zero3_enabled() and hf_quantizer is None:
+        if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3617,6 +3625,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
+        is_quantized = hf_quantizer is None
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -3742,7 +3751,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if param.device == torch.device("meta"):
                     value = torch.empty(*param.size(), dtype=target_dtype)
                     if (
-                        hf_quantizer is None
+                        not is_quantized
                         or getattr(hf_quantizer, "requires_parameters_quantization", False)
                         or not hf_quantizer.check_quantized_param(
                             model, param_value=value, param_name=key, state_dict={}
@@ -3772,7 +3781,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
-            if is_deepspeed_zero3_enabled() and hf_quantizer is None:
+            if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
                 not_initialized_parameters = list(
@@ -3929,15 +3938,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ignore_mismatched_sizes,
                 )
                 if low_cpu_mem_usage:
-                    if is_fsdp_enabled() and not is_local_dist_rank_0() and hf_quantizer is None:
+                    if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
-                                if hf_quantizer is None:
-                                    set_module_tensor_to_device(
-                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
-                                    )
-                                else:
-                                    hf_quantizer.create_quantized_param(model, param, key, "cpu", state_dict)
+                                set_module_tensor_to_device(
+                                    model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                )
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,

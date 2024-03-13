@@ -69,6 +69,7 @@ if is_torch_available():
     from .pytorch_utils import is_torch_greater_or_equal_than_2_0
 
 if is_accelerate_available():
+    from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
@@ -1718,7 +1719,11 @@ class TrainingArguments:
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ[f"{prefix}SHARDING_STRATEGY"] = fsdp_option.upper()
+                    os.environ[f"{prefix}SHARDING_STRATEGY"] = (
+                        str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
+                        if version.parse(accelerate_version) >= version.parse("0.26.0")
+                        else fsdp_option.upper()
+                    )
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
