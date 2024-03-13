@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_hqq_available, is_auto_awq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -203,11 +203,11 @@ class HQQConfig(QuantizationConfigMixin):
     def __init__(
         self,
         quant_config=hqq_default_config,
-        skip_modules=["lm_head"], 
+        skip_modules=["lm_head"],
         show_progress=True,
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.HQQ 
+        self.quant_method = QuantizationMethod.HQQ
         self.quant_config  = quant_config
         self.skip_modules  = skip_modules
         self.show_progress = show_progress

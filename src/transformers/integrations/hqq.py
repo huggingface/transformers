@@ -13,10 +13,11 @@
 # limitations under the License.
 "HQQ (Half-Quadratic Quantization) integration file"
 
-from ..utils import is_accelerate_available, is_hqq_available, logging
+import torch
+
+from ..utils import is_hqq_available, logging
 from ..utils.hqq_utils import autoname_modules, get_linear_tags, name_to_linear_tag
 
-import torch
 
 if is_hqq_available():
     from hqq.core.quantize import HQQLinear
@@ -47,7 +48,7 @@ def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_
                     model._modules[name].source_cls = type(module)
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
-                
+
             has_been_replaced = True
 
         if len(list(module.children())) > 0:
@@ -63,7 +64,7 @@ def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_
 
 def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_convert=None, has_been_replaced=False):
     """
-    Prepares nn.Linear layers for HQQ quantization. 
+    Prepares nn.Linear layers for HQQ quantization.
     Since each layer type can have separate quantization parameters, we need to do the following:
     1- tag each module with its neme via autoname_modules()
     2- Extract linear_tags (e.g. ['self_attn.q_proj', ...])
@@ -83,7 +84,7 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     quant_config = quantization_config.to_dict()
     linear_tags  = list(set(linear_tags) - set(skip_modules) - set(modules_to_not_convert))
 
-    if(True in [(key in linear_tags) for key in quant_config.keys()]): 
+    if(True in [(key in linear_tags) for key in quant_config.keys()]):
         #If the user doesn't specify a key from get_linear_tags, the layer is not quantized via (key, None)
         patch_params = {key: None for key in linear_tags}
         patch_params.update(quant_config)

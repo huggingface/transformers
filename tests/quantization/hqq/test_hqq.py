@@ -16,13 +16,11 @@
 import gc
 import unittest
 
-from transformers import HQQConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, HQQConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch_gpu,
-    require_torch_multi_gpu,
     slow,
-    torch_device,
 )
 from transformers.utils import is_accelerate_available, is_hqq_available, is_torch_available
 
@@ -31,10 +29,10 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 if is_hqq_available():
-    from hqq.core.quantize import HQQLinear, HQQBackend, BaseQuantizeConfig
+    from hqq.core.quantize import BaseQuantizeConfig, HQQBackend, HQQLinear
 
 @require_torch_gpu
 class HQQConfigTest(unittest.TestCase):
@@ -51,8 +49,8 @@ class HQQConfigTest(unittest.TestCase):
 
 class HQQLLMRunner():
     def __init__(self, model_id, quant_config=None, compute_dtype=torch.float16, device='cuda', cache_dir=None):
-        self.model     = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=compute_dtype, device_map=device, quantization_config=quant_config, cache_dir=cache_dir) 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir) 
+        self.model     = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=compute_dtype, device_map=device, quantization_config=quant_config, cache_dir=cache_dir)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
         self.device    = self.model.device
         HQQLinear.set_backend(HQQBackend.PYTORCH_BACKPROP)
 
@@ -91,7 +89,7 @@ class HQQTest(unittest.TestCase):
         hqq_layer = hqq_runner.model.model.layers[10].self_attn.v_proj
         W_r       = hqq_layer.dequantize()
         x         = torch.randn((batch_size, context_size, 4096), device=device, dtype=compute_dtype)/10.
-        with torch.no_grad(): 
+        with torch.no_grad():
             y = hqq_layer(x)
         self.assertEqual(y.shape[-1], W_r.shape[0])
         self.assertEqual(y.dtype, compute_dtype)
@@ -99,7 +97,7 @@ class HQQTest(unittest.TestCase):
         del W_r, x, y
         cleanup()
 
-        #Test forward pass 
+        #Test forward pass
         with torch.no_grad():
             out = hqq_runner.model(torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)).logits
         self.assertEqual(out.shape[0], batch_size)
@@ -137,7 +135,7 @@ class HQQTest(unittest.TestCase):
         hqq_layer = hqq_runner.model.model.layers[10].self_attn.v_proj
         W_r       = hqq_layer.dequantize()
         x         = torch.randn((batch_size, context_size, 4096), device=device, dtype=compute_dtype)/10.
-        with torch.no_grad(): 
+        with torch.no_grad():
             y = hqq_layer(x)
         self.assertEqual(y.shape[-1], W_r.shape[0])
         self.assertEqual(y.dtype, compute_dtype)
@@ -149,7 +147,7 @@ class HQQTest(unittest.TestCase):
         del W_r, x, y
         cleanup()
 
-        #Test forward pass 
+        #Test forward pass
         with torch.no_grad():
             out = hqq_runner.model(torch.zeros([batch_size, context_size], device=hqq_runner.model.device, dtype=torch.int32)).logits
         self.assertEqual(out.shape[0], batch_size)

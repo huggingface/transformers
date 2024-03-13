@@ -13,16 +13,18 @@
 # limitations under the License.
 
 from typing import TYPE_CHECKING, Any, Dict, List
+
 from .base import HfQuantizer
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_torch_available, is_hqq_available, logging
+from ..integrations import prepare_for_hqq_linear
+from ..utils import is_hqq_available, is_torch_available, logging
+from ..utils.hqq_utils import find_parent
 from .quantizers_utils import get_module_from_name
 
-from ..integrations import prepare_for_hqq_linear
-from ..utils.hqq_utils import find_parent
 
 if is_torch_available():
     import torch
@@ -37,15 +39,15 @@ logger = logging.get_logger(__name__)
 
 class HQQHfQuantizer(HfQuantizer):
     """
-    HQQ quantizer base HF class. 
+    HQQ quantizer base HF class.
     nn.Linear modules are first tagged with quant_config in _process_model_before_weight_loading().
     The actually quantization and offloading to the GPU is done in check_quantized_param().
     self.show_progress (bool) is used to show quantization progress in each shard.
     """
 
-    use_keep_in_fp32_modules         = False  
-    requires_parameters_quantization = True   
-    requires_calibration             = False 
+    use_keep_in_fp32_modules         = False
+    requires_parameters_quantization = True
+    requires_calibration             = False
     required_packages                = ["hqq"]
 
     def __init__(self, quantization_config, **kwargs):
@@ -90,15 +92,15 @@ class HQQHfQuantizer(HfQuantizer):
         unexpected_keys: List[str],
     ):
         """
-        Each nn.Linear layer is processsed here. 
+        Each nn.Linear layer is processsed here.
         We first check if the corresponding module state_dict contains already HQQ quantized parameters.
         If not, we create a temp linear layer with the module state_dict params and use it for quantization
         """
 
         module, tensor_name = get_module_from_name(model, param_name)
-        
-        if(type(module) is not torch.nn.Linear): 
-            return 
+
+        if(type(module) is not torch.nn.Linear):
+            return
 
         layer_name    = param_name.replace('.weight', '').replace('.bias', '')
         parent_module = find_parent(model, layer_name)
@@ -111,15 +113,15 @@ class HQQHfQuantizer(HfQuantizer):
         if(('W_q' in module_state_dict) and ('meta' in module_state_dict)):
             module = HQQLinear(linear_layer=None, quant_config=None, compute_dtype=self.torch_dtype, device=target_device)
             module.load_state_dict(module_state_dict)
-            return 
+            return
 
         # Step 2: Create tmp linear layer on CPU
         tmp_linear_layer = torch.nn.Linear(in_features=module.in_features, out_features=module.out_features, bias=module.bias)
         tmp_linear_layer.load_state_dict(module_state_dict)
 
         """
-        Step 3: Replace tmp_linear_layer with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module 
-        directly doesn't work. 
+        Step 3: Replace tmp_linear_layer with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
+        directly doesn't work.
         """
 
         if(hasattr(module, 'quant_config')):
@@ -145,9 +147,9 @@ class HQQHfQuantizer(HfQuantizer):
     ):
 
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear > HQQLinear in create_quantized_param()
-        model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config) 
+        model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
-        #model.config.quantization_config is done inside prepare_for_hqq_linear 
+        #model.config.quantization_config is done inside prepare_for_hqq_linear
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_hqq_quantized    = True

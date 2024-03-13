@@ -31,13 +31,13 @@ from dataclasses import dataclass
 from functools import partial, wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from zipfile import is_zipfile
-from tqdm import tqdm as tqdm_lib
 
 import torch
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
+from tqdm import tqdm as tqdm_lib
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -90,6 +90,7 @@ from .utils import (
     replace_return_docstrings,
     strtobool,
 )
+from .utils.hqq_utils import check_if_hqq_quant_config, find_parent, get_ignore_layers, load_hqq_module
 from .utils.hub import convert_file_size_to_int, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -98,11 +99,6 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-from .utils.hqq_utils import (
-    check_if_hqq_quant_config,
-    get_ignore_layers,
-    find_parent,
-    load_hqq_module)
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -2368,7 +2364,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         #Temporary HQQ logic. Unfortunately, we can't get state_dict directly, so we actually save module dicts instead as used in hqq repo
         if(hasattr(model_to_save, 'is_hqq_quantized')):
-            logger.info(f"safe_serialization parameter is set to False for HQQ-quantized models.")
+            logger.info("safe_serialization parameter is set to False for HQQ-quantized models.")
             from hqq.models.base import BaseHQQModel
             BaseHQQModel.get_ignore_layers = get_ignore_layers
             weights = BaseHQQModel.serialize_weights(model_to_save, verbose=False)
@@ -2391,7 +2387,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     commit_message=commit_message,
                     token=token,
                 )
-            return 
+            return
 
         # Save the model
         if state_dict is None:
@@ -3063,14 +3059,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         quant_config = getattr(config, "quantization_config", None)
         if check_if_hqq_quant_config(quant_config):
             from hqq.models.base import BaseHQQModel, BasePatch
-            from hqq.core.quantize import HQQLinear
-        
+
             save_dir = BaseHQQModel.try_snapshot_download(pretrained_model_name_or_path, cache_dir)
 
             #Load model with meta device
             with init_empty_weights():
                 model = cls(config, *model_args, **model_kwargs)
-            
+
             #Set layers to ignore
             BaseHQQModel.get_ignore_layers = get_ignore_layers
 
@@ -3080,23 +3075,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             #Load weights
             try:
                 loaded_weights = BaseHQQModel.load_weights(save_dir)
-            except Exception as error:
+            except Exception:
                 logger.warning("Failed to load the HQQ weights")
                 return
 
-            compute_dtype = torch_dtype if (torch_dtype is not None) else None 
+            compute_dtype = torch_dtype if (torch_dtype is not None) else None
             hqq_device    = 'cuda'
             if(isinstance(device_map, dict)):
                 hqq_device = [device_map[k] for k in device_map][0]
 
             #loop over modules
-            model.eval();
+            model.eval()
             ignore_layers = BaseHQQModel.get_ignore_layers(model)
 
-            #Can't replace modules directly in this loop, so creating a tmp dictionary 
+            #Can't replace modules directly in this loop, so creating a tmp dictionary
             name_to_module = {}
             for name, module in model.named_modules():
-                if(name in ignore_layers): 
+                if(name in ignore_layers):
                     continue
                 name_to_module[name] = module
 

@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import is_accelerate_available, is_torch_available, is_hqq_available
+from . import is_hqq_available, is_torch_available
+
 
 if is_torch_available():
-    import torch 
+    import torch
 
 if is_hqq_available():
     from hqq.core.quantize import HQQLinear
 else:
-    HQQLinear = None    
+    HQQLinear = None
 
 #Name all modules inside the model
 def autoname_modules(model):
@@ -61,18 +62,18 @@ def get_ignore_layers(model):
 
 #Checks if a quant config is an HQQ quant config
 def check_if_hqq_quant_config(quant_config):
-    if(quant_config is None): 
+    if(quant_config is None):
         return False
-    q_keys = list(quant_config.keys()) 
+    q_keys = list(quant_config.keys())
     q_vals = [quant_config[k] for k in quant_config][0]
     if(isinstance(q_vals, dict)):
         q_keys = q_keys + list([quant_config[k] for k in quant_config][0].keys())
     return ('weight_quant_params' in q_keys)
 
-#Returns a new module from a dummy (meta) module and a dictionary of module name -> state_dict 
+#Returns a new module from a dummy (meta) module and a dictionary of module name -> state_dict
 @torch.no_grad()
 def load_hqq_module(module, weights, compute_dtype, device):
-    if(module.name not in weights): 
+    if(module.name not in weights):
         try:
             return module.to(compute_dtype).cuda(device)
         except Exception:
@@ -86,4 +87,4 @@ def load_hqq_module(module, weights, compute_dtype, device):
         for key in state_dict:
             setattr(module, key, torch.nn.Parameter(state_dict[key].to(compute_dtype).to(device), requires_grad=False))
 
-    return module 
+    return module
