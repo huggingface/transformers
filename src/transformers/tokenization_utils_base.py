@@ -1737,7 +1737,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `Union[List[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
-            set, will return a dict of tokenizer output instead.
+            set, will return a dict of tokenizer outputs instead.
         """
 
         if return_dict is None and tokenize:
