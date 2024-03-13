@@ -1143,7 +1143,8 @@ class RTDetrImageProcessor(BaseImageProcessor):
             in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
+        # convert from relative cxcywh to absolute xyxy
+        boxes = center_to_corners_format(out_bbox)
         if target_sizes is not None:
             if len(out_logits) != len(target_sizes):
                 raise ValueError(
@@ -1155,9 +1156,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
-
-            # convert from relative cxcywh to absolute xyxy
-            boxes = center_to_corners_format(out_bbox)
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
