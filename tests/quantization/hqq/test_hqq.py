@@ -64,9 +64,9 @@ def cleanup():
 	torch.cuda.empty_cache()
 	gc.collect()
 
-#@slow
-#@require_torch_gpu
-#@require_accelerate
+@slow
+@require_torch_gpu
+@require_accelerate
 class HQQTest(unittest.TestCase):
 
     def tearDown(self):
