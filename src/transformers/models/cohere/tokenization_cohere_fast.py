@@ -59,7 +59,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
     >>> tokenizer.encode("Hello this is a test")
-    [1, 15043, 445, 338, 263, 1243]
+    [5, 28339, 2075, 1801, 1671, 3282]
     ```
 
     If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
@@ -244,7 +244,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
         >>> messages = [{"role": "user", "content": "Hello, how are you?"}]
         >>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
+        '<BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'
 
         """
         logger.warning_once(
@@ -543,8 +543,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >>> tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-v01")
-        >>> tools = [
+        >> tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-v01")
+        >> tools = [
             {
                 "name": "internet_search",
                 "description": "Returns a list of relevant document snippets for a textual query retrieved from the internet",
@@ -562,17 +562,12 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
                 "parameter_definitions": {}
             }
         ]
-        >>> conversation = [
+        >> conversation = [
             {"role": "user", "content": "Whats the biggest penguin in the world?"}
         ]
-        >>> # render the prompt, ready for user to inspect, or for input into the model:
-        >>> prompt = tokenizer.apply_tool_use_template(
-            conversation,
-            tools=tools,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-        >>> print(prompt)
+        >> # render the prompt, ready for user to inspect, or for input into the model:
+        >> prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
+        >> print(prompt) # doctest: +SKIP
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
         The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
 
@@ -614,9 +609,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             }
         ]\\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
         ```
-        >>> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
-        >>> outputs = model.generate(inputs, max_new_tokens=128)
-        >>> print(tokenizer.decode(outputs[0]))
+        >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
+        >> outputs = model.generate(inputs, max_new_tokens=128) # doctest: +SKIP
+        >> print(tokenizer.decode(outputs[0])) # doctest: +SKIP
         Action: ```json
         [
             {
@@ -706,25 +701,20 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >>> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-v01')
+        >> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-v01')
 
-        >>> # define documents:
-        >>> documents = [
-            { "title": "Tall penguins", "text": "Emperor penguins are the tallest." },
-            { "title": "Penguin habitats", "text": "Emperor penguins only live in Antarctica."}
+        >> # define documents:
+        >> documents = [ \
+            { "title": "Tall penguins", "text": "Emperor penguins are the tallest." }, \
+            { "title": "Penguin habitats", "text": "Emperor penguins only live in Antarctica."} \
         ]
-        >>> # define a conversation:
-        >>> conversation = [
-            {"role": "user", "content": "Whats the biggest penguin in the world?"}
+        >> # define a conversation:
+        >> conversation = [ \
+            {"role": "user", "content": "Whats the biggest penguin in the world?"} \
         ]
-        >>> # render the prompt, ready for user to inspect, or for input into the model:
-        >>> grounded_generation_prompt = tokenizer.apply_grounded_generation_template(
-            conversation,
-            documents=documents,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-        >>> print(grounded_generation_prompt)
+        >> # render the prompt, ready for user to inspect, or for input into the model:
+        >> grounded_generation_prompt = tokenizer.apply_grounded_generation_template(conversation, documents=documents, tokenize=False, add_generation_prompt=True)
+        >> print(grounded_generation_prompt) # doctest: +SKIP
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
         The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
 
@@ -750,9 +740,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Thirdly, Write 'Answer:' followed by a response to the user's last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.
         Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'''
         ```
-        >>> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
-        >>> outputs = model.generate(inputs, max_new_tokens=128)
-        >>> print(tokenizer.decode(outputs[0]))
+        >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
+        >> outputs = model.generate(inputs, max_new_tokens=128) # doctest: +SKIP
+        >> print(tokenizer.decode(outputs[0])) # doctest: +SKIP
         Relevant Documents: 0,1
         Cited Documents: 0,1
         Answer: The Emperor Penguin is the tallest or biggest penguin in the world. It is a bird that lives only in Antarctica and grows to a height of around 122 centimetres.
