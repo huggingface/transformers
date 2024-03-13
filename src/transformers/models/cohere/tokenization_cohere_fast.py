@@ -198,7 +198,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         <|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{ I am doing well! }}<|END_OF_TURN_TOKEN|>
 
         Use add_generation_prompt to add a prompt for the model to generate a response:
-
+        
+        >>> from transformers import AutoTokenizer
+        >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01", trust_remote_code=True)
         >>> messages = [{"role": "user", "content": "Hello, how are you?"}]
         >>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
