@@ -699,11 +699,12 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
-        galore_target_modules (`List[str]`, *optional*):
-            The GaLoRe target modules, i.e. the module names that you would like to train, using GaLoRe algorithm
+        optim_target_modules (`List[str]`, *optional*):
+            The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLoRe algorithm
             https://arxiv.org/abs/2403.03507
             See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
-            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor"
+            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
+            only.
     """
 
     framework = "pt"
@@ -1362,7 +1363,7 @@ class TrainingArguments:
         },
     )
 
-    galore_target_modules: Optional[List[str]] = field(
+    optim_target_modules: Optional[List[str]] = field(
         default=None,
         metadata={
             "help": "Target modules for GaLoRE optimizer. See https://github.com/jiaweizzhao/GaLore for more details."

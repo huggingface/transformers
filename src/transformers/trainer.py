@@ -1199,14 +1199,14 @@ class Trainer:
 
             optimizer_cls = optimizer_mapping[args.optim]
 
-            if args.galore_target_modules is None:
+            if args.optim_target_modules is None:
                 raise ValueError(
-                    "You need to define a `galore_target_modules` in order to properly use GaLoRe optimizers"
+                    "You need to define a `optim_target_modules` in order to properly use GaLoRe optimizers"
                 )
 
-            if not isinstance(args.galore_target_modules, list):
+            if not isinstance(args.optim_target_modules, list):
                 raise ValueError(
-                    f"`galore_target_modules` has to be a list of strings, you passed {args.galore_target_modules}"
+                    f"`optim_target_modules` has to be a list of strings, you passed {args.optim_target_modules}"
                 )
 
             if model is None:
@@ -1217,14 +1217,14 @@ class Trainer:
                 if not isinstance(module, nn.Linear):
                     continue
 
-                if not any(target_key in module_name for target_key in args.galore_target_modules):
+                if not any(target_key in module_name for target_key in args.optim_target_modules):
                     continue
 
                 galore_params.append(module.weight)
 
             if len(galore_params) == 0:
                 raise ValueError(
-                    f"None of the target modules were found! ({args.galore_target_modules}). Please make sure to pass a valid `target_modules`."
+                    f"None of the target modules were found! ({args.optim_target_modules}). Please make sure to pass a valid `target_modules`."
                 )
 
             id_galore_params = [id(p) for p in galore_params]

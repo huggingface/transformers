@@ -1086,7 +1086,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="galore_adamw",
-                galore_target_modules=["attn", "mlp"],
+                optim_target_modules=["attn", "mlp"],
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -1107,7 +1107,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="galore_adamw_8bit",
-                galore_target_modules=["attn", "mlp"],
+                optim_target_modules=["attn", "mlp"],
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -1128,7 +1128,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=1e-9,
                 logging_steps=5,
                 optim="galore_adafactor",
-                galore_target_modules=["attn", "mlp"],
+                optim_target_modules=["attn", "mlp"],
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 

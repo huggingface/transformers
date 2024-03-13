@@ -262,7 +262,7 @@ First make sure to install GaLore official repository:
 pip install git+https://github.com/jiaweizzhao/GaLore
 ```
 
-Then simply add one of `["galore_adamw", "galore_adafactor", "galore_adamw_8bit"]` in `optim` together with `galore_target_modules`, which should be a list of strings, corresponding to the target module names you want to adapt. Below is an end-to-end example script (make sure to `pip install trl datasets`):
+Then simply add one of `["galore_adamw", "galore_adafactor", "galore_adamw_8bit"]` in `optim` together with `optim_target_modules`, which should be a list of strings, corresponding to the target module names you want to adapt. Below is an end-to-end example script (make sure to `pip install trl datasets`):
 
 ```python
 import torch
@@ -278,7 +278,7 @@ args = TrainingArguments(
     max_steps=100,
     per_device_train_batch_size=2,
     optim="galore_adamw",
-    galore_target_modules=["attn", "mlp"]
+    optim_target_modules=["attn", "mlp"]
 )
 
 model_id = "google/gemma-2b"
@@ -300,6 +300,8 @@ trainer.train()
 ```
 
 You can read more about the method in the [original repository](https://github.com/jiaweizzhao/GaLore) or the [paper](https://arxiv.org/abs/2403.03507).
+
+Currently you can only train Linear layers that are considered as GaLore layers and will use low-rank decomposition to be trained.
 
 Note it will take a bit of time before starting the training (~3 minutes for a 2B model on a NVIDIA A100), but training should go smoothly afterwards.
 
