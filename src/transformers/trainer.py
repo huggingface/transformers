@@ -1199,9 +1199,11 @@ class Trainer:
                     "You need to install `galore_torch` in order to use GaLore optimizers"
                     " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
                 )
-            if args.parallel_mode == ParallelMode.DISTRIBUTED:
-                raise NotImplementedError("GaLore does not support DDP at this time")
             from galore_torch import GaLoreAdafactor, GaLoreAdamW, GaLoreAdamW8bit
+
+            is_layerwise = args.optim.lower().endswith("layerwise")
+            if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED:
+                raise NotImplementedError("GaLore does not support DDP at this time")
 
             optimizer_mapping = {
                 OptimizerNames.GALORE_ADAMW: GaLoreAdamW,
@@ -1235,8 +1237,6 @@ class Trainer:
                 isinstance(args.optim_target_modules, str)
                 and args.optim_target_modules.replace("_", "-") == "all-linear"
             )
-
-            is_layerwise = args.optim.lower().endswith("layerwise")
 
             galore_params = []
             galore_params_names = []
