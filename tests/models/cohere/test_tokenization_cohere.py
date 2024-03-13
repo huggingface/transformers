@@ -62,7 +62,10 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)["input_ids"]
         self.assertListEqual(TARGET_TOKENS, computed_tokens)
 
-        INPUT_SENTENCES_W_BOS = ["<BOS_TOKEN>The quick brown fox<|END_OF_TURN_TOKEN|>", "<BOS_TOKEN>jumps over the lazy dog<|END_OF_TURN_TOKEN|>"]
+        INPUT_SENTENCES_W_BOS = [
+            "<BOS_TOKEN>The quick brown fox<|END_OF_TURN_TOKEN|>",
+            "<BOS_TOKEN>jumps over the lazy dog<|END_OF_TURN_TOKEN|>",
+        ]
         decoded_tokens = tokenizer.batch_decode(computed_tokens)
         self.assertListEqual(decoded_tokens, INPUT_SENTENCES_W_BOS)
 

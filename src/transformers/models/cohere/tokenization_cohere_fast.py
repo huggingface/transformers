@@ -83,6 +83,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
+        merges_file (`<fill_type>`, *optional*): <fill_docstring>
         tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
@@ -102,7 +103,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Cohere tokenizer should be used.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):):
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not the tokenizer should automatically add a prefix space
     """
 
@@ -111,7 +112,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
-    # No `max_model_input_sizes` 
+    # No `max_model_input_sizes`
 
     def __init__(
         self,
@@ -326,7 +327,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             "{{ param_fields.type }}"
             "{% endif %}"
             "{% endfor %}"
-            "{{ ') -> List[Dict]:\n    \"\"\"'}}"
+            '{{ \') -> List[Dict]:\n    """\'}}'
             "{{ tool.description }}"
             "{% if tool.parameter_definitions|length != 0 %}"
             "{{ '\n\n    Args:\n        '}}"
@@ -343,7 +344,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             "{{ '): ' + param_fields.description }}"
             "{% endfor %}"
             "{% endif %}"
-            "{{ '\n    \"\"\"\n    pass\n```' }}"
+            '{{ \'\n    """\n    pass\n```\' }}'
             "{% endfor %}"
             "{{ '<|END_OF_TURN_TOKEN|>'}}"
             "{% for message in loop_messages %}"
