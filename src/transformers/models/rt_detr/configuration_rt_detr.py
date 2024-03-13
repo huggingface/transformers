@@ -52,7 +52,7 @@ class RTDetrConfig(PretrainedConfig):
             Type of the backbone based on timm.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weight for backbone model.
-        backbone_kwargs (`dict`, *optional*, defaults to `{'features_only': True, 'out_indices': (2, 3, 4)}`):
+        backbone_kwargs (`dict`, *optional*, defaults to `{'features_only': True, 'out_indices': [2, 3, 4]}`):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         d_model (`int`, *optional*, defaults to 256):
