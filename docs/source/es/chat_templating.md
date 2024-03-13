@@ -56,7 +56,7 @@ Ten en cuenta que esta vez, el tokenizador ha añadido los tokens de control [IN
 
 ## ¿Cómo uso las plantillas de chat?
 
-Como puedes ver en el ejemplo anterior, las plantillas de chat son fáciles de usar. Simplemente construye una lista de mensajes, con claves de `rol` y `contenido`, y luego pásala al método [`~PreTrainedTokenizer.apply_chat_template`]. Una vez que hagas eso, ¡obtendrás una salida lista para usar! Al utilizar plantillas de chat como entrada para la generación de modelos, también es una buena idea usar `add_generation_prompt=True` para agregar una [indicación de generación](#what-are-generation-prompts).
+Como puedes ver en el ejemplo anterior, las plantillas de chat son fáciles de usar. Simplemente construye una lista de mensajes, con claves de `rol` y `contenido`, y luego pásala al método [`~PreTrainedTokenizer.apply_chat_template`]. Una vez que hagas eso, ¡obtendrás una salida lista para usar! Al utilizar plantillas de chat como entrada para la generación de modelos, también es una buena idea usar `add_generation_prompt=True` para agregar una [indicación de generación](#¿Qué-son-los-"generation-prompts"?).
 
 Aquí tienes un ejemplo de cómo preparar la entrada para `model.generate()` utilizando el modelo de asistente `Zephyr`:
 
@@ -110,7 +110,7 @@ Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopte
 
 ## ¿Existe un pipeline automatizado para chats?
 
-Sí, lo hay! Nuestras canalizaciónes generalizadas del texto apoyan los aportes del chat, cual facilita más facíl utilizar los modelos de chat. En el pasado, solíamos utilizar una clase dedicada "ConversationalPipeline", pero ahora  [`TextGenerationPipeline`]. Este pipeline está diseñado para facilitar el uso de modelos de chat. Intentemos el ejemplo de `Zephyr` de nuevo, pero esta vez utilizando el pipeline:
+Sí, lo hay! Nuestros canales de generación de texto admiten entradas de chat, cual facilita más facíl utilizar los modelos de chat. En el pasado, solíamos utilizar una clase dedicada "ConversationalPipeline", pero ahora la ha sido hecho obsoleta y se une con la nueva clase [`TextGenerationPipeline`]. Este pipeline está diseñado para facilitar el uso de modelos de chat. Intentemos el ejemplo de `Zephyr` de nuevo, pero esta vez utilizando el pipeline:
 
 ```python
 from transformers import pipeline
@@ -123,17 +123,15 @@ messages = [
     },
     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
 ]
-print(pipe(messages))
+print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1])  # Print the assistant's response
 ```
 
 ```text
-Conversation id: 76d886a0-74bd-454e-9804-0467041a63dc
-system: You are a friendly chatbot who always responds in the style of a pirate
-user: How many helicopters can a human eat in one sitting?
-assistant: Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
+{'role': 'assistant', 'content': "Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all."}
 ```
 
-La canalización se encargará de todos los detalles de tokenización y llamar a `apply_chat_template` por ti. Una vez que el modelo tenga una plantilla de chat, ¡todo lo que necesitas hacer es inicializar el pipeline y pasarle la lista de mensajes!
+
+La canalización se encargará de todos los detalles de de la tokenización y de llamar a `apply_chat_template` por ti. Una vez que el modelo tenga una plantilla de chat, ¡todo lo que necesitas hacer es inicializar el pipeline y pasarle la lista de mensajes!
 
 # ¿Qué son los "generation prompts"?
 
@@ -175,6 +173,7 @@ Can I ask a question?<|im_end|>
 ```
 
 Ten en cuenta que esta vez, hemos agregado los tokens que indican el inicio de una respuesta del bot. Esto asegura que cuando el modelo genere texto, escribirá una respuesta del bot en lugar de hacer algo inesperado, como continuar el mensaje del usuario. Recuerda, los modelos de chat siguen siendo solo modelos de lenguaje: están entrenados para continuar texto, ¡y el chat es solo un tipo especial de texto para ellos! Necesitas guiarlos con los tokens de control apropiados para que sepan lo que se supone que deben estar haciendo.
+
 No todos los modelos requieren "generation prompts". Algunos modelos, como BlenderBot y LLaMA, no tienen ningún token especial antes de las respuestas del bot. En estos casos, el argumento `add_generation_prompt` no tendrá ningún efecto. El efecto exacto que tiene `add_generation_prompt` dependerá de la plantilla que se esté utilizando.
 
 ## ¿Puedo usar plantillas de chat en el entrenamiento?
@@ -224,7 +223,7 @@ La plantilla de chat para un modelo se almacena en el atributo `tokenizer.chat_t
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
-¡Es un poco intimidante! Vamos a agregar algunas líneas nuevas e indentación para que sea más legible. Ten en cuenta que la primera línea nueva después de cada bloque, así como cualquier espacio en blanco precedente antes de un bloque, se ignoran de forma predeterminada, utilizando las banderas `trim_blocks` y `lstrip_blocks` de Jinja. Sin embargo, ¡ten cuidado! Aunque el espacio en blanco inicial en cada línea se elimina, los espacios entre bloques en la misma línea no lo son. ¡Te recomendamos encarecidamente que verifiques que tu plantilla no esté imprimiendo espacios adicionales donde no debería estarlo!
+¡Es un poco intimidante! Vamos a agregar algunas líneas nuevas y sangria para que sea más legible. Ten en cuenta que la primera línea nueva después de cada bloque, así como cualquier espacio en blanco anterior a un bloque, se ignoran de forma predeterminada, utilizando las banderas `trim_blocks` y `lstrip_blocks` de Jinja. Sin embargo, ¡ten cuidado! Aunque el espacio en blanco inicial en cada línea se elimina, los espacios entre bloques en la misma línea no. ¡Te recomendamos encarecidamente que verifiques que tu plantilla no esté imprimiendo espacios adicionales donde no debería estarlo!
 
 ```
 {% for message in messages %}
@@ -252,9 +251,9 @@ print(eos_token)
 ```
 
 Efectivamente, la plantilla hace tres cosas:
-1.Para cada mensaje, si el mensaje es un mensaje de usuario, añade un espacio en blanco antes de él, de lo contrario no imprime nada.
-2.Añade el contenido del mensaje.
-3.Si el mensaje no es el último mensaje, añade dos espacios después de él. Después del último mensaje, imprime el token EOS.
+1. Para cada mensaje, si el mensaje es un mensaje de usuario, añade un espacio en blanco antes de él, de lo contrario no imprime nada.
+2. Añade el contenido del mensaje.
+3. Si el mensaje no es el último mensaje, añade dos espacios después de él. Después del último mensaje, imprime el token EOS.
 
 Esta es una plantilla bastante simple: no añade ningún token de control y no admite mensajes "del sistema", que son una forma común de dar al modelo directivas sobre cómo debe comportarse en la conversación posterior. ¡Pero Jinja te brinda mucha flexibilidad para hacer esas cosas! Veamos una plantilla de Jinja que pueda formatear las entradas de manera similar a la forma en que LLaMA las formatea (nota que la plantilla real de LLaMA incluye el manejo de mensajes del sistema predeterminados y el manejo de mensajes del sistema ligeramente diferentes en general; ¡no uses esta en tu código real!)
 
@@ -311,13 +310,13 @@ Si estás ajustando finamente un modelo para chat, además de establecer una pla
 
 Antes de la introducción de las plantillas de chat, el manejo del chat estaba codificado en el nivel de la clase del modelo. Por razones de compatibilidad con versiones anteriores, hemos conservado este manejo específico de la clase como plantillas predeterminadas, también establecidas a nivel de clase. Si un modelo no tiene una plantilla de chat establecida, pero hay una plantilla predeterminada para su clase de modelo, la clase `TextGenerationPipeline` y métodos como `apply_chat_template` usarán la plantilla de clase en su lugar. Puedes averiguar cuál es la plantilla predeterminada para tu tokenizador comprobando el atributo `tokenizer.default_chat_template`.
 
-Esto es algo que hacemos puramente por razones de compatibilidad con versiones anteriores, para evitar romper cualquier flujo de trabajo existente. Incluso cuando la plantilla de clase es apropiada para tu modelo, recomendamos encarecidamente anular la plantilla predeterminada estableciendo explícitamente el atributo `chat_template` para dejar claro a los usuarios que tu modelo ha sido configurado correctamente para el chat, y para futurizar en caso de que las plantillas predeterminadas alguna vez se alteren o se eliminen.
+Esto es algo que hacemos puramente por razones de compatibilidad con versiones anteriores, para evitar romper cualquier flujo de trabajo existente. Incluso cuando la plantilla de clase es apropiada para tu modelo, recomendamos encarecidamente anular la plantilla predeterminada estableciendo explícitamente el atributo `chat_template` para dejar claro a los usuarios que tu modelo ha sido configurado correctamente para el chat, y para estar preparados para el futuro en caso de que las plantillas predeterminadas alguna vez se alteren o se eliminen.
 
 ### ¿Qué plantilla debería usar?
 
 Cuando establezcas la plantilla para un modelo que ya ha sido entrenado para chat, debes asegurarte de que la plantilla coincida exactamente con el formato de mensajes que el modelo vio durante el entrenamiento, o de lo contrario es probable que experimentes degradación del rendimiento. Esto es cierto incluso si estás entrenando aún más el modelo; probablemente obtendrás el mejor rendimiento si mantienes constantes los tokens de chat. Esto es muy análogo a la tokenización: generalmente obtienes el mejor rendimiento para la inferencia o el ajuste fino cuando coincides precisamente con la tokenización utilizada durante el entrenamiento.
 
-Si estás entrenando un modelo desde cero o ajustando finamente un modelo de lenguaje base para chat, por otro lado, ¡tienes mucha libertad para elegir una plantilla apropiada! Los LLM son lo suficientemente inteligentes como para aprender a manejar muchos formatos de entrada diferentes. Nuestra plantilla predeterminada para modelos que no tienen una plantilla específica de clase sigue [el formato ChatML](https://github.com/openai/openai-python/blob/main/chatml.md), y esta es una buena elección flexible para muchos casos de uso. Se ve así:
+Si estás entrenando un modelo desde cero o ajustando finamente un modelo de lenguaje base para chat, por otro lado, ¡tienes mucha libertad para elegir una plantilla apropiada! Los LLM son lo suficientemente inteligentes como para aprender a manejar muchos formatos de entrada diferentes. Nuestra plantilla predeterminada para modelos que no tienen una plantilla específica de clase sigue el formato ChatML, y esta es una buena elección flexible para muchos casos de uso. Se ve así:
 
 ```
 {% for message in messages %}
@@ -325,7 +324,7 @@ Si estás entrenando un modelo desde cero o ajustando finamente un modelo de len
 {% endfor %}
 ```
 
-Si te gusta esta plantilla, aquí está en forma de una sola línea, lista para copiar en tu código. La versión de una sola línea también incluye un práctico soporte para [prompts de generación](#what-are-generation-prompts), ¡pero ten en cuenta que no añade tokens de BOS o EOS! Si tu modelo espera esos tokens, no se agregarán automáticamente por `apply_chat_template`, en otras palabras, el texto será tokenizado con `add_special_tokens=False`. Esto es para evitar posibles conflictos entre la plantilla y la lógica de `add_special_tokens`. ¡Si tu modelo espera tokens especiales, asegúrate de añadirlos a la plantilla!
+Si te gusta esta plantilla, aquí está en forma de una sola línea, lista para copiar en tu código. La versión de una sola línea también incluye un práctico soporte para [prompts de generación](#¿Qué-son-los-"generation-prompts"?), ¡pero ten en cuenta que no añade tokens de BOS o EOS! Si tu modelo espera esos tokens, no se agregarán automáticamente por `apply_chat_template`, en otras palabras, el texto será tokenizado con `add_special_tokens=False`. Esto es para evitar posibles conflictos entre la plantilla y la lógica de `add_special_tokens`. ¡Si tu modelo espera tokens especiales, asegúrate de añadirlos a la plantilla!
 
 ```python
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
@@ -355,6 +354,7 @@ Al asegurarnos de que los modelos tengan este atributo, podemos garantizar que t
 ## Avanzado: Consejos para escribir plantillas
 
 Si no estás familiarizado con Jinja, generalmente encontramos que la forma más fácil de escribir una plantilla de chat es primero escribir un script de Python corto que formatee los mensajes como desees, y luego convertir ese script en una plantilla.
+
 Recuerda que el manejador de plantillas recibirá el historial de conversación como una variable llamada mensajes. Cada mensaje es un diccionario con dos claves, `role` y `content`. Podrás acceder a los `mensajes` en tu plantilla tal como lo harías en Python, lo que significa que puedes recorrerlo con `{% for message in messages %}` o acceder a mensajes individuales con, por ejemplo, `{{ messages[0] }}`.
 
 También puedes usar los siguientes consejos para convertir tu código a Jinja:
