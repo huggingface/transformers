@@ -1199,7 +1199,7 @@ class Trainer:
                     "You need to install `galore_torch` in order to use GaLore optimizers"
                     " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
                 )
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+            if args.parallel_mode == ParallelMode.DISTRIBUTED:
                 raise NotImplementedError("GaLore does not support DDP at this time")
             from galore_torch import GaLoreAdafactor, GaLoreAdamW, GaLoreAdamW8bit
 
