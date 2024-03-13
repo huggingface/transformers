@@ -301,7 +301,7 @@ trainer.train()
 
 You can read more about the method in the [original repository](https://github.com/jiaweizzhao/GaLore) or the [paper](https://arxiv.org/abs/2403.03507).
 
-Currently you can only train Linear layers that are considered as GaLore layers and will use low-rank decomposition to be trained.
+Currently you can only train Linear layers that are considered as GaLore layers and will use low-rank decomposition to be trained while remaining layers will be optimized in the conventional manner.
 
 Note it will take a bit of time before starting the training (~3 minutes for a 2B model on a NVIDIA A100), but training should go smoothly afterwards.
 
