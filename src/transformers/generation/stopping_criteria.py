@@ -135,8 +135,109 @@ class MaxTimeCriteria(StoppingCriteria):
 
 class StopStringCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever specific string sequences are encountered. It preprocesses
+    This class can be used to stop generation whenever specific string sequences are generated. It preprocesses
     the strings together with the tokenizer vocab to find positions where tokens can validly complete the stop strings.
+
+    Generation is stopped as soon as a token is generated that completes any of the stop strings.
+    We want to catch any instance in which the stop string would be present in the decoded output, which means
+    we must also catch cases with "overhangs" off one or both ends. To make this more concrete, for the stop string
+    "stop", any of the following token sequences would trigger the match:
+
+    - ["st", "op"]
+    - ["stop"]
+    - ["st", "opera"]
+    - ["sto", "opper"]
+    - ["las", "topper"]
+
+    Note that a match will only be triggered if the stop string is at the end of the generated sequence. In other
+    words, these sequences will not trigger a match:
+
+    - ["stop", "at"]
+    - ["st", "op", "at"]
+    - ["st", "opera", "tion"]
+
+    The reason these are not a match is that the stop string does not overlap with the final token. If you can remove
+    one or more tokens from the end of the sequence without destroying the stop string, then this criterion will not
+    match that stop string. This is by design; because this check is run after each token is generated, we can't miss a
+    valid stop string if one is generated, but we don't want to halt generation just because the stop string exists
+    somewhere in the past input_ids.
+
+    How is the match actually performed, though? We do it in quite a confusing way, because we want the entire match
+    process to be compilable with Torch or XLA, which means we cannot use standard string methods. However, it is possible,
+    with some work, to do string matching with pure tensor operations. We'll begin by describing the algorithm we use
+    with standard string operations, and then at the end we'll explain how this is converted to pure tensor operations
+    at generation time.
+
+    The key to the algorithm is an observation: Because the stop string must overlap with the end of the token sequence, we can start at
+    the end of the sequence and work backwards. Specifically, we check that there is an overlap between the *start* of
+    the final token and the *end* of the stop_string, or to put it another way, stop_string[-i:] == token[:i] for
+    some i > 0. If you look at the positive examples above, you'll see the last token in all of them fulfills this
+    property:
+
+    - ["st", "op"] (overlap is "op")
+    - ["stop"]  (overlap is "stop")
+    - ["st", "opera"]  (overlap is "op")
+    - ["sto", "pper"]  (overlap is "p")
+    - ["las", "topper"]  (overlap is "top")
+
+    It's impossible to construct a matching sequence that does not have this property (feel free to verify this
+    yourself). However, although this overlap between the start of the final token and the end of the stop string is
+    necessary for a match, it is not sufficient. We also need to check that the rest of the token sequence is
+    consistent with the stop string.
+
+    How do we do that? Let's say the stop string is N characters long, and the initial overlap covers the final
+    M characters. Then, we have N - M characters left to match. If the next token is less than M - N tokens long, then
+    the entire token must match: token == stop_string[-(M + len(token)): -M]. If the next token is longer than M - N
+    tokens, then we consider only the final M - N characters of the token. This allows for the token to have an overhang
+    off the start of the stop string.
+
+    Again, let's make this concrete with a worked example. We'll use the stop string "stop" and the token sequence
+    ["las", "topper"]. The length of the stop string is 4. The final token is "topper", and its overlap with the stop
+    string is "top", which has length 3. We continue to the next token, "las", and we have 4 - 3 = 1 character left to
+    match. We check that "las"[-1:] == stop[:1], which is true. We have now matched 4 characters, which is the length of
+    the stop string, and we are done.
+
+    At this point, hopefully you agree that we have an algorithm that detects the presence of a stop string, but you
+    may not see how we can convert this to tensor operations, particularly since we want to avoid data-dependent
+    conditional branching in the compiled code, and ideally vectorize everything so it can be efficiently computed on
+    GPU. The key is to realize that although we don't have access to string operations inside the generation loop,
+    we can use them in a precomputation stage!
+
+    For every token in the tokenizer vocabulary, we precompute the values
+    we need for the above algorithm: The length of that token's overlap with the end of the stop string, the
+    position(s) in the stop string where that token matches perfectly, and the length of the token. We then pack
+    these values into a single vector per token, and stack those vectors into an embedding tensor which we can
+    gather from at runtime to get the values we need.
+
+    This is the approach we take in this class. The precomputation is done in the `_stop_string_create_embedding_vec`
+    function. Then, at runtime in the `__call__()` method, we implement the algorithm above in purely vectorized
+    fashion, starting from an input_ids vector containing the token IDs in the sequence:
+
+    - Gather from the embedding vector using input_ids as indices, and split the packed vectors into end overlap lengths,
+      valid token positions, and token lengths.
+    - Make a vector of the length of every token in the sequence, except for the final token, where we use the
+      end-overlap length instead.
+    - Compute the cumulative sum of the sequence, starting from the end. This represents the number of characters in the stop string that
+      we would match after each token, assuming that token is a valid fit for the sequence at that point.
+    - To determine if the tokens are valid at each position, we check that the cumulative length so far matches
+      one of the values in their valid positions vector. Where it does not, we mask that token and all tokens
+      following it.
+    - We then check the highest unmasked value in the cumulative sum. This represents the length of the total string
+      match before we reached a token that did not match the stop string. If it is equal to or greater than the length
+      of the stop string, the stop string is matched.
+
+    This is almost the complete algorithm, and the remaining details just handle edge cases: For example, what do
+    we do if a token can have multiple possible overlap lengths with the stop string? For example, consider the
+    stop string "banana", and the token sequences ["ba", "nana"] and ["bana", "nana"]. Both of these sequences
+    contain the stop string and should trigger a match. However, the overlap of the final token is different! In
+    the first case, the overlap is "nana". In the second case, the overlap is "na". When we start from the end
+    of the sequence and work backwards, we cannot know in advance which overlap length, if any, will lead to a valid
+    match, and therefore we must test all possible overlap lengths.
+
+    Therefore, for the stop string "banana" and the token "nana", we store two valid end overlap lengths: 2 and 4.
+    We then perform the above algorithm, starting from each value, and test whether each results in a match.
+    Thanks to vectorization, we can run these tests in parallel (in fact, we can run the test for every possible
+    overlap length and all stop strings in parallel).
 
     Args:
         tokenizer (`PreTrainedTokenizer`):
@@ -316,11 +417,6 @@ def _stop_string_get_matching_positions(
 
 @lru_cache(8)
 def _stop_string_create_embedding_vec(token_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
-    """
-    This function builds an embedding matrix for each stop string, consisting of possible valid positions
-    and possible end lengths for each token, and the total length of the token string. When tokens have
-    fewer valid positions or end lengths than the maximum, we pad the vectors with -1.
-    """
     token_valid_positions, token_end_overlaps = _stop_string_get_matching_positions(
         token_list, tok_indices, stop_strings
     )
