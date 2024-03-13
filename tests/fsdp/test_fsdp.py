@@ -18,7 +18,6 @@ import unittest
 from copy import deepcopy
 from functools import partial
 
-from packaging import version
 from parameterized import parameterized
 
 import tests.trainer.test_trainer
@@ -91,7 +90,6 @@ if is_torch_available():
 
 require_fsdp_version = require_fsdp
 if is_accelerate_available():
-    from accelerate import __version__ as accelerate_version
     from accelerate.utils.constants import (
         FSDP_PYTORCH_VERSION,
         FSDP_SHARDING_STRATEGY,
@@ -197,7 +195,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
             fsdp_sharding_strategy = (
                 str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
-                if version.parse(accelerate_version) >= version.parse("0.26.0")
+                if is_accelerate_available("0.26.0")
                 else sharding_strategy.upper()
             )
             self.assertEqual(os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy)
