@@ -97,7 +97,8 @@ class HQQHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         
-        if(type(module) is not torch.nn.Linear): return 
+        if(type(module) is not torch.nn.Linear): 
+            return 
 
         layer_name    = param_name.replace('.weight', '').replace('.bias', '')
         parent_module = find_parent(model, layer_name)

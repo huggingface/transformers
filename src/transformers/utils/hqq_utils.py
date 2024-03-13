@@ -75,7 +75,7 @@ def load_hqq_module(module, weights, compute_dtype, device):
     if(module.name not in weights): 
         try:
             return module.to(compute_dtype).cuda(device)
-        except:
+        except Exception:
             return module
 
     state_dict = weights[module.name]
