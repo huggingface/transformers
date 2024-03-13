@@ -118,9 +118,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
     ):
         if add_prefix_space is not None:
             logger.warning_once(
-                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
+                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers but Cohere tokenizer does not have a slow tokenizer. The `add_prefix_space` argument will be ignored."
             )
-            kwargs["from_slow"] = True
 
         super().__init__(
             vocab_file=vocab_file,
