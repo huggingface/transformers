@@ -47,13 +47,17 @@ def find_parent(model, name):
         parent = parent._modules[m]
     return parent
 
+#checks if a module is a leaf: doesn't have another module inside
+def is_leaf_module(module):
+	return len(module._modules)==0
+
 #Returns layers to ignores. These layers are typically not leaves we are interested in for storage and loading
 def get_ignore_layers(model):
-    layers  = ['', 'model', 'model.layers'] 
-    layers += ['model.layers.' + str(i) for i in range(len(model.model.layers))]
-    layers += ['model.layers.' + str(i) + '.self_attn' for i in range(len(model.model.layers))]
-    layers += ['model.layers.' + str(i) + '.mlp' for i in range(len(model.model.layers))]
-    return layers
+	layers  = set([''])
+	for name, module in model.named_modules():
+		if(not is_leaf_module(module)):
+			layers.add(name)
+	return list(layers)
 
 #Checks if a quant config is an HQQ quant config
 def check_if_hqq_quant_config(quant_config):

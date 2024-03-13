@@ -589,6 +589,49 @@ double_quant_config = BitsAndBytesConfig(
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
 
+## HQQ 
+Half-Quadratic Quantization (HQQ) implements on-the-fly quantization via fast robust optimization. It doesn't require calibration data and can be used to quantize any model.  
+Please refer to the <a href="https://github.com/mobiusml/hqq/">official package</a> for more details.
+
+For installation, we recommend you use the following approach to get the latest version and build its corresponding CUDA kernels:
+```
+git clone https://github.com/mobiusml/hqq/; cd hqq; pip install -e .;
+cd hqq/kernels && python setup_cuda.py install; cd ../../../;
+```
+
+To quantize a model, you need to create an ```HQQConfig``` as follows:
+``` Python
+from transformers import AutoModelForCausalLM, AutoTokenizer, HQQConfig
+from hqq.core.quantize import *
+
+#Linear layers will use the same quantization config
+quant_config  = HQQConfig(BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False))
+
+#Each type of linear layer (referred to as linear tag) will use different quantization parameters
+quant_config  = HQQConfig({
+  'self_attn.q_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+  'self_attn.k_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+  'self_attn.v_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+  'self_attn.o_proj':BaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False),
+
+  'mlp.gate_proj':BaseQuantizeConfig(nbits=3, group_size=64, offload_meta=True),
+  'mlp.up_proj':  BaseQuantizeConfig(nbits=3, group_size=64, offload_meta=True),
+  'mlp.down_proj':BaseQuantizeConfig(nbits=3, group_size=64, offload_meta=True),
+  })
+```
+
+Then you simply quantize the model as follows
+``` Python
+model = transformers.AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map="cuda", quantization_config=quant_config)
+```
+
+Then you can set the preferred backend, we recommend you use the ATEN backend that uses CUDA kernels:
+``` Python
+HQQLinear.set_backend(HQQBackend.ATEN_BACKPROP)
+```
+
+You can save/load HQQ quantized models via ```save_pretrained``` and load them via ```from_pretrained```. Note however that for the moment, the serialization logic is quite different from the other methods and the quantized model is saved via ```torch.save``` instead of using ```safetensors```.
+
 ## Optimum
 
 The [Optimum](https://huggingface.co/docs/optimum/index) library supports quantization for Intel, Furiosa, ONNX Runtime, GPTQ, and lower-level PyTorch quantization functions. Consider using Optimum for quantization if you're using specific and optimized hardware like Intel CPUs, Furiosa NPUs or a model accelerator like ONNX Runtime.

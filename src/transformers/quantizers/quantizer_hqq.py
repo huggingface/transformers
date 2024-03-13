@@ -146,7 +146,7 @@ class HQQHfQuantizer(HfQuantizer):
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear > HQQLinear in create_quantized_param()
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config) 
 
-        model.config.quantization_config = self.quantization_config
+        #model.config.quantization_config is done inside prepare_for_hqq_linear 
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_hqq_quantized    = True

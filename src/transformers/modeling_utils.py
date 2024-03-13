@@ -2389,7 +2389,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             return 
 
-
         # Save the model
         if state_dict is None:
             state_dict = model_to_save.state_dict()
@@ -3057,9 +3056,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_kwargs = kwargs
 
         #HQQ-logic adapted from https://github.com/mobiusml/hqq/blob/master/hqq/models/base.py#L175
-        #-------------------------------------------------------------------------------------------------------
         quant_config = getattr(config, "quantization_config", None)
-
         if check_if_hqq_quant_config(quant_config):
             from hqq.models.base import BaseHQQModel, BasePatch
             from hqq.core.quantize import HQQLinear
@@ -3098,15 +3095,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if(name in ignore_layers): continue
                 name_to_module[name] = module
 
+            #load modules
             for name in logging.tqdm(name_to_module.keys(), "Loading"):
                 module = name_to_module[name]
                 parent = find_parent(model, name)
                 node   = name.split('.')[-1]
                 setattr(parent, node, load_hqq_module(module, loaded_weights, compute_dtype, hqq_device))
 
-            return model
-        #-------------------------------------------------------------------------------------------------------
-
+            return model #end HQQ temp logic
 
         pre_quantized = getattr(config, "quantization_config", None) is not None
         if pre_quantized or quantization_config is not None:

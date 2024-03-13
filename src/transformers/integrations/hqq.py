@@ -100,6 +100,9 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     model, has_been_replaced = _prepare_for_hqq_linear(model, patch_params=patch_params,
 															  has_been_replaced=has_been_replaced)
 
+    #We store quantization config as linear_tag -> hqq quant config
+    model.config.quantization_config = patch_params
+
     if not has_been_replaced:
         logger.warning("No linear modules were found in your model for quantization.")
 
