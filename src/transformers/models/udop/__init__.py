@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_udop": ["UdopConfig"],
+    "configuration_udop": ["UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP", "UdopConfig"],
     "processing_udop": ["UdopProcessor"],
 }
 
@@ -51,6 +51,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_udop"] = [
+        "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "UdopForConditionalGeneration",
         "UdopPreTrainedModel",
         "UdopModel",
@@ -58,7 +59,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_udop import UdopConfig
+    from .configuration_udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig
     from .processing_udop import UdopProcessor
 
     try:
@@ -84,6 +85,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_udop import (
+            UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
             UdopEncoderModel,
             UdopForConditionalGeneration,
             UdopModel,

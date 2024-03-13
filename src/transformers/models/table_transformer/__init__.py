@@ -19,6 +19,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_table_transformer": [
+        "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TableTransformerConfig",
         "TableTransformerOnnxConfig",
     ]
@@ -31,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_table_transformer"] = [
+        "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TableTransformerForObjectDetection",
         "TableTransformerModel",
         "TableTransformerPreTrainedModel",
@@ -39,6 +41,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_table_transformer import (
+        TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TableTransformerConfig,
         TableTransformerOnnxConfig,
     )
@@ -50,6 +53,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_table_transformer import (
+            TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TableTransformerForObjectDetection,
             TableTransformerModel,
             TableTransformerPreTrainedModel,

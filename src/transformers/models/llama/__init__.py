@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_llama": ["LlamaConfig"],
+    "configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
 }
 
 try:
@@ -67,7 +67,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_llama import LlamaConfig
+    from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
 
     try:
         if not is_sentencepiece_available():

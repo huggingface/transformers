@@ -26,6 +26,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_owlvit": [
+        "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
         "OwlViTOnnxConfig",
         "OwlViTTextConfig",
@@ -51,6 +52,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_owlvit"] = [
+        "OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OwlViTModel",
         "OwlViTPreTrainedModel",
         "OwlViTTextModel",
@@ -60,6 +62,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_owlvit import (
+        OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OwlViTConfig,
         OwlViTOnnxConfig,
         OwlViTTextConfig,
@@ -83,6 +86,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_owlvit import (
+            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OwlViTForObjectDetection,
             OwlViTModel,
             OwlViTPreTrainedModel,

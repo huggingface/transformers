@@ -22,6 +22,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_bark": [
+        "BARK_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BarkCoarseConfig",
         "BarkConfig",
         "BarkFineConfig",
@@ -37,6 +38,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_bark"] = [
+        "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BarkFineModel",
         "BarkSemanticModel",
         "BarkCoarseModel",
@@ -47,6 +49,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_bark import (
+        BARK_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BarkCoarseConfig,
         BarkConfig,
         BarkFineConfig,
@@ -61,6 +64,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_bark import (
+            BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
             BarkCausalModel,
             BarkCoarseModel,
             BarkFineModel,

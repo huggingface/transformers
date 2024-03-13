@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_beit": ["BeitConfig", "BeitOnnxConfig"]}
+_import_structure = {"configuration_beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig", "BeitOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -41,6 +41,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_beit"] = [
+        "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BeitForImageClassification",
         "BeitForMaskedImageModeling",
         "BeitForSemanticSegmentation",
@@ -64,7 +65,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_beit import BeitConfig, BeitOnnxConfig
+    from .configuration_beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig, BeitOnnxConfig
 
     try:
         if not is_vision_available():
@@ -82,6 +83,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_beit import (
+            BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BeitBackbone,
             BeitForImageClassification,
             BeitForMaskedImageModeling,

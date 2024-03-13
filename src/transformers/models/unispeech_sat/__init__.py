@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_unispeech_sat": ["UniSpeechSatConfig"],
+    "configuration_unispeech_sat": ["UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "UniSpeechSatConfig"],
 }
 
 try:
@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_unispeech_sat"] = [
+        "UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "UniSpeechSatForAudioFrameClassification",
         "UniSpeechSatForCTC",
         "UniSpeechSatForPreTraining",
@@ -43,7 +44,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_unispeech_sat import UniSpeechSatConfig
+    from .configuration_unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
 
     try:
         if not is_torch_available():
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_unispeech_sat import (
+            UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechSatForAudioFrameClassification,
             UniSpeechSatForCTC,
             UniSpeechSatForPreTraining,

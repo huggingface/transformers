@@ -19,6 +19,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_jukebox": [
+        "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
         "JukeboxPriorConfig",
         "JukeboxVQVAEConfig",
@@ -33,6 +34,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_jukebox"] = [
+        "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "JukeboxModel",
         "JukeboxPreTrainedModel",
         "JukeboxVQVAE",
@@ -41,6 +43,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_jukebox import (
+        JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
         JukeboxPriorConfig,
         JukeboxVQVAEConfig,
@@ -54,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_jukebox import (
+            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
             JukeboxPreTrainedModel,
             JukeboxPrior,

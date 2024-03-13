@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_qdqbert": ["QDQBertConfig"]}
+_import_structure = {"configuration_qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,6 +25,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_qdqbert"] = [
+        "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "QDQBertForMaskedLM",
         "QDQBertForMultipleChoice",
         "QDQBertForNextSentencePrediction",
@@ -40,7 +41,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_qdqbert import QDQBertConfig
+    from .configuration_qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
 
     try:
         if not is_torch_available():
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_qdqbert import (
+            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             QDQBertForMaskedLM,
             QDQBertForMultipleChoice,
             QDQBertForNextSentencePrediction,

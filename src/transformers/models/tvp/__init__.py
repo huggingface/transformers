@@ -18,7 +18,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_tvp": ["TvpConfig"],
+    "configuration_tvp": [
+        "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvpConfig",
+    ],
     "processing_tvp": ["TvpProcessor"],
 }
 
@@ -37,6 +40,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tvp"] = [
+        "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TvpModel",
         "TvpPreTrainedModel",
         "TvpForVideoGrounding",
@@ -44,6 +48,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_tvp import (
+        TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TvpConfig,
     )
     from .processing_tvp import TvpProcessor
@@ -63,6 +68,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tvp import (
+            TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvpForVideoGrounding,
             TvpModel,
             TvpPreTrainedModel,

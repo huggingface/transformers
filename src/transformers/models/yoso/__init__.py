@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
-_import_structure = {"configuration_yoso": ["YosoConfig"]}
+_import_structure = {"configuration_yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,6 +25,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_yoso"] = [
+        "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "YosoForMaskedLM",
         "YosoForMultipleChoice",
         "YosoForQuestionAnswering",
@@ -37,7 +38,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_yoso import YosoConfig
+    from .configuration_yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
     try:
         if not is_torch_available():
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_yoso import (
+            YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
             YosoForMaskedLM,
             YosoForMultipleChoice,
             YosoForQuestionAnswering,

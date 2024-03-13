@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mpnet": ["MPNetConfig"],
+    "configuration_mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig"],
     "tokenization_mpnet": ["MPNetTokenizer"],
 }
 
@@ -44,6 +44,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mpnet"] = [
+        "MPNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MPNetForMaskedLM",
         "MPNetForMultipleChoice",
         "MPNetForQuestionAnswering",
@@ -61,6 +62,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_mpnet"] = [
+        "TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFMPNetEmbeddings",
         "TFMPNetForMaskedLM",
         "TFMPNetForMultipleChoice",
@@ -74,7 +76,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mpnet import MPNetConfig
+    from .configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig
     from .tokenization_mpnet import MPNetTokenizer
 
     try:
@@ -92,6 +94,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mpnet import (
+            MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             MPNetForMaskedLM,
             MPNetForMultipleChoice,
             MPNetForQuestionAnswering,
@@ -109,6 +112,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_mpnet import (
+            TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMPNetEmbeddings,
             TFMPNetForMaskedLM,
             TFMPNetForMultipleChoice,

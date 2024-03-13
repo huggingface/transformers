@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_bigbird_pegasus": [
+        "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
         "BigBirdPegasusOnnxConfig",
     ],
@@ -30,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_bigbird_pegasus"] = [
+        "BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BigBirdPegasusForCausalLM",
         "BigBirdPegasusForConditionalGeneration",
         "BigBirdPegasusForQuestionAnswering",
@@ -41,6 +43,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_bigbird_pegasus import (
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BigBirdPegasusConfig,
         BigBirdPegasusOnnxConfig,
     )
@@ -52,6 +55,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_bigbird_pegasus import (
+            BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BigBirdPegasusForCausalLM,
             BigBirdPegasusForConditionalGeneration,
             BigBirdPegasusForQuestionAnswering,

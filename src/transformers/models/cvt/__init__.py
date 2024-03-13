@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
-_import_structure = {"configuration_cvt": ["CvtConfig"]}
+_import_structure = {"configuration_cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"]}
 
 
 try:
@@ -26,6 +26,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_cvt"] = [
+        "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CvtForImageClassification",
         "CvtModel",
         "CvtPreTrainedModel",
@@ -38,13 +39,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_cvt"] = [
+        "TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFCvtForImageClassification",
         "TFCvtModel",
         "TFCvtPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_cvt import CvtConfig
+    from .configuration_cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
 
     try:
         if not is_torch_available():
@@ -53,6 +55,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_cvt import (
+            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CvtForImageClassification,
             CvtModel,
             CvtPreTrainedModel,
@@ -65,6 +68,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_cvt import (
+            TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCvtForImageClassification,
             TFCvtModel,
             TFCvtPreTrainedModel,

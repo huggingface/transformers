@@ -26,6 +26,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_layoutlmv3": [
+        "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMv3Config",
         "LayoutLMv3OnnxConfig",
     ],
@@ -48,6 +49,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_layoutlmv3"] = [
+        "LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LayoutLMv3ForQuestionAnswering",
         "LayoutLMv3ForSequenceClassification",
         "LayoutLMv3ForTokenClassification",
@@ -62,6 +64,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_layoutlmv3"] = [
+        "TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFLayoutLMv3ForQuestionAnswering",
         "TFLayoutLMv3ForSequenceClassification",
         "TFLayoutLMv3ForTokenClassification",
@@ -81,6 +84,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_layoutlmv3 import (
+        LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LayoutLMv3Config,
         LayoutLMv3OnnxConfig,
     )
@@ -102,6 +106,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_layoutlmv3 import (
+            LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv3ForQuestionAnswering,
             LayoutLMv3ForSequenceClassification,
             LayoutLMv3ForTokenClassification,
@@ -116,6 +121,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_layoutlmv3 import (
+            TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMv3ForQuestionAnswering,
             TFLayoutLMv3ForSequenceClassification,
             TFLayoutLMv3ForTokenClassification,

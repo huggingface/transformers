@@ -23,6 +23,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_efficientnet": [
+        "EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EfficientNetConfig",
         "EfficientNetOnnxConfig",
     ]
@@ -43,6 +44,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_efficientnet"] = [
+        "EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EfficientNetForImageClassification",
         "EfficientNetModel",
         "EfficientNetPreTrainedModel",
@@ -50,6 +52,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_efficientnet import (
+        EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EfficientNetConfig,
         EfficientNetOnnxConfig,
     )
@@ -69,6 +72,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_efficientnet import (
+            EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             EfficientNetForImageClassification,
             EfficientNetModel,
             EfficientNetPreTrainedModel,

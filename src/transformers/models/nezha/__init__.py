@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_nezha": ["NezhaConfig"],
+    "configuration_nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
 }
 
 try:
@@ -27,6 +27,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_nezha"] = [
+        "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "NezhaForNextSentencePrediction",
         "NezhaForMaskedLM",
         "NezhaForPreTraining",
@@ -40,7 +41,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_nezha import NezhaConfig
+    from .configuration_nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
 
     try:
         if not is_torch_available():
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_nezha import (
+            NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,
             NezhaForMaskedLM,
             NezhaForMultipleChoice,
             NezhaForNextSentencePrediction,

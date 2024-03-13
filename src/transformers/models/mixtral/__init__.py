@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mixtral": ["MixtralConfig"],
+    "configuration_mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
 }
 
 
@@ -40,7 +40,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mixtral import MixtralConfig
+    from .configuration_mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
 
     try:
         if not is_torch_available():

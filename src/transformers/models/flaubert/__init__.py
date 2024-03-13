@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_flaubert": ["FlaubertConfig", "FlaubertOnnxConfig"],
+    "configuration_flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertOnnxConfig"],
     "tokenization_flaubert": ["FlaubertTokenizer"],
 }
 
@@ -29,6 +29,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flaubert"] = [
+        "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FlaubertForMultipleChoice",
         "FlaubertForQuestionAnswering",
         "FlaubertForQuestionAnsweringSimple",
@@ -46,6 +47,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_flaubert"] = [
+        "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFFlaubertForMultipleChoice",
         "TFFlaubertForQuestionAnsweringSimple",
         "TFFlaubertForSequenceClassification",
@@ -57,7 +59,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_flaubert import FlaubertConfig, FlaubertOnnxConfig
+    from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertOnnxConfig
     from .tokenization_flaubert import FlaubertTokenizer
 
     try:
@@ -67,6 +69,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flaubert import (
+            FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
             FlaubertForQuestionAnswering,
             FlaubertForQuestionAnsweringSimple,
@@ -84,6 +87,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_flaubert import (
+            TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,
             TFFlaubertForQuestionAnsweringSimple,
             TFFlaubertForSequenceClassification,

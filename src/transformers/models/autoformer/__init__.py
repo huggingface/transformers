@@ -18,7 +18,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_autoformer": ["AutoformerConfig"],
+    "configuration_autoformer": [
+        "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AutoformerConfig",
+    ],
 }
 
 try:
@@ -28,6 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_autoformer"] = [
+        "AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "AutoformerForPrediction",
         "AutoformerModel",
         "AutoformerPreTrainedModel",
@@ -36,6 +40,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_autoformer import (
+        AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AutoformerConfig,
     )
 
@@ -46,6 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_autoformer import (
+            AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             AutoformerForPrediction,
             AutoformerModel,
             AutoformerPreTrainedModel,

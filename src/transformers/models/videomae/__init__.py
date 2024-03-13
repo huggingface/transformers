@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_videomae": ["VideoMAEConfig"],
+    "configuration_videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
 }
 
 try:
@@ -27,6 +27,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_videomae"] = [
+        "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VideoMAEForPreTraining",
         "VideoMAEModel",
         "VideoMAEPreTrainedModel",
@@ -43,7 +44,7 @@ else:
     _import_structure["image_processing_videomae"] = ["VideoMAEImageProcessor"]
 
 if TYPE_CHECKING:
-    from .configuration_videomae import VideoMAEConfig
+    from .configuration_videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
 
     try:
         if not is_torch_available():
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_videomae import (
+            VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
             VideoMAEForVideoClassification,
             VideoMAEModel,

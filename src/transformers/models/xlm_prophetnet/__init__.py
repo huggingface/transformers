@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepie
 
 
 _import_structure = {
-    "configuration_xlm_prophetnet": ["XLMProphetNetConfig"],
+    "configuration_xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
 }
 
 try:
@@ -35,6 +35,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_xlm_prophetnet"] = [
+        "XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLMProphetNetDecoder",
         "XLMProphetNetEncoder",
         "XLMProphetNetForCausalLM",
@@ -45,7 +46,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm_prophetnet import XLMProphetNetConfig
+    from .configuration_xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
 
     try:
         if not is_sentencepiece_available():
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_xlm_prophetnet import (
+            XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMProphetNetDecoder,
             XLMProphetNetEncoder,
             XLMProphetNetForCausalLM,

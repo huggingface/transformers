@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_trocr": ["TrOCRConfig"],
+    "configuration_trocr": ["TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP", "TrOCRConfig"],
     "processing_trocr": ["TrOCRProcessor"],
 }
 
@@ -35,13 +35,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_trocr"] = [
+        "TROCR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TrOCRForCausalLM",
         "TrOCRPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_trocr import TrOCRConfig
+    from .configuration_trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig
     from .processing_trocr import TrOCRProcessor
 
     try:
@@ -50,7 +51,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_trocr import TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .modeling_trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
 
 else:
     import sys

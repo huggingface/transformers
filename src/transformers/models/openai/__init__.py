@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_openai": ["OpenAIGPTConfig"],
+    "configuration_openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig"],
     "tokenization_openai": ["OpenAIGPTTokenizer"],
 }
 
@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_openai"] = [
+        "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OpenAIGPTDoubleHeadsModel",
         "OpenAIGPTForSequenceClassification",
         "OpenAIGPTLMHeadModel",
@@ -58,6 +59,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_openai"] = [
+        "TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFOpenAIGPTDoubleHeadsModel",
         "TFOpenAIGPTForSequenceClassification",
         "TFOpenAIGPTLMHeadModel",
@@ -68,7 +70,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_openai import OpenAIGPTConfig
+    from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
     from .tokenization_openai import OpenAIGPTTokenizer
 
     try:
@@ -86,6 +88,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_openai import (
+            OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,
             OpenAIGPTForSequenceClassification,
             OpenAIGPTLMHeadModel,
@@ -101,6 +104,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_openai import (
+            TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOpenAIGPTDoubleHeadsModel,
             TFOpenAIGPTForSequenceClassification,
             TFOpenAIGPTLMHeadModel,

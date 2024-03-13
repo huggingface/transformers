@@ -17,7 +17,10 @@ from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avai
 
 
 _import_structure = {
-    "configuration_trajectory_transformer": ["TrajectoryTransformerConfig"],
+    "configuration_trajectory_transformer": [
+        "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrajectoryTransformerConfig",
+    ],
 }
 
 try:
@@ -27,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_trajectory_transformer"] = [
+        "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TrajectoryTransformerModel",
         "TrajectoryTransformerPreTrainedModel",
         "load_tf_weights_in_trajectory_transformer",
@@ -35,6 +39,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_trajectory_transformer import (
+        TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
     )
 
@@ -45,6 +50,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_trajectory_transformer import (
+            TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrajectoryTransformerModel,
             TrajectoryTransformerPreTrainedModel,
             load_tf_weights_in_trajectory_transformer,

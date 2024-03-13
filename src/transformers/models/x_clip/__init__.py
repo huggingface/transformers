@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_x_clip": [
+        "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XCLIPConfig",
         "XCLIPTextConfig",
         "XCLIPVisionConfig",
@@ -32,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_x_clip"] = [
+        "XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XCLIPModel",
         "XCLIPPreTrainedModel",
         "XCLIPTextModel",
@@ -40,6 +42,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_x_clip import (
+        XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XCLIPConfig,
         XCLIPTextConfig,
         XCLIPVisionConfig,
@@ -53,6 +56,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_x_clip import (
+            XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             XCLIPModel,
             XCLIPPreTrainedModel,
             XCLIPTextModel,

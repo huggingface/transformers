@@ -26,6 +26,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_blenderbot": [
+        "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotConfig",
         "BlenderbotOnnxConfig",
     ],
@@ -47,6 +48,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_blenderbot"] = [
+        "BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BlenderbotForCausalLM",
         "BlenderbotForConditionalGeneration",
         "BlenderbotModel",
@@ -82,6 +84,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_blenderbot import (
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BlenderbotConfig,
         BlenderbotOnnxConfig,
     )
@@ -102,6 +105,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_blenderbot import (
+            BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlenderbotForCausalLM,
             BlenderbotForConditionalGeneration,
             BlenderbotModel,

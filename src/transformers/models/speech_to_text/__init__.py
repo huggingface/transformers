@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_speech_to_text": ["Speech2TextConfig"],
+    "configuration_speech_to_text": ["SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Speech2TextConfig"],
     "feature_extraction_speech_to_text": ["Speech2TextFeatureExtractor"],
     "processing_speech_to_text": ["Speech2TextProcessor"],
 }
@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_speech_to_text"] = [
+        "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFSpeech2TextForConditionalGeneration",
         "TFSpeech2TextModel",
         "TFSpeech2TextPreTrainedModel",
@@ -55,6 +56,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_speech_to_text"] = [
+        "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Speech2TextForConditionalGeneration",
         "Speech2TextModel",
         "Speech2TextPreTrainedModel",
@@ -62,7 +64,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_speech_to_text import Speech2TextConfig
+    from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
     from .processing_speech_to_text import Speech2TextProcessor
 
@@ -81,6 +83,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_speech_to_text import (
+            TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFSpeech2TextForConditionalGeneration,
             TFSpeech2TextModel,
             TFSpeech2TextPreTrainedModel,
@@ -93,6 +96,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_speech_to_text import (
+            SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Speech2TextForConditionalGeneration,
             Speech2TextModel,
             Speech2TextPreTrainedModel,

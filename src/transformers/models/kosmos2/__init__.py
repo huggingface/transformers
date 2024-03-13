@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_kosmos2": ["Kosmos2Config"],
+    "configuration_kosmos2": ["KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Kosmos2Config"],
     "processing_kosmos2": ["Kosmos2Processor"],
 }
 
@@ -34,6 +34,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_kosmos2"] = [
+        "KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Kosmos2ForConditionalGeneration",
         "Kosmos2Model",
         "Kosmos2PreTrainedModel",
@@ -41,7 +42,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_kosmos2 import Kosmos2Config
+    from .configuration_kosmos2 import KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP, Kosmos2Config
     from .processing_kosmos2 import Kosmos2Processor
 
     try:
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_kosmos2 import (
+            KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Kosmos2ForConditionalGeneration,
             Kosmos2Model,
             Kosmos2PreTrainedModel,

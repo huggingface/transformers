@@ -22,7 +22,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mega": ["MegaConfig", "MegaOnnxConfig"],
+    "configuration_mega": ["MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegaConfig", "MegaOnnxConfig"],
 }
 
 try:
@@ -32,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mega"] = [
+        "MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MegaForCausalLM",
         "MegaForMaskedLM",
         "MegaForMultipleChoice",
@@ -43,7 +44,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mega import MegaConfig, MegaOnnxConfig
+    from .configuration_mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig, MegaOnnxConfig
 
     try:
         if not is_torch_available():
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mega import (
+            MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegaForCausalLM,
             MegaForMaskedLM,
             MegaForMultipleChoice,

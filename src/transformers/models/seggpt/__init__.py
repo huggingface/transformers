@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_seggpt": ["SegGptConfig", "SegGptOnnxConfig"]}
+_import_structure = {
+    "configuration_seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGptConfig", "SegGptOnnxConfig"]
+}
 
 try:
     if not is_torch_available():
@@ -25,6 +27,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_seggpt"] = [
+        "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SegGptModel",
         "SegGptPreTrainedModel",
         "SegGptForImageSegmentation",
@@ -39,7 +42,7 @@ else:
     _import_structure["image_processing_seggpt"] = ["SegGptImageProcessor"]
 
 if TYPE_CHECKING:
-    from .configuration_seggpt import SegGptConfig, SegGptOnnxConfig
+    from .configuration_seggpt import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, SegGptConfig, SegGptOnnxConfig
 
     try:
         if not is_torch_available():
@@ -48,6 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_seggpt import (
+            SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegGptForImageSegmentation,
             SegGptModel,
             SegGptPreTrainedModel,

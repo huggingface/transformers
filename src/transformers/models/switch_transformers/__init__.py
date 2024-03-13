@@ -27,6 +27,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_switch_transformers": [
+        "SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwitchTransformersConfig",
         "SwitchTransformersOnnxConfig",
     ]
@@ -39,6 +40,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_switch_transformers"] = [
+        "SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SwitchTransformersEncoderModel",
         "SwitchTransformersForConditionalGeneration",
         "SwitchTransformersModel",
@@ -50,6 +52,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_switch_transformers import (
+        SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwitchTransformersConfig,
         SwitchTransformersOnnxConfig,
     )
@@ -61,6 +64,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_switch_transformers import (
+            SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwitchTransformersEncoderModel,
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,

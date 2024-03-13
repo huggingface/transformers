@@ -24,6 +24,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_blip": [
+        "BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlipConfig",
         "BlipTextConfig",
         "BlipVisionConfig",
@@ -47,6 +48,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_blip"] = [
+        "BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BlipModel",
         "BlipPreTrainedModel",
         "BlipForConditionalGeneration",
@@ -63,6 +65,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_blip"] = [
+        "TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFBlipModel",
         "TFBlipPreTrainedModel",
         "TFBlipForConditionalGeneration",
@@ -73,7 +76,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
+    from .configuration_blip import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, BlipConfig, BlipTextConfig, BlipVisionConfig
     from .processing_blip import BlipProcessor
 
     try:
@@ -91,6 +94,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_blip import (
+            BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlipForConditionalGeneration,
             BlipForImageTextRetrieval,
             BlipForQuestionAnswering,
@@ -107,6 +111,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_blip import (
+            TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBlipForConditionalGeneration,
             TFBlipForImageTextRetrieval,
             TFBlipForQuestionAnswering,

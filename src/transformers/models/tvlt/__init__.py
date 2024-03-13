@@ -26,7 +26,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_tvlt": ["TvltConfig"],
+    "configuration_tvlt": ["TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TvltConfig"],
     "feature_extraction_tvlt": ["TvltFeatureExtractor"],
     "processing_tvlt": ["TvltProcessor"],
 }
@@ -38,6 +38,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tvlt"] = [
+        "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TvltModel",
         "TvltForPreTraining",
         "TvltForAudioVisualClassification",
@@ -54,7 +55,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_tvlt import TvltConfig
+    from .configuration_tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
     from .processing_tvlt import TvltProcessor
     from .feature_extraction_tvlt import TvltFeatureExtractor
 
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tvlt import (
+            TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvltForAudioVisualClassification,
             TvltForPreTraining,
             TvltModel,

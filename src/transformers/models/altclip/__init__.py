@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 _import_structure = {
     "configuration_altclip": [
+        "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AltCLIPConfig",
         "AltCLIPTextConfig",
         "AltCLIPVisionConfig",
@@ -32,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_altclip"] = [
+        "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "AltCLIPPreTrainedModel",
         "AltCLIPModel",
         "AltCLIPTextModel",
@@ -41,6 +43,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_altclip import (
+        ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AltCLIPConfig,
         AltCLIPTextConfig,
         AltCLIPVisionConfig,
@@ -54,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_altclip import (
+            ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             AltCLIPModel,
             AltCLIPPreTrainedModel,
             AltCLIPTextModel,

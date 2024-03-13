@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable
 
 
 _import_structure = {
-    "configuration_gpt_neox_japanese": ["GPTNeoXJapaneseConfig"],
+    "configuration_gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "tokenization_gpt_neox_japanese": ["GPTNeoXJapaneseTokenizer"],
 }
 
@@ -29,6 +29,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_gpt_neox_japanese"] = [
+        "GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoXJapaneseForCausalLM",
         "GPTNeoXJapaneseLayer",
         "GPTNeoXJapaneseModel",
@@ -37,7 +38,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neox_japanese import GPTNeoXJapaneseConfig
+    from .configuration_gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
 
     try:
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gpt_neox_japanese import (
+            GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXJapaneseForCausalLM,
             GPTNeoXJapaneseLayer,
             GPTNeoXJapaneseModel,

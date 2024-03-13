@@ -17,7 +17,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_wav2vec2_bert": ["Wav2Vec2BertConfig"],
+    "configuration_wav2vec2_bert": [
+        "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2BertConfig",
+    ],
     "processing_wav2vec2_bert": ["Wav2Vec2BertProcessor"],
 }
 
@@ -29,6 +32,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_wav2vec2_bert"] = [
+        "WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Wav2Vec2BertForAudioFrameClassification",
         "Wav2Vec2BertForCTC",
         "Wav2Vec2BertForSequenceClassification",
@@ -39,6 +43,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_wav2vec2_bert import (
+        WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2BertConfig,
     )
     from .processing_wav2vec2_bert import Wav2Vec2BertProcessor
@@ -50,6 +55,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_wav2vec2_bert import (
+            WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2BertForAudioFrameClassification,
             Wav2Vec2BertForCTC,
             Wav2Vec2BertForSequenceClassification,

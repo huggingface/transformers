@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_realm": ["RealmConfig"],
+    "configuration_realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig"],
     "tokenization_realm": ["RealmTokenizer"],
 }
 
@@ -36,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_realm"] = [
+        "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RealmEmbedder",
         "RealmForOpenQA",
         "RealmKnowledgeAugEncoder",
@@ -48,7 +49,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_realm import RealmConfig
+    from .configuration_realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig
     from .tokenization_realm import RealmTokenizer
 
     try:
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_realm import (
+            REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RealmEmbedder,
             RealmForOpenQA,
             RealmKnowledgeAugEncoder,

@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gptsan_japanese": ["GPTSanJapaneseConfig"],
+    "configuration_gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSanJapaneseConfig"],
     "tokenization_gptsan_japanese": ["GPTSanJapaneseTokenizer"],
 }
 
@@ -35,6 +35,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_gptsan_japanese"] = [
+        "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTSanJapaneseForConditionalGeneration",
         "GPTSanJapaneseModel",
         "GPTSanJapanesePreTrainedModel",
@@ -45,7 +46,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_gptsan_japanese import GPTSanJapaneseConfig
+    from .configuration_gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSanJapaneseConfig
     from .tokenization_gptsan_japanese import GPTSanJapaneseTokenizer
 
     try:
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gptsan_japanese import (
+            GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTSanJapaneseForConditionalGeneration,
             GPTSanJapaneseModel,
             GPTSanJapanesePreTrainedModel,

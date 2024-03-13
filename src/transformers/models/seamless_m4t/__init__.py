@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_seamless_m4t": ["SeamlessM4TConfig"],
+    "configuration_seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig"],
     "feature_extraction_seamless_m4t": ["SeamlessM4TFeatureExtractor"],
     "processing_seamless_m4t": ["SeamlessM4TProcessor"],
 }
@@ -51,6 +51,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_seamless_m4t"] = [
+        "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SeamlessM4TForTextToSpeech",
         "SeamlessM4TForSpeechToSpeech",
         "SeamlessM4TForTextToText",
@@ -64,7 +65,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_seamless_m4t import SeamlessM4TConfig
+    from .configuration_seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig
     from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
     from .processing_seamless_m4t import SeamlessM4TProcessor
 
@@ -91,6 +92,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_seamless_m4t import (
+            SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
             SeamlessM4TForSpeechToSpeech,
             SeamlessM4TForSpeechToText,

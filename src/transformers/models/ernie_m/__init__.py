@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepie
 
 
 _import_structure = {
-    "configuration_ernie_m": ["ErnieMConfig"],
+    "configuration_ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
 }
 
 try:
@@ -36,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_ernie_m"] = [
+        "ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ErnieMForMultipleChoice",
         "ErnieMForQuestionAnswering",
         "ErnieMForSequenceClassification",
@@ -47,7 +48,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_ernie_m import ErnieMConfig
+    from .configuration_ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
 
     try:
         if not is_sentencepiece_available():
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_ernie_m import (
+            ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
             ErnieMForInformationExtraction,
             ErnieMForMultipleChoice,
             ErnieMForQuestionAnswering,
