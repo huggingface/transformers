@@ -720,8 +720,8 @@ class ModelTesterMixin:
                     batched_object.values(), single_row_object.values()
                 ):
                     recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            # do not compare returned loss (0-dim tensor) or codebook ids (int)
-            elif batched_object is None or isinstance(batched_object, int):
+            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
+            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
             elif batched_object.dim() == 0:
                 return
