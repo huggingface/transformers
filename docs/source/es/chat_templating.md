@@ -18,6 +18,7 @@ rendered properly in your Markdown viewer.
 # Plantillas para Modelos de Chat
 
 ## Introducción
+
 Un caso de uso cada vez más común para LLMs es **el chat**. En un contexto de chat, en lugar de continuar una única cadena de texto (como es el caso con un modelo de lenguaje estándar), el modelo continúa una conversación que consta de uno o más **mensajes**, cada uno de los cuales incluye un **rol**, como "usuario" o "asistente", así como el texto del mensaje.
 Al igual que con la tokenización, diferentes modelos esperan formatos de entrada muy diferentes para el chat. Esta es la razón por la que agregamos las plantillas de chat como una característica. Las plantillas de chat son parte del tokenizador. Especifican cómo convertir conversaciones, representadas como listas de mensajes, en una única cadena tokenizable en el formato que el modelo espera.
 Vamos a hacer esto con un ejemplo concreto utilizando el modelo `BlenderBot`. BlenderBot tiene una plantilla predeterminada extremadamente simple, que principalmente solo agrega espacios en blanco entre rondas de diálogo:
@@ -110,7 +111,7 @@ Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopte
 
 ## ¿Existe un pipeline automatizado para chats?
 
-Sí, lo hay! Nuestros canales de generación de texto admiten entradas de chat, cual facilita más facíl utilizar los modelos de chat. En el pasado, solíamos utilizar una clase dedicada "ConversationalPipeline", pero ahora la ha sido hecho obsoleta y se une con la nueva clase [`TextGenerationPipeline`]. Este pipeline está diseñado para facilitar el uso de modelos de chat. Intentemos el ejemplo de `Zephyr` de nuevo, pero esta vez utilizando el pipeline:
+Sí, lo hay! Nuestros canales de generación de texto admiten entradas de chat, cual facilita más facíl utilizar los modelos de chat. En el pasado, solíamos utilizar una clase dedicada "ConversationalPipeline", pero ahora ha quedado obsoleta y su funcionalidad se ha fusionado en [`TextGenerationPipeline`]. Este pipeline está diseñado para facilitar el uso de modelos de chat. Intentemos el ejemplo de `Zephyr` de nuevo, pero esta vez utilizando el pipeline:
 
 ```python
 from transformers import pipeline
@@ -131,7 +132,7 @@ print(pipe(messages, max_new_tokens=128)[0]['generated_text'][-1])  # Print the 
 ```
 
 
-La canalización se encargará de todos los detalles de de la tokenización y de llamar a `apply_chat_template` por ti. Una vez que el modelo tenga una plantilla de chat, ¡todo lo que necesitas hacer es inicializar el pipeline y pasarle la lista de mensajes!
+La canalización se encargará de todos los detalles de la tokenización y de llamar a `apply_chat_template` por ti. Una vez que el modelo tenga una plantilla de chat, ¡todo lo que necesitas hacer es inicializar el pipeline y pasarle la lista de mensajes!
 
 # ¿Qué son los "generation prompts"?
 
