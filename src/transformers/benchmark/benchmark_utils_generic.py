@@ -34,13 +34,13 @@ class BenchMark:
         self._buffer["measure_kwargs"] = {}
         self._buffer["report_kwargs"] = {}
 
-    def measure(self, func, **measure_kwargs):
+    def _measure(self, func, **measure_kwargs):
         raise NotImplementedError
 
-    def target(self, **target_kwargs):
+    def _target(self, **target_kwargs):
         raise NotImplementedError
 
-    def inputs(self, **inputs_kwargs):
+    def _inputs(self, **inputs_kwargs):
         return {}
 
     def _convert_to_json(self, report):
@@ -52,7 +52,7 @@ class BenchMark:
             return report.__name__
         return report
 
-    def report(self, result, only_result=False, output_path=None):
+    def _report(self, result, only_result=False, output_path=None):
         report = {"result": result}
         if not only_result:
             report["configuration"] = self._buffer
@@ -78,23 +78,23 @@ class BenchMark:
         if measure_kwargs is None:
             measure_kwargs = {}
 
-        target = self.target(**target_kwargs)
+        target = self._target(**target_kwargs)
 
         all_inputs_kwargs = [inputs_kwargs] if isinstance(inputs_kwargs, dict) else inputs_kwargs
         results = []
         for _inputs_kwargs in all_inputs_kwargs:
-            inputs = self.inputs(**_inputs_kwargs)
-            result = self.measure(target, **measure_kwargs)(**inputs)
+            inputs = self._inputs(**_inputs_kwargs)
+            result = self._measure(target, **measure_kwargs)(**inputs)
             results.append(result)
 
         if isinstance(inputs_kwargs, dict):
             results = results[0]
 
-        return self.report(results, **report_kwargs)
+        return self._report(results, **report_kwargs)
 
 
 class SpeedBenchMark(BenchMark):
-    def measure(self, func, number=3, repeat=1):
+    def _measure(self, func, number=3, repeat=1):
         self._buffer["measure_kwargs"]["number"] = number
         self._buffer["measure_kwargs"]["repeat"] = repeat
 
