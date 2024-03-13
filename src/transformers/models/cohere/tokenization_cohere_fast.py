@@ -567,7 +567,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         ]
         >> # render the prompt, ready for user to inspect, or for input into the model:
         >> prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
-        >> print(prompt) # doctest: +SKIP
+        >> print(prompt) 
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
         The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
 
@@ -610,8 +610,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         ]\\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
         ```
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
-        >> outputs = model.generate(inputs, max_new_tokens=128) # doctest: +SKIP
-        >> print(tokenizer.decode(outputs[0])) # doctest: +SKIP
+        >> outputs = model.generate(inputs, max_new_tokens=128) 
+        >> print(tokenizer.decode(outputs[0])) 
         Action: ```json
         [
             {
@@ -704,17 +704,17 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         >> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-v01')
 
         >> # define documents:
-        >> documents = [ \
-            { "title": "Tall penguins", "text": "Emperor penguins are the tallest." }, \
-            { "title": "Penguin habitats", "text": "Emperor penguins only live in Antarctica."} \
+        >> documents = [ 
+            { "title": "Tall penguins", "text": "Emperor penguins are the tallest." }, 
+            { "title": "Penguin habitats", "text": "Emperor penguins only live in Antarctica."} 
         ]
         >> # define a conversation:
-        >> conversation = [ \
-            {"role": "user", "content": "Whats the biggest penguin in the world?"} \
+        >> conversation = [ 
+            {"role": "user", "content": "Whats the biggest penguin in the world?"} 
         ]
         >> # render the prompt, ready for user to inspect, or for input into the model:
         >> grounded_generation_prompt = tokenizer.apply_grounded_generation_template(conversation, documents=documents, tokenize=False, add_generation_prompt=True)
-        >> print(grounded_generation_prompt) # doctest: +SKIP
+        >> print(grounded_generation_prompt) 
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
         The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
 
@@ -741,8 +741,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'''
         ```
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
-        >> outputs = model.generate(inputs, max_new_tokens=128) # doctest: +SKIP
-        >> print(tokenizer.decode(outputs[0])) # doctest: +SKIP
+        >> outputs = model.generate(inputs, max_new_tokens=128) 
+        >> print(tokenizer.decode(outputs[0])) 
         Relevant Documents: 0,1
         Cited Documents: 0,1
         Answer: The Emperor Penguin is the tallest or biggest penguin in the world. It is a bird that lives only in Antarctica and grows to a height of around 122 centimetres.
