@@ -74,20 +74,15 @@ class QuantoHfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         import quanto
 
-        # if the model is prequantized, we don't need to remove any keys
-        if self.pre_quantized:
-            return missing_keys
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, quanto.QModuleMixin):
                 for missing in missing_keys:
-                    if (
-                        (name in missing or name in f"{prefix}.{missing}")
-                        and "weights" not in missing
-                        and "bias" not in "missing"
-                    ):
-                        not_missing_keys.append(missing)
-        return [k for k in missing_keys if k not in not_missing_keys]
+                    if name in missing or name in f"{prefix}.{missing}":
+                        if self.pre_quantized or (not missing.endswith(".weight") and not missing.endswith(".bias")):
+                            not_missing_keys.append(missing)
+        val = [k for k in missing_keys if k not in not_missing_keys]
+        return val
 
     def check_quantized_param(
         self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
@@ -98,8 +93,14 @@ class QuantoHfQuantizer(HfQuantizer):
         import quanto
 
         module, tensor_name = get_module_from_name(model, param_name)
+        if self.pre_quantized:
+            if isinstance(module, quanto.QModuleMixin):
+                return not module.frozen
+            else:
+                return False
+
         # We only quantize the weights and the bias is not quantized.
-        if isinstance(module, quanto.QModuleMixin) and tensor_name == "weight":
+        if isinstance(module, quanto.QModuleMixin) and "weight" in tensor_name:
             # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
             return not module.frozen
         else:
@@ -115,6 +116,8 @@ class QuantoHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
+        state_dict: Dict[str, Any],
+        unexpected_keys: List[str],
         *args,
         **kwargs,
     ):
@@ -123,10 +126,22 @@ class QuantoHfQuantizer(HfQuantizer):
         """
         from accelerate.utils import set_module_tensor_to_device
 
-        set_module_tensor_to_device(model, param_name, target_device, param_value)
-        module, _ = get_module_from_name(model, param_name)
-        module.freeze()
-        module.weight.requires_grad = False
+        if self.pre_quantized:
+            module, _ = get_module_from_name(model, param_name)
+            module_name = ".".join(param_name.split(".")[:-1])
+            module_state_dict = {}
+            for k, v in state_dict.items():
+                if module_name + "." in k:
+                    module_state_dict[k[len(module_name + ".") :]] = v
+                    if k in unexpected_keys:
+                        unexpected_keys.remove(k)
+            module.load_state_dict(module_state_dict)
+            module.to(target_device)
+        else:
+            set_module_tensor_to_device(model, param_name, target_device, param_value)
+            module, _ = get_module_from_name(model, param_name)
+            module.freeze()
+            module.weight.requires_grad = False
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.27.0"):
@@ -171,9 +186,18 @@ class QuantoHfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model):
         return model
 
-    @property
-    def weights_only_kwarg(self) -> Optional[Dict[str, Any]]:
-        return {"weights_only": False}
+    def _process_model_after_weight_loading(self, model):
+        return model
+
+    def split_state_dict(self, state_dict):
+        # Split state_dict into tensors and metadata
+        tensors, metadata = {}, {}
+        for name, value in state_dict.items():
+            if type(value) == torch.Tensor:
+                tensors[name] = value
+            if isinstance(value, str):
+                metadata[name] = value
+        return tensors, metadata
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
@@ -182,12 +206,3 @@ class QuantoHfQuantizer(HfQuantizer):
     @property
     def is_serializable(self):
         return True
-
-    @property
-    def is_safe_serializable(self):
-        logger.warning(
-            "Serialization with safetensors is not supported with models quantized with quanto. "
-            "Please pass `safe_serialization=False` in `save_pretrained`. You will most likely face errors or"
-            " unexpected behaviours."
-        )
-        return False

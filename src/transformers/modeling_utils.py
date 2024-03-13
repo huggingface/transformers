@@ -506,8 +506,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
-    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", **weights_only_kwarg)
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu")
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -521,7 +520,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike], weights_only_kwarg=None):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -534,7 +533,10 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], weights_only_kwarg
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
             )
-        return safe_load_file(checkpoint_file)
+        state_dict = safe_load_file(checkpoint_file)
+        del metadata["format"]
+        state_dict.update(metadata)
+        return state_dict
     try:
         if (
             is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
@@ -551,8 +553,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], weights_only_kwarg
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        if weights_only_kwarg is None:
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
@@ -758,7 +759,11 @@ def _load_state_dict_into_meta_model(
 
     for param_name, param in state_dict.items():
         # First part of the test is always true as load_state_dict_keys always contains state_dict keys.
-        if param_name not in loaded_state_dict_keys or param_name not in expected_keys:
+        if (
+            param_name not in loaded_state_dict_keys
+            or param_name not in expected_keys
+            or not isinstance(param, torch.Tensor)
+        ):
             continue
 
         if param_name.startswith(start_prefix):
@@ -832,7 +837,6 @@ def _load_state_dict_into_meta_model(
         else:
             hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
             # TODO: consider removing used param_parts from state_dict before return
-
     return error_msgs, offload_index, state_dict_index
 
 
@@ -2281,9 +2285,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            hf_quantizer is not None
-            and isinstance(hf_quantizer, HfQuantizer)
-            and (hf_quantizer.is_safe_serializable if safe_serialization else hf_quantizer.is_serializable)
+            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
@@ -2394,6 +2396,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for ignore_key in self._keys_to_ignore_on_save:
                 if ignore_key in state_dict.keys():
                     del state_dict[ignore_key]
+
+        # separate state_dict into state_dict and metadata
+        metadata = {}
+        if hf_quantizer is not None:
+            state_dict, metadata = hf_quantizer.split_state_dict(state_dict)
+
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
@@ -2473,8 +2481,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+                metadata.update({"format": "pt"})
+                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
             else:
+                shard.update(metadata)
                 save_function(shard, os.path.join(save_directory, shard_file))
 
         if index is None:
@@ -3332,13 +3342,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         from_pt = not (from_tf | from_flax)
 
-        weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
-
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file, weights_only_kwarg=weights_only_kwarg)
+                state_dict = load_state_dict(resolved_archive_file)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3359,9 +3367,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(
-                                    resolved_archive_file[0], weights_only_kwarg=weights_only_kwarg
-                                )
+                                one_state_dict = load_state_dict(resolved_archive_file[0])
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -3941,8 +3947,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
-                state_dict = load_state_dict(shard_file, weights_only_kwarg=weights_only_kwarg)
+                state_dict = load_state_dict(shard_file)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4107,8 +4112,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
-        weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
-        state_dict = load_state_dict(resolved_archive_file, weights_only_kwarg=weights_only_kwarg)
+        state_dict = load_state_dict(resolved_archive_file)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
         error_msgs = _load_state_dict_into_meta_model(
             model,
