@@ -149,6 +149,31 @@ class RegressionDataset:
         return result
 
 
+# Converting Bytes to Megabytes
+def bytes2megabytes(x):
+    return int(x / 2**20)
+
+
+# Copied from acclerate: https://github.com/huggingface/accelerate/blob/ee163b66fb7848892519e804688cb4ae981aacbe/src/accelerate/test_utils/scripts/external_deps/test_peak_memory_usage.py#L40C1-L73C68
+class TorchTracemalloc:
+    def __enter__(self):
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_max_memory_allocated()  # reset the peak gauge to zero
+            self.begin = torch.cuda.memory_allocated()
+        return self
+
+    def __exit__(self, *exc):
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            self.end = torch.cuda.memory_allocated()
+            self.peak = torch.cuda.max_memory_allocated()
+        self.used = bytes2megabytes(self.end - self.begin)
+        self.peaked = bytes2megabytes(self.peak - self.begin)
+
+
 @dataclasses.dataclass
 class RegressionTrainingArguments(TrainingArguments):
     a: float = 0.0
@@ -1073,6 +1098,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.evaluate()
 
     @require_galore_torch
+    @require_torch_gpu
     def test_galore(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1094,6 +1120,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             _ = trainer.train()
 
     @require_galore_torch
+    @require_torch_gpu
     def test_galore_adamw_8bit(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1115,13 +1142,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             _ = trainer.train()
 
     @require_galore_torch
+    @require_torch_gpu
     def test_galore_adafactor(self):
+        upper_bound_pm = 700
+
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir, TorchTracemalloc() as tracemalloc:
             # Trainer without inf/nan filter
             args = TrainingArguments(
                 tmpdir,
@@ -1134,6 +1164,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Check this works
             _ = trainer.train()
+
+        galore_peak_memory = tracemalloc.peaked + bytes2megabytes(tracemalloc.begin)
+        self.assertTrue(galore_peak_memory < upper_bound_pm)
 
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
