@@ -83,6 +83,8 @@ from .trainer_pt_utils import (
     DistributedTensorGatherer,
     IterableDatasetShard,
     LabelSmoother,
+    LayerWiseDummyOptimizer,
+    LayerWiseDummyScheduler,
     LengthGroupedSampler,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
@@ -1018,6 +1020,11 @@ class Trainer:
             if "params" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("params")
 
+            # For layer-wise dummy optimizers we overwrite optimizer_grouped_parameters with `optimizer_dict`
+            # to avoid arguments conflicts.
+            if "optimizer_dict" in optimizer_kwargs:
+                optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
+
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
             if optimizer_cls.__name__ == "Adam8bit":
                 import bitsandbytes
@@ -1183,6 +1190,9 @@ class Trainer:
             OptimizerNames.GALORE_ADAMW,
             OptimizerNames.GALORE_ADAMW_8BIT,
             OptimizerNames.GALORE_ADAFACTOR,
+            OptimizerNames.GALORE_ADAMW_LAYERWISE,
+            OptimizerNames.GALORE_ADAMW_8BIT_LAYERWISE,
+            OptimizerNames.GALORE_ADAFACTOR_LAYERWISE,
         ]:
             if not is_galore_torch_available():
                 raise ImportError(
@@ -1196,6 +1206,9 @@ class Trainer:
                 OptimizerNames.GALORE_ADAMW: GaLoreAdamW,
                 OptimizerNames.GALORE_ADAMW_8BIT: GaLoreAdamW8bit,
                 OptimizerNames.GALORE_ADAFACTOR: GaLoreAdafactor,
+                OptimizerNames.GALORE_ADAMW_LAYERWISE: GaLoreAdamW,
+                OptimizerNames.GALORE_ADAMW_8BIT_LAYERWISE: GaLoreAdamW8bit,
+                OptimizerNames.GALORE_ADAFACTOR_LAYERWISE: GaLoreAdafactor,
             }
 
             optimizer_cls = optimizer_mapping[args.optim]
@@ -1213,10 +1226,16 @@ class Trainer:
             if model is None:
                 raise ValueError("You need to pass a model in order to correctly initialize a GaLore optimizer.")
 
+            logger.warning(
+                "Activated GaLoRE fine-tuning, depending on your model size and hardware, the training might take a while before starting. Please be patient !"
+            )
+
             all_linear = (
                 isinstance(args.optim_target_modules, str)
                 and args.optim_target_modules.replace("_", "-") == "all-linear"
             )
+
+            is_layerwise = args.optim.lower().endswith("layerwise")
 
             galore_params = []
             galore_params_names = []
@@ -1237,17 +1256,46 @@ class Trainer:
 
             non_galore_params = [p for n, p in model.named_parameters() if n not in galore_params_names]
 
+            galore_optim_kwargs = {
+                "rank": optim_args.pop("rank", 128),
+                "update_proj_gap": optim_args.pop("update_proj_gap", 200),
+                "scale": optim_args.pop("scale", 0.25),
+                "proj_type": optim_args.pop("proj_type", "std"),
+            }
+
             # The default args are from the official repository: https://github.com/jiaweizzhao/GaLore
             param_groups = [
                 {"params": non_galore_params},
-                {
-                    "params": galore_params,
-                    "rank": optim_args.pop("rank", 128),
-                    "update_proj_gap": optim_args.pop("update_proj_gap", 200),
-                    "scale": optim_args.pop("scale", 0.25),
-                    "proj_type": optim_args.pop("proj_type", "std"),
-                },
+                {"params": galore_params, **galore_optim_kwargs},
             ]
+
+            if is_layerwise:
+                # For layer-wise optimizers, the optimization step is done through post accumulation
+                # gradient hooks. The trick is to first attach these hooks to the model parameters then
+                # create a dummy optimizer that will perform no-ops in the Trainer.
+                # See the original implementation or the nice implementation from @hiyouga
+                # here: https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
+                if args.gradient_accumulation_steps != 1:
+                    raise ValueError("Layerwise GaLoRE optimizer do not support gradient accumulation !")
+
+                optimizer_dict = {}
+                for param in non_galore_params:
+                    param_groups = [{"params": [param]}]
+                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
+                for param in galore_params:
+                    param_groups = [{"params": [param], **galore_optim_kwargs}]
+                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
+
+                def optimizer_hook(param):
+                    if param.grad is not None:
+                        optimizer_dict[param].step()
+                        optimizer_dict[param].zero_grad()
+
+                for param in model.parameters():
+                    param.register_post_accumulate_grad_hook(optimizer_hook)
+
+                optimizer_cls = LayerWiseDummyOptimizer
+                optimizer_kwargs.update({"optimizer_dict": optimizer_dict})
 
             optimizer_kwargs.update({"params": param_groups})
 
@@ -1265,6 +1313,30 @@ class Trainer:
         Args:
             num_training_steps (int): The number of training steps to do.
         """
+        if optimizer is not None and isinstance(optimizer, LayerWiseDummyOptimizer):
+            optimizer_dict = optimizer.optimizer_dict
+            scheduler_dict = {}
+
+            for param in optimizer_dict.keys():
+                scheduler_dict[param] = get_scheduler(
+                    self.args.lr_scheduler_type,
+                    optimizer=optimizer_dict[param],
+                    num_warmup_steps=self.args.get_warmup_steps(num_training_steps) * 2,
+                    num_training_steps=num_training_steps * 2,
+                )
+
+            def scheduler_hook(param):
+                # Since the optimizer hook has been already attached we only need to
+                # attach the scheduler hook
+                if param.grad is not None:
+                    scheduler_dict[param].step()
+
+            for param in optimizer_dict.keys():
+                param.register_post_accumulate_grad_hook(scheduler_hook)
+
+            self._created_lr_scheduler = True
+            self.lr_scheduler = LayerWiseDummyScheduler()
+
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
