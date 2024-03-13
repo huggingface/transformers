@@ -293,7 +293,7 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model_row_output = model(**single_row_input)
 
             for key in model_batched_output:
-                # the first hiddent state in SegGPT has weird hack of adding first half of batch with second half
+                # the first hidden state in SegGPT has weird hack of adding first half of batch with second half
                 if key == "hidden_states":
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
