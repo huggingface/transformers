@@ -188,7 +188,7 @@ class RTDetrConfig(PretrainedConfig):
         use_pretrained_backbone=True,
         backbone_kwargs={
             "features_only": True,
-            "out_indices": (2, 3, 4),
+            "out_indices": [2, 3, 4],
         },
         # encoder HybridEncoder
         d_model=256,

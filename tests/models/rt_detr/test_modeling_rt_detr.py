@@ -445,7 +445,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[1].shape[-2:]),
-                [self.model_tester.image_size // 8, self.model_tester.image_size // 8],
+                [
+                    self.model_tester.image_size // self.model_tester.feat_strides[-1],
+                    self.model_tester.image_size // self.model_tester.feat_strides[-1],
+                ],
             )
 
             if config.is_encoder_decoder:
