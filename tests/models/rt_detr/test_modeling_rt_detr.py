@@ -488,8 +488,8 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         outputs = model(**inputs)
 
-        # we take the fifth output since last_hidden_state is the fifth item
-        output = outputs[5]
+        # we take the first output since last_hidden_state is the first item
+        output = outputs[0]
 
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_attentions = outputs.encoder_attentions[0]
