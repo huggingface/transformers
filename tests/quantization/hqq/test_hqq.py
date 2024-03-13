@@ -14,13 +14,9 @@
 # limitations under the License.
 
 import gc
-import importlib
-import tempfile
 import unittest
 
-from packaging import version
-
-from transformers import HQQConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
+from transformers import HQQConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.testing_utils import (
     require_accelerate,
     require_torch_gpu,
@@ -38,7 +34,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 if is_hqq_available():
-    from hqq.core.quantize import *
+    from hqq.core.quantize import HQQLinear, HQQBackend, BaseQuantizeConfig
 
 @require_torch_gpu
 class HQQConfigTest(unittest.TestCase):
@@ -58,7 +54,7 @@ class HQQLLMRunner():
         self.model     = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=compute_dtype, device_map=device, quantization_config=quant_config, cache_dir=cache_dir) 
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir) 
         self.device    = self.model.device
-        HQQLinear.set_backend(HQQBackend.ATEN_BACKPROP)
+        HQQLinear.set_backend(HQQBackend.PYTORCH_BACKPROP)
 
 def cleanup():
     torch.cuda.empty_cache()
@@ -95,7 +91,8 @@ class HQQTest(unittest.TestCase):
         hqq_layer = hqq_runner.model.model.layers[10].self_attn.v_proj
         W_r       = hqq_layer.dequantize()
         x         = torch.randn((batch_size, context_size, 4096), device=device, dtype=compute_dtype)/10.
-        with torch.no_grad(): y = hqq_layer(x)
+        with torch.no_grad(): 
+            y = hqq_layer(x)
         self.assertEqual(y.shape[-1], W_r.shape[0])
         self.assertEqual(y.dtype, compute_dtype)
 
@@ -140,7 +137,8 @@ class HQQTest(unittest.TestCase):
         hqq_layer = hqq_runner.model.model.layers[10].self_attn.v_proj
         W_r       = hqq_layer.dequantize()
         x         = torch.randn((batch_size, context_size, 4096), device=device, dtype=compute_dtype)/10.
-        with torch.no_grad(): y = hqq_layer(x)
+        with torch.no_grad(): 
+            y = hqq_layer(x)
         self.assertEqual(y.shape[-1], W_r.shape[0])
         self.assertEqual(y.dtype, compute_dtype)
 

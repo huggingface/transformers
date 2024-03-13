@@ -61,7 +61,8 @@ def get_ignore_layers(model):
 
 #Checks if a quant config is an HQQ quant config
 def check_if_hqq_quant_config(quant_config):
-    if(quant_config is None): return False
+    if(quant_config is None): 
+        return False
     q_keys = list(quant_config.keys()) 
     q_vals = [quant_config[k] for k in quant_config][0]
     if(isinstance(q_vals, dict)):
