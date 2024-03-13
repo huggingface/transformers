@@ -2566,6 +2566,7 @@ else:
     _import_structure["models.m2m_100"].extend(
         [
             "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "M2M100EncoderModel",
             "M2M100ForConditionalGeneration",
             "M2M100Model",
             "M2M100PreTrainedModel",
@@ -7137,6 +7138,7 @@ if TYPE_CHECKING:
         )
         from .models.m2m_100 import (
             M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST,
+            M2M100EncoderModel,
             M2M100ForConditionalGeneration,
             M2M100Model,
             M2M100PreTrainedModel,
