@@ -158,11 +158,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.output_scores = True
 
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
-        input_length = input_ids.shape[-1]
-        min_new_tokens = (
-            self.generation_config.min_new_tokens if self.generation_config.min_new_tokens is not None else 0
-        )
-        self.min_length = max(self.generation_config.min_length, input_length + min_new_tokens)
+        self.main_model_min_length = self.generation_config.min_length
         self.generation_config.min_length = 0
         self.generation_config.min_new_tokens = None
 
