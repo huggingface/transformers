@@ -1119,9 +1119,8 @@ class TokenizerTesterMixin:
                 self.assertEqual(tokenizer.chat_template, dummy_template)  # Test property setter
                 output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test chat_template attribute is used if no arg is passed
-                tokenizer.apply_chat_template(
-                    dummy_conversation, tokenize=True, return_dict=False
-                )  # Check that no error raised
+                # Check that no error raised
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.save_pretrained(tmp_dir_name)
