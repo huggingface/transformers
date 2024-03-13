@@ -16,16 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 用于生成的工具
 
-此页面列出了所有由 [`~generation.GenerationMixin.generate`],
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`], 和
-[`~generation.GenerationMixin.constrained_beam_search`]使用的实用函数。
-
-其中大多数仅在您研究库中生成方法的代码时才有用。
+此页面列出了所有由 [`~generation.GenerationMixin.generate`]。
 
 ## 生成输出
 
@@ -338,12 +329,6 @@ generation_output[:2]
 [[autodoc]] ConstrainedBeamSearchScorer
     - process
     - finalize
-
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
 
 ## Streamers
 

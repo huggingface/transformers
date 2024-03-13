@@ -895,7 +895,3 @@ class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, 
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
-
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass

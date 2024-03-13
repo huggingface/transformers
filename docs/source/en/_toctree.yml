@@ -398,6 +398,8 @@
         title: M2M100
       - local: model_doc/madlad-400
         title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -581,6 +583,8 @@
         title: PoolFormer
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
@@ -770,6 +774,8 @@
         title: TVLT
       - local: model_doc/tvp
         title: TVP
+      - local: model_doc/udop
+        title: UDOP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava

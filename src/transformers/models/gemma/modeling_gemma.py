@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Gemma model."""
+
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -114,7 +115,7 @@ class GemmaRotaryEmbedding(nn.Module):
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) else "cpu"
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -409,7 +410,7 @@ class GemmaFlashAttention2(GemmaAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -971,13 +972,19 @@ class GemmaModel(GemmaPreTrainedModel):
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
 
-        causal_mask = causal_mask.to(dtype=dtype, device=device)
-        if attention_mask is not None and attention_mask.dim() == 2:
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+        causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
+        causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            elif attention_mask.dim() == 4:
+                mask_shape = attention_mask.shape
+                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                causal_mask[: mask_shape[0], : mask_shape[1], : mask_shape[2], : mask_shape[3]] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"

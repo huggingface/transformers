@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_with_bytefallback.mode
 @require_sentencepiece
 @require_tokenizers
 class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "AI-Sweden-Models/gpt-sw3-126m"
     tokenizer_class = GPTSw3Tokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

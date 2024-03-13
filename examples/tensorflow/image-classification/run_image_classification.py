@@ -509,7 +509,7 @@ def main():
                 collate_fn=collate_fn,
             ).with_options(dataset_options)
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just write anything because we won't be using it
 
         if training_args.do_eval:
             eval_dataset = model.prepare_tf_dataset(
