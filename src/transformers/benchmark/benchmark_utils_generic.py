@@ -22,6 +22,7 @@ class BenchMark:
     def __init__(self, *arg, **kwargs):
 
         self._buffer = {
+            "init_kwargs": dict(),
             "inputs_kwargs": dict(),
             "target_kwargs": dict(),
             "measure_kwargs": dict(),
