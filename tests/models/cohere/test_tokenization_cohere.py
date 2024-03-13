@@ -29,6 +29,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_slow_tokenizer = False
     from_pretrained_vocab_key = "tokenizer_file"
+    from_pretrained_id = "CohereForAI/c4ai-command-r-v01"
     special_tokens_map = {
         "bos_token": "<BOS_TOKEN>",
         "eos_token": "<|END_OF_TURN_TOKEN|>",
@@ -61,8 +62,9 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)["input_ids"]
         self.assertListEqual(TARGET_TOKENS, computed_tokens)
 
+        INPUT_SENTENCES_W_BOS = ["<BOS_TOKEN>The quick brown fox<|END_OF_TURN_TOKEN|>", "<BOS_TOKEN>jumps over the lazy dog<|END_OF_TURN_TOKEN|>"]
         decoded_tokens = tokenizer.batch_decode(computed_tokens)
-        self.assertListEqual(decoded_tokens, INPUT_SENTENCES)
+        self.assertListEqual(decoded_tokens, INPUT_SENTENCES_W_BOS)
 
     def test_padding(self, max_length=10):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -118,6 +120,11 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
+
+    def test_pretrained_model_lists(self):
+        # No `max_model_input_sizes` for Cohere model
+        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
+        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @require_jinja
     def test_tokenization_for_chat(self):
@@ -278,3 +285,10 @@ Thirdly, Write 'Answer:' followed by a response to the user's last input in high
 Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>"""
 
         self.assertEqual(grounded_generation_prompt, expected_prompt)
+
+    def test_add_prefix_space_fast(self):
+        tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)
+        tokenizer_wo_prefix = self.get_rust_tokenizer(add_prefix_space=False)
+        tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
+        tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
+        self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
