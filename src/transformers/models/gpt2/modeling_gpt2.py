@@ -144,7 +144,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 class GPT2Attention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
-
+        self.config = config
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
@@ -441,7 +441,7 @@ class GPT2FlashAttention2(GPT2Attention):
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.c_proj.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -454,7 +454,7 @@ class GPT2FlashAttention2(GPT2Attention):
             value = value.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=1.0
+            query, key, value, attention_mask, query_length, dropout=attn_dropout
         )
 
         attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)

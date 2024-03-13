@@ -877,7 +877,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         """
         Overwritting the common test as the test is flaky on tiny models
         """
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
 
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
@@ -891,7 +891,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_native = tokenizer.batch_decode(output_native)
 
-        model = GPT2LMHeadModel.from_pretrained("gpt2", device_map={"": 0}, attn_implementation="flash_attention_2")
+        model = GPT2LMHeadModel.from_pretrained(
+            "gpt2", device_map={"": 0}, attn_implementation="flash_attention_2", torch_dtype=torch.float16
+        )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
