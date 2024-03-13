@@ -322,7 +322,7 @@ class CodeAgent(Agent):
         return clean_code_for_run(result)
     
 
-    def run(self, task, **kwargs):
+    def run(self, task, return_generated_code=False, **kwargs):
         """
         Sends a request to the agent.
 
@@ -348,6 +348,8 @@ class CodeAgent(Agent):
         self.log("====Executing with this prompt====")
         self.log(self.prompt)
 
+        if return_generated_code:
+            return llm_output
 
         # Parse
         code_action = self.extract_action(

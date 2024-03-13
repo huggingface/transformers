@@ -84,22 +84,6 @@ from {module_name} import {class_name}
 launch_gradio_demo({class_name})
 """
 
-
-class ToolMeta(type):
-    def __new__(cls, name, bases, dct):
-        if bases:
-            required_attributes = {
-                'description': str,
-                'name': str,
-                'inputs': Dict,
-                'output_type': type,
-            }
-            for attr, expected_type in required_attributes.items():
-                if attr not in dct or not isinstance(dct[attr], expected_type):
-                    raise TypeError(f"{attr} must exist and be of type {expected_type.__name__}")
-        return super().__new__(cls, name, bases, dct)
-
-
 class Tool():
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
@@ -128,6 +112,19 @@ class Tool():
 
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
+
+    def validate_attributes(self):
+        print('ok')
+        required_attributes = {
+            'description': str,
+            'name': str,
+            'inputs': Dict,
+            'output_type': type,
+        }
+        for attr, expected_type in required_attributes.items():
+            attr_value = getattr(self, attr, None)
+            if not isinstance(attr_value, expected_type):
+                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
 
     def __call__(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
