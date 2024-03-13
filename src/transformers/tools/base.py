@@ -693,7 +693,7 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
         else:
             return tool_class(model_repo_id, token=token, **kwargs)
     else:
-        logging.warning_once(
+        logger.warning_once(
             f"You're loading a tool from the Hub from {model_repo_id}. Please make sure this is a source that you "
             f"trust as the code within that tool will be executed on your machine. Always verify the code of "
             f"the tools that you load. We recommend specifying a `revision` to ensure you're loading the "
