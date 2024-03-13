@@ -1696,7 +1696,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = None,
+        return_dict: bool = False,
         **tokenizer_kwargs,
     ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
@@ -1730,7 +1730,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*):
+            return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
@@ -1739,9 +1739,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
             set, will return a dict of tokenizer outputs instead.
         """
-
-        if return_dict is None and tokenize:
-            return_dict = False
 
         if return_dict and not tokenize:
             raise ValueError(
