@@ -21,7 +21,7 @@ from typing import Dict, List, Literal, Optional, Union
 from tokenizers import processors
 
 from ...pipelines.conversational import Conversation
-from ...tokenization_utils_base import TensorType, BatchEncoding
+from ...tokenization_utils_base import BatchEncoding, TensorType
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ...utils.versions import require_version
@@ -57,7 +57,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import AutoTokenizer
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-0.1")
+    >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
     >>> tokenizer.encode("Hello this is a test")
     [1, 15043, 445, 338, 263, 1243]
     ```
@@ -81,9 +81,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     Args:
         vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        merges_file (`<fill_type>`, *optional*): <fill_docstring>
+            Path to the vocabulary file.
+        merges_file (`str`, *optional*):
+            Path to the merges file.
         tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
@@ -237,13 +237,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         for user, assitant and system messages respectively.
 
         The output should look something like:
-        <|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{ preamble }}<|END_OF_TURN_TOKEN|>
-        <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>{{ How are you? }}<|END_OF_TURN_TOKEN|>
-        <|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{ I am doing well! }}<|END_OF_TURN_TOKEN|>
+        <|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{ preamble }}<|END_OF_TURN_TOKEN|><BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>{{ How are you? }}<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{ I am doing well! }}<|END_OF_TURN_TOKEN|>
 
         Use add_generation_prompt to add a prompt for the model to generate a response:
         >>> from transformers import AutoTokenizer
-        >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01", trust_remote_code=True)
+        >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
         >>> messages = [{"role": "user", "content": "Hello, how are you?"}]
         >>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         <BOS_TOKEN><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Hello, how are you?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
@@ -545,7 +543,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >>> tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-0.1")
+        >>> tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-v01")
         >>> tools = [
             {
                 "name": "internet_search",
@@ -708,7 +706,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >>> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-0.1')
+        >>> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-v01')
 
         >>> # define documents:
         >>> documents = [
