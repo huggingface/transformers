@@ -51,7 +51,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
 
-    
     try:
         if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()

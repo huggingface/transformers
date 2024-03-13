@@ -34,7 +34,8 @@ class CohereConfig(PretrainedConfig):
     model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the [CohereForAI/c4ai-command-r-v01](https://huggingface.co/CohereForAI/c4ai-command-r-v01) model.
 
 
     Args:
@@ -46,7 +47,7 @@ class CohereConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 22528):
             Dimension of the MLP representations.
         logit_scale (`float`, *optional*, defaults to 0.0625):
-            The scaling factor for the output logits. 
+            The scaling factor for the output logits.
         num_hidden_layers (`int`, *optional*, defaults to 40):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 64):
@@ -62,7 +63,7 @@ class CohereConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with. 
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):

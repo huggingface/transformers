@@ -82,12 +82,12 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
-        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
+        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<UNK>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<BOS_TOKEN>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<|END_OF_TURN_TOKEN|>"`):
             The end of sequence token.
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether or not to add an `bos_token` at the start of sequences.

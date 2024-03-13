@@ -30,7 +30,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -61,6 +61,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CohereConfig"
 
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -74,7 +75,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class LayerNorm(nn.Module):
+class CohereLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-5, bias=False):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -91,9 +92,9 @@ class LayerNorm(nn.Module):
         if self.bias is not None:
             hidden_states = hidden_states + self.bias.to(torch.float32)
         return hidden_states.to(input_dtype)
-    
 
-ALL_LAYERNORM_LAYERS.append(LayerNorm)
+
+ALL_LAYERNORM_LAYERS.append(CohereLayerNorm)
 
 
 class CohereRotaryEmbedding(nn.Module):
@@ -113,22 +114,6 @@ class CohereRotaryEmbedding(nn.Module):
         emb = torch.repeat_interleave(freqs, 2, dim=-1)
         self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
         self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
-
-    @property
-    def sin_cached(self):
-        logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `CohereAttention` class"
-        )
-        return self._sin_cached
-
-    @property
-    def cos_cached(self):
-        logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `CohereAttention` class"
-        )
-        return self._cos_cached
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
@@ -197,26 +182,9 @@ class CohereMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
+    # Ignore copy
     def forward(self, x):
-        if self.config.pretraining_tp > 1:
-            slice = self.intermediate_size // self.config.pretraining_tp
-            gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
-            up_proj_slices = self.up_proj.weight.split(slice, dim=0)
-            down_proj_slices = self.down_proj.weight.split(slice, dim=1)
-
-            gate_proj = torch.cat(
-                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
-            )
-            up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
-
-            intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
-            down_proj = [
-                F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.config.pretraining_tp)
-            ]
-            down_proj = sum(down_proj)
-        else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
 
@@ -233,7 +201,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class Attention(nn.Module):
+class CohereAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: CohereConfig, layer_idx: Optional[int] = None):
@@ -273,6 +241,7 @@ class Attention(nn.Module):
             base=self.rope_theta,
         )
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -286,27 +255,9 @@ class Attention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        if self.config.pretraining_tp > 1:
-            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
-            query_slices = self.q_proj.weight.split(
-                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
-            )
-            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
-            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
-
-            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
-            query_states = torch.cat(query_states, dim=-1)
-
-            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
-            key_states = torch.cat(key_states, dim=-1)
-
-            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
-            value_states = torch.cat(value_states, dim=-1)
-
-        else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -347,12 +298,7 @@ class Attention(nn.Module):
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
-        if self.config.pretraining_tp > 1:
-            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
-            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
-            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
-        else:
-            attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -361,9 +307,9 @@ class Attention(nn.Module):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 Llama->Cohere
-class FlashAttention2(Attention):
+class CohereFlashAttention2(CohereAttention):
     """
-    Flash attention module. This module inherits from `Attention` as the weights of the module stays
+    CohereFlash attention module. This module inherits from `CohereAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -376,6 +322,7 @@ class FlashAttention2(Attention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -424,7 +371,7 @@ class FlashAttention2(Attention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. 
+        # in fp32.
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -483,7 +430,7 @@ class FlashAttention2(Attention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in FlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in CohereFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -556,10 +503,11 @@ class FlashAttention2(Attention):
         )
 
 
-class SdpaAttention(Attention):
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention Llama->Cohere
+class CohereSdpaAttention(CohereAttention):
     """
-    Attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `Attention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    Cohere Attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `CohereAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
@@ -642,13 +590,15 @@ class SdpaAttention(Attention):
 
 
 COHERE_ATTENTION_CLASSES = {
-    "eager": Attention,
-    "flash_attention_2": FlashAttention2,
-    "sdpa": SdpaAttention,
+    "eager": CohereAttention,
+    "flash_attention_2": CohereFlashAttention2,
+    "sdpa": CohereSdpaAttention,
 }
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Cohere
 class CohereDecoderLayer(nn.Module):
+    # Ignore copy
     def __init__(self, config: CohereConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -656,8 +606,9 @@ class CohereDecoderLayer(nn.Module):
         self.self_attn = COHERE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = CohereMLP(config)
-        self.input_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = CohereLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -742,6 +693,7 @@ COHERE_START_DOCSTRING = r"""
     "The bare Cohere Model outputting raw hidden-states without any specific head on top.",
     COHERE_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
 class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
@@ -865,6 +817,7 @@ COHERE_INPUTS_DOCSTRING = r"""
     "The bare Cohere Model outputting raw hidden-states without any specific head on top.",
     COHERE_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere
 class CohereModel(CoherePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]
@@ -873,6 +826,7 @@ class CohereModel(CoherePreTrainedModel):
         config: CohereConfig
     """
 
+    # Ignore copy
     def __init__(self, config: CohereConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -882,7 +836,7 @@ class CohereModel(CoherePreTrainedModel):
         self.layers = nn.ModuleList(
             [CohereDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm = CohereLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
         # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
@@ -1064,6 +1018,7 @@ class CohereModel(CoherePreTrainedModel):
         return causal_mask
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM Llama->Cohere
 class CohereForCausalLM(CoherePreTrainedModel):
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
@@ -1096,6 +1051,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(COHERE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1123,7 +1079,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
 
         ```python
         >>> from transformers import AutoTokenizer, CohereForCausalLM
-        
+
         #TODO: Model name needs to be updated
         >>> model = CohereForCausalLM.from_pretrained("CohereForAI/Cohere-model")
         >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/Cohere-model")
@@ -1157,12 +1113,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
-        else:
-            logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
         logits = logits * self.logit_scale
         logits = logits.float()
 
