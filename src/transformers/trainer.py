@@ -1213,6 +1213,7 @@ class Trainer:
                 raise ValueError("You need to pass a model in order to correctly initialize a GaLore optimizer.")
 
             galore_params = []
+            galore_params_names = []
             for module_name, module in model.named_modules():
                 if not isinstance(module, nn.Linear):
                     continue
@@ -1221,14 +1222,14 @@ class Trainer:
                     continue
 
                 galore_params.append(module.weight)
+                galore_params_names.append(module_name + ".weight")
 
             if len(galore_params) == 0:
                 raise ValueError(
                     f"None of the target modules were found! ({args.optim_target_modules}). Please make sure to pass a valid `target_modules`."
                 )
 
-            id_galore_params = [id(p) for p in galore_params]
-            non_galore_params = [p for p in model.parameters() if id(p) not in id_galore_params]
+            non_galore_params = [p for n, p in model.named_parameters() if n not in galore_params_names]
 
             # The default args are from the official repository: https://github.com/jiaweizzhao/GaLore
             param_groups = [
