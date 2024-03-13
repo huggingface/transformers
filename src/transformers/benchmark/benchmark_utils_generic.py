@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Benchmark
+Benchmark utilities - module containing base classes for benchmarking
 """
 import json
 import timeit
