@@ -720,7 +720,7 @@ def _load_state_dict_into_meta_model(
 
     old_keys = []
     new_keys = []
-    is_quantized = hf_quantizer is None
+    is_quantized = hf_quantizer is not None
     for key in state_dict.keys():
         new_key = None
         if "gamma" in key:
@@ -1896,7 +1896,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_embeddings
 
-        is_quantized = self.hf_quantizer is None
+        is_quantized = self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
@@ -1973,7 +1973,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if new_num_tokens is None:
             return old_lm_head
 
-        is_quantized = self.hf_quantizer is None
+        is_quantized = self.hf_quantizer is not None
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
 
@@ -2962,7 +2962,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError(
                     "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
                 )
-            if not is_accelerate_available():
+            elif not is_accelerate_available():
                 raise ImportError(
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
@@ -3052,7 +3052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
                 logger.warning("`low_cpu_mem_usage` was None, now set to True since model is quantized.")
-        is_quantized = hf_quantizer is None
+        is_quantized = hf_quantizer is not None
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -3625,7 +3625,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
-        is_quantized = hf_quantizer is None
+        is_quantized = hf_quantizer is not None
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -3925,7 +3925,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file, is_quantized=hf_quantizer is not None)
+                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
