@@ -123,6 +123,7 @@ from . import (
     levit,
     lilt,
     llama,
+    olmo,
     llava,
     llava_next,
     longformer,
