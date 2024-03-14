@@ -2431,6 +2431,8 @@ class GenerationMixin:
         this_peer_finished = False
 
         def has_unfinished_sequences(this_peer_finished: bool, cur_len: int) -> bool:
+            # torch.compile does not support data-dependent control flow. This is a workaround to allow torch.compile,
+            # although we lose the ability to stop when all sequences return an EOS token (and other stopping criteria)
             if is_torchdynamo_compiling():
                 return cur_len < max_length
             else:
@@ -2515,6 +2517,7 @@ class GenerationMixin:
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
+            cur_len += 1
 
         if streamer is not None:
             streamer.end()
