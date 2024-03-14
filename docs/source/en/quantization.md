@@ -28,7 +28,15 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 ## Quanto
 
+<Tip>
+
+Try Quanto + transformers with this [notebook](https://colab.research.google.com/drive/16CXfVmtdQvciSh9BopZUDYcmXCDpvgrT?usp=sharing)!
+
+</Tip>
+
+
 [🤗 Quanto](https://github.com/huggingface/quanto) library is a versatile pytorch quantization toolkit. The quantization method used is the linear quantization. Quanto provides several unique features such as:
+
 - weights quantization (`float8`,`int8`,`int4`,`int2`)
 - activation quantization (`float8`,`int8`)
 - modality agnostic (e.g CV,LLM)
