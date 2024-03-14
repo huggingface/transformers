@@ -1189,7 +1189,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_galore_torch
     @require_torch_gpu
     def test_galore_adafactor(self):
+        # These are the intervals of the peak memory usage of training such a tiny model
+        # if the peak memory goes outside that range, then we know there might be a bug somewhere
         upper_bound_pm = 700
+        lower_bound_pm = 650
 
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1211,12 +1214,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             _ = trainer.train()
 
         galore_peak_memory = tracemalloc.peaked + bytes2megabytes(tracemalloc.begin)
+
         self.assertTrue(galore_peak_memory < upper_bound_pm)
+        self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
     @require_torch_gpu
     def test_galore_adafactor_attention_only(self):
+        # These are the intervals of the peak memory usage of training such a tiny model
+        # if the peak memory goes outside that range, then we know there might be a bug somewhere
         upper_bound_pm = 700
+        lower_bound_pm = 650
 
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1239,11 +1247,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         galore_peak_memory = tracemalloc.peaked + bytes2megabytes(tracemalloc.begin)
         self.assertTrue(galore_peak_memory < upper_bound_pm)
+        self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
     @require_torch_gpu
     def test_galore_adafactor_all_linear(self):
+        # These are the intervals of the peak memory usage of training such a tiny model
+        # if the peak memory goes outside that range, then we know there might be a bug somewhere
         upper_bound_pm = 700
+        lower_bound_pm = 650
 
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1266,6 +1278,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         galore_peak_memory = tracemalloc.peaked + bytes2megabytes(tracemalloc.begin)
         self.assertTrue(galore_peak_memory < upper_bound_pm)
+        self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_torch_multi_accelerator
     def test_data_is_not_parallelized_when_model_is_parallel(self):
