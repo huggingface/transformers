@@ -559,8 +559,41 @@ class GemmaSdpaAttention(GemmaAttention):
         
         # 
         # Efficient implementation equivalent to the following:
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-        #attn_output = debug_scaled_dot_product_attention(
+        def debug_scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None) -> torch.Tensor:
+            # Efficient implementation equivalent to the following:
+            L, S = query.size(-2), key.size(-2)
+            scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
+            attn_bias = torch.zeros(L, S, dtype=query.dtype)
+            if is_causal:
+                assert attn_mask is None
+                temp_mask = torch.ones(L, S, dtype=torch.bool).tril(diagonal=0)
+                attn_bias.masked_fill_(temp_mask.logical_not(), float("-inf"))
+                attn_bias.to(query.dtype)
+
+            if attn_mask is not None:
+                if attn_mask.dtype == torch.bool:
+                    attn_bias.masked_fill_(attn_mask.logical_not(), float("-inf"))
+                else:
+                    attn_bias += attn_mask[0, 0]
+            # Here query * scale_factor is IDENTICAL to q *= self.head_dim**-0.5
+            # np.allclose(query * scale_factor, q_flax.transpose(0, 2, 1, 3), atol=1e-3, rtol=1e-3) is True
+
+            # also key is IDENTICAL to k 
+            # in the sense np.allclose(key[0, 0], k_flax.transpose(0, 2, 1, 3)[0][0], atol=1e-3) is True
+            attn_weight = query @ key.transpose(-2, -1) * scale_factor 
+            # This above is close to logits in flax 
+            # so that np.allclose(logits_flax[0,0], attn_weight.cpu().numpy(), atol=5e-3) is True
+
+            attn_weight += attn_bias
+
+            attn_weight = torch.softmax(attn_weight, dim=-1)
+            attn_weight = torch.dropout(attn_weight, dropout_p, train=False)
+            # check if np.allclose(encoded_flax.transpose(0, 2, 3, 1, 4)[0], attn_weight @ value)
+            return attn_weight @ value # 
+
+
+        #attn_output = torch.nn.functional.scaled_dot_product_attention(
+        attn_output = debug_scaled_dot_product_attention(
             query=query_states,
             key=key_states,
             value=value_states,
@@ -570,8 +603,9 @@ class GemmaSdpaAttention(GemmaAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
         # with causal mask changed to full block attention for image tokens, above works well
+        breakpoint()
         attn_output = self.o_proj(attn_output)
-        # FIXME first entry of this projection doesn't match flax, the rest does. 
+        # This is fixed when taking a full attention mask (attend to everything in the input)
         return attn_output, None, past_key_value
 
 
@@ -980,11 +1014,11 @@ class GemmaModel(GemmaPreTrainedModel):
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
         # FIXME to remove from modeling_gemma, only useful to modify the causal mask
         # which makes it non causal
-        block_size = 256
+        block_size = 266 # image tokens + unpadded text input length
         if seq_length > block_size:
-            causal_mask[:, :, :block_size, :block_size] = torch.full((batch_size, 1, block_size, block_size), fill_value=0.0, dtype=dtype)
+            causal_mask[:, :, :block_size, :block_size] = torch.full((batch_size, 1, block_size, block_size), fill_value=0.0, dtype=torch.float32)
             for i in range(block_size, seq_length):
-                causal_mask[:, :, i, :i+1] = torch.full((batch_size, 1, 1, i+1), fill_value=0.0, dtype=dtype)
+                causal_mask[:, :, i, :i+1] = torch.full((batch_size, 1, 1, i+1), fill_value=0.0, dtype=torch.float32)
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None

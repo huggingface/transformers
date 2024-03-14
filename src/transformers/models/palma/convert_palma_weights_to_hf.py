@@ -69,6 +69,7 @@ def get_palma_config():
     config.text_config.num_hidden_layers = 18
     config.text_config.num_key_value_heads = 1
     config.text_config.head_dim = 256
+    config.text_config.torch_dtype = "float32"
     config.text_config.hidden_size = 2048
     return config
 
@@ -371,6 +372,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         # load jax-imported state dictionary to model
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
+        breakpoint()
         model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
     else:
