@@ -1369,7 +1369,7 @@ class TrainingArguments:
     optim_target_modules: Optional[List[str]] = field(
         default=None,
         metadata={
-            "help": "Target modules for GaLoRE optimizer. See https://github.com/jiaweizzhao/GaLore for more details."
+            "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment.
         },
     )
 
