@@ -559,6 +559,7 @@ class TFSwiftFormerEncoder(keras.layers.Layer):
         hidden_states: tf.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[tuple, TFBaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -568,7 +569,7 @@ class TFSwiftFormerEncoder(keras.layers.Layer):
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
         for i, block in enumerate(self.network):
-            hidden_states = block(hidden_states)
+            hidden_states = block(hidden_states, training=training)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
