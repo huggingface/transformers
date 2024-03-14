@@ -702,13 +702,13 @@ class TFSwiftFormerMainLayer(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "patch_embed", None) is not None:
             with tf.name_scope(self.patch_embed.name):
                 self.patch_embed.build(None)
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)
+        self.built = True
 
 
 @add_start_docstrings(
@@ -741,10 +741,10 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "swiftformer", None) is not None:
             with tf.name_scope(self.swiftformer.name):
                 self.swiftformer.build(None)
+        self.built = True
 
 
 @add_start_docstrings(
@@ -854,7 +854,6 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "swiftformer", None) is not None:
             with tf.name_scope(self.swiftformer.name):
                 self.swiftformer.build(None)
@@ -867,3 +866,4 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         if getattr(self, "dist_head", None) is not None:
             with tf.name_scope(self.dist_head.name):
                 self.dist_head.build(self.config.embed_dims[-1])
+        self.built = True
