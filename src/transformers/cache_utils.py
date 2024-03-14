@@ -64,8 +64,8 @@ class Cache:
     @property
     def seen_tokens(self):
         logger.warning_once(
-            "The `seen_tokens` attribute is deprecated and will be removed in v4.40. Use the `cache_position` "
-            "variable instead."
+            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
+            "model input instead."
         )
         if hasattr(self, "_seen_tokens"):
             return self._seen_tokens

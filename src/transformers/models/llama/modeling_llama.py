@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LLaMA model."""
+"""PyTorch LLaMA model."""
+
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -30,6 +31,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -92,69 +94,71 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
+        self.scaling_factor = scaling_factor
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # For BC we register cos and sin cached
+        self.max_seq_len_cached = max_position_embeddings
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+        t = t / self.scaling_factor
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     @property
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead."
+            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._sin_cached
 
     @property
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.40. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead."
+            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._cos_cached
 
-    def forward(self, x, position_ids, seq_len=None):
-        if seq_len is not None:
-            logger.warning_once("The `seq_len` argument is deprecated and unused. It will be removed in v4.40.")
-
+    @torch.no_grad()
+    def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos().to(dtype=x.dtype)
-        sin = emb.sin().to(dtype=x.dtype)
-        # backwards compatibility
-        self._cos_cached = cos
-        self._sin_cached = sin
-        return cos, sin
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
-
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
         position_ids = position_ids.float() / self.scaling_factor
-        cos, sin = super().forward(x, position_ids, seq_len)
+        cos, sin = super().forward(x, position_ids)
         return cos, sin
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
-
-    def forward(self, x, position_ids, seq_len=None):
+    def forward(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_position_embeddings:
@@ -166,7 +170,7 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
             )
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: this may break with compilation
 
-        cos, sin = super().forward(x, position_ids, seq_len)
+        cos, sin = super().forward(x, position_ids)
         return cos, sin
 
 
@@ -367,6 +371,7 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask
             if cache_position is not None:
                 causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
@@ -513,7 +518,7 @@ class LlamaFlashAttention2(LlamaAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -811,13 +816,19 @@ class LlamaPreTrainedModel(PreTrainedModel):
             )
 
         if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
-            causal_mask = torch.full((max_cache_len, max_cache_len), fill_value=1, device=self.device)
+            causal_mask = torch.full(
+                (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool
+            )
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
+            device = layer.input_layernorm.weight.device
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                dtype = self.config._pre_quantization_dtype
+            else:
+                dtype = layer.self_attn.o_proj.weight.dtype
             layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
+                self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
             )
 
     def _reset_cache(self):
@@ -923,8 +934,11 @@ class LlamaModel(LlamaPreTrainedModel):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
+        # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
+        # NOTE: This is not friendly with TorchScript, ONNX, ExportedProgram serialization for very large `max_position_embeddings`.
+        causal_mask = torch.full(
+            (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
+        )
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
@@ -1073,20 +1087,36 @@ class LlamaModel(LlamaPreTrainedModel):
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # We use the current dtype to avoid any overflows
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
+        min_dtype = torch.finfo(dtype).min
+        causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
+        causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            elif attention_mask.dim() == 4:
+                mask_shape = attention_mask.shape
+                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                causal_mask[: mask_shape[0], : mask_shape[1], : mask_shape[2], : mask_shape[3]] = mask_slice
 
-        causal_mask = causal_mask.to(dtype=dtype, device=device)
-        if attention_mask is not None and attention_mask.dim() == 2:
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(
-                padding_mask, torch.finfo(dtype).min
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+        ):
+            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
-
-        if self.config._attn_implementation == "sdpa":
-            # is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-            # if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
-            causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
+            if not is_tracing and torch.any(attention_mask != 1):
+                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+                # Details: https://github.com/pytorch/pytorch/issues/110213
+                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
@@ -1230,7 +1260,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-                max_cache_length = torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
                 cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
             # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
@@ -1275,12 +1309,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
-        # same goes for position ids. Could also help with continued generation.
-        # input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        # cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        position_ids = position_ids.contiguous() if position_ids is not None else None
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1295,7 +1323,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         model_inputs.update(
             {
-                "position_ids": position_ids.contiguous(),
+                "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
@@ -1445,6 +1473,8 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     LLAMA_START_DOCSTRING,
 )
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
+    base_model_prefix = "transformer"
+
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama
     def __init__(self, config):
         super().__init__(config)
