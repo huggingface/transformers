@@ -45,6 +45,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
+* [GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj#transformers.GPTJModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
@@ -55,6 +56,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 
@@ -181,6 +183,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
+* [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 
 <Tip>

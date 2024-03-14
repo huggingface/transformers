@@ -34,6 +34,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "mobilebert-uncased"
     tokenizer_class = MobileBertTokenizer
     rust_tokenizer_class = MobileBertTokenizerFast
     test_rust_tokenizer = True

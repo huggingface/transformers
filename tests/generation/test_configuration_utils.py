@@ -24,6 +24,7 @@ from parameterized import parameterized
 from requests.exceptions import HTTPError
 
 from transformers import AutoConfig, GenerationConfig
+from transformers.generation import GenerationMode
 from transformers.testing_utils import TOKEN, USER, is_staging_test
 
 
@@ -156,6 +157,11 @@ class GenerationConfigTest(unittest.TestCase):
         # Impossible sets of contraints/parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
+        with self.assertRaises(ValueError):
+            # dummy constraint
+            GenerationConfig(do_sample=True, num_beams=2, constraints=["dummy"])
+        with self.assertRaises(ValueError):
+            GenerationConfig(do_sample=True, num_beams=2, force_words_ids=[[[1, 2, 3]]])
 
         # Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
@@ -196,6 +202,23 @@ class GenerationConfigTest(unittest.TestCase):
                 config.save_pretrained(tmp_dir)
             self.assertEqual(len(captured_warnings), 0)
             self.assertTrue(len(os.listdir(tmp_dir)) == 1)
+
+    def test_generation_mode(self):
+        """Tests that the `get_generation_mode` method is working as expected."""
+        config = GenerationConfig()
+        self.assertEqual(config.get_generation_mode(), GenerationMode.GREEDY_SEARCH)
+
+        config = GenerationConfig(do_sample=True)
+        self.assertEqual(config.get_generation_mode(), GenerationMode.SAMPLE)
+
+        config = GenerationConfig(num_beams=2)
+        self.assertEqual(config.get_generation_mode(), GenerationMode.BEAM_SEARCH)
+
+        config = GenerationConfig(top_k=10, do_sample=False, penalty_alpha=0.6)
+        self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
+
+        config = GenerationConfig()
+        self.assertEqual(config.get_generation_mode(assistant_model="foo"), GenerationMode.ASSISTED_GENERATION)
 
 
 @is_staging_test

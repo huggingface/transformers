@@ -196,8 +196,9 @@ def get_class_in_module(class_name: str, module_path: Union[str, os.PathLike]) -
     Returns:
         `typing.Type`: The class looked for.
     """
-    module_path = module_path.replace(os.path.sep, ".")
-    module = importlib.import_module(module_path)
+    name = os.path.normpath(module_path).replace(".py", "").replace(os.path.sep, ".")
+    module_path = str(Path(HF_MODULES_CACHE) / module_path)
+    module = importlib.machinery.SourceFileLoader(name, module_path).load_module()
     return getattr(module, class_name)
 
 
@@ -497,7 +498,7 @@ def get_class_from_dynamic_module(
         local_files_only=local_files_only,
         repo_type=repo_type,
     )
-    return get_class_in_module(class_name, final_module.replace(".py", ""))
+    return get_class_in_module(class_name, final_module)
 
 
 def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None) -> List[str]:
