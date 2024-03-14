@@ -34,7 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
+from ..utils import ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -1187,7 +1187,7 @@ class GenerationMixin:
             # 1) the generation config must have been created from the model config (`_from_model_config` field);
             # 2) the generation config must have seen no modification since its creation (the hash is the same);
             # 3) the user must have set generation parameters in the model config.
-            # NOTE: `torch.compile` can't compile `hash`, so this feature is disabled during compilation.
+            # NOTE: `torch.compile` can't compile `hash`, this legacy support is disabled with compilation.
             if (
                 not is_torchdynamo_compiling()
                 and self.generation_config._from_model_config
@@ -1206,7 +1206,7 @@ class GenerationMixin:
             generation_config = self.generation_config
 
         # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
-        # will permanently mutate the object with `.update`. As such, passing arguments through `kwargs` is disabled.
+        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled.
         if is_torchdynamo_compiling():
             model_kwargs = kwargs
             generate_attributes_in_kwargs = [key for key in kwargs.keys() if hasattr(generation_config, key)]
@@ -2422,19 +2422,33 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
-        # while True:
-        while not stopping_criteria(input_ids, scores):
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
+        max_length = None
+        for criteria in stopping_criteria:
+            if isinstance(criteria, MaxLengthCriteria):
+                max_length = criteria.max_length
+                break
 
+        this_peer_finished = False
+
+        def has_unfinished_sequences(this_peer_finished: bool, cur_len: int) -> bool:
+            if is_torchdynamo_compiling():
+                return cur_len < max_length
+            else:
+                if synced_gpus:
+                    # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                    # The following logic allows an early break if all peers finished generating their sequence
+                    this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                    # send 0.0 if we finished, 1.0 otherwise
+                    dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                    # did all peers finish? the reduced sum will be 0.0 then
+                    if this_peer_finished_flag.item() == 0.0:
+                        return False
+                else:
+                    if this_peer_finished:
+                        return False
+                return True
+
+        while has_unfinished_sequences(this_peer_finished, cur_len):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2499,15 +2513,8 @@ class GenerationMixin:
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
-                # stop when each sentence is finished
-                this_peer_finished = unfinished_sequences.max() == 0
-
-            # stop if we exceed the maximum length
-            # if stopping_criteria(input_ids, scores):
-            #     this_peer_finished = True
-
-            # if this_peer_finished and not synced_gpus:
-            #     break
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
