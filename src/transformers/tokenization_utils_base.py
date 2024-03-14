@@ -1760,9 +1760,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = template_dict["default"]
             elif chat_template is None:
                 raise ValueError(
-                    "This model has multiple chat templates with no default specified! Please pass "
-                    "the name of the template you wish to use to the `chat_template` argument. Available "
-                    f"templates are {list(template_dict.keys())}."
+                    "This model has multiple chat templates with no default specified! Please either pass a chat "
+                    "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                    f"template names are {sorted(template_dict.keys())}."
                 )
         elif chat_template is None:
             # These are the cases when the model has a single template
