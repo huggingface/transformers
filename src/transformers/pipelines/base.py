@@ -1095,6 +1095,7 @@ class Pipeline(_ScikitCompat):
         # forward params.
         if (
             self.tokenizer is not None
+            and self.model.can_generate()
             and self.tokenizer.pad_token_id is not None
             and self.model.generation_config.pad_token_id is None
         ):
