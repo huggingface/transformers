@@ -15,7 +15,6 @@
 """ PyTorch RT-DETR model."""
 
 
-import copy
 import math
 import os
 import warnings
@@ -358,7 +357,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
 
 
 def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+    return nn.ModuleList([module for i in range(N)])
 
 
 def inverse_sigmoid(x, eps=1e-5):
