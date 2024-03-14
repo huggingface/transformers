@@ -37,8 +37,8 @@ The model and tokenizer can be loaded via:
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id)
 
 # Format message with the command-r chat template
 messages = [{"role": "user", "content": "Hello, how are you?"}]
@@ -61,7 +61,7 @@ print(gen_text)
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LLaMA2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Command-R. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 
 <PipelineTag pipeline="text-generation"/>
@@ -72,8 +72,8 @@ Loading FP16 model
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id)
 
 # Format message with the command-r chat template
 messages = [{"role": "user", "content": "Hello, how are you?"}]
@@ -99,8 +99,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model_id = "CohereForAI/c4ai-command-r-v01"
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True, quantization_config=bnb_config)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb_config)
 
 gen_tokens = model.generate(
     input_ids, 
