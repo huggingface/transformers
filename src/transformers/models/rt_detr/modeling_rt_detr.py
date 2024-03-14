@@ -2324,11 +2324,10 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
-        Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
-        Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
-        Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
-        Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
+        Detected remote with confidence 0.956 at location [41.8, 71.91, 174.73, 117.89]
+        Detected cat with confidence 0.948 at location [6.13, 45.47, 319.86, 465.09]
+        Detected remote with confidence 0.924 at location [333.95, 77.18, 369.43, 188.97]
+        Detected cat with confidence 0.916 at location [347.61, 26.0, 626.84, 375.41]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
