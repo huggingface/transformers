@@ -15,6 +15,7 @@
 
 import inspect
 import math
+import warnings
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -246,8 +247,8 @@ class TemperatureLogitsWarper(LogitsWarper):
 
     >>> set_seed(0)  # for reproducibility
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
     >>> model.config.pad_token_id = model.config.eos_token_id
     >>> inputs = tokenizer(["Hugging Face Company is"], return_tensors="pt")
 
@@ -306,8 +307,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
     >>> # Initializing the model and tokenizer for it
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
     >>> inputs = tokenizer(["I'm not going to"], return_tensors="pt")
 
     >>> # This shows a normal generate without any specific parameters
@@ -414,8 +415,8 @@ class TopPLogitsWarper(LogitsWarper):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
     >>> set_seed(0)
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
     >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
@@ -478,8 +479,8 @@ class TopKLogitsWarper(LogitsWarper):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
     >>> set_seed(0)
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
     >>> inputs = tokenizer("A sequence: A, B, C, D", return_tensors="pt")
 
@@ -619,8 +620,8 @@ class EpsilonLogitsWarper(LogitsWarper):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
     >>> set_seed(0)
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
     >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
@@ -696,8 +697,8 @@ class EtaLogitsWarper(LogitsWarper):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
     >>> set_seed(0)
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
     >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
@@ -840,8 +841,8 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     ```py
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
     >>> inputs = tokenizer(["Today I"], return_tensors="pt")
 
     >>> output = model.generate(**inputs)
@@ -967,8 +968,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
     >>> inputs = tokenizer(["The full name of Donald is Donald"], return_tensors="pt")
 
     >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=4)
@@ -976,7 +977,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     The full name of Donald is Donald J. Trump Jr
 
     >>> # Now let's control generation through a bias. Please note that the tokenizer is initialized differently!
-    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("openai-community/gpt2", add_prefix_space=True)
 
 
     >>> def get_tokens_as_tuple(word):
@@ -1112,8 +1113,8 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
     >>> inputs = tokenizer(["In a word, the cake is a"], return_tensors="pt")
 
     >>> output_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
@@ -1121,7 +1122,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     In a word, the cake is a bit of a mess.
 
     >>> # Now let's take the bad words out. Please note that the tokenizer is initialized differently
-    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("openai-community/gpt2", add_prefix_space=True)
 
 
     >>> def get_tokens_as_list(word_list):
@@ -1272,8 +1273,8 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     >>> import torch
 
     >>> # Initialize the model and tokenizer
-    >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
-    >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
     >>> # A long text about the solar system
     >>> text = (
@@ -1436,8 +1437,8 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
     >>> inputs = tokenizer("A sequence: 1, 2, 3", return_tensors="pt")
 
@@ -1511,8 +1512,8 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
     >>> text = "Just wanted to let you know, I"
     >>> inputs = tokenizer(text, return_tensors="pt")
@@ -1595,8 +1596,8 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
     >>> import torch
 
-    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
     >>> inputs = tokenizer("A sequence: 1, 2, 3", return_tensors="pt")
 
@@ -1745,8 +1746,14 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, force_token_map: List[List[int]]):
+    def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
         self.force_token_map = dict(force_token_map)
+        if not _has_warned:
+            # TODO(Sanchit): remove this processor entirely in v4.40
+            warnings.warn(
+                "This `ForceTokensLogitsProcessor` has been deprecated and will be removed in v4.40. Should you need to provide prompt ids for generation, specify `input_ids` to the generate method for decoder-only models, or `decoder_input_ids` for encoder-decoder models.",
+                FutureWarning,
+            )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -2083,8 +2090,8 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
     >>> inputs = tokenizer(["Today, a dragon flew over Paris, France,"], return_tensors="pt")
     >>> out = model.generate(inputs["input_ids"], guidance_scale=1.5)
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]

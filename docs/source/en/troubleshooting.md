@@ -134,7 +134,7 @@ In some cases, the output `hidden_state` may be incorrect if the `input_ids` inc
 >>> from transformers import AutoModelForSequenceClassification
 >>> import torch
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
 >>> model.config.pad_token_id
 0
 ```
@@ -191,8 +191,8 @@ For instance, you'll see this error in the following example because there is no
 ```py
 >>> from transformers import AutoProcessor, AutoModelForQuestionAnswering
 
->>> processor = AutoProcessor.from_pretrained("gpt2-medium")
->>> model = AutoModelForQuestionAnswering.from_pretrained("gpt2-medium")
+>>> processor = AutoProcessor.from_pretrained("openai-community/gpt2-medium")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("openai-community/gpt2-medium")
 ValueError: Unrecognized configuration class <class 'transformers.models.gpt2.configuration_gpt2.GPT2Config'> for this kind of AutoModel: AutoModelForQuestionAnswering.
 Model type should be one of AlbertConfig, BartConfig, BertConfig, BigBirdConfig, BigBirdPegasusConfig, BloomConfig, ...
 ```

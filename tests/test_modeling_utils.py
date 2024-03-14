@@ -709,7 +709,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
-        mname = "bert-base-cased"
+        mname = "google-bert/bert-base-cased"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
@@ -753,9 +753,9 @@ class ModelUtilsTest(TestCasePlus):
         for i in range(12):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2", device_map=device_map)
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", device_map=device_map)
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         inputs = tokenizer("Hello, my name is", return_tensors="pt")
         output = model.generate(inputs["input_ids"].to(0))
 
@@ -764,7 +764,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
@@ -807,7 +807,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_from_pretrained_disk_offload_derived_to_base_model(self):
         derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
@@ -1165,7 +1165,7 @@ class ModelUtilsTest(TestCasePlus):
     @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
-        model_ids = ["gpt2"]
+        model_ids = ["openai-community/gpt2"]
 
         for model_id in model_ids:
             model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path=model_id)
@@ -1188,12 +1188,14 @@ class ModelUtilsTest(TestCasePlus):
         # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
+        model = AutoModelForCausalLM.from_pretrained(
+            "joaogante/tiny-random-gpt2-with-generation-config", use_safetensors=False
+        )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
         # 2. Load with `device_map`
         model = AutoModelForCausalLM.from_pretrained(
-            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto"
+            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto", use_safetensors=False
         )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
@@ -1246,13 +1248,33 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.equal(p1, p2))
 
     def test_modifying_model_config_causes_warning_saving_generation_config(self):
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         model.config.top_k = 1
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
                 model.save_pretrained(tmp_dir)
             self.assertEqual(len(logs.output), 1)
             self.assertIn("Your generation config was originally created from the model config", logs.output[0])
+
+    @require_safetensors
+    def test_model_from_pretrained_from_mlx(self):
+        from safetensors import safe_open
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-mistral-mlx")
+        self.assertIsNotNone(model)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            with safe_open(os.path.join(tmp_dir, "model.safetensors"), framework="pt") as f:
+                metadata = f.metadata()
+                self.assertEqual(metadata.get("format"), "pt")
+            new_model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+
+        input_ids = torch.randint(100, 1000, (1, 10))
+        with torch.no_grad():
+            outputs = model(input_ids)
+            outputs_from_saved = new_model(input_ids)
+            self.assertTrue(torch.allclose(outputs_from_saved["logits"], outputs["logits"]))
 
 
 @slow
@@ -1514,7 +1536,7 @@ class ModelPushToHubTester(unittest.TestCase):
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
->>> config = AutoConfig.from_pretrained("bert-base-uncased")
+>>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
         commit_details = model.push_to_hub(
@@ -1671,7 +1693,7 @@ class AttentionMaskTester(unittest.TestCase):
     def compute_num_context_mask(self, kv_len, context, q_len):
         # This function computes the # of attention tokens that are added for
         # the sliding window
-        c_mask_len = kv_len - context
+        c_mask_len = kv_len - context - 1
         num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
         cut_mask_len = max(c_mask_len - q_len, 0)
         num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
@@ -1970,6 +1992,8 @@ class Mask4DTestBase(unittest.TestCase):
         # [   1,  278, 6635,  750],
         # [   1,  278, 6635,  338]], device='cuda:0')
 
+        position_ids_0 = torch.tensor([[0, 1, 2, 3]] * 3, device=torch_device, dtype=torch.int64)
+
         # Combining common prefix with the unique ending tokens:
         input_1 = torch.cat([input_0[0][:-1], input_0[:, -1]]).unsqueeze(0)
         # tensor([[   1,  278, 6635, 3290,  750,  338]], device='cuda:0')
@@ -1995,81 +2019,63 @@ class Mask4DTestBase(unittest.TestCase):
         # Creating a position_ids tensor. note the repeating figures in the end.
         position_ids_1 = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
 
-        return input_0, input_1, mask_1, position_ids_1
+        return input_0, position_ids_0, input_1, mask_1, position_ids_1
 
 
-@slow
 @require_torch_gpu
 class Mask4DTestFP32(Mask4DTestBase):
     def setUp(self):
         model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
-        model_dtype = torch.float32
+        self.model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=model_dtype).to(torch_device)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
 
     def test_attention(self):
         """comparing outputs of attention layer"""
-        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+        input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+        causal_mask_1 = (1 - mask_1).to(self.model_dtype) * torch.finfo(self.model_dtype).min
 
         hid_0 = self.model.model.embed_tokens(input_0)
-        outs_0 = self.model.model.layers[0].self_attn.forward(hid_0)[0]
+        outs_0 = self.model.model.layers[0].self_attn.forward(hid_0, position_ids=position_ids_0)[0]
         # outs_0.shape == torch.Size([3, 4, 768])
 
         hid_1 = self.model.model.embed_tokens(input_1)
         outs_1 = self.model.model.layers[0].self_attn.forward(
-            hid_1, attention_mask=mask_1.bool(), position_ids=position_ids_1
+            hid_1, attention_mask=causal_mask_1, position_ids=position_ids_1
         )[0]
         # outs_1.shape == torch.Size([1, 6, 768])
 
         outs_0_last_tokens = outs_0[:, -1, :]  # last tokens in each batch line
         outs_1_last_tokens = outs_1[0, -3:, :]  # last three tokens
-        assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens)
-
-    def test_inner_model(self):
-        """comparing hidden outputs of whole inner model"""
-        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
-
-        logits_0 = self.model.forward(input_0).logits
-        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
-
-        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
-        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
-        torch.testing.assert_close(
-            logits_0_last_tokens,
-            logits_1_last_tokens,
-        )
+        torch.testing.assert_close(outs_0_last_tokens, outs_1_last_tokens)
 
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
-        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+        input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
-        logits_0 = self.model.forward(input_0).logits
+        logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
         logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
 
         logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
         logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
-        torch.testing.assert_close(
-            logits_0_last_tokens,
-            logits_1_last_tokens,
-        )
+        torch.testing.assert_close(logits_0_last_tokens, logits_1_last_tokens)
 
 
-@slow
 @require_torch_gpu
 class Mask4DTestFP16(Mask4DTestBase):
     test_attention = Mask4DTestFP32.test_attention
 
     def setUp(self):
         model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
-        model_dtype = torch.float16
+        self.model_dtype = torch.float16
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=model_dtype).to(torch_device)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
 
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
-        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+        input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
-        logits_0 = self.model.forward(input_0).logits
+        logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
         logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
 
         logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line

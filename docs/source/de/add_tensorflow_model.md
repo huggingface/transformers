@@ -42,7 +42,7 @@ Sind Sie unsicher, ob das Modell, das Sie verwenden möchten, bereits eine entsp
 &nbsp;
 
 Überprüfen Sie das Feld `model_type` in der `config.json` des Modells Ihrer Wahl
-([Beispiel](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). Wenn der entsprechende Modellordner in
+([Beispiel](https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json#L14)). Wenn der entsprechende Modellordner in
 🤗 Transformers eine Datei hat, deren Name mit "modeling_tf" beginnt, bedeutet dies, dass es eine entsprechende TensorFlow
 Architektur hat ([Beispiel](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
 

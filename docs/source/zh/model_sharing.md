@@ -235,4 +235,4 @@ pip install huggingface_hub
 * 手动创建并上传一个`README.md`文件。
 * 在你的模型仓库中点击**编辑模型卡片**按钮。
 
-可以参考DistilBert的[模型卡片](https://huggingface.co/distilbert-base-uncased)来了解模型卡片应该包含的信息类型。有关您可以在`README.md`文件中控制的更多选项的细节，例如模型的碳足迹或小部件示例，请参考文档[这里](https://huggingface.co/docs/hub/models-cards)。
+可以参考DistilBert的[模型卡片](https://huggingface.co/distilbert/distilbert-base-uncased)来了解模型卡片应该包含的信息类型。有关您可以在`README.md`文件中控制的更多选项的细节，例如模型的碳足迹或小部件示例，请参考文档[这里](https://huggingface.co/docs/hub/models-cards)。

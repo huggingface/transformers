@@ -94,6 +94,15 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> depth = Image.fromarray(formatted)
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Depth Anything.
+
+- [Monocular depth estimation task guide](../tasks/depth_estimation)
+- A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
 ## DepthAnythingConfig
 
 [[autodoc]] DepthAnythingConfig

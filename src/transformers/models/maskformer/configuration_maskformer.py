@@ -66,6 +66,9 @@ class MaskFormerConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         decoder_config (`Dict`, *optional*):
             The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
             will be used.
@@ -126,6 +129,7 @@ class MaskFormerConfig(PretrainedConfig):
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
+        backbone_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
         if use_pretrained_backbone:
@@ -133,6 +137,9 @@ class MaskFormerConfig(PretrainedConfig):
 
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         if backbone_config is None and backbone is None:
             # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
@@ -198,6 +205,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
         super().__init__(**kwargs)
 
     @classmethod

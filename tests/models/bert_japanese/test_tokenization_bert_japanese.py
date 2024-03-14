@@ -36,6 +36,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @custom_tokenizers
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "cl-tohoku/bert-base-japanese"
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
     space_between_special_tokens = True
@@ -403,6 +404,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 @custom_tokenizers
 class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "cl-tohoku/bert-base-japanese"
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
 
@@ -488,7 +490,7 @@ class BertTokenizerMismatchTest(unittest.TestCase):
                     " is called from."
                 )
             )
-        EXAMPLE_BERT_ID = "bert-base-cased"
+        EXAMPLE_BERT_ID = "google-bert/bert-base-cased"
         with self.assertLogs("transformers", level="WARNING") as cm:
             BertJapaneseTokenizer.from_pretrained(EXAMPLE_BERT_ID)
             self.assertTrue(

@@ -86,7 +86,7 @@ DistilBertConfig {
 Atributos de um modelo pré-treinado podem ser modificados na função [`~PretrainedConfig.from_pretrained`]:
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+>>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
 Uma vez que você está satisfeito com as configurações do seu modelo, você consegue salvar elas com [`~PretrainedConfig.save_pretrained`]. Seu arquivo de configurações está salvo como um arquivo JSON no diretório especificado:
@@ -127,13 +127,13 @@ Isso cria um modelo com valores aleatórios ao invés de pré-treinar os pesos. 
 Criar um modelo pré-treinado com [`~PreTrainedModel.from_pretrained`]:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir: 
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
 <tf>
@@ -151,13 +151,13 @@ Isso cria um modelo com valores aleatórios ao invés de pré-treinar os pesos. 
 Criar um modelo pré-treinado com [`~TFPreTrainedModel.from_pretrained`]:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir: 
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </tf>
 </frameworkcontent>
@@ -173,7 +173,7 @@ Por exemplo, [`DistilBertForSequenceClassification`] é um modelo DistilBERT bas
 ```py
 >>> from transformers import DistilBertForSequenceClassification
 
->>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma head de modelo diferente. Para uma tarefe de responder questões, você usaria a head do modelo [`DistilBertForQuestionAnswering`]. A head de responder questões é similar com a de classificação de sequências exceto o fato de que ela é uma camada no topo dos estados das saídas ocultas.
@@ -181,7 +181,7 @@ Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma hea
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
 
->>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
 <tf>
@@ -190,7 +190,7 @@ Por exemplo, [`TFDistilBertForSequenceClassification`] é um modelo DistilBERT b
 ```py
 >>> from transformers import TFDistilBertForSequenceClassification
 
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma head de modelo diferente. Para uma tarefe de responder questões, você usaria a head do modelo [`TFDistilBertForQuestionAnswering`]. A head de responder questões é similar com a de classificação de sequências exceto o fato de que ela é uma camada no topo dos estados das saídas ocultas.
@@ -198,7 +198,7 @@ Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma hea
 ```py
 >>> from transformers import TFDistilBertForQuestionAnswering
 
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </tf>
 </frameworkcontent>
@@ -231,7 +231,7 @@ Se você treinou seu prórpio tokenizer, você pode criar um a partir do seu arq
 ```py
 >>> from transformers import DistilBertTokenizer
 
->>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+>>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Criando um 'fast tokenizer' com a classe [`DistilBertTokenizerFast`]:
@@ -239,7 +239,7 @@ Criando um 'fast tokenizer' com a classe [`DistilBertTokenizerFast`]:
 ```py
 >>> from transformers import DistilBertTokenizerFast
 
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip>

@@ -2216,10 +2216,10 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         >>> from transformers import BertTokenizer, EncoderDecoderModel, AutoTokenizer
         >>> import torch
 
-        >>> tokenizer_enc = BertTokenizer.from_pretrained("bert-large-uncased")
+        >>> tokenizer_enc = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
         >>> tokenizer_dec = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "bert-large-uncased", "patrickvonplaten/xprophetnet-large-uncased-standalone"
+        ...     "google-bert/bert-large-uncased", "patrickvonplaten/xprophetnet-large-uncased-standalone"
         ... )
 
         >>> ARTICLE = (

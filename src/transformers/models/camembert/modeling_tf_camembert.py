@@ -62,7 +62,7 @@ from .configuration_camembert import CamembertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "camembert-base"
+_CHECKPOINT_FOR_DOC = "almanach/camembert-base"
 _CONFIG_FOR_DOC = "CamembertConfig"
 
 TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [

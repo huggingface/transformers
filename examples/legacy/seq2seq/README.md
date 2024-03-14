@@ -170,7 +170,7 @@ If 'translation' is in your task name, the computed metric will be BLEU. Otherwi
 For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
 export DATA_DIR=wmt_en_ro
-./run_eval.py t5-base \
+./run_eval.py google-t5/t5-base \
     $DATA_DIR/val.source t5_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \

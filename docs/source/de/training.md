@@ -48,7 +48,7 @@ Wie Sie nun wissen, benötigen Sie einen Tokenizer, um den Text zu verarbeiten u
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 
 
 >>> def tokenize_function(examples):
@@ -86,7 +86,7 @@ Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 <Tip>
@@ -187,7 +187,7 @@ Wir können sie also ohne Tokenisierung direkt in ein NumPy-Array konvertieren!
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
 tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
 # Tokenizer returns a BatchEncoding, but we convert that to a dict for Keras
 tokenized_data = dict(tokenized_data)
@@ -202,7 +202,7 @@ from transformers import TFAutoModelForSequenceClassification
 from tensorflow.keras.optimizers import Adam
 
 # Load and compile our model
-model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
 # Lower learning rates are often better for fine-tuning transformers
 model.compile(optimizer=Adam(3e-5))
 
@@ -333,7 +333,7 @@ Laden Sie Ihr Modell mit der Anzahl der erwarteten Kennzeichnungen:
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
 ### Optimierer und Lernratensteuerung

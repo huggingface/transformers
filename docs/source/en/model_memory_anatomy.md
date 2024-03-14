@@ -92,7 +92,7 @@ We see that the kernels alone take up 1.3GB of GPU memory. Now let's see how muc
 
 ## Load Model
 
-First, we load the `bert-large-uncased` model. We load the model weights directly to the GPU so that we can check 
+First, we load the `google-bert/bert-large-uncased` model. We load the model weights directly to the GPU so that we can check 
 how much space just the weights use.
 
 
@@ -100,7 +100,7 @@ how much space just the weights use.
 >>> from transformers import AutoModelForSequenceClassification
 
 
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda")
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-large-uncased").to("cuda")
 >>> print_gpu_utilization()
 GPU memory occupied: 2631 MB.
 ```

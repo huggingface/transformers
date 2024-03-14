@@ -78,6 +78,16 @@ if is_safetensors_available():
 if TYPE_CHECKING:
     from . import PreTrainedTokenizerBase
 
+logger = logging.get_logger(__name__)
+
+if "TF_USE_LEGACY_KERAS" not in os.environ:
+    os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Compatibility fix to make sure tf.keras stays at Keras 2
+elif os.environ["TF_USE_LEGACY_KERAS"] != "1":
+    logger.warning(
+        "Transformers is only compatible with Keras 2, but you have explicitly set `TF_USE_LEGACY_KERAS` to `0`. "
+        "This may result in unexpected behaviour or errors if Keras 3 objects are passed to Transformers models."
+    )
+
 try:
     import tf_keras as keras
     from tf_keras import backend as K
@@ -93,7 +103,6 @@ except (ModuleNotFoundError, ImportError):
         )
 
 
-logger = logging.get_logger(__name__)
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
@@ -2493,8 +2502,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~TFPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch state_dict save file* (e.g, `./pt_model/pytorch_model.bin`). In this
@@ -2592,11 +2599,11 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         >>> from transformers import BertConfig, TFBertModel
 
         >>> # Download model and configuration from huggingface.co and cache.
-        >>> model = TFBertModel.from_pretrained("bert-base-uncased")
+        >>> model = TFBertModel.from_pretrained("google-bert/bert-base-uncased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
         >>> model = TFBertModel.from_pretrained("./test/saved_model/")
         >>> # Update configuration during loading.
-        >>> model = TFBertModel.from_pretrained("bert-base-uncased", output_attentions=True)
+        >>> model = TFBertModel.from_pretrained("google-bert/bert-base-uncased", output_attentions=True)
         >>> assert model.config.output_attentions == True
         >>> # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
         >>> config = BertConfig.from_json_file("./pt_model/my_pt_model_config.json")
@@ -3075,7 +3082,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         ```python
         from transformers import TFAutoModel
 
-        model = TFAutoModel.from_pretrained("bert-base-cased")
+        model = TFAutoModel.from_pretrained("google-bert/bert-base-cased")
 
         # Push the model to your namespace with the name "my-finetuned-bert".
         model.push_to_hub("my-finetuned-bert")

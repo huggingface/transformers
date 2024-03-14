@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 La tarea de selección múltiple es parecida a la de responder preguntas, con la excepción de que se dan varias opciones de respuesta junto con el contexto. El modelo se entrena para escoger la respuesta correcta
 entre varias opciones a partir del contexto dado.
 
-Esta guía te mostrará como hacerle fine-tuning a [BERT](https://huggingface.co/bert-base-uncased) en la configuración `regular` del dataset [SWAG](https://huggingface.co/datasets/swag), de forma
+Esta guía te mostrará como hacerle fine-tuning a [BERT](https://huggingface.co/google-bert/bert-base-uncased) en la configuración `regular` del dataset [SWAG](https://huggingface.co/datasets/swag), de forma
 que seleccione la mejor respuesta a partir de varias opciones y algún contexto.
 
 ## Cargar el dataset SWAG
@@ -58,7 +58,7 @@ Carga el tokenizer de BERT para procesar el comienzo de cada oración y los cuat
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 La función de preprocesmaiento debe hacer lo siguiente:
@@ -194,7 +194,7 @@ Carga el modelo BERT con [`AutoModelForMultipleChoice`]:
 ```py
 >>> from transformers import AutoModelForMultipleChoice, TrainingArguments, Trainer
 
->>> model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 <Tip>
@@ -274,7 +274,7 @@ Carga el modelo BERT con [`TFAutoModelForMultipleChoice`]:
 ```py
 >>> from transformers import TFAutoModelForMultipleChoice
 
->>> model = TFAutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 Configura el modelo para entrenarlo con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):

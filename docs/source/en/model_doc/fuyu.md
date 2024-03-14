@@ -81,7 +81,7 @@ text_prompt = "Generate a coco-style caption.\\n"
 
 bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
 bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
-inputs_to_model = processor(text=text_prompt, images=image_pil)
+inputs_to_model = processor(text=text_prompt, images=bus_image_pil)
 
 
 ```

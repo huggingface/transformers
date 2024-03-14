@@ -64,7 +64,7 @@ To fine-tune a transformer model with IGF on a language modeling task, use the f
   
 ```python
 python run_clm_igf.py\
---model_name_or_path "gpt2" \
+--model_name_or_path "openai-community/gpt2" \
 --data_file="data/tokenized_stories_train_wikitext103" \
 --igf_data_file="data/IGF_values" \
 --context_len 32 \

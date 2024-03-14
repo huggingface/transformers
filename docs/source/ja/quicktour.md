@@ -83,7 +83,7 @@ pip install tensorflow
 >>> classifier = pipeline("sentiment-analysis")
 ```
 
-[`pipeline`]は、感情分析のためのデフォルトの[事前学習済みモデル](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english)とトークナイザをダウンロードしてキャッシュし、使用できるようになります。
+[`pipeline`]は、感情分析のためのデフォルトの[事前学習済みモデル](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english)とトークナイザをダウンロードしてキャッシュし、使用できるようになります。
 これで、`classifier`を対象のテキストに使用できます：
 
 ```python
@@ -411,7 +411,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```python
 >>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
+>>> my_config = AutoConfig.from_pretrained("distilbert/distilbert-base-uncased", n_heads=12)
 ```
 
 <frameworkcontent>
@@ -452,7 +452,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
     ```py
     >>> from transformers import AutoModelForSequenceClassification
 
-    >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+    >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
     ```
 
 2. [`TrainingArguments`]には、変更できるモデルのハイパーパラメータが含まれており、学習率、バッチサイズ、トレーニングエポック数などが変更できます。指定しない場合、デフォルト値が使用されます：
@@ -474,7 +474,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
     ```
 
 4. データセットをロードする:
@@ -547,7 +547,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import TFAutoModelForSequenceClassification
 
-   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 2. トークナイザ、画像プロセッサ、特徴量抽出器、またはプロセッサのような前処理クラスをロードします：
@@ -555,7 +555,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```py
    >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
    ```
 
 3. データセットをトークナイズするための関数を作成します：

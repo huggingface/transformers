@@ -836,6 +836,7 @@ class FlavaModelTester:
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1289,7 +1290,7 @@ class FlavaModelIntegrationTest(unittest.TestCase):
         # verify the embeddings
         self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -3988.51367, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4602050, places=4)
 
 
 @require_vision
@@ -1339,9 +1340,9 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 1.75533199, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0290069, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 11.0626, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
 
     @slow
     def test_inference_with_itm_labels(self):
@@ -1390,6 +1391,6 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 1.75533199, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.89590501, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 9.1995, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)

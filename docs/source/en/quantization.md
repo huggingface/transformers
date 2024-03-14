@@ -26,6 +26,38 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 </Tip>
 
+## AQLM
+
+
+
+Try AQLM on [Google Colab](https://colab.research.google.com/drive/1-xZmBRXT5Fm3Ghn4Mwa2KRypORXb855X?usp=sharing)!
+
+Additive Quantization of Language Models ([AQLM](https://arxiv.org/abs/2401.06118)) is a Large Language Models compression method. It quantizes multiple weights together and take advantage of interdependencies between them. AQLM represents groups of 8-16 weights as a sum of multiple vector codes.
+
+Inference support for AQLM is realised in the `aqlm` library. Make sure to install it to run the models (note aqlm works only with python>=3.10):
+```bash
+pip install aqlm[gpu,cpu]
+```
+
+The library provides efficient kernels for both GPU and CPU inference and training.
+
+The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM).
+
+### PEFT
+
+Starting with version `aqlm 1.0.2`, AQLM supports Parameter-Efficient Fine-Tuning in a form of [LoRA](https://huggingface.co/docs/peft/package_reference/lora) integrated into the [PEFT](https://huggingface.co/blog/peft) library.
+
+### AQLM configurations
+
+AQLM quantization setups vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
+ 
+| Kernel | Number of codebooks | Codebook size, bits | Notation | Accuracy | Speedup     | Fast GPU inference | Fast CPU inference |
+|---|---------------------|---------------------|----------|-------------|-------------|--------------------|--------------------|
+| Triton | K                   | N                  | KxN     | -        | Up to ~0.7x | ✅                  | ❌                  |
+| CUDA | 1                   | 16                  | 1x16     | Best        | Up to ~1.3x | ✅                  | ❌                  |
+| CUDA | 2                   | 8                   | 2x8      | OK          | Up to ~3.0x | ✅                  | ❌                  |
+| Numba | K                   | 8                   | Kx8      | Good        | Up to ~4.0x | ❌                  | ✅                  |
+
 ## AWQ
 
 <Tip>
@@ -163,6 +195,45 @@ The parameter `modules_to_fuse` should include:
 
 </hfoption>
 </hfoptions>
+
+### Exllama-v2 support
+
+Recent versions of `autoawq` supports exllama-v2 kernels for faster prefill and decoding. To get started, first install the latest version of `autoawq` by running:
+
+```bash
+pip install git+https://github.com/casper-hansen/AutoAWQ.git
+```
+
+Get started by passing an `AwqConfig()` with `version="exllama"`.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
+
+quantization_config = AwqConfig(version="exllama")
+
+model = AutoModelForCausalLM.from_pretrained(
+    "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
+    quantization_config=quantization_config,
+    device_map="auto",
+)
+
+input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cuda")
+output = model(input_ids)
+print(output.logits)
+
+tokenizer = AutoTokenizer.from_pretrained("TheBloke/Mistral-7B-Instruct-v0.1-AWQ")
+input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(model.device)
+output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=50256)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+<Tip warning={true}>
+
+Note this feature is supported on AMD GPUs.
+
+</Tip>
+
 
 ## AutoGPTQ
 

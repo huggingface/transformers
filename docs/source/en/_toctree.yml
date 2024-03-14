@@ -73,6 +73,10 @@
       title: Depth estimation
     - local: tasks/image_to_image
       title: Image-to-Image
+    - local: tasks/image_feature_extraction
+      title: Image Feature Extraction
+    - local: tasks/mask_generation
+      title: Mask Generation
     - local: tasks/knowledge_distillation_for_image_classification
       title: Knowledge Distillation for Computer Vision
     title: Computer Vision
@@ -352,6 +356,8 @@
         title: Funnel Transformer
       - local: model_doc/fuyu
         title: Fuyu
+      - local: model_doc/gemma
+        title: Gemma
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -392,6 +398,8 @@
         title: M2M100
       - local: model_doc/madlad-400
         title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -476,6 +484,10 @@
         title: Splinter
       - local: model_doc/squeezebert
         title: SqueezeBERT
+      - local: model_doc/stablelm
+        title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
       - local: model_doc/switch_transformers
         title: SwitchTransformers
       - local: model_doc/t5
@@ -571,12 +583,16 @@
         title: PoolFormer
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin
@@ -758,6 +774,8 @@
         title: TVLT
       - local: model_doc/tvp
         title: TVP
+      - local: model_doc/udop
+        title: UDOP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava

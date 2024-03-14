@@ -50,11 +50,11 @@ Calibrate the pretrained model and finetune with quantization awared:
 
 ```bash
 python3 run_quant_qa.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --dataset_name squad \
   --max_seq_length 128 \
   --doc_stride 32 \
-  --output_dir calib/bert-base-uncased \
+  --output_dir calib/google-bert/bert-base-uncased \
   --do_calib \
   --calibrator percentile \
   --percentile 99.99
@@ -62,7 +62,7 @@ python3 run_quant_qa.py \
 
 ```bash
 python3 run_quant_qa.py \
-  --model_name_or_path calib/bert-base-uncased \
+  --model_name_or_path calib/google-bert/bert-base-uncased \
   --dataset_name squad \
   --do_train \
   --do_eval \
@@ -71,8 +71,8 @@ python3 run_quant_qa.py \
   --num_train_epochs 2 \
   --max_seq_length 128 \
   --doc_stride 32 \
-  --output_dir finetuned_int8/bert-base-uncased \
-  --tokenizer_name bert-base-uncased \
+  --output_dir finetuned_int8/google-bert/bert-base-uncased \
+  --tokenizer_name google-bert/bert-base-uncased \
   --save_steps 0
 ```
 
@@ -82,14 +82,14 @@ To export the QAT model finetuned above:
 
 ```bash
 python3 run_quant_qa.py \
-  --model_name_or_path finetuned_int8/bert-base-uncased \
+  --model_name_or_path finetuned_int8/google-bert/bert-base-uncased \
   --output_dir ./ \
   --save_onnx \
   --per_device_eval_batch_size 1 \
   --max_seq_length 128 \
   --doc_stride 32 \
   --dataset_name squad \
-  --tokenizer_name bert-base-uncased
+  --tokenizer_name google-bert/bert-base-uncased
 ```
 
 Use `--recalibrate-weights` to calibrate the weight ranges according to the quantizer axis. Use `--quant-per-tensor` for per tensor quantization (default is per channel).
@@ -117,7 +117,7 @@ python3 evaluate-hf-trt-qa.py \
   --max_seq_length 128 \
   --doc_stride 32 \
   --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
+  --tokenizer_name google-bert/bert-base-uncased \
   --int8 \
   --seed 42
 ```
@@ -128,14 +128,14 @@ Finetune a fp32 precision model with [transformers/examples/pytorch/question-ans
 
 ```bash
 python3 ../../pytorch/question-answering/run_qa.py \
-  --model_name_or_path bert-base-uncased \
+  --model_name_or_path google-bert/bert-base-uncased \
   --dataset_name squad \
   --per_device_train_batch_size 12 \
   --learning_rate 3e-5 \
   --num_train_epochs 2 \
   --max_seq_length 128 \
   --doc_stride 32 \
-  --output_dir ./finetuned_fp32/bert-base-uncased \
+  --output_dir ./finetuned_fp32/google-bert/bert-base-uncased \
   --save_steps 0 \
   --do_train \
   --do_eval
@@ -147,13 +147,13 @@ python3 ../../pytorch/question-answering/run_qa.py \
 
 ```bash
 python3 run_quant_qa.py \
-  --model_name_or_path ./finetuned_fp32/bert-base-uncased \
+  --model_name_or_path ./finetuned_fp32/google-bert/bert-base-uncased \
   --dataset_name squad \
   --calibrator percentile \
   --percentile 99.99 \
   --max_seq_length 128 \
   --doc_stride 32 \
-  --output_dir ./calib/bert-base-uncased \
+  --output_dir ./calib/google-bert/bert-base-uncased \
   --save_steps 0 \
   --do_calib \
   --do_eval
@@ -163,14 +163,14 @@ python3 run_quant_qa.py \
 
 ```bash
 python3 run_quant_qa.py \
-  --model_name_or_path ./calib/bert-base-uncased \
+  --model_name_or_path ./calib/google-bert/bert-base-uncased \
   --output_dir ./ \
   --save_onnx \
   --per_device_eval_batch_size 1 \
   --max_seq_length 128 \
   --doc_stride 32 \
   --dataset_name squad \
-  --tokenizer_name bert-base-uncased
+  --tokenizer_name google-bert/bert-base-uncased
 ```
 
 ### Evaluate the INT8 PTQ ONNX model inference with TensorRT
@@ -183,7 +183,7 @@ python3 evaluate-hf-trt-qa.py \
   --max_seq_length 128 \
   --doc_stride 32 \
   --dataset_name squad \
-  --tokenizer_name bert-base-uncased \
+  --tokenizer_name google-bert/bert-base-uncased \
   --int8 \
   --seed 42
 ```

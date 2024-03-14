@@ -47,7 +47,7 @@ README, but for more information you can see the 'Input Datasets' section of
 ### Example command
 ```bash
 python run_qa.py \
---model_name_or_path distilbert-base-cased \
+--model_name_or_path distilbert/distilbert-base-cased \
 --output_dir output \
 --dataset_name squad \
 --do_train \

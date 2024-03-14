@@ -87,7 +87,7 @@ DistilBertConfig {
 Pretrained model attributes can be modified in the [`~PretrainedConfig.from_pretrained`] function:
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+>>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
 Once you are satisfied with your model configuration, you can save it with [`~PretrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory:
@@ -128,13 +128,13 @@ This creates a model with random values instead of pretrained weights. You won't
 Create a pretrained model with [`~PreTrainedModel.from_pretrained`]:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
 <tf>
@@ -152,13 +152,13 @@ This creates a model with random values instead of pretrained weights. You won't
 Create a pretrained model with [`~TFPreTrainedModel.from_pretrained`]:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </tf>
 </frameworkcontent>
@@ -174,7 +174,7 @@ For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model 
 ```py
 >>> from transformers import DistilBertForSequenceClassification
 
->>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`DistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
@@ -182,7 +182,7 @@ Easily reuse this checkpoint for another task by switching to a different model 
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
 
->>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
 <tf>
@@ -191,7 +191,7 @@ For example, [`TFDistilBertForSequenceClassification`] is a base DistilBERT mode
 ```py
 >>> from transformers import TFDistilBertForSequenceClassification
 
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`TFDistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
@@ -199,7 +199,7 @@ Easily reuse this checkpoint for another task by switching to a different model 
 ```py
 >>> from transformers import TFDistilBertForQuestionAnswering
 
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </tf>
 </frameworkcontent>
@@ -232,7 +232,7 @@ It is important to remember the vocabulary from a custom tokenizer will be diffe
 ```py
 >>> from transformers import DistilBertTokenizer
 
->>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+>>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Create a fast tokenizer with the [`DistilBertTokenizerFast`] class:
@@ -240,7 +240,7 @@ Create a fast tokenizer with the [`DistilBertTokenizerFast`] class:
 ```py
 >>> from transformers import DistilBertTokenizerFast
 
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip>

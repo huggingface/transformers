@@ -713,12 +713,12 @@ def pipeline(
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
     >>> oracle = pipeline(
-    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="google-bert/bert-base-cased"
     ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
     >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
     if model_kwargs is None:

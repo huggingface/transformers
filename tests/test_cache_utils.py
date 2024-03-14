@@ -143,7 +143,7 @@ class CacheTest(unittest.TestCase):
         mha_config = LlamaConfig(num_attention_heads=32)
         mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mha_static_cache.update(
-            *_random_kvs(mha_config), 0, cache_kwargs={"position_ids": torch.arange(1)}
+            *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
         )
         self.assertTrue(cached_keys.shape == (1, 32, 10, 128))
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
@@ -151,7 +151,7 @@ class CacheTest(unittest.TestCase):
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
         gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = gqa_static_cache.update(
-            *_random_kvs(gqa_config), 0, cache_kwargs={"position_ids": torch.arange(1)}
+            *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
         )
         self.assertTrue(cached_keys.shape == (1, 4, 10, 128))
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
@@ -159,7 +159,7 @@ class CacheTest(unittest.TestCase):
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
         mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
         cached_keys, cached_values = mqa_static_cache.update(
-            *_random_kvs(mqa_config), 0, cache_kwargs={"position_ids": torch.arange(1)}
+            *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1)}
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
@@ -291,9 +291,9 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
-    def test_static_cache_greedy_sampling_pad_left(self, attn_implementation):
+    def test_static_cache_greedy_decoding_pad_left(self, attn_implementation):
         EXPECTED_GENERATION = [
-            "The best color is the one that complements the subject you are photograph",
+            "The best color is the one that complements the skin tone of the",
             "We should not undermind the issues at hand.\nWe should not undermind the issues",
         ]
 
@@ -331,20 +331,20 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
-    def test_static_cache_greedy_sampling_pad_right(self, attn_implementation):
+    def test_static_cache_greedy_decoding_pad_right(self, attn_implementation):
         EXPECTED_GENERATION = [
-            "The best color is\n\n\n\n\n\n\n\n\n\n",
-            "We should not undermind the issues at hand, but address them head on.\nI think",
+            "The best color isЋ the one that complements the skin tone of",
+            "We should not undermind the issues at hand.\nWe should not undermind the issues",
         ]
 
         tokenizer = AutoTokenizer.from_pretrained(
-            "NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>"
+            "NousResearch/Llama-2-7b-chat-hf", padding_side="right", pad_token="<s>"
         )
         model = AutoModelForCausalLM.from_pretrained(
             "NousResearch/Llama-2-7b-chat-hf",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
-        ).to("cuda:1")
+        ).to(torch_device)
         inputs = tokenizer(
             ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
         ).to(model.device)
@@ -381,6 +381,76 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    def test_dynamic_cache_extra_left_padding(self):
+        """Tests that adding extra left-padding does not affect the generation with the dynamic cache"""
+        EXPECTED_GENERATION = [
+            "The best color is the one that complements the skin tone of the",
+            "We should not undermind the issues at hand.\nWe should not undermind the issues",
+        ]
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            "NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>"
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            "NousResearch/Llama-2-7b-chat-hf",
+            torch_dtype=torch.bfloat16,
+        ).to(torch_device)
+        inputs = tokenizer(
+            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+        ).to(model.device)
+
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+        # Now with extra left-padding
+        inputs_expanded = tokenizer(
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
+            pad_to_multiple_of=32,
+        ).to(model.device)
+        self.assertTrue(inputs.input_ids.shape[1] < inputs_expanded.input_ids.shape[1])
+        gen_out = model.generate(**inputs_expanded, do_sample=False, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    def test_static_cache_extra_left_padding(self):
+        """Tests that adding extra left-padding does not affect the generation with the static cache"""
+        EXPECTED_GENERATION = [
+            "The best color is the one that complements the skin tone of the",
+            "We should not undermind the issues at hand.\nWe should not undermind the issues",
+        ]
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            "NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>"
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            "NousResearch/Llama-2-7b-chat-hf",
+            torch_dtype=torch.bfloat16,
+        ).to(torch_device)
+        inputs = tokenizer(
+            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+        ).to(model.device)
+
+        model.generation_config.cache_implementation = "static"
+
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+        # Now with extra left-padding
+        inputs_expanded = tokenizer(
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
+            pad_to_multiple_of=32,
+        ).to(model.device)
+        self.assertTrue(inputs.input_ids.shape[1] < inputs_expanded.input_ids.shape[1])
+        gen_out = model.generate(**inputs_expanded, do_sample=False, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @unittest.skip("TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):

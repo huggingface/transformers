@@ -100,7 +100,7 @@ IPEXは、Float32およびBFloat16の両方でCPUトレーニングのパフォ�
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -134,7 +134,7 @@ node0では、各ノードのIPアドレスを含む構成ファイルを作成�
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \

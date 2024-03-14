@@ -43,7 +43,7 @@ This script trains a masked language model.
 ### Example command
 ```bash
 python run_mlm.py \
---model_name_or_path distilbert-base-cased \
+--model_name_or_path distilbert/distilbert-base-cased \
 --output_dir output \
 --dataset_name wikitext \
 --dataset_config_name wikitext-103-raw-v1
@@ -52,7 +52,7 @@ python run_mlm.py \
 When using a custom dataset, the validation file can be separately passed as an input argument. Otherwise some split (customizable) of training data is used as validation.
 ```bash
 python run_mlm.py \
---model_name_or_path distilbert-base-cased \
+--model_name_or_path distilbert/distilbert-base-cased \
 --output_dir output \
 --train_file train_file_path
 ```
@@ -64,7 +64,7 @@ This script trains a causal language model.
 ### Example command
 ```bash
 python run_clm.py \
---model_name_or_path distilgpt2 \
+--model_name_or_path distilbert/distilgpt2 \
 --output_dir output \
 --dataset_name wikitext \
 --dataset_config_name wikitext-103-raw-v1
@@ -74,7 +74,7 @@ When using a custom dataset, the validation file can be separately passed as an 
 
 ```bash
 python run_clm.py \
---model_name_or_path distilgpt2 \
+--model_name_or_path distilbert/distilgpt2 \
 --output_dir output \
 --train_file train_file_path
 ```

@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서 학습할 내용은:
 
-1. 영어 텍스트를 프랑스어로 번역하기 위해 [T5](https://huggingface.co/t5-small) 모델을 OPUS Books 데이터세트의 영어-프랑스어 하위 집합으로 파인튜닝하는 방법과
+1. 영어 텍스트를 프랑스어로 번역하기 위해 [T5](https://huggingface.co/google-t5/t5-small) 모델을 OPUS Books 데이터세트의 영어-프랑스어 하위 집합으로 파인튜닝하는 방법과
 2. 파인튜닝된 모델을 추론에 사용하는 방법입니다.
 
 <Tip>
@@ -88,7 +88,7 @@ pip install transformers datasets evaluate sacrebleu
 ```py
 >>> from transformers import AutoTokenizer
 
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 ```
 

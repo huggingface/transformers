@@ -42,7 +42,7 @@ rendered properly in your Markdown viewer.
 ```py
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("bert-base-cased")
+model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 ```
 
 如果您使用 [`PreTrainedModel.save_pretrained`](模型预训练保存) 进行保存，您将得到一个新的文件夹，其中包含两个文件：模型的配置和权重：

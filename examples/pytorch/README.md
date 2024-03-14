@@ -109,7 +109,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 ```bash
 torchrun \
     --nproc_per_node 8 pytorch/text-classification/run_glue.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
     --do_eval \
@@ -153,7 +153,7 @@ classification MNLI task using the `run_glue` script, with 8 TPUs (from this fol
 ```bash
 python xla_spawn.py --num_cores 8 \
     text-classification/run_glue.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
     --do_eval \

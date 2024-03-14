@@ -78,6 +78,9 @@ USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
+# Try to run a native pytorch job in an environment with TorchXLA installed by setting this value to 0.
+USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
+
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
 # `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
@@ -90,6 +93,7 @@ FSDP_MIN_VERSION = "1.12.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
@@ -160,6 +164,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
+_mlx_available = _is_package_available("mlx")
 
 
 _torch_version = "N/A"
@@ -263,6 +268,13 @@ if _torch_available:
     )
 
 
+_torch_xla_available = False
+if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
+    _torch_xla_available, _torch_xla_version = _is_package_available("torch_xla", return_version=True)
+    if _torch_xla_available:
+        logger.info(f"Torch XLA version {_torch_xla_version} available.")
+
+
 def is_kenlm_available():
     return _kenlm_available
 
@@ -319,6 +331,27 @@ def is_torch_cuda_available():
         return torch.cuda.is_available()
     else:
         return False
+
+
+def is_mamba_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            return _is_package_available("mamba_ssm")
+    return False
+
+
+def is_causal_conv1d_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        return _is_package_available("causal_conv1d")
+    return False
 
 
 def is_torch_mps_available():
@@ -477,6 +510,12 @@ def is_g2p_en_available():
 @lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    warnings.warn(
+        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
+        "Please use the `is_torch_xla_available` instead.",
+        FutureWarning,
+    )
+
     if not _torch_available:
         return False
     if importlib.util.find_spec("torch_xla") is not None:
@@ -493,10 +532,31 @@ def is_torch_tpu_available(check_device=True):
     return False
 
 
+@lru_cache
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
+    """
+    Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
+    the USE_TORCH_XLA to false.
+    """
+    assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
+
+    if not _torch_xla_available:
+        return False
+
+    import torch_xla
+
+    if check_is_gpu:
+        return torch_xla.runtime.device_type() in ["GPU", "CUDA"]
+    elif check_is_tpu:
+        return torch_xla.runtime.device_type() == "TPU"
+
+    return True
+
+
 @lru_cache()
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
-        return is_torch_tpu_available(check_device)
+        return is_torch_xla_available()
     return False
 
 
@@ -584,6 +644,10 @@ def is_sacremoses_available():
 
 def is_apex_available():
     return _apex_available
+
+
+def is_aqlm_available():
+    return _aqlm_available
 
 
 def is_ninja_available():
@@ -676,14 +740,6 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-def is_flash_attn_available():
-    logger.warning(
-        "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. "
-        "Please use `is_flash_attn_2_available` instead."
-    )
-    return is_flash_attn_2_available()
-
-
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -752,6 +808,7 @@ def is_tokenizers_available():
     return _tokenizers_available
 
 
+@lru_cache
 def is_vision_available():
     _pil_available = importlib.util.find_spec("PIL") is not None
     if _pil_available:
@@ -939,6 +996,10 @@ def is_jieba_available():
 
 def is_jinja_available():
     return _jinja_available
+
+
+def is_mlx_available():
+    return _mlx_available
 
 
 # docstyle-ignore

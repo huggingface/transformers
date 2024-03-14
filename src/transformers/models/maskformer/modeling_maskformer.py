@@ -27,10 +27,12 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_1
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     logging,
     replace_return_docstrings,
@@ -41,6 +43,10 @@ from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
@@ -1193,8 +1199,15 @@ class MaskFormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor(num_masks, dtype=torch.float, device=device)
-        return num_masks_pt
+        num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_masks = reduce(num_masks)
+                world_size = PartialState().num_processes
+
+        num_masks = torch.clamp(num_masks / world_size, min=1)
+        return num_masks
 
 
 class MaskFormerFPNConvLayer(nn.Module):
@@ -1428,7 +1441,7 @@ class MaskFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        if hasattr(config, "backbone_config") and config.backbone_config.model_type == "swin":
+        if getattr(config, "backbone_config") is not None and config.backbone_config.model_type == "swin":
             # for backwards compatibility
             backbone_config = config.backbone_config
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
@@ -1750,6 +1763,12 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         pixel_embeddings = outputs.pixel_decoder_last_hidden_state
         # get the auxiliary predictions (one for each decoder's layer)
         auxiliary_logits: List[str, Tensor] = []
+
+        is_tracing = (
+            torch.jit.is_tracing()
+            or isinstance(outputs, torch.fx.Proxy)
+            or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+        )
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxiliary loss then we are going to return more than one element in the list
         if self.config.use_auxiliary_loss:
             stacked_transformer_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
@@ -1758,14 +1777,17 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             # get the masks
             mask_embeddings = self.mask_embedder(stacked_transformer_decoder_outputs)
 
-            # Equivalent to einsum('lbqc, bchw -> lbqhw') but jit friendly
-            num_embeddings, batch_size, num_queries, num_channels = mask_embeddings.shape
-            _, _, height, width = pixel_embeddings.shape
-            binaries_masks = torch.zeros(
-                (num_embeddings, batch_size, num_queries, height, width), device=mask_embeddings.device
-            )
-            for c in range(num_channels):
-                binaries_masks += mask_embeddings[..., c][..., None, None] * pixel_embeddings[None, :, None, c]
+            if is_tracing and not is_torch_greater_or_equal_than_2_1:
+                # Equivalent to einsum('lbqc, bchw -> lbqhw') but jit friendly
+                num_embeddings, batch_size, num_queries, num_channels = mask_embeddings.shape
+                _, _, height, width = pixel_embeddings.shape
+                binaries_masks = torch.zeros(
+                    (num_embeddings, batch_size, num_queries, height, width), device=mask_embeddings.device
+                )
+                for c in range(num_channels):
+                    binaries_masks += mask_embeddings[..., c][..., None, None] * pixel_embeddings[None, :, None, c]
+            else:
+                binaries_masks = torch.einsum("lbqc, bchw -> lbqhw", mask_embeddings, pixel_embeddings)
 
             masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
@@ -1782,12 +1804,17 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             mask_embeddings = self.mask_embedder(transformer_decoder_hidden_states)
             # sum up over the channels
 
-            # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
-            batch_size, num_queries, num_channels = mask_embeddings.shape
-            _, _, height, width = pixel_embeddings.shape
-            masks_queries_logits = torch.zeros((batch_size, num_queries, height, width), device=mask_embeddings.device)
-            for c in range(num_channels):
-                masks_queries_logits += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
+            if is_tracing and not is_torch_greater_or_equal_than_2_1:
+                # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
+                batch_size, num_queries, num_channels = mask_embeddings.shape
+                _, _, height, width = pixel_embeddings.shape
+                masks_queries_logits = torch.zeros(
+                    (batch_size, num_queries, height, width), device=mask_embeddings.device
+                )
+                for c in range(num_channels):
+                    masks_queries_logits += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
+            else:
+                masks_queries_logits = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
         return class_queries_logits, masks_queries_logits, auxiliary_logits
 

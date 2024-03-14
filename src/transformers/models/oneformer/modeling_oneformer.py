@@ -31,6 +31,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     logging,
     replace_return_docstrings,
@@ -39,6 +40,10 @@ from ...utils import (
 from ...utils.backbone_utils import load_backbone
 from .configuration_oneformer import OneFormerConfig
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
@@ -196,10 +201,9 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
     cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
-    loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
-    loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
+    loss_pos = torch.matmul(cross_entropy_loss_pos / height_and_width, labels.T)
+    loss_neg = torch.matmul(cross_entropy_loss_neg / height_and_width, (1 - labels).T)
     loss = loss_pos + loss_neg
-    loss = loss / height_and_width
     return loss
 
 
@@ -722,8 +726,15 @@ class OneFormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
-        return num_masks_pt
+        num_masks = torch.as_tensor([num_masks], dtype=torch.float, device=device)
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_masks = reduce(num_masks)
+                world_size = PartialState().num_processes
+
+        num_masks = torch.clamp(num_masks / world_size, min=1)
+        return num_masks
 
 
 @dataclass

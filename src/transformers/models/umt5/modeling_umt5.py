@@ -1418,7 +1418,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UMT5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->UMT5, t5-small->google/umt5-small
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->UMT5, google-t5/t5-small->google/umt5-small
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

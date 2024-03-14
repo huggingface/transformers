@@ -24,7 +24,7 @@ Token classification assigns a label to individual tokens in a sentence. One of 
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -110,7 +110,7 @@ The next step is to load a DistilBERT tokenizer to preprocess the `tokens` field
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 As you saw in the example `tokens` field above, it looks like the input has already been tokenized. But the input actually hasn't been tokenized yet and you'll need to set `is_split_into_words=True` to tokenize the words into subwords. For example:
@@ -272,7 +272,7 @@ You're ready to start training your model now! Load DistilBERT with [`AutoModelF
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForTokenClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -343,7 +343,7 @@ Then you can load DistilBERT with [`TFAutoModelForTokenClassification`] along wi
 >>> from transformers import TFAutoModelForTokenClassification
 
 >>> model = TFAutoModelForTokenClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
 

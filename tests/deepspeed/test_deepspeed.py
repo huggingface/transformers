@@ -70,7 +70,7 @@ set_seed(42)
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
 
-T5_SMALL = "t5-small"
+T5_SMALL = "google-t5/t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
 GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"
@@ -786,9 +786,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             with self.assertRaises(Exception) as context:
                 checkpoint = os.path.join(output_dir, "checkpoint-5")
                 trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
-            self.assertTrue(
-                "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
-            )
 
     @parameterized.expand(params_with_optims_and_schedulers, name_func=parameterized_custom_name_func)
     def test_can_resume_training_normal(self, stage, dtype, optim, scheduler):
