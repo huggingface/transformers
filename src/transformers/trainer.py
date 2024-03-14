@@ -134,6 +134,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     PushInProgress,
+    PushToHubMixin,
     can_return_loss,
     find_labels,
     is_accelerate_available,
@@ -3019,9 +3020,10 @@ class Trainer:
 
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
+        supported_classes = (PushToHubMixin,)
         xm.rendezvous("saving_checkpoint")
-        if not isinstance(model, PreTrainedModel):
-            if isinstance(unwrap_model(model), PreTrainedModel):
+        if not isinstance(model, supported_classes):
+            if isinstance(unwrap_model(model), supported_classes):
                 unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
