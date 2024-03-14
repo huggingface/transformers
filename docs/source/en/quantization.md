@@ -55,7 +55,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
 model_id = "facebook/opt-125m"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 quantization_config = QuantoConfig(weights="int8")
-quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config= quantization_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0", quantization_config=quantization_config)
 ```
 
 Note that serialization is not supported yet with transformers but it is coming soon! If you want to save the model, you can use quanto library instead.
