@@ -1390,7 +1390,7 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> question = "what does the front of the bus say at the top?"
 
         >>> input_ids = processor(text=question, add_special_tokens=False).input_ids
-        >>> input_ids = [processor.tokenizer.cls_token_id] + input_ids
+        >>> input_ids = [processor.tokenizer.eos_token_id] + input_ids
         >>> input_ids = torch.tensor(input_ids).unsqueeze(0)
 
         >>> generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
