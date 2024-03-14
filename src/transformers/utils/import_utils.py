@@ -571,6 +571,7 @@ def is_torch_mlu_available(check_device=False):
 
     import torch
     import torch_mlu  # noqa: F401
+
     torch.cuda = torch.mlu
 
     if check_device:
