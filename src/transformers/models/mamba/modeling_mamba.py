@@ -362,6 +362,10 @@ class MambaPreTrainedModel(PreTrainedModel):
             with torch.no_grad():
                 module.dt_proj.bias.copy_(inv_dt)
             module.dt_proj.bias._no_reinit = True
+        elif isinstance(module, MambaClassificationHead):
+            for name, p in module.named_parameters():
+                if name in ["dense.weight", "out_proj.weight"]:
+                    nn.init.normal_(p, std=self.config.initializer_range)
 
         if isinstance(module, nn.Linear):
             if module.bias is not None:
@@ -744,6 +748,9 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         self.num_labels = config.num_labels
         self.backbone = MambaModel(config)
         self.classifier = MambaClassificationHead(config)
+
+        for param in self.base_model.parameters():
+            param.requires_grad = False
 
         # Initialize weights and apply final processing
         self.post_init()
