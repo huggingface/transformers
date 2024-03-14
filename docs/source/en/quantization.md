@@ -42,6 +42,7 @@ Try Quanto + transformers with this [notebook](https://colab.research.google.com
 - modality agnostic (e.g CV,LLM)
 - device agnostic (e.g CUDA,MPS,CPU)
 - compatibility with `torch.compile`
+- easy to add custom kernel for specific device
 - supports quantization aware training
 <!-- Add link to the blogpost -->
 
@@ -69,7 +70,16 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cud
 
 Note that serialization is not supported yet with transformers but it is coming soon! If you want to save the model, you can use quanto library instead.
 
+Quanto library uses linear quantization algorithm for quantization. Even though this is a simple quantization technique, we get pretty very results! Have a look at the following becnhmark (llama-2-7b on perplexity metric). You can find more benchamarks [here](https://github.com/huggingface/quanto/tree/main/bench/generation)
+
 <!-- Add benchmark on multi devices / models -->
+<div class="flex gap-4">
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/NousResearch-Llama-2-7b-hf_Perplexity.png" alt="llama-2-7b-quanto-perplexity" />
+  </div>
+</div>
+
+The library is versatible enough to be compatible with most PTQ optimization algorithms. The plan in the future is to integrate the most popular algorithms in the most seamless possible way (AWQ, Smoothquant).
 
 ## AQLM
 
