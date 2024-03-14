@@ -55,10 +55,10 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "audio_utils": [],
     "benchmark": [],
-    "constants": [],
-    "constants.token_constants": ["SPIECE_UNDERLINE"],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
+    "constants": [],
+    "constants.token_constants": ["SPIECE_UNDERLINE"],
     "convert_graph_to_onnx": [],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "convert_tf_hub_seq_to_seq_bert_to_pytorch": [],
