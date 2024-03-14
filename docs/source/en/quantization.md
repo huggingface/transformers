@@ -85,7 +85,7 @@ Starting with version `aqlm 1.0.2`, AQLM supports Parameter-Efficient Fine-Tunin
 
 ### AQLM configurations
 
-AQLM quantization setpus vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
+AQLM quantization setups vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
  
 | Kernel | Number of codebooks | Codebook size, bits | Notation | Accuracy | Speedup     | Fast GPU inference | Fast CPU inference |
 |---|---------------------|---------------------|----------|-------------|-------------|--------------------|--------------------|
