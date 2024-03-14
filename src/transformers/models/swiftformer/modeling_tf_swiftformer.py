@@ -88,7 +88,6 @@ class TFSwiftFormerPatchEmbeddingSequential(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "conv1", None) is not None:
             with tf.name_scope(self.conv1.name):
                 self.conv1.build(self.config.num_channels)
@@ -101,6 +100,7 @@ class TFSwiftFormerPatchEmbeddingSequential(keras.layers.Layer):
         if getattr(self, "batch_norm2", None) is not None:
             with tf.name_scope(self.batch_norm2.name):
                 self.batch_norm2.build((None, None, None, self.out_chs))
+        self.built = True
 
 
 class TFSwiftFormerPatchEmbedding(keras.layers.Layer):
@@ -122,10 +122,10 @@ class TFSwiftFormerPatchEmbedding(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "patch_embedding", None) is not None:
             with tf.name_scope(self.patch_embedding.name):
                 self.patch_embedding.build(None)
+        self.built = True
 
 
 class TFSwiftFormerDropPath(keras.layers.Layer):
@@ -176,13 +176,13 @@ class TFSwiftFormerEmbeddings(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "proj", None) is not None:
             with tf.name_scope(self.proj.name):
                 self.proj.build(self.in_chans)
         if getattr(self, "norm", None) is not None:
             with tf.name_scope(self.norm.name):
                 self.norm.build((None, None, None, self.embed_dim))
+        self.built = True
 
 
 class TFSwiftFormerConvEncoder(keras.layers.Layer):
@@ -211,7 +211,6 @@ class TFSwiftFormerConvEncoder(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         self.layer_scale = self.add_weight(
             name="layer_scale",
             shape=self.dim,
@@ -234,6 +233,7 @@ class TFSwiftFormerConvEncoder(keras.layers.Layer):
         if getattr(self, "drop_path", None) is not None:
             with tf.name_scope(self.drop_path.name):
                 self.drop_path.build(None)
+        self.built = True
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         input = x
@@ -281,7 +281,6 @@ class TFSwiftFormerMlp(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
         if getattr(self, "norm1", None) is not None:
             with tf.name_scope(self.norm1.name):
                 self.norm1.build((None, None, None, self.in_features))
@@ -291,6 +290,7 @@ class TFSwiftFormerMlp(keras.layers.Layer):
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
                 self.fc2.build((None, None, None, self.hidden_features))
+        self.built = True
 
 
 class TFSwiftFormerEfficientAdditiveAttention(keras.layers.Layer):
@@ -317,8 +317,6 @@ class TFSwiftFormerEfficientAdditiveAttention(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
-
         self.w_g = self.add_weight(
             name="w_g",
             shape=(self.dim, 1),
@@ -338,6 +336,7 @@ class TFSwiftFormerEfficientAdditiveAttention(keras.layers.Layer):
         if getattr(self, "final", None) is not None:
             with tf.name_scope(self.final.name):
                 self.final.build(self.dim)
+        self.built = True
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         query = self.to_query(x)
@@ -384,15 +383,12 @@ class TFSwiftFormerLocalRepresentation(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
-
         self.layer_scale = self.add_weight(
             name="layer_scale",
             shape=(self.dim),
             initializer="ones",
             trainable=True,
         )
-
         if getattr(self, "depth_wise_conv", None) is not None:
             with tf.name_scope(self.depth_wise_conv.name):
                 self.depth_wise_conv.build((None, None, None, self.dim))
@@ -408,6 +404,7 @@ class TFSwiftFormerLocalRepresentation(keras.layers.Layer):
         if getattr(self, "drop_path", None) is not None:
             with tf.name_scope(self.drop_path.name):
                 self.drop_path.build(None)
+        self.built = True
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         input = x
