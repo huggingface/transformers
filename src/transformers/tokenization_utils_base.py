@@ -1697,6 +1697,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
+        tokenizer_kwargs: Dict[str, Any] = None,
         **kwargs,
     ) -> Union[str, List[int]]:
         """
@@ -1743,6 +1744,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Indicates it's a Conversation object
             conversation = conversation.messages
 
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = dict()
+
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
             if self.chat_template is not None:
@@ -1753,8 +1757,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
+        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered = compiled_template.render(
-            messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map, **kwargs
+            messages=conversation, add_generation_prompt=add_generation_prompt, **template_kwargs
         )
 
         if padding is True:
@@ -1768,7 +1773,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length=max_length,
                     add_special_tokens=False,
                     return_tensors=return_tensors,
-                    **kwargs,
+                    **tokenizer_kwargs,
                 )
             else:
                 return self.encode(
@@ -1778,7 +1783,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length=max_length,
                     add_special_tokens=False,
                     return_tensors=return_tensors,
-                    **kwargs,
+                    **tokenizer_kwargs,
                 )
         else:
             return rendered
