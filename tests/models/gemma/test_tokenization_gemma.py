@@ -371,7 +371,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens=False)
         self.assertEqual(input_ids, [204, 25957, 204, 1139])
         tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens=False)
-        self.assertEqual(tokens, ["<s>", SPIECE_UNDERLINE+"Hello", "<s>", "how"])
+        self.assertEqual(tokens, ["<s>", SPIECE_UNDERLINE + "Hello", "<s>", "how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, "<s> Hello<s>how")
 
@@ -380,7 +380,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(input_ids, [235248, 204, 25957, 204, 1368])
         tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens=False)
         self.assertEqual(
-            tokens, [SPIECE_UNDERLINE, "<s>", SPIECE_UNDERLINE+"Hello", "<s>", SPIECE_UNDERLINE+"how"]
+            tokens, [SPIECE_UNDERLINE, "<s>", SPIECE_UNDERLINE + "Hello", "<s>", SPIECE_UNDERLINE + "how"]
         )
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")

@@ -58,7 +58,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
 
-        self.assertEqual(vocab_keys[5], SPIECE_UNDERLINE+"the")
+        self.assertEqual(vocab_keys[5], SPIECE_UNDERLINE + "the")
         self.assertEqual(vocab_keys[2], "</s>")
 
     def test_vocab_size(self):
@@ -71,10 +71,10 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"This",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"a",
-                SPIECE_UNDERLINE+"t",
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
                 "est",
             ],
         )
@@ -122,13 +122,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"The",
-                SPIECE_UNDERLINE+"c",
+                SPIECE_UNDERLINE + "The",
+                SPIECE_UNDERLINE + "c",
                 "at",
                 ".",
                 SPIECE_UNDERLINE,
                 ".",
-                SPIECE_UNDERLINE+"S",
+                SPIECE_UNDERLINE + "S",
                 "at",
                 SPIECE_UNDERLINE,
                 "<",
@@ -137,8 +137,8 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
                 "I",
                 "n",
-                SPIECE_UNDERLINE+"a",
-                SPIECE_UNDERLINE+"room",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "room",
             ],
         )
         encoded_string = tokenizer.encode(text)
@@ -170,13 +170,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"B",
+                SPIECE_UNDERLINE + "B",
                 "on",
                 "j",
                 "o",
                 "ur",
                 "!",
-                SPIECE_UNDERLINE+"He",
+                SPIECE_UNDERLINE + "He",
                 "ll",
                 "o",
                 "!",

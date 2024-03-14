@@ -60,10 +60,10 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab = [
             "</s>",
             "<unk>",
-            SPIECE_UNDERLINE+"This",
-            SPIECE_UNDERLINE+"is",
-            SPIECE_UNDERLINE+"a",
-            SPIECE_UNDERLINE+"t",
+            SPIECE_UNDERLINE + "This",
+            SPIECE_UNDERLINE + "is",
+            SPIECE_UNDERLINE + "a",
+            SPIECE_UNDERLINE + "t",
             "est",
             "\u0120",
             "<pad>",
@@ -115,10 +115,10 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"This",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"a",
-                SPIECE_UNDERLINE+"t",
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
                 "est",
             ],
         )
@@ -132,10 +132,10 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             [
-                SPIECE_UNDERLINE+"This",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"a",
-                SPIECE_UNDERLINE+"t",
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
                 "est",
             ],
         )

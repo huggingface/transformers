@@ -81,10 +81,10 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"This",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"a",
-                SPIECE_UNDERLINE+"t",
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
                 "est",
             ],
         )
@@ -98,23 +98,23 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"I",
-                SPIECE_UNDERLINE+"was",
-                SPIECE_UNDERLINE+"b",
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE+"in",
-                SPIECE_UNDERLINE+"",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
                 "9",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE+"and",
-                SPIECE_UNDERLINE+"this",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"f",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
                 "al",
                 "s",
                 "é",
@@ -131,23 +131,23 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             [
-                SPIECE_UNDERLINE+"I",
-                SPIECE_UNDERLINE+"was",
-                SPIECE_UNDERLINE+"b",
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE+"in",
-                SPIECE_UNDERLINE+"",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
                 "<unk>",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE+"and",
-                SPIECE_UNDERLINE+"this",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"f",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
                 "al",
                 "s",
                 "<unk>",
@@ -556,7 +556,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens=False)
         self.assertEqual(input_ids, [1, 15043, 1, 3525])
         tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens=False)
-        self.assertEqual(tokens, ["<s>", SPIECE_UNDERLINE+"Hello", "<s>", "how"])
+        self.assertEqual(tokens, ["<s>", SPIECE_UNDERLINE + "Hello", "<s>", "how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, "<s> Hello<s>how")
 
@@ -566,7 +566,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens=False)
         self.assertEqual(
             tokens,
-            [SPIECE_UNDERLINE*2, "<s>", SPIECE_UNDERLINE+"Hello", "<s>", SPIECE_UNDERLINE+"how"],
+            [SPIECE_UNDERLINE * 2, "<s>", SPIECE_UNDERLINE + "Hello", "<s>", SPIECE_UNDERLINE + "how"],
         )
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
@@ -596,13 +596,13 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"[",
+                SPIECE_UNDERLINE + "[",
                 "INST",
                 "]",
-                SPIECE_UNDERLINE+"How",
-                SPIECE_UNDERLINE+"are",
-                SPIECE_UNDERLINE+"you",
-                SPIECE_UNDERLINE+"doing",
+                SPIECE_UNDERLINE + "How",
+                SPIECE_UNDERLINE + "are",
+                SPIECE_UNDERLINE + "you",
+                SPIECE_UNDERLINE + "doing",
                 "?",
                 "<s>",
                 "[",

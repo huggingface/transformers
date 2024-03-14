@@ -205,17 +205,17 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             SPIECE_UNDERLINE,
             "T",
             "his",
-            SPIECE_UNDERLINE+"is",
-            SPIECE_UNDERLINE+"a",
-            SPIECE_UNDERLINE+"test",
+            SPIECE_UNDERLINE + "is",
+            SPIECE_UNDERLINE + "a",
+            SPIECE_UNDERLINE + "test",
         ]
         back_tokens_target = [
             SPIECE_UNDERLINE,
             "<unk>",
             "his",
-            SPIECE_UNDERLINE+"is",
-            SPIECE_UNDERLINE+"a",
-            SPIECE_UNDERLINE+"test",
+            SPIECE_UNDERLINE + "is",
+            SPIECE_UNDERLINE + "a",
+            SPIECE_UNDERLINE + "test",
         ]
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", keep_accents=True)

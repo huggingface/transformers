@@ -754,10 +754,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         self.assertEqual(
             [(entity["word"], entity["is_subword"]) for entity in pre_entities],
             [
-                (SPIECE_UNDERLINE+"I", False),
-                (SPIECE_UNDERLINE+"play", False),
-                (SPIECE_UNDERLINE+"the", False),
-                (SPIECE_UNDERLINE+"there", False),
+                (SPIECE_UNDERLINE + "I", False),
+                (SPIECE_UNDERLINE + "play", False),
+                (SPIECE_UNDERLINE + "the", False),
+                (SPIECE_UNDERLINE + "there", False),
                 ("min", True),
             ],
         )

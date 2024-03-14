@@ -61,7 +61,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "<unk>")
-        self.assertEqual(vocab_keys[-1], SPIECE_UNDERLINE+"eloquent")
+        self.assertEqual(vocab_keys[-1], SPIECE_UNDERLINE + "eloquent")
         self.assertEqual(len(vocab_keys), 30_000)
 
     def test_vocab_size(self):
@@ -95,7 +95,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(
             tokens,
-            [SPIECE_UNDERLINE, "T", "his", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"a", SPIECE_UNDERLINE+"test"],
+            [SPIECE_UNDERLINE, "T", "his", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "a", SPIECE_UNDERLINE + "test"],
         )
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [13, 1, 4398, 25, 21, 1289])
@@ -106,16 +106,16 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 SPIECE_UNDERLINE,
                 "I",
-                SPIECE_UNDERLINE+"was",
-                SPIECE_UNDERLINE+"born",
-                SPIECE_UNDERLINE+"in",
-                SPIECE_UNDERLINE+"9",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "born",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "9",
                 "2000",
                 ",",
-                SPIECE_UNDERLINE+"and",
-                SPIECE_UNDERLINE+"this",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"fal",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "fal",
                 "s",
                 "é",
                 ".",
@@ -130,16 +130,16 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 SPIECE_UNDERLINE,
                 "<unk>",
-                SPIECE_UNDERLINE+"was",
-                SPIECE_UNDERLINE+"born",
-                SPIECE_UNDERLINE+"in",
-                SPIECE_UNDERLINE+"9",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "born",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "9",
                 "2000",
                 ",",
-                SPIECE_UNDERLINE+"and",
-                SPIECE_UNDERLINE+"this",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"fal",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "fal",
                 "s",
                 "<unk>",
                 ".",

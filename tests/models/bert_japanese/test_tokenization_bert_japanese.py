@@ -389,15 +389,15 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"こん",
+                SPIECE_UNDERLINE + "こん",
                 "ばん",
                 "は",
-                SPIECE_UNDERLINE+"こん",
+                SPIECE_UNDERLINE + "こん",
                 "ばん",
-                SPIECE_UNDERLINE+"に",
+                SPIECE_UNDERLINE + "に",
                 "ち",
-                SPIECE_UNDERLINE+"は",
-                SPIECE_UNDERLINE+"こんにちは",
+                SPIECE_UNDERLINE + "は",
+                SPIECE_UNDERLINE + "こんにちは",
             ],
         )
 

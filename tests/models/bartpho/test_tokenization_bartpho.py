@@ -35,10 +35,10 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         vocab = [
-            SPIECE_UNDERLINE+"This",
-            SPIECE_UNDERLINE+"is",
-            SPIECE_UNDERLINE+"a",
-            SPIECE_UNDERLINE+"t",
+            SPIECE_UNDERLINE + "This",
+            SPIECE_UNDERLINE + "is",
+            SPIECE_UNDERLINE + "a",
+            SPIECE_UNDERLINE + "t",
             "est",
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))

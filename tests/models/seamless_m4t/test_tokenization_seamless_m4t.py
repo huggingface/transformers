@@ -73,10 +73,10 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"This",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"a",
-                SPIECE_UNDERLINE+"t",
+                SPIECE_UNDERLINE + "This",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "a",
+                SPIECE_UNDERLINE + "t",
                 "est",
             ],
         )
@@ -90,23 +90,23 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"I",
-                SPIECE_UNDERLINE+"was",
-                SPIECE_UNDERLINE+"b",
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE+"in",
-                SPIECE_UNDERLINE+"",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
                 "9",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE+"and",
-                SPIECE_UNDERLINE+"this",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"f",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
                 "al",
                 "s",
                 "é",
@@ -126,23 +126,23 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             [
-                SPIECE_UNDERLINE+"I",
-                SPIECE_UNDERLINE+"was",
-                SPIECE_UNDERLINE+"b",
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE+"in",
-                SPIECE_UNDERLINE+"",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
                 "<unk>",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE+"and",
-                SPIECE_UNDERLINE+"this",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"f",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
                 "al",
                 "s",
                 "<unk>",
@@ -600,7 +600,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # [bos, lang_id, _] + offset_sp_encode
         self.assertEqual(input_ids[:-1], [3, 1, 8] + [i + self.tokenizer.fairseq_offset for i in sp_encode])
         tokens = self.tokenizer.tokenize(". Hello")
-        self.assertEqual(tokens, [SPIECE_UNDERLINE, ".", SPIECE_UNDERLINE+"He", "ll", "o"])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE, ".", SPIECE_UNDERLINE + "He", "ll", "o"])
 
         tokens = self.tokenizer.tokenize("")
         self.assertEqual(tokens, [])
@@ -623,20 +623,20 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
         self.assertEqual([i - self.tokenizer.fairseq_offset for i in input_ids[2:-1]], [7] + sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, [SPIECE_UNDERLINE, ".", SPIECE_UNDERLINE+"He", "ll", "o"])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE, ".", SPIECE_UNDERLINE + "He", "ll", "o"])
 
         # `SPIECE_UNDERLINE` is also a whitespace
-        input_ids = self.tokenizer.encode(SPIECE_UNDERLINE+"He is not")
+        input_ids = self.tokenizer.encode(SPIECE_UNDERLINE + "He is not")
         self.assertEqual(input_ids, [3, 1, 157, 47, 45, 3])
-        tokens = self.tokenizer.tokenize(SPIECE_UNDERLINE+"He is not")
+        tokens = self.tokenizer.tokenize(SPIECE_UNDERLINE + "He is not")
         sp_encode = [
-            self.tokenizer.sp_model.piece_to_id(SPIECE_UNDERLINE+"He"),
-            self.tokenizer.sp_model.piece_to_id(SPIECE_UNDERLINE+"is"),
-            self.tokenizer.sp_model.piece_to_id(SPIECE_UNDERLINE+"not"),
+            self.tokenizer.sp_model.piece_to_id(SPIECE_UNDERLINE + "He"),
+            self.tokenizer.sp_model.piece_to_id(SPIECE_UNDERLINE + "is"),
+            self.tokenizer.sp_model.piece_to_id(SPIECE_UNDERLINE + "not"),
         ]
         self.assertEqual([i - self.tokenizer.fairseq_offset for i in input_ids[2:-1]], sp_encode)
         self.assertEqual(
-            tokens, [SPIECE_UNDERLINE+"He", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"not"]
+            tokens, [SPIECE_UNDERLINE + "He", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "not"]
         )  # no extra space added
 
         input_ids = self.tokenizer.encode(f"{SPIECE_UNDERLINE}He is not<s>             {SPIECE_UNDERLINE}He")
@@ -645,11 +645,11 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(
             tokens,
             [
-                SPIECE_UNDERLINE+"He",
-                SPIECE_UNDERLINE+"is",
-                SPIECE_UNDERLINE+"not",
+                SPIECE_UNDERLINE + "He",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "not",
                 "<s>",
-                SPIECE_UNDERLINE+"He",
+                SPIECE_UNDERLINE + "He",
             ],
         )  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
@@ -659,7 +659,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = self.tokenizer.tokenize(f"{SPIECE_UNDERLINE}He is not              {SPIECE_UNDERLINE}He")
         self.assertEqual(
             tokens,
-            [SPIECE_UNDERLINE+"He", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"not", SPIECE_UNDERLINE+"He"],
+            [SPIECE_UNDERLINE + "He", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "not", SPIECE_UNDERLINE + "He"],
         )  # spaces are eaten by spm even if not start
 
     def test_character_after_special_token(self):
@@ -677,7 +677,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("Hello, <s>,")
         self.assertEqual(input_ids, [3, 1, 157, 87, 21, 4, 2, 4, 3])
         tokens = self.tokenizer.tokenize("Hello, <s>,")
-        self.assertEqual(tokens, [SPIECE_UNDERLINE+"He", "ll", "o", ",", "<s>", ","])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE + "He", "ll", "o", ",", "<s>", ","])
 
     def test_special_tokens_strip(self):
         input_ids = self.tokenizer.encode(" <s> ,")
@@ -690,5 +690,5 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [3, 1, 285, 2, 157, 3])
         tokens = self.tokenizer.tokenize(f"No <s> {SPIECE_UNDERLINE}He")
         self.assertEqual(
-            tokens, [SPIECE_UNDERLINE+"No", "<s>", SPIECE_UNDERLINE+"He"]
+            tokens, [SPIECE_UNDERLINE + "No", "<s>", SPIECE_UNDERLINE + "He"]
         )  # spaces are eaten by rstrip / lstrip

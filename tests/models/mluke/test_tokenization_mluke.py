@@ -52,7 +52,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
         text = "lower newer"
-        spm_tokens = [SPIECE_UNDERLINE+"l", "ow", "er", SPIECE_UNDERLINE+"new", "er"]
+        spm_tokens = [SPIECE_UNDERLINE + "l", "ow", "er", SPIECE_UNDERLINE + "new", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, spm_tokens)
 
