@@ -31,8 +31,9 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 [🤗 Quanto](https://github.com/huggingface/quanto) library is a versatile pytorch quantization toolkit. The quantization method used is the linear quantization. Quanto provides several unique features such as:
 - weights quantization (`float8`,`int8`,`int4`,`int2`)
 - activation quantization (`float8`,`int8`)
-- device agnostic (CUDA,MPS,CPU)
-- model agnostic 
+- modality agnostic (e.g CV,LLM)
+- device agnostic (e.g CUDA,MPS,CPU)
+- compatibility with `torch.compile`
 - supports quantization aware training
 <!-- Add link to the blogpost -->
 
