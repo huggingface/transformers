@@ -1746,7 +1746,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversation = conversation.messages
 
         if tokenizer_kwargs is None:
-            tokenizer_kwargs = dict()
+            tokenizer_kwargs = {}
 
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
