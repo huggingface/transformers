@@ -73,6 +73,9 @@ class QuantoHfQuantizer(HfQuantizer):
         return device_map
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        if torch_dtype is None:
+            logger.info("You did not specify `torch_dtype` in `from_pretrained`. Setting it to `torch.float32`.")
+            torch_dtype = torch.float32
         return torch_dtype
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
