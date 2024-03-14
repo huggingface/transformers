@@ -1144,6 +1144,7 @@ class TokenizerTesterMixin:
                 )
                 self.assertEqual(output2, output2_via_dict)
 
+    @require_jinja
     def test_chat_template_dict_saving(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
