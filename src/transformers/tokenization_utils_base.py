@@ -1697,7 +1697,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
-        tokenizer_kwargs: Dict[str, Any] = None,
+        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Union[str, List[int]]:
         """
@@ -1733,7 +1733,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+            tokenizer_kwargs (`Dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
+            **kwargs: Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
 
         Returns:
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
