@@ -1610,6 +1610,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
+        if isinstance(self.chat_template, (list, tuple)):
+            # Chat templates are stored as lists of dicts with fixed key names,
+            # we reconstruct that into a single dict while loading them.
+            self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
         super().__init__(**kwargs)
 
@@ -2449,7 +2453,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config.update(self.special_tokens_map)
 
         if self.chat_template is not None:
-            tokenizer_config["chat_template"] = self.chat_template
+            if isinstance(self.chat_template, dict):
+                # Chat template dicts are saved to the config as lists of dicts with fixed key names.
+                # They will be reconstructed as a single dict during loading.
+                tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+            else:
+                tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
