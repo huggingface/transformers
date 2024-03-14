@@ -449,8 +449,6 @@ class TFSwiftFormerEncoderBlock(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.built = True
-
         self.layer_scale_1 = self.add_weight(
             name="layer_scale_1",
             shape=self.dim,
@@ -473,6 +471,7 @@ class TFSwiftFormerEncoderBlock(keras.layers.Layer):
         if getattr(self, "linear", None) is not None:
             with tf.name_scope(self.linear.name):
                 self.linear.build(None)
+        self.built = True
 
     def call(self, x: tf.Tensor, training: bool = False):
         x = self.local_representation(x, training=training)
