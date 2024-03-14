@@ -61,6 +61,7 @@ def get_palma_config():
     config.vision_config.intermediate_size = 4304
     config.vision_config.num_hidden_layers = 27
     config.vision_config.num_attention_heads = 16
+    config.vision_config.projector_hidden_act = "gelu_fast"
     """
     else:
         raise ValueError("Model not supported")
@@ -71,6 +72,7 @@ def get_palma_config():
     config.text_config.head_dim = 256
     config.text_config.torch_dtype = "float32"
     config.text_config.hidden_size = 2048
+    config.text_config.hidden_act = "gelu_fast"
     return config
 
 
@@ -169,7 +171,7 @@ def slice_state_dict(state_dict, config):
         "bos_token_id": 2,
         "eos_token_id": 1,
         "head_dim": 256,
-        "hidden_act": "gelu",
+        "hidden_act": "gelu_fast",
         "hidden_size": 2048,
         "initializer_range": 0.02,
         "intermediate_size": 16384,
@@ -306,7 +308,20 @@ def verify_logits(model):
         attention_mask= attention_mask.bool()
         # check raw outputs before generate
         outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
-        # chck geenrate
+        outputs_logits_flax = np.load("/home/ubuntu/temp/output_logits_flax.npy")
+
+        if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=4e-3):
+            raise ValueError("Logits do not match.")
+        else:
+            print("Full forward pass works. Amazing!")
+            manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
+            next_token_id = torch.argmax(manual_probs, dim=-1)
+            if not tokenizer.decode(next_token_id[0]) != "beach":
+                raise ValueError("Next token prediction is wrong.")
+            else:
+                print("It seems that the forward pass predicts a correct next token. Go to generate()!")
+
+
         generation = tokenizer.decode(model.language_model.generate(inputs_embeds=concat_embeddings, max_new_tokens=10, attention_mask=attention_mask)[0])
         print(generation)
         if generation != "beach":
@@ -372,7 +387,6 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         # load jax-imported state dictionary to model
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
-        breakpoint()
         model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
     else:
