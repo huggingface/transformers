@@ -116,7 +116,12 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ) -> bool:
         import bitsandbytes as bnb
 

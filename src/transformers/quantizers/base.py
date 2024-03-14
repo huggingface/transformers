@@ -133,7 +133,12 @@ class HfQuantizer(ABC):
         return max_memory
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ) -> bool:
         """
         checks if a loaded state_dict component is part of quantized param + some validation; only defined if

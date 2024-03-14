@@ -798,7 +798,11 @@ def _load_state_dict_into_meta_model(
         elif (
             hf_quantizer is None
             or (not hf_quantizer.requires_parameters_quantization)
-            or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
+            or (
+                not hf_quantizer.check_quantized_param(
+                    model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                )
+            )
         ):
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)

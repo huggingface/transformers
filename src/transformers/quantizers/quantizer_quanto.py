@@ -87,12 +87,26 @@ class QuantoHfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ) -> bool:
         """
         Check if a parameter needs to be quantized.
         """
         import quanto
+
+        device_map = kwargs.get("device_map", None)
+        param_device = kwargs.get("param_device", None)
+        # we don't quantize the model if the module is going to be offloaded to the cpu
+        if device_map is not None and param_device is not None:
+            device_map_values = set(device_map.values())
+            if param_device == "cpu" and len(device_map_values) > 1:
+                if not (device_map_values == {"cpu"} or device_map_values == {"cpu", "disk"}):
+                    return False
 
         module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.
@@ -174,4 +188,4 @@ class QuantoHfQuantizer(HfQuantizer):
 
     @property
     def is_serializable(self):
-        return True
+        return False
