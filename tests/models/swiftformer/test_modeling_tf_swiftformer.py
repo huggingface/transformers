@@ -249,7 +249,7 @@ def prepare_img():
 @require_vision
 class TFSwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
 
     @slow
