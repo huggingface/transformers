@@ -1016,7 +1016,7 @@ class Trainer:
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args, opt_model)
 
             # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
-            # e.g. for GaLoRe optimizer.
+            # e.g. for GaLore optimizer.
             if "params" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("params")
 
@@ -1218,7 +1218,7 @@ class Trainer:
 
             if args.optim_target_modules is None:
                 raise ValueError(
-                    "You need to define a `optim_target_modules` in order to properly use GaLoRe optimizers"
+                    "You need to define a `optim_target_modules` in order to properly use GaLore optimizers"
                 )
 
             if not isinstance(args.optim_target_modules, (list, str)):
