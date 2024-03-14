@@ -3012,6 +3012,7 @@ class Trainer:
 
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
+        xm.mark_step()
         model.to("cpu")
 
         if xm.is_master_ordinal():
