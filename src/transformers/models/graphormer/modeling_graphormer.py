@@ -37,6 +37,9 @@ _CHECKPOINT_FOR_DOC = "graphormer-base-pcqm4mv1"
 _CONFIG_FOR_DOC = "GraphormerConfig"
 
 
+from ..deprecated._archive_maps import GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def quant_noise(module: nn.Module, p: float, block_size: int):
     """
     From:

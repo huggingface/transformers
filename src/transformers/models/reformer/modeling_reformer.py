@@ -51,6 +51,9 @@ _CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
 
 
+from ..deprecated._archive_maps import REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 # Define named tuples for nn.Modules here
 LSHSelfAttentionOutput = namedtuple("LSHSelfAttentionOutput", ["hidden_states", "attention_probs", "buckets"])
 LocalSelfAttentionOutput = namedtuple("LocalSelfAttentionOutput", ["hidden_states", "attention_probs"])

@@ -49,6 +49,9 @@ _CONFIG_FOR_DOC = "VisualBertConfig"
 _CHECKPOINT_FOR_DOC = "uclanlp/visualbert-vqa-coco-pre"
 
 
+from ..deprecated._archive_maps import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 class VisualBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings and visual embeddings."""
 

@@ -77,6 +77,9 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
 
+from ..deprecated._archive_maps import MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

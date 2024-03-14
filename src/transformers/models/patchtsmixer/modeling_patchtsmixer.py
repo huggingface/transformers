@@ -39,6 +39,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PatchTSMixerConfig"
 
 
+from ..deprecated._archive_maps import PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 PATCHTSMIXER_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

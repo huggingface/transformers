@@ -57,6 +57,9 @@ _CONFIG_FOR_DOC = "MusicgenConfig"
 _CHECKPOINT_FOR_DOC = "facebook/musicgen-small"
 
 
+from ..deprecated._archive_maps import MUSICGEN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class MusicgenUnconditionalInput(ModelOutput):
     """

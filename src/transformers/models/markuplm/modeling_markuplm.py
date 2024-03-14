@@ -53,6 +53,9 @@ _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
 
 
+from ..deprecated._archive_maps import MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 class XPathEmbeddings(nn.Module):
     """Construct the embeddings from xpath tags and subscripts.
 

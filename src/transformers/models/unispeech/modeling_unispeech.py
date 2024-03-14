@@ -57,6 +57,9 @@ _CTC_EXPECTED_OUTPUT = "'mister quilter is the apposl of the midle classes and w
 _CTC_EXPECTED_LOSS = 17.17
 
 
+from ..deprecated._archive_maps import UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class UniSpeechForPreTrainingOutput(ModelOutput):
     """

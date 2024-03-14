@@ -57,6 +57,9 @@ _IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
+from ..deprecated._archive_maps import VIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 class ViTEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.

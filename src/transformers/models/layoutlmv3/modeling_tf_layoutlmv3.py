@@ -58,6 +58,9 @@ _DUMMY_BBOX = [
 ]
 
 
+from ..deprecated._archive_maps import TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 LARGE_NEGATIVE = -1e8
 
 

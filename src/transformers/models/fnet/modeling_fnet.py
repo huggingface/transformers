@@ -60,6 +60,9 @@ _CHECKPOINT_FOR_DOC = "google/fnet-base"
 _CONFIG_FOR_DOC = "FNetConfig"
 
 
+from ..deprecated._archive_maps import FNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 # Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
 def _two_dim_matmul(x, matrix_dim_one, matrix_dim_two):
     """Applies 2D matrix multiplication to 3D input arrays."""

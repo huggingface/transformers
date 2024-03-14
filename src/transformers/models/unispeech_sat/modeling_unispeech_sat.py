@@ -73,6 +73,9 @@ _XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
+from ..deprecated._archive_maps import UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class UniSpeechSatForPreTrainingOutput(ModelOutput):
     """

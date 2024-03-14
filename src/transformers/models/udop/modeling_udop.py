@@ -47,6 +47,9 @@ from ...utils import (
 logger = logging.getLogger(__name__)
 
 
+from ..deprecated._archive_maps import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 _CONFIG_FOR_DOC = "UdopConfig"
 
 

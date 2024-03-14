@@ -702,10 +702,6 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_word_time_stamps_start, word_time_stamps_start)
         self.assertListEqual(expected_word_time_stamps_end, word_time_stamps_end)
 
-    def test_pretrained_model_lists(self):
-        # Wav2Vec2Model has no max model length => no testing
-        pass
-
     # overwrite from test_tokenization_common
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

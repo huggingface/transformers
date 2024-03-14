@@ -152,6 +152,9 @@ _CONFIG_FOR_DOC = "DetaConfig"
 _CHECKPOINT_FOR_DOC = "jozhang97/deta-swin-large-o365"
 
 
+from ..deprecated._archive_maps import DETA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderOutput with DeformableDetr->Deta
 class DetaDecoderOutput(ModelOutput):

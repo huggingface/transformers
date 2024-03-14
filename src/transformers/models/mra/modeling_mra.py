@@ -54,6 +54,9 @@ _CONFIG_FOR_DOC = "MraConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 
+from ..deprecated._archive_maps import MRA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 mra_cuda_kernel = None
 
 

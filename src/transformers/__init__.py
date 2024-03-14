@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
+from .models.deprecated._archive_maps import *
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
@@ -47,8 +48,6 @@ from .utils import (
     is_vision_available,
     logging,
 )
-
-from .models.deprecated._archive_maps import *
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

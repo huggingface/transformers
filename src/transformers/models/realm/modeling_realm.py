@@ -43,6 +43,9 @@ _SCORER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-scorer"
 _CONFIG_FOR_DOC = "RealmConfig"
 
 
+from ..deprecated._archive_maps import REALM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

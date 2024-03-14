@@ -52,6 +52,9 @@ _CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 
+from ..deprecated._archive_maps import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

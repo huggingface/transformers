@@ -63,6 +63,9 @@ _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 3401, 384]
 
 
+from ..deprecated._archive_maps import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class YolosObjectDetectionOutput(ModelOutput):
     """

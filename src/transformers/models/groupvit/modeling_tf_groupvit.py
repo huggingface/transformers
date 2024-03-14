@@ -67,6 +67,9 @@ if is_tensorflow_probability_available():
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
 
+from ..deprecated._archive_maps import TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 LARGE_NEGATIVE = -1e8
 
 

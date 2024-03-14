@@ -70,6 +70,9 @@ _CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "QDQBertConfig"
 
 
+from ..deprecated._archive_maps import QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

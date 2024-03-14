@@ -48,6 +48,9 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
 
 
+from ..deprecated._archive_maps import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     """

@@ -58,6 +58,9 @@ _CONFIG_FOR_DOC = "MegatronBertConfig"
 _CHECKPOINT_FOR_DOC = "nvidia/megatron-bert-cased-345m"
 
 
+from ..deprecated._archive_maps import MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

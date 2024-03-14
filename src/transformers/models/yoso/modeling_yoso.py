@@ -52,6 +52,9 @@ _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
 
 
+from ..deprecated._archive_maps import YOSO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 lsh_cumulation = None
 
 

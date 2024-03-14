@@ -40,6 +40,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncodecConfig"
 
 
+from ..deprecated._archive_maps import ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class EncodecOutput(ModelOutput):
     """

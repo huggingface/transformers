@@ -61,6 +61,9 @@ _CONFIG_FOR_DOC = "ConditionalDetrConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/conditional-detr-resnet-50"
 
 
+from ..deprecated._archive_maps import CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """

@@ -48,6 +48,8 @@ _CHECKPOINT_FOR_DOC = "google/owlv2-base-patch16-ensemble"
 
 # See all Owlv2 models at https://huggingface.co/models?filter=owlv2
 
+from ..deprecated._archive_maps import OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlv2
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:

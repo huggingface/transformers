@@ -53,6 +53,9 @@ _IMAGE_CLASS_CHECKPOINT = "google/siglip-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_1"
 
 
+from ..deprecated._archive_maps import SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf

@@ -45,6 +45,9 @@ _QA_TARGET_START_INDEX = 2
 _QA_TARGET_END_INDEX = 9
 
 
+from ..deprecated._archive_maps import DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 # Copied from transformers.models.deberta.modeling_deberta.ContextPooler
 class ContextPooler(nn.Module):
     def __init__(self, config):

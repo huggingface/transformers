@@ -42,6 +42,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VitsConfig"
 
 
+from ..deprecated._archive_maps import VITS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class VitsModelOutput(ModelOutput):
     """

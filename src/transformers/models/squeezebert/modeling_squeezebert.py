@@ -43,6 +43,9 @@ _CHECKPOINT_FOR_DOC = "squeezebert/squeezebert-uncased"
 _CONFIG_FOR_DOC = "SqueezeBertConfig"
 
 
+from ..deprecated._archive_maps import SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 class SqueezeBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 

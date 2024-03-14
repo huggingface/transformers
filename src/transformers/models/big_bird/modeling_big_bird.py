@@ -55,6 +55,9 @@ _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
 
 
+from ..deprecated._archive_maps import BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 _TRIVIA_QA_MAPPING = {
     "big_bird_attention": "attention/self",
     "output_layer_norm": "output/LayerNorm",

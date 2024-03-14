@@ -56,6 +56,9 @@ _CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
 
 
+from ..deprecated._archive_maps import ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 class ErnieEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 

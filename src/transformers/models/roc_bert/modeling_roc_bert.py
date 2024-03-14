@@ -73,6 +73,8 @@ _QA_TARGET_END_INDEX = 15
 
 # Maske language modeling
 
+from ..deprecated._archive_maps import ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->roc_bert
 def load_tf_weights_in_roc_bert(model, config, tf_checkpoint_path):

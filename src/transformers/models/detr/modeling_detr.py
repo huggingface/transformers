@@ -61,6 +61,9 @@ _CONFIG_FOR_DOC = "DetrConfig"
 _CHECKPOINT_FOR_DOC = "facebook/detr-resnet-50"
 
 
+from ..deprecated._archive_maps import DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """

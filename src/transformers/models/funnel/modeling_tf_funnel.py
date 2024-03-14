@@ -63,6 +63,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "FunnelConfig"
 
 
+from ..deprecated._archive_maps import TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 INF = 1e6
 
 

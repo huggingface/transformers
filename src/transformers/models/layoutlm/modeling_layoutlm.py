@@ -44,6 +44,9 @@ _CONFIG_FOR_DOC = "LayoutLMConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlm-base-uncased"
 
 
+from ..deprecated._archive_maps import LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 LayoutLMLayerNorm = nn.LayerNorm
 
 

@@ -58,6 +58,9 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
+from ..deprecated._archive_maps import FALCON_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
 
