@@ -365,16 +365,10 @@ def shard_checkpoint(
     for key, weight in state_dict.items():
         # when bnb serialization is used the weights in the state dict can be strings
         # check: https://github.com/huggingface/transformers/pull/24416 for more details
-        has_storage = True
         if isinstance(weight, str):
             continue
         else:
-            try:
-                storage_id = id_tensor_storage(weight)
-            except RuntimeError:
-                # fallback in case the tensor don't have a storage (e.g. QTensor with quanto)
-                storage_id = id(weight)
-                has_storage = False
+            storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
         if storage_id in storage_id_to_block:
@@ -382,26 +376,7 @@ def shard_checkpoint(
             sharded_state_dicts[block_id][key] = weight
             continue
 
-        if has_storage:
-            weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-        else:
-            # If the tensor don't have a storage, some field on this tensor can be a tensor (e.g. QTensor in quanto
-            # where the tensor is created using _make_wrapper_subclass() )
-            def get_tensors(weight):
-                if not isinstance(weight, torch.Tensor):
-                    return []
-                weight_dict = weight.__dict__
-                if len(weight_dict) == 0:
-                    return [weight]
-                tensors = []
-                for val in weight_dict.values():
-                    tensors.extend(get_tensors(val))
-                return tensors
-
-            tensors = get_tensors(weight)
-            weight_size = 0
-            for t in tensors:
-                weight_size += t.numel() * dtype_byte_size(t.dtype)
+        weight_size = weight.numel() * dtype_byte_size(weight.dtype)
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
@@ -506,8 +481,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
-    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", **weights_only_kwarg)
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu")
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -521,7 +495,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike], weights_only_kwarg=None):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -551,8 +525,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike], weights_only_kwarg
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        if weights_only_kwarg is None:
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
@@ -2281,9 +2254,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            hf_quantizer is not None
-            and isinstance(hf_quantizer, HfQuantizer)
-            and (hf_quantizer.is_safe_serializable if safe_serialization else hf_quantizer.is_serializable)
+            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
@@ -3332,13 +3303,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         from_pt = not (from_tf | from_flax)
 
-        weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
-
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file, weights_only_kwarg=weights_only_kwarg)
+                state_dict = load_state_dict(resolved_archive_file)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3359,9 +3328,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(
-                                    resolved_archive_file[0], weights_only_kwarg=weights_only_kwarg
-                                )
+                                one_state_dict = load_state_dict(resolved_archive_file[0])
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
@@ -3941,8 +3908,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
-                state_dict = load_state_dict(shard_file, weights_only_kwarg=weights_only_kwarg)
+                state_dict = load_state_dict(shard_file)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4107,8 +4073,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
-        weights_only_kwarg = None if hf_quantizer is None else hf_quantizer.weights_only_kwarg
-        state_dict = load_state_dict(resolved_archive_file, weights_only_kwarg=weights_only_kwarg)
+        state_dict = load_state_dict(resolved_archive_file)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
         error_msgs = _load_state_dict_into_meta_model(
             model,

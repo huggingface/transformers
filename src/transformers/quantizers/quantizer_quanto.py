@@ -74,17 +74,14 @@ class QuantoHfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         import quanto
 
-        # if the model is prequantized, we don't need to remove any keys
-        if self.pre_quantized:
-            return missing_keys
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, quanto.QModuleMixin):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
-                        and "weights" not in missing
-                        and "bias" not in "missing"
+                        and not missing.endswith(".weight")
+                        and not missing.endswith(".bias")
                     ):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
@@ -99,7 +96,7 @@ class QuantoHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.
-        if isinstance(module, quanto.QModuleMixin) and tensor_name == "weight":
+        if isinstance(module, quanto.QModuleMixin) and "weight" in tensor_name:
             # if the weights are quantized, don't need to recreate it again with `create_quantized_param`
             return not module.frozen
         else:
@@ -172,22 +169,9 @@ class QuantoHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def weights_only_kwarg(self) -> Optional[Dict[str, Any]]:
-        return {"weights_only": False}
-
-    @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
         return False
 
     @property
     def is_serializable(self):
         return True
-
-    @property
-    def is_safe_serializable(self):
-        logger.warning(
-            "Serialization with safetensors is not supported with models quantized with quanto. "
-            "Please pass `safe_serialization=False` in `save_pretrained`. You will most likely face errors or"
-            " unexpected behaviours."
-        )
-        return False
