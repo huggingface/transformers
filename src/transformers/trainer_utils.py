@@ -801,7 +801,7 @@ def check_target_module_exists(optim_target_modules, key: str):
         None if no match found
     """
     if isinstance(optim_target_modules, str):
-        target_module_found = re.fullmatch(optim_target_modules, key)
+        target_module_found = bool(re.fullmatch(optim_target_modules, key))
     elif key in optim_target_modules:
         # this module is specified directly in target_modules
         target_module_found = True

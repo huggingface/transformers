@@ -85,7 +85,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -1096,6 +1096,63 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         trainer.evaluate()
+
+    def test_galore_matched_modules(self):
+        regex_patterns = [r".*.attn.*", r".*.mlp.*"]
+
+        module_names = [
+            "model.transformer.h.0.ln_1",
+            "model.transformer.h.0.attn.q_proj",
+            "model.lm_head",
+            "model.transformer.h.0.mlp.up_proj",
+        ]
+        expected_values = [False, True, False, True]
+
+        for expected_value, module_name in zip(expected_values, module_names):
+            is_module_matched = check_target_module_exists(regex_patterns, module_name)
+            self.assertTrue(is_module_matched == expected_value)
+
+        exact_patterns = ["q_proj", "up_proj"]
+
+        module_names = [
+            "model.transformer.h.0.ln_1",
+            "model.transformer.h.0.attn.q_proj",
+            "model.lm_head",
+            "model.transformer.h.0.mlp.up_proj",
+        ]
+        expected_values = [False, True, False, True]
+
+        for expected_value, module_name in zip(expected_values, module_names):
+            is_module_matched = check_target_module_exists(exact_patterns, module_name)
+            self.assertTrue(is_module_matched == expected_value)
+
+        simple_regex = r".*.attn.*"
+
+        module_names = [
+            "model.transformer.h.0.ln_1",
+            "model.transformer.h.0.attn.q_proj",
+            "model.lm_head",
+            "model.transformer.h.0.mlp.up_proj",
+        ]
+        expected_values = [False, True, False, False]
+
+        for expected_value, module_name in zip(expected_values, module_names):
+            is_module_matched = check_target_module_exists(simple_regex, module_name)
+            self.assertTrue(is_module_matched == expected_value)
+
+        simple_regex = "model.transformer.h.0.attn.q_proj"
+
+        module_names = [
+            "model.transformer.h.0.ln_1",
+            "model.transformer.h.0.attn.q_proj",
+            "model.lm_head",
+            "model.transformer.h.0.mlp.up_proj",
+        ]
+        expected_values = [False, True, False, False]
+
+        for expected_value, module_name in zip(expected_values, module_names):
+            is_module_matched = check_target_module_exists(simple_regex, module_name)
+            self.assertTrue(is_module_matched == expected_value)
 
     @require_galore_torch
     @require_torch_gpu
