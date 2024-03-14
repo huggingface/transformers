@@ -105,6 +105,8 @@ class MobileBertConfig(PretrainedConfig):
     ```
     """
 
+    model_type = "mobilebert"
+
     def __init__(
         self,
         vocab_size=30522,
