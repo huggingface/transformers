@@ -188,7 +188,6 @@ class Text2TextGenerationPipeline(Pipeline):
             generate_kwargs.get("min_length", self.model.config.min_length),
             generate_kwargs.get("max_length", self.model.config.max_length),
         )
-
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":

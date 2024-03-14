@@ -179,7 +179,6 @@ class ImageToTextPipeline(Pipeline):
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
         #  in the `_prepare_model_inputs` method.
         inputs = model_inputs.pop(self.model.main_input_name)
-
         model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
         return model_outputs
 
