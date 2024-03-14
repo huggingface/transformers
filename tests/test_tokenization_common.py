@@ -1144,6 +1144,25 @@ class TokenizerTesterMixin:
                 )
                 self.assertEqual(output2, output2_via_dict)
 
+    def test_chat_template_dict_saving(self):
+        dummy_template_1 = "{{'a'}}"
+        dummy_template_2 = "{{'b'}}"
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    tokenizer.save_pretrained(tmp_dir_name)
+                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    # Assert that chat templates are correctly serialized as lists of dictionaries
+                    self.assertEqual(
+                        config_dict["chat_template"],
+                        [{"name": "template1", "template": "{{'a'}}"}, {"name": "template2", "template": "{{'b'}}"}],
+                    )
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                # Assert that the serialized list is correctly reconstructed as a single dict
+                self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
