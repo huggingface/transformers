@@ -59,14 +59,6 @@ class QuantoHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_quanto_available():
             raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
-        device_map = kwargs.get("device_map", None)
-        if device_map is not None and isinstance(device_map, dict):
-            if "cpu" in device_map.values() or "disk" in device_map.values():
-                if version.parse(importlib.metadata.version("accelerate")) <= version.parse("0.27.0"):
-                    raise ValueError(
-                        "You have a version of `accelerate` that is not compatible cpu/disk offload with quanto quantized model. "
-                        "You need to install a version of accelerate > 0.27.0."
-                    )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch_dtype
