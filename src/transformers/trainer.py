@@ -84,7 +84,6 @@ from .trainer_pt_utils import (
     IterableDatasetShard,
     LabelSmoother,
     LayerWiseDummyOptimizer,
-    LayerWiseDummyScheduler,
     LengthGroupedSampler,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
@@ -1314,30 +1313,6 @@ class Trainer:
         Args:
             num_training_steps (int): The number of training steps to do.
         """
-        if optimizer is not None and isinstance(optimizer, LayerWiseDummyOptimizer):
-            optimizer_dict = optimizer.optimizer_dict
-            scheduler_dict = {}
-
-            for param in optimizer_dict.keys():
-                scheduler_dict[param] = get_scheduler(
-                    self.args.lr_scheduler_type,
-                    optimizer=optimizer_dict[param],
-                    num_warmup_steps=self.args.get_warmup_steps(num_training_steps) * 2,
-                    num_training_steps=num_training_steps * 2,
-                )
-
-            def scheduler_hook(param):
-                # Since the optimizer hook has been already attached we only need to
-                # attach the scheduler hook
-                if param.grad is not None:
-                    scheduler_dict[param].step()
-
-            for param in optimizer_dict.keys():
-                param.register_post_accumulate_grad_hook(scheduler_hook)
-
-            self._created_lr_scheduler = True
-            self.lr_scheduler = LayerWiseDummyScheduler()
-
         if self.lr_scheduler is None:
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
