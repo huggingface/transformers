@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
+    from transformers import AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
     from transformers.models.pvt_v2.modeling_pvt_v2 import PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
