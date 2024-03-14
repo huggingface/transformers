@@ -873,7 +873,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_generate_padding_right(self):
+    def test_flash_attn_2_generate_padding_left(self):
         """
         Overwritting the common test as the test is flaky on tiny models
         """
@@ -883,7 +883,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         texts = ["hi", "Hello this is a very long sentence"]
 
-        tokenizer.padding_side = "right"
+        tokenizer.padding_side = "left"
         tokenizer.pad_token = tokenizer.eos_token
 
         inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
@@ -898,4 +898,10 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
+        expected_output = [
+            "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
+            "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
+        ]
+
         self.assertListEqual(output_native, output_fa_2)
+        self.assertListEqual(output_native, expected_output)
