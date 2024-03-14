@@ -29,6 +29,11 @@
     title: 使用LLMs进行生成
   title: 教程
 - sections:
+  - isExpanded: false
+    sections:
+    - local: tasks/asr
+      title: 自动语音识别
+- sections:
   - local: fast_tokenizers
     title: 使用 🤗 Tokenizers 中的分词器
   - local: multilingual
@@ -37,15 +42,21 @@
     title: 使用特定于模型的 API
   - local: custom_models
     title: 共享自定义模型
+  - local: chat_templating
+    title: 聊天模型的模板
   - local: serialization
     title: 导出为 ONNX
   - local: tflite
     title: 导出为 TFLite
+  - local: torchscript
+    title: 导出为 TorchScript
   title: 开发者指南
 - sections:
   - local: performance
     title: 综述
   - sections:
+    - local: fsdp
+      title: 完全分片数据并行
     - local: perf_hardware
       title: 用于训练的定制硬件
     - local: hpo_train
@@ -63,6 +74,8 @@
 - sections:
   - local: contributing
     title: 如何为 🤗 Transformers 做贡献？
+  - local: add_new_pipeline
+    title: 如何将流水线添加到 🤗 Transformers？
   title: 贡献
 - sections:
   - local: task_summary
