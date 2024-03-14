@@ -186,6 +186,7 @@ class TokenizerTesterMixin:
     space_between_special_tokens = False
     from_pretrained_kwargs = None
     from_pretrained_filter = None
+    from_pretrained_id = None
     from_pretrained_vocab_key = "vocab_file"
     test_seq2seq = True
 
@@ -200,19 +201,13 @@ class TokenizerTesterMixin:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
         if self.test_rust_tokenizer:
-            tokenizers_list = [
+            self.tokenizers_list = [
                 (
                     self.rust_tokenizer_class,
-                    pretrained_name,
+                    self.from_pretrained_id,
                     self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {},
                 )
-                for pretrained_name in self.rust_tokenizer_class.pretrained_vocab_files_map[
-                    self.from_pretrained_vocab_key
-                ].keys()
-                if self.from_pretrained_filter is None
-                or (self.from_pretrained_filter is not None and self.from_pretrained_filter(pretrained_name))
             ]
-            self.tokenizers_list = tokenizers_list[:1]  # Let's just test the first pretrained vocab for speed
         else:
             self.tokenizers_list = []
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:

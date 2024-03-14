@@ -53,6 +53,7 @@ SMALL_TRAINING_CORPUS = [
 @require_sentencepiece
 @require_tokenizers
 class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/hf-seamless-m4t-medium"
     tokenizer_class = SeamlessM4TTokenizer
     rust_tokenizer_class = SeamlessM4TTokenizerFast
     test_rust_tokenizer = True

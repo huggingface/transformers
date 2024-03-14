@@ -427,6 +427,15 @@ To upload your custom prompt on a repo on the Hub and share it with the communit
 
 ## Using custom tools
 
+<Tip warning={true}>
+
+Using custom tools in your local runtime means that you'll download code to run on your machine.
+
+ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+installing a package using pip/npm/apt.
+
+</Tip>
+
 In this section, we'll be leveraging two existing custom tools that are specific to image generation:
 
 - We replace [huggingface-tools/image-transformation](https://huggingface.co/spaces/huggingface-tools/image-transformation),
