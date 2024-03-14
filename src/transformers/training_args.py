@@ -1531,6 +1531,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
@@ -1538,7 +1539,7 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
+                " (`--fp16_full_eval`) can only be used on CUDA or MLU devices or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
