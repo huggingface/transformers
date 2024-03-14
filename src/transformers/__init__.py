@@ -292,6 +292,7 @@ _import_structure = {
         "CodeGenConfig",
         "CodeGenTokenizer",
     ],
+    "models.codereviewer": ["CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeReviewerConfig"],
     "models.conditional_detr": [
         "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ConditionalDetrConfig",
@@ -1815,6 +1816,19 @@ else:
             "CodeGenForCausalLM",
             "CodeGenModel",
             "CodeGenPreTrainedModel",
+        ]
+    )
+    _import_structure["models.codereviewer"].extend(
+        [
+            "CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CodeReviewerEncoderModel",
+            "CodeReviewerForConditionalGeneration",
+            "CodeReviewerForQuestionAnswering",
+            "CodeReviewerForSequenceClassification",
+            "CodeReviewerForTokenClassification",
+            "CodeReviewerModel",
+            "CodeReviewerPreTrainedModel",
+            "load_tf_weights_in_codereviewer",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -5119,6 +5133,7 @@ if TYPE_CHECKING:
         CodeGenConfig,
         CodeGenTokenizer,
     )
+    from .models.codereviewer import CODEREVIEWER_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeReviewerConfig
     from .models.conditional_detr import (
         CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConditionalDetrConfig,
@@ -6556,6 +6571,17 @@ if TYPE_CHECKING:
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,
+        )
+        from .models.codereviewer import (
+            CODEREVIEWER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CodeReviewerEncoderModel,
+            CodeReviewerForConditionalGeneration,
+            CodeReviewerForQuestionAnswering,
+            CodeReviewerForSequenceClassification,
+            CodeReviewerForTokenClassification,
+            CodeReviewerModel,
+            CodeReviewerPreTrainedModel,
+            load_tf_weights_in_codereviewer,
         )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -54,6 +54,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GraphormerConfig": ["spatial_pos_max"],
     # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
+    "CodeReviewerConfig": ["feed_forward_proj"],
     # used internally in the configuration class file
     # `tokenizer_class` get default value `T5Tokenizer` intentionally
     "MT5Config": ["feed_forward_proj", "tokenizer_class"],
@@ -304,7 +305,7 @@ def check_config_attributes_being_used(config_class):
 
 
 def check_config_attributes():
-    """Check the arguments in `__init__` of all configuration classes are used in  python files"""
+    """Check the arguments in `__init__` of all configuration classes are used in python files"""
     configs_with_unused_attributes = {}
     for _config_class in list(CONFIG_MAPPING.values()):
         # Skip deprecated models
