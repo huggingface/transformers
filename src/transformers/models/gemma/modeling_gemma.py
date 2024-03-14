@@ -174,11 +174,20 @@ class GemmaMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         hidden_act = config.hidden_act
-        if hidden_act != "gelu_pytorch_tanh":
+        use_old_gelu = getattr(config, "force_use_exact_gelu", False)
+        if not use_old_gelu:
             logger.warning_once(
                 "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"\
                 "Please edit your model config to use `gelu_pytorch_tanh` and not `gelu`.\n"\
-                "For now, we shall use `gelu_pytorch_tanh` temporarily.\n"\
+                "You set `force_use_exact_gelu` to True, so we'll use the old exact gelu.\n"\
+                "See https://github.com/huggingface/transformers/pull/29402 for more details."
+            )
+            hidden_act = "gelu"
+        elif hidden_act != "gelu_pytorch_tanh":
+            logger.warning_once(
+                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"\
+                "We shall use approx gelu. To forcibly use the old exact gelu, please add a new\n"\
+                "field in the `config.json` file, and set `force_use_exact_gelu` to True.\n"\
                 "See https://github.com/huggingface/transformers/pull/29402 for more details."
             )
             hidden_act = "gelu_pytorch_tanh"
