@@ -603,7 +603,6 @@ class GemmaSdpaAttention(GemmaAttention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
         # with causal mask changed to full block attention for image tokens, above works well
-        breakpoint()
         attn_output = self.o_proj(attn_output)
         # This is fixed when taking a full attention mask (attend to everything in the input)
         return attn_output, None, past_key_value
