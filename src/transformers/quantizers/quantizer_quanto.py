@@ -23,7 +23,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_quanto_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_quanto_available, is_torch_available, logging
 from ..utils.quantization_config import QuantoConfig
 
 
@@ -59,6 +59,18 @@ class QuantoHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_quanto_available():
             raise ImportError("Loading a quanto quantized model requires quanto library (`pip install quanto`)")
+        if not is_accelerate_available():
+            raise ImportError("Loading a quanto quantized model requires accelerate library (`pip install quanto`)")
+
+    def update_device_map(self, device_map):
+        if device_map is None:
+            device_map = {"": "cpu"}
+            logger.info(
+                "The device_map was not initialized. "
+                "Setting device_map to {'':'cpu'}. "
+                "If you want to use the model for inference, please set device_map ='auto'"
+            )
+        return device_map
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch_dtype
