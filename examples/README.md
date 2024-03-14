@@ -97,11 +97,7 @@ and run the example command as usual afterward.
 
 ## Running the Examples on Remote Hardware with Auto-Setup
 
-[run_on_remote.py](./run_on_remote.py) is a script that launches any example on remote self-hosted hardware, 
-with automatic hardware and environment setup. It uses [Runhouse](https://github.com/run-house/runhouse) to launch 
-on self-hosted hardware (e.g. in your own cloud account or on-premise cluster) but there are other options 
-for running remotely as well. You can easily customize the example used, command line arguments, dependencies, 
-and type of compute hardware, and then run the script to automatically launch the example.
+The script [run_on_remote.py](./run_on_remote.py) helps you launch examples on your own remote hardware effortlessly. It sets up the hardware and environment automatically. It uses [Runhouse](https://github.com/run-house/runhouse) for this purpose, but you have other remote running options too. You can easily customize the example, command line settings, dependencies, and hardware type. Then, just run the script to launch your example automatically.
 
 You can refer to 
 [hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
