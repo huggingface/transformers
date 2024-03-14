@@ -126,6 +126,11 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+# for version specific tests in TrainerIntegrationTest
+require_accelerate_version = require_accelerate  # in case we need to passthrough
+if is_accelerate_available("0.28"):
+    require_accelerate_version = partial(require_accelerate, min_version="0.28")
+    GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = True
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
@@ -793,9 +798,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 @require_sentencepiece
 @require_tokenizers
 class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
-    GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
-    require_accelerate_version = partial(require_accelerate, min_version="0.28")
-
     def setUp(self):
         super().setUp()
         args = TrainingArguments("..")
@@ -2504,7 +2506,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
 
-            if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 # gradient accumulation kwargs configures gradient_state
                 self.assertNotIn("sync_each_batch", trainer.accelerator.gradient_state.plugin_kwargs)
 
@@ -2522,7 +2524,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "even_batches": False,
                 "use_seedable_sampler": True,
             }
-            if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
 
             # Leaves all options as something *not* basic
@@ -2536,7 +2538,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
 
-            if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_yaml(self):
@@ -2551,7 +2553,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     "even_batches": False,
                     "use_seedable_sampler": False,
                 }
-                if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+                if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                     accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
                 json.dump(accelerator_config, f)
             config = RegressionModelConfig(a=1.5, b=2.5)
@@ -2566,7 +2568,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
-            if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
+            if GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
                 self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_dataclass(self):
@@ -2628,20 +2630,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset = SampleIterableDataset()
 
             # Leaves one option as something *not* basic
-            accelerator_config = {
-                "split_batches": True,
-            }
-            if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
-            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config={
+                    "split_batches": True,
+                },
+            )
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
-
-            if self.GRAD_ACCUM_KWARGS_VERSION_AVAILABLE:
-                self.assertEqual(trainer.accelerator.gradient_state.plugin_kwargs["sync_each_batch"], True)
 
     def test_accelerator_config_from_dict_with_deprecated_args(self):
         # Checks that accelerator kwargs can be passed through
