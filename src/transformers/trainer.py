@@ -1203,7 +1203,7 @@ class Trainer:
 
             is_layerwise = args.optim.lower().endswith("layerwise")
             if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED:
-                raise NotImplementedError("GaLore does not support DDP at this time")
+                raise NotImplementedError("Layer-wise GaLore does not support DDP at this time")
 
             optimizer_mapping = {
                 OptimizerNames.GALORE_ADAMW: GaLoreAdamW,
