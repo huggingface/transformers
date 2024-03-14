@@ -1697,7 +1697,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
-        **tokenizer_kwargs,
+        **kwargs,
     ) -> Union[str, List[int]]:
         """
         Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
@@ -1754,7 +1754,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         compiled_template = self._compile_jinja_template(chat_template)
 
         rendered = compiled_template.render(
-            messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
+            messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map, **kwargs
         )
 
         if padding is True:
@@ -1768,7 +1768,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length=max_length,
                     add_special_tokens=False,
                     return_tensors=return_tensors,
-                    **tokenizer_kwargs,
+                    **kwargs,
                 )
             else:
                 return self.encode(
@@ -1778,7 +1778,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length=max_length,
                     add_special_tokens=False,
                     return_tensors=return_tensors,
-                    **tokenizer_kwargs,
+                    **kwargs,
                 )
         else:
             return rendered
