@@ -886,7 +886,7 @@ class Pipeline(_ScikitCompat):
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
         # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
-        # forward params.
+        # forward params so that `generate` is aware of the pad token.
         if (
             self.tokenizer is not None
             and self.model.can_generate()
