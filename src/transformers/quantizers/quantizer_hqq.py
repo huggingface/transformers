@@ -21,16 +21,13 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..integrations import prepare_for_hqq_linear
-from ..utils import is_accelerate_available, is_hqq_available, is_torch_available, logging
+from ..utils import is_hqq_available, is_torch_available, logging
 from ..utils.hqq_utils import find_parent
 from .quantizers_utils import get_module_from_name
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_hqq_available():
     from hqq.core.quantize import HQQLinear
@@ -116,23 +113,19 @@ class HQQHfQuantizer(HfQuantizer):
 
         # Step 1: Check if the state_dict of the module already contains quantized parameters
         if ("W_q" in module_state_dict) and ("meta" in module_state_dict):
-            module = HQQLinear(
+            module_hqq = HQQLinear(
                 linear_layer=None, quant_config=None, compute_dtype=self.torch_dtype, device=target_device
             )
-            module.load_state_dict(module_state_dict)
+            module_hqq.load_state_dict(module_state_dict)
+            setattr(parent_module, node, module_hqq)
             return
 
-        # Step 2: Create tmp linear layer on meta then feed the dictionary.
-        with init_empty_weights():
-            tmp_linear_layer = torch.nn.Linear(
-                in_features=module.in_features, out_features=module.out_features, bias=module.bias
-            )
-
+        # Step 2: populate module with weight/bias from module state dict
         for key in module_state_dict:
-            setattr(tmp_linear_layer, key, torch.nn.Parameter(module_state_dict[key]))
+            setattr(module, key, torch.nn.Parameter(module_state_dict[key]))
 
         """
-        Step 3: Replace tmp_linear_layer with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
+        Step 3: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         directly doesn't work.
         """
 
@@ -141,7 +134,7 @@ class HQQHfQuantizer(HfQuantizer):
                 parent_module,
                 node,
                 HQQLinear(
-                    tmp_linear_layer,
+                    module,
                     module.quant_config,
                     compute_dtype=self.torch_dtype,
                     device=target_device,
@@ -149,9 +142,7 @@ class HQQHfQuantizer(HfQuantizer):
                 ),
             )
         else:
-            setattr(parent_module, node, tmp_linear_layer.to(self.torch_dtype).to(target_device))
-
-        del tmp_linear_layer
+            setattr(parent_module, node, module.to(self.torch_dtype).to(target_device))
 
         torch.cuda.empty_cache()
 
