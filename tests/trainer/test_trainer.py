@@ -128,6 +128,7 @@ if is_torch_available():
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version = require_accelerate  # in case we need to passthrough
+GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = False
 if is_accelerate_available("0.28"):
     require_accelerate_version = partial(require_accelerate, min_version="0.28")
     GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = True
