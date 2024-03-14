@@ -40,9 +40,6 @@ def is_deepspeed_available():
         try:
             if is_torch_mlu_available():
                 _ = importlib_metadata.metadata("deepspeed-mlu")
-                from ..dependency_versions_table import deps
-
-                deps["deepspeed"] = "deepspeed-mlu>=0.10.1"
                 return True
             _ = importlib_metadata.metadata("deepspeed")
             return True
