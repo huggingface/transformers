@@ -1123,18 +1123,26 @@ class TokenizerTesterMixin:
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
         dummy_conversation = [
-            {"role": "system", "content": "system message"},
             {"role": "user", "content": "user message"},
-            {"role": "assistant", "content": "assistant message"},
         ]
-        tokenizer = self.get_tokenizers()[0]
-        tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
-        output1 = tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template_1, tokenize=False)
-        output1_via_dict = tokenizer.apply_chat_template(dummy_conversation, chat_template="template1", tokenize=False)
-        self.assertEqual(output1, output1_via_dict)
-        output2 = tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template_2, tokenize=False)
-        output2_via_dict = tokenizer.apply_chat_template(dummy_conversation, chat_template="template2", tokenize=False)
-        self.assertEqual(output2, output2_via_dict)
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                output1 = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template_1, tokenize=False
+                )
+                output1_via_dict = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template="template1", tokenize=False
+                )
+                self.assertEqual(output1, output1_via_dict)
+                output2 = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template_2, tokenize=False
+                )
+                output2_via_dict = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template="template2", tokenize=False
+                )
+                self.assertEqual(output2, output2_via_dict)
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
