@@ -148,6 +148,7 @@ class MambaModelTester:
         (
             config,
             input_ids,
+            _,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -181,12 +182,11 @@ class MambaModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_for_sequence_classification(self, config, input_ids, *args):
+    def create_and_check_for_sequence_classification(self, config, input_ids, sequence_labels, *args):
         config.num_labels = self.num_labels
         model = MambaForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
         result = model(input_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -324,8 +324,16 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.model_tester.create_and_check_causl_lm(*config_and_inputs)
 
     def test_model_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        (
+            config,
+            input_ids,
+            _,
+            sequence_labels,
+            _,
+            _,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        self.model_tester.create_and_check_for_sequence_classification(config, input_ids, sequence_labels)
 
     def test_state_equivalency(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
