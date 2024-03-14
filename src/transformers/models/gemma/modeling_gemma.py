@@ -263,13 +263,11 @@ class GemmaAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-        breakpoint()
         if attention_mask is not None:  # no matter the length, we just slice it
             if cache_position is not None:
                 causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
             else:
                 causal_mask = attention_mask
-            breakpoint()
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -538,7 +536,6 @@ class GemmaSdpaAttention(GemmaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
@@ -551,7 +548,6 @@ class GemmaSdpaAttention(GemmaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
-            breakpoint()
             causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
@@ -560,21 +556,22 @@ class GemmaSdpaAttention(GemmaAttention):
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
-        breakpoint()
+        
+        # 
+        # Efficient implementation equivalent to the following:
         attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
+        #attn_output = debug_scaled_dot_product_attention(
+            query=query_states,
+            key=key_states,
+            value=value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
         )
-        breakpoint()
-
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
-
+        # with causal mask changed to full block attention for image tokens, above works well
         attn_output = self.o_proj(attn_output)
-
+        # FIXME first entry of this projection doesn't match flax, the rest does. 
         return attn_output, None, past_key_value
 
 
@@ -631,7 +628,6 @@ class GemmaDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
         # so far so good layer 1 at least
-        breakpoint()
         # Self Attention
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -644,7 +640,6 @@ class GemmaDecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
-        breakpoint()
         hidden_states = residual + hidden_states
 
         # Fully Connected
@@ -652,7 +647,6 @@ class GemmaDecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -888,13 +882,12 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        breakpoint()
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
-        causal_mask[:, :, :256, :256] = 0
         # embed positions
         hidden_states = inputs_embeds
 
         # normalized
+        # FIXME commented out because image hidden states should not be scaled (are not scaled in palma)
         # hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         # decoder layers
@@ -927,7 +920,6 @@ class GemmaModel(GemmaPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                 )
-                breakpoint()
 
             hidden_states = layer_outputs[0]
 
@@ -975,6 +967,7 @@ class GemmaModel(GemmaPreTrainedModel):
         if seq_length > self.causal_mask.shape[-1]:
             causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+        
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
@@ -985,7 +978,13 @@ class GemmaModel(GemmaPreTrainedModel):
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-
+        # FIXME to remove from modeling_gemma, only useful to modify the causal mask
+        # which makes it non causal
+        block_size = 256
+        if seq_length > block_size:
+            causal_mask[:, :, :block_size, :block_size] = torch.full((batch_size, 1, block_size, block_size), fill_value=0.0, dtype=dtype)
+            for i in range(block_size, seq_length):
+                causal_mask[:, :, i, :i+1] = torch.full((batch_size, 1, 1, i+1), fill_value=0.0, dtype=dtype)
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None

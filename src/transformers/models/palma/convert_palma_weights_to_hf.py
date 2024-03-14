@@ -200,8 +200,8 @@ def slice_state_dict(state_dict, config):
 
         # output projection.
 
-        # llm_attention_attn_vec_einsum[i].shape = (8, 256, 2048)
-        o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
+        # llm_attention_attn_vec_einsum[i].shape = (8, 256, 2048) 
+        o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(2, 0, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
         state_dict[f"language_model.model.layers.{i}.self_attn.o_proj.weight"] = o_proj_weight_reshaped
         # mlp layers
@@ -242,9 +242,9 @@ def verify_logits(model):
     # First load intermediates given, and test prompt
 
     # all intermediates activations
-    intermediates_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
+    intermediates_path = "/home/ubuntu/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
     # intermediates_path = "/home/pablo/Downloads/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
-    cow_on_beach_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/cow_beach_1.png"
+    cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
     # cow_on_beach_path = "/home/pablo/Downloads/gvhf/cow_beach_1.png"
     intermediates = np.load(intermediates_path)
 
@@ -296,7 +296,23 @@ def verify_logits(model):
 
     concat_embeddings = torch.cat((projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
     # This matches exactly the gemma embeddings
-    
+    # Verify generation
+    with torch.inference_mode():
+        max_length = 16
+        unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
+
+        attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
+        attention_mask= attention_mask.bool()
+        # check raw outputs before generate
+        outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
+        # chck geenrate
+        generation = tokenizer.decode(model.language_model.generate(inputs_embeds=concat_embeddings, max_new_tokens=10, attention_mask=attention_mask)[0])
+        print(generation)
+        if generation != "beach":
+            raise ValueError("Generation does not match.")
+        else:
+            print("Generation matches. You're almost done!")
+
     #with torch.inference_mode():
     #    outputs_activations_text = model.language_model(prompt_input_ids).logits
     """
@@ -309,16 +325,11 @@ def verify_logits(model):
 
     # Verify pre logits
     with torch.inference_mode():
-        max_length = 16
-        unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
-
-        attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
         outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
 
         for h in outputs.hidden_states:
             print((h.cpu().numpy()-intermediates['llm/pre_logits']).mean())
             # last entry gives a close to 0.000 mean, which is encouraging
-        breakpoint()
         '''
         pre_logits = outputs.hidden_states[-1]
 
@@ -327,14 +338,6 @@ def verify_logits(model):
         else:
             print("Concatenated pre logits match.")
         '''
-    # Verify generation
-    with torch.inference_mode():
-        generation = tokenizer.decode(model.language_model.generate(inputs_embeds=concat_embeddings, max_new_tokens=10)[0])
-        print(generation)
-        if generation != "beach":
-            raise ValueError("Generation does not match.")
-        else:
-            print("Generation matches. You're almost done!")
 
 
 @torch.no_grad()
@@ -345,24 +348,34 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     # define default SigLIP configuration
     config = get_palma_config()
     # get checkpoint (move to args)
-    checkpoint_path = "/home/pablo/.cache/huggingface/hub/models--gv-hf--test/snapshots/58b24b23afbeb278bfa3aa3b9f0fc1e60b9cbcc5/hf_test_ckpt.bv.params.npz" 
-    # load original state dict
-    print("Loading original jax state dict...")
-    data = load(checkpoint_path)
-    print("State dict loaded. Flattening...")
-    state_dict = flatten_nested_dict(data)
-    print("Flattened state dict. Starting slice and replace...")
-    print(state_dict.keys())
 
-    state_dict_transformers = slice_state_dict(state_dict, config)
+    do_convert_weights = False
 
-    # load HuggingFace model
-    print("Instantiating model...")
-    model = PalmaForConditionalGeneration(config).to(device).eval()
-    print("Model setup done. Loading new weights...")
-    # load jax-imported state dictionary to model
-    model.load_state_dict(state_dict_transformers)
-    del state_dict_transformers
+    if do_convert_weights:
+        checkpoint_path = "/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz" 
+        # load original state dict
+        print("Loading original jax state dict...")
+        data = load(checkpoint_path)
+        print("State dict loaded. Flattening...")
+        state_dict = flatten_nested_dict(data)
+        del data
+        print("Flattened state dict. Starting slice and replace...")
+        print(state_dict.keys())
+
+        state_dict_transformers = slice_state_dict(state_dict, config)
+        del state_dict
+        # load HuggingFace model
+        print("Instantiating model...")
+        model = PalmaForConditionalGeneration(config).to(device).eval()
+        print("Model setup done. Loading new weights...")
+        # load jax-imported state dictionary to model
+        model.load_state_dict(state_dict_transformers)
+        del state_dict_transformers
+        model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+
+    else:
+        print("Loading locally transformed weights...")
+        model = PalmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
     print("New weights loaded. Verifying logits...")
 
     do_verify_logits = True
@@ -370,7 +383,6 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model)
-    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
 
 if __name__ == "__main__":
@@ -383,7 +395,7 @@ if __name__ == "__main__":
         help="Path to the .npz checkpoint",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="/home/pablo/palma_files/palma_hf", type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path", default="/home/ubuntu/palma_hf", type=str, help="Path to the output PyTorch model directory."
     )
 
     args = parser.parse_args()
