@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple
 
 from tokenizers import normalizers, processors
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
@@ -32,8 +33,6 @@ else:
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
-
-SPIECE_UNDERLINE = "▁"
 
 
 B_INST, E_INST = "[INST]", "[/INST]"
@@ -124,10 +123,10 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
-        prefix_token="▁<PRE>",
-        middle_token="▁<MID>",
-        suffix_token="▁<SUF>",
-        eot_token="▁<EOT>",
+        prefix_token=SPIECE_UNDERLINE+"<PRE>",
+        middle_token=SPIECE_UNDERLINE+"<MID>",
+        suffix_token=SPIECE_UNDERLINE+"<SUF>",
+        eot_token=SPIECE_UNDERLINE+"<EOT>",
         fill_token="<FILL_ME>",
         additional_special_tokens=None,
         add_bos_token=True,
@@ -274,14 +273,14 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         if reset:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
-                    normalizers.Prepend(prepend="▁"),
-                    normalizers.Replace(pattern=" ", content="▁"),
+                    normalizers.Prepend(prepend=SPIECE_UNDERLINE),
+                    normalizers.Replace(pattern=" ", content=SPIECE_UNDERLINE),
                 ]
             )
             self.update_post_processor()
             return
 
-        self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
+        self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content=SPIECE_UNDERLINE)
         pair = [self.bos_token] if self.add_bos_token and add_special_tokens else []
         special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token and add_special_tokens else []
         if suffix_first:

@@ -19,6 +19,7 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -55,8 +56,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "moussaKam/barthez": 1024,
     "moussaKam/barthez-orangesum-title": 1024,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 
 class BarthezTokenizerFast(PreTrainedTokenizerFast):

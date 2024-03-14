@@ -19,6 +19,7 @@ import pickle
 import unittest
 
 from transformers import AutoTokenizer
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
@@ -382,10 +383,23 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         subword_tokenizer = tokenizer.subword_tokenizer
 
         tokens = subword_tokenizer.tokenize("国境 の 長い トンネル を 抜ける と 雪国 であった 。")
-        self.assertListEqual(tokens, ["▁国境", "▁の", "▁長い", "▁トンネル", "▁を", "▁抜ける", "▁と", "▁雪", "国", "▁であった", "▁。"])  # fmt: skip
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE+"国境", SPIECE_UNDERLINE+"の", SPIECE_UNDERLINE+"長い", SPIECE_UNDERLINE+"トンネル", SPIECE_UNDERLINE+"を", SPIECE_UNDERLINE+"抜ける", SPIECE_UNDERLINE+"と", SPIECE_UNDERLINE+"雪", "国", SPIECE_UNDERLINE+"であった", SPIECE_UNDERLINE+"。"])  # fmt: skip
 
         tokens = subword_tokenizer.tokenize("こんばんは こんばん にち は こんにちは")
-        self.assertListEqual(tokens, ["▁こん", "ばん", "は", "▁こん", "ばん", "▁に", "ち", "▁は", "▁こんにちは"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"こん",
+                "ばん",
+                "は",
+                SPIECE_UNDERLINE+"こん",
+                "ばん",
+                SPIECE_UNDERLINE+"に",
+                "ち",
+                SPIECE_UNDERLINE+"は",
+                SPIECE_UNDERLINE+"こんにちは",
+            ],
+        )
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("cl-tohoku/bert-base-japanese")

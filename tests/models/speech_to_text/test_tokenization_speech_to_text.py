@@ -16,7 +16,8 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import SPIECE_UNDERLINE, is_sentencepiece_available
+from transformers import is_sentencepiece_available
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.speech_to_text import Speech2TextTokenizer
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
@@ -82,7 +83,16 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"This",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -90,12 +100,12 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(tokens,[SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "9", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "é", "."])  # fmt: skip
+        self.assertListEqual(tokens,[SPIECE_UNDERLINE+"I", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"b", "or", "n", SPIECE_UNDERLINE+"in", SPIECE_UNDERLINE+"", "9", "2", "0", "0", "0", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"f", "al", "s", "é", "."])  # fmt: skip
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [12, 25, 88, 59, 28, 23, 11, 4, 606, 351, 351, 351, 7, 16, 70, 50, 76, 84, 10, 4, 8])
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        self.assertListEqual(back_tokens,[SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", "."])  # fmt: skip
+        self.assertListEqual(back_tokens,[SPIECE_UNDERLINE+"I", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"b", "or", "n", SPIECE_UNDERLINE+"in", SPIECE_UNDERLINE+"", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"f", "al", "s", "<unk>", "."])  # fmt: skip
 
     @slow
     def test_tokenizer_integration(self):

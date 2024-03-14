@@ -61,7 +61,16 @@ class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = XLMProphetNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"This",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -72,23 +81,23 @@ class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
+                SPIECE_UNDERLINE+"I",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"",
                 "9",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"f",
                 "al",
                 "s",
                 "é",
@@ -108,23 +117,23 @@ class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
+                SPIECE_UNDERLINE+"I",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"",
                 "[UNK]",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"f",
                 "al",
                 "s",
                 "[UNK]",

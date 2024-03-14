@@ -20,8 +20,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import SPIECE_UNDERLINE, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

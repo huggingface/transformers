@@ -18,6 +18,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import M2M100Tokenizer, is_torch_available
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -56,7 +57,17 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
+        vocab = [
+            "</s>",
+            "<unk>",
+            SPIECE_UNDERLINE+"This",
+            SPIECE_UNDERLINE+"is",
+            SPIECE_UNDERLINE+"a",
+            SPIECE_UNDERLINE+"t",
+            "est",
+            "\u0120",
+            "<pad>",
+        ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
@@ -101,7 +112,16 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"This",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -109,7 +129,16 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens([2, 3, 4, 5, 6])
-        self.assertListEqual(back_tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            back_tokens,
+            [
+                SPIECE_UNDERLINE+"This",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         text = tokenizer.convert_tokens_to_string(tokens)
         self.assertEqual(text, "This is a test")

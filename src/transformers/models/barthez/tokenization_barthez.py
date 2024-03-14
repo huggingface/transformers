@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
@@ -44,8 +45,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "moussaKam/barthez": 1024,
     "moussaKam/barthez-orangesum-title": 1024,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 # TODO this class is useless. This is the most standard sentencpiece model. Let's find which one is closest and nuke this.
 

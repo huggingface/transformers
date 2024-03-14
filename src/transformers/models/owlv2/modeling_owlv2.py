@@ -1547,7 +1547,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
-        >>> from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+        >>> from transformers.constants.utils_constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
         >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
@@ -1673,7 +1673,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> import numpy as np
         >>> import torch
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
-        >>> from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+        >>> from transformers.constants.utils_constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
         >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")

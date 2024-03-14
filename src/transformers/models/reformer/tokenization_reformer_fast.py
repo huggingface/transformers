@@ -19,6 +19,7 @@ import os
 from shutil import copyfile
 from typing import Optional, Tuple
 
+from ...constants.token_constants import SPIECE_UNDERLINE  # noqa: F401
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 
@@ -31,8 +32,6 @@ else:
 
 logger = logging.get_logger(__name__)
 
-
-SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 

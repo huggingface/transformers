@@ -19,6 +19,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import Speech2TextFeatureExtractor, Speech2TextProcessor, Speech2TextTokenizer
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, require_torchaudio
 from transformers.utils import FEATURE_EXTRACTOR_NAME
@@ -36,7 +37,17 @@ class Speech2TextProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        vocab = ["<s>", "<pad>", "</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est"]
+        vocab = [
+            "<s>",
+            "<pad>",
+            "</s>",
+            "<unk>",
+            SPIECE_UNDERLINE+"This",
+            SPIECE_UNDERLINE+"is",
+            SPIECE_UNDERLINE+"a",
+            SPIECE_UNDERLINE+"t",
+            "est",
+        ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])

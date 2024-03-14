@@ -25,6 +25,7 @@ from transformers import (
     GemmaTokenizerFast,
     is_torch_available,
 )
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
@@ -370,7 +371,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens=False)
         self.assertEqual(input_ids, [204, 25957, 204, 1139])
         tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens=False)
-        self.assertEqual(tokens, ["<s>", "▁Hello", "<s>", "how"])
+        self.assertEqual(tokens, ["<s>", SPIECE_UNDERLINE+"Hello", "<s>", "how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, "<s> Hello<s>how")
 
@@ -378,7 +379,9 @@ class GemmaIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(" <s> Hello<s> how", add_special_tokens=False)
         self.assertEqual(input_ids, [235248, 204, 25957, 204, 1368])
         tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens=False)
-        self.assertEqual(tokens, ["▁", "<s>", "▁Hello", "<s>", "▁how"])
+        self.assertEqual(
+            tokens, [SPIECE_UNDERLINE, "<s>", SPIECE_UNDERLINE+"Hello", "<s>", SPIECE_UNDERLINE+"how"]
+        )
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
@@ -396,19 +399,19 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, tokenizer.sp_model.encode("", out_type=str))
 
         tokens = tokenizer.tokenize(" ")
-        self.assertEqual(tokens, ["▁"])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE])
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
 
-        tokens = tokenizer.tokenize("▁")
-        self.assertEqual(tokens, ["▁"])
+        tokens = tokenizer.tokenize(SPIECE_UNDERLINE)
+        self.assertEqual(tokens, [SPIECE_UNDERLINE])
         # a dummy prefix space is not added by the sp_model as it was de-activated
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+        self.assertEqual(tokens, tokenizer.sp_model.encode(SPIECE_UNDERLINE, out_type=str))
 
-        tokens = tokenizer.tokenize(" ▁")
-        self.assertEqual(tokens, ["▁▁"])
+        tokens = tokenizer.tokenize(" " + SPIECE_UNDERLINE)
+        self.assertEqual(tokens, [SPIECE_UNDERLINE + SPIECE_UNDERLINE])
         # a dummy prefix space is not added by the sp_model as it was de-activated
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁", out_type=str))
+        self.assertEqual(tokens, tokenizer.sp_model.encode(SPIECE_UNDERLINE + SPIECE_UNDERLINE, out_type=str))
 
     @require_jinja
     def test_tokenization_for_chat(self):
@@ -441,8 +444,10 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         fast_tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/dummy-gemma")
         slow_tokenizer = GemmaTokenizer.from_pretrained("hf-internal-testing/dummy-gemma")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
-        EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
-        EXPECTED_TOKENS = [ "Hey", "<eos>", ".", "▁", "\t\t", "▁", "\n\n", "you", "▁▁", "é", "▁▁", "@#", "😈", "▁▁", "🤗", "!", "▁▁▁▁▁▁▁", ",", "▁", "1", "2", "3", "4", "▁", "1", "5", "▁", "5", ",", "6", "1"]  # fmt: skip
+        EXPECTED_IDS = [2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
+        EXPECTED_TOKENS = ["Hey", "<eos>", ".", SPIECE_UNDERLINE, "\t\t", SPIECE_UNDERLINE, "\n\n",
+                            "you", SPIECE_UNDERLINE*2, "é", SPIECE_UNDERLINE*2, "@#", "😈", SPIECE_UNDERLINE*2, "🤗", "!", SPIECE_UNDERLINE*7,
+                            ",", SPIECE_UNDERLINE, "1", "2", "3", "4", SPIECE_UNDERLINE, "1", "5", SPIECE_UNDERLINE, "5", ",", "6", "1"]  # fmt: skip
 
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
@@ -470,7 +475,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         input_text = "\t\t\t\t \n\n61"
         EXPECTED_IDS = [2, 255971, 235248, 109, 235318, 235274]
-        EXPECTED_TOKENS = ["\t\t\t\t", "▁", "\n\n", "6", "1"]
+        EXPECTED_TOKENS = ["\t\t\t\t", SPIECE_UNDERLINE, "\n\n", "6", "1"]
 
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):

@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
@@ -39,8 +40,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/fnet-base": 512,
     "google/fnet-large": 512,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 
 class FNetTokenizer(PreTrainedTokenizer):

@@ -17,13 +17,13 @@ import tempfile
 import unittest
 
 from transformers import (
-    SPIECE_UNDERLINE,
     AddedToken,
     BatchEncoding,
     NllbTokenizer,
     NllbTokenizerFast,
     is_torch_available,
 )
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
 from transformers.testing_utils import (
     get_tests_dir,
@@ -66,7 +66,16 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = NllbTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"This",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -77,23 +86,23 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
+                SPIECE_UNDERLINE+"I",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"",
                 "9",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"f",
                 "al",
                 "s",
                 "é",
@@ -113,23 +122,23 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
+                SPIECE_UNDERLINE+"I",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"",
                 "<unk>",
                 "2",
                 "0",
                 "0",
                 "0",
                 ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"f",
                 "al",
                 "s",
                 "<unk>",

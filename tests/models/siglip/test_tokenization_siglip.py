@@ -18,7 +18,8 @@ import os
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
+from transformers import AddedToken, BatchEncoding, SiglipTokenizer
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
@@ -70,7 +71,16 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁this", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [66, 46, 10, 170, 382])
 
@@ -80,21 +90,21 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 SPIECE_UNDERLINE,
                 "i",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"",
                 "9",
                 "2",
                 "0",
                 "0",
                 "0",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"f",
                 "al",
                 "s",
                 "é",
@@ -109,21 +119,21 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 SPIECE_UNDERLINE,
                 "i",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"b",
                 "or",
                 "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"",
                 "<unk>",
                 "2",
                 "0",
                 "0",
                 "0",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"f",
                 "al",
                 "s",
                 "<unk>",
@@ -396,13 +406,13 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokens, [])
         self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
 
-        tokens = tokenizer.tokenize("▁")
+        tokens = tokenizer.tokenize(SPIECE_UNDERLINE)
         self.assertEqual(tokens, [])
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+        self.assertEqual(tokens, tokenizer.sp_model.encode(SPIECE_UNDERLINE, out_type=str))
 
-        tokens = tokenizer.tokenize(" ▁")
+        tokens = tokenizer.tokenize(" " + SPIECE_UNDERLINE)
         self.assertEqual(tokens, [])
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+        self.assertEqual(tokens, tokenizer.sp_model.encode(SPIECE_UNDERLINE, out_type=str))
 
 
 @require_sentencepiece
@@ -421,13 +431,13 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         cls.tokenizer = tokenizer
 
     def test_add_dummy_prefix(self):
-        # make sure `'▁'` is prepended, and outputs match sp_model's
+        # make sure `SPIECE_UNDERLINE` is prepended, and outputs match sp_model's
         # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
         input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [37, 86, 20])
         self.assertEqual(input_ids, [37, 86, 20])
         tokens = self.tokenizer.tokenize(". Hello")
-        self.assertEqual(tokens, ["▁he", "ll", "o"])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE+"he", "ll", "o"])
 
         tokens = self.tokenizer.tokenize("")
         self.assertEqual(tokens, [])
@@ -437,9 +447,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, [])
         self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
 
-        tokens = self.tokenizer.tokenize("▁")
+        tokens = self.tokenizer.tokenize(SPIECE_UNDERLINE)
         self.assertEqual(tokens, [])
-        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode(SPIECE_UNDERLINE, out_type=str))
 
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten
@@ -448,15 +458,20 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [37, 86, 20])
         self.assertEqual(input_ids, [37, 86, 20])
         tokens = self.tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ["▁he", "ll", "o"])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE+"he", "ll", "o"])
 
-        # `'▁'` is also a whitespace
-        input_ids = self.tokenizer.encode("▁He is not")
+        # `SPIECE_UNDERLINE` is also a whitespace
+        input_ids = self.tokenizer.encode(SPIECE_UNDERLINE+"He is not")
         self.assertEqual(input_ids, [37, 46, 44, 2])
-        tokens = self.tokenizer.tokenize("▁He is not")
-        self.assertEqual(tokens, ["▁he", "▁is", "▁not"])  # no extra space added
+        tokens = self.tokenizer.tokenize(SPIECE_UNDERLINE+"He is not")
+        self.assertEqual(
+            tokens, [SPIECE_UNDERLINE+"he", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"not"]
+        )  # no extra space added
 
-        input_ids = self.tokenizer.encode("▁He is not             ▁He")
+        input_ids = self.tokenizer.encode(f"{SPIECE_UNDERLINE}He is not             {SPIECE_UNDERLINE}He")
         self.assertEqual(input_ids, [37, 46, 44, 37, 2])
-        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(tokens, ["▁he", "▁is", "▁not", "▁he"])  # spaces are eaten by spm even if not start
+        tokens = self.tokenizer.tokenize(f"{SPIECE_UNDERLINE}He is not              {SPIECE_UNDERLINE}He")
+        self.assertEqual(
+            tokens,
+            [SPIECE_UNDERLINE+"he", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"not", SPIECE_UNDERLINE+"he"],
+        )  # spaces are eaten by spm even if not start

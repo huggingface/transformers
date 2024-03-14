@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import SPIECE_UNDERLINE
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.speecht5 import SpeechT5Tokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.tokenization_utils import AddedToken
@@ -207,7 +207,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = SpeechT5Tokenizer.from_pretrained("microsoft/speecht5_tts")
 
         tokens = tokenizer.tokenize("a = b")
-        self.assertEqual(tokens, ["▁", "a", "▁", "=", "▁", "b"])
+        self.assertEqual(tokens, [SPIECE_UNDERLINE, "a", SPIECE_UNDERLINE, "=", SPIECE_UNDERLINE, "b"])
 
         # the `'='` is unknown.
         ids = tokenizer.convert_tokens_to_ids(tokens)

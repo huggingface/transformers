@@ -17,6 +17,7 @@
 import unittest
 from typing import Tuple
 
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
@@ -51,7 +52,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
         text = "lower newer"
-        spm_tokens = ["▁l", "ow", "er", "▁new", "er"]
+        spm_tokens = [SPIECE_UNDERLINE+"l", "ow", "er", SPIECE_UNDERLINE+"new", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, spm_tokens)
 

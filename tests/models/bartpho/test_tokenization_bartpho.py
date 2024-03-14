@@ -16,6 +16,7 @@
 import os
 import unittest
 
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, BartphoTokenizer
 from transformers.testing_utils import get_tests_dir
 
@@ -33,7 +34,13 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
+        vocab = [
+            SPIECE_UNDERLINE+"This",
+            SPIECE_UNDERLINE+"is",
+            SPIECE_UNDERLINE+"a",
+            SPIECE_UNDERLINE+"t",
+            "est",
+        ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         self.special_tokens_map = {"unk_token": "<unk>"}
 
@@ -57,7 +64,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = BartphoTokenizer(SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map)
         text = "This is a là test"
-        bpe_tokens = "▁This ▁is ▁a ▁l à ▁t est".split()
+        bpe_tokens = f"{SPIECE_UNDERLINE}This {SPIECE_UNDERLINE}is {SPIECE_UNDERLINE}a {SPIECE_UNDERLINE}l à {SPIECE_UNDERLINE}t est".split()
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 

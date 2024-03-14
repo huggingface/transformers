@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
@@ -56,8 +57,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google-t5/t5-3b": 512,
     "google-t5/t5-11b": 512,
 }
-
-SPIECE_UNDERLINE = "▁"
 
 
 class T5Tokenizer(PreTrainedTokenizer):
@@ -405,7 +404,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
         SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
-        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `['H', 'e', 'y']` instead of `[SPIECE_UNDERLINE+'He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
@@ -415,7 +414,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
+        # 2. Remove self.unk_token from ['<','unk','>', SPIECE_UNDERLINE+'Hey']
         return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
     def _convert_token_to_id(self, token):

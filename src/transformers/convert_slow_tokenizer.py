@@ -26,6 +26,7 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
+from .constants.token_constants import SPIECE_UNDERLINE
 from .utils import is_protobuf_available, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -589,7 +590,7 @@ class SpmConverter(Converter):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         _normalizers = [
             normalizers.Strip(left=False, right=True),  # stripping is important
-            normalizers.Replace(Regex(" {2,}"), "▁"),
+            normalizers.Replace(Regex(" {2,}"), SPIECE_UNDERLINE),
         ]
         if not precompiled_charsmap:
             return normalizers.Sequence(_normalizers)
@@ -618,7 +619,7 @@ class SpmConverter(Converter):
         if normalizer is not None:
             tokenizer.normalizer = normalizer
 
-        replacement = "▁"
+        replacement = SPIECE_UNDERLINE
         add_prefix_space = True
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
@@ -1250,7 +1251,7 @@ class GemmaConvert(SpmConverter):
     """
 
     def normalizer(self, proto):
-        return normalizers.Replace(" ", "▁")
+        return normalizers.Replace(" ", SPIECE_UNDERLINE)
 
     def vocab(self, proto):
         vocab = [
@@ -1276,7 +1277,7 @@ class GemmaConvert(SpmConverter):
     def decoder(self, replacement, add_prefix_space):
         return decoders.Sequence(
             [
-                decoders.Replace("▁", " "),
+                decoders.Replace(SPIECE_UNDERLINE, " "),
                 decoders.ByteFallback(),
                 decoders.Fuse(),
             ]
@@ -1341,7 +1342,7 @@ class LlamaConverter(SpmConverter):
 
     def decoder(self, replacement, add_prefix_space):
         sequence = [
-            decoders.Replace("▁", " "),
+            decoders.Replace(SPIECE_UNDERLINE, " "),
             decoders.ByteFallback(),
             decoders.Fuse(),
         ]
@@ -1384,8 +1385,8 @@ class LlamaConverter(SpmConverter):
         sequence = []
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             if self.original_tokenizer.add_prefix_space:
-                sequence += [normalizers.Prepend(prepend="▁")]
-        sequence += [normalizers.Replace(pattern=" ", content="▁")]
+                sequence += [normalizers.Prepend(prepend=SPIECE_UNDERLINE)]
+        sequence += [normalizers.Replace(pattern=" ", content=SPIECE_UNDERLINE)]
         return normalizers.Sequence(sequence)
 
     def pre_tokenizer(self, replacement, add_prefix_space):

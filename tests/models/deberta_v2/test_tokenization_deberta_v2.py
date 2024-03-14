@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import DebertaV2Tokenizer, DebertaV2TokenizerFast
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -65,7 +66,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_do_lower_case(self):
         # fmt: off
         sequence = " \tHeLLo!how  \n Are yoU?  "
-        tokens_target = ["▁hello", "!", "how", "▁are", "▁you", "?"]
+        tokens_target = [SPIECE_UNDERLINE+"hello", "!", "how", SPIECE_UNDERLINE+"are", SPIECE_UNDERLINE+"you", "?"]
         # fmt: on
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", do_lower_case=True)
@@ -89,7 +90,8 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_split_by_punct(self):
         # fmt: off
         sequence = "I was born in 92000, and this is falsé."
-        tokens_target = ["▁", "<unk>", "▁was", "▁born", "▁in", "▁9", "2000", "▁", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "▁", ".", ]
+        tokens_target = [SPIECE_UNDERLINE, "<unk>", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"born", SPIECE_UNDERLINE+"in", SPIECE_UNDERLINE+"9", "2000",
+                         SPIECE_UNDERLINE, ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"fal", "s", "<unk>", SPIECE_UNDERLINE, ".", ]
         # fmt: on
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", split_by_punct=True)
@@ -105,7 +107,8 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_do_lower_case_split_by_punct(self):
         # fmt: off
         sequence = "I was born in 92000, and this is falsé."
-        tokens_target = ["▁i", "▁was", "▁born", "▁in", "▁9", "2000", "▁", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "▁", ".", ]
+        tokens_target = [SPIECE_UNDERLINE+"i", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"born", SPIECE_UNDERLINE+"in", SPIECE_UNDERLINE+"9", "2000", SPIECE_UNDERLINE,
+                         ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"fal", "s", "<unk>", SPIECE_UNDERLINE, ".", ]
         # fmt: on
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", do_lower_case=True, split_by_punct=True)
@@ -121,7 +124,9 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_do_lower_case_split_by_punct_false(self):
         # fmt: off
         sequence = "I was born in 92000, and this is falsé."
-        tokens_target = ["▁i", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", ".", ]
+        tokens_target = [SPIECE_UNDERLINE+"i", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"born", SPIECE_UNDERLINE+"in",
+                         SPIECE_UNDERLINE+"9", "2000", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+                         SPIECE_UNDERLINE+"fal", "s", "<unk>", ".", ]
         # fmt: on
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", do_lower_case=True, split_by_punct=False)
@@ -139,7 +144,9 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_do_lower_case_false_split_by_punct(self):
         # fmt: off
         sequence = "I was born in 92000, and this is falsé."
-        tokens_target = ["▁", "<unk>", "▁was", "▁born", "▁in", "▁9", "2000", "▁", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "▁", ".", ]
+        tokens_target = [SPIECE_UNDERLINE, "<unk>", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"born", SPIECE_UNDERLINE+"in",
+                         SPIECE_UNDERLINE+"9", "2000", SPIECE_UNDERLINE, ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+                         SPIECE_UNDERLINE+"fal", "s", "<unk>", SPIECE_UNDERLINE, ".", ]
         # fmt: on
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", do_lower_case=False, split_by_punct=True)
@@ -157,7 +164,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_do_lower_case_false_split_by_punct_false(self):
         # fmt: off
         sequence = " \tHeLLo!how  \n Are yoU?  "
-        tokens_target = ["▁", "<unk>", "e", "<unk>", "o", "!", "how", "▁", "<unk>", "re", "▁yo", "<unk>", "?"]
+        tokens_target = [SPIECE_UNDERLINE, "<unk>", "e", "<unk>", "o", "!", "how", SPIECE_UNDERLINE, "<unk>", "re", SPIECE_UNDERLINE+"yo", "<unk>", "?"]
         # fmt: on
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", do_lower_case=False, split_by_punct=False)
@@ -194,8 +201,22 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         sequence = "This is a test"
         ids_target = [13, 1, 4398, 25, 21, 1289]
-        tokens_target = ["▁", "T", "his", "▁is", "▁a", "▁test"]
-        back_tokens_target = ["▁", "<unk>", "his", "▁is", "▁a", "▁test"]
+        tokens_target = [
+            SPIECE_UNDERLINE,
+            "T",
+            "his",
+            SPIECE_UNDERLINE+"is",
+            SPIECE_UNDERLINE+"a",
+            SPIECE_UNDERLINE+"test",
+        ]
+        back_tokens_target = [
+            SPIECE_UNDERLINE,
+            "<unk>",
+            "his",
+            SPIECE_UNDERLINE+"is",
+            SPIECE_UNDERLINE+"a",
+            SPIECE_UNDERLINE+"test",
+        ]
 
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>", keep_accents=True)
         rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, unk_token="<unk>", keep_accents=True)
@@ -217,8 +238,12 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: off
         sequence = "I was born in 92000, and this is falsé."
         ids_target = [13, 1, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9]
-        tokens_target = ["▁", "I", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "é", ".", ]
-        back_tokens_target = ["▁", "<unk>", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", ".", ]
+        tokens_target = [SPIECE_UNDERLINE, "I", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"born", SPIECE_UNDERLINE+"in",
+                         SPIECE_UNDERLINE+"9", "2000", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+                         SPIECE_UNDERLINE+"fal", "s", "é", ".", ]
+        back_tokens_target = [SPIECE_UNDERLINE, "<unk>", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"born", SPIECE_UNDERLINE+"in",
+                              SPIECE_UNDERLINE+"9", "2000", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+                              SPIECE_UNDERLINE+"fal", "s", "<unk>", ".", ]
         # fmt: on
 
         ids = tokenizer.encode(sequence, add_special_tokens=False)

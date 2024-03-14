@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import GPTSw3Tokenizer
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_jinja, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -68,7 +69,16 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE+"This",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"a",
+                SPIECE_UNDERLINE+"t",
+                "est",
+            ],
+        )
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [465, 287, 265, 631, 842])
 
@@ -76,7 +86,9 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: off
         self.assertListEqual(
             tokens,
-            ["▁I", "▁was", "▁bor", "n", "▁in", "▁", "<0x39>", "2", "0", "0", "0", ",", "▁and", "▁this", "▁is", "▁f", "al", "s", "<0xC3>", "<0xA9>", "."],
+            [SPIECE_UNDERLINE+"I", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"bor", "n", SPIECE_UNDERLINE+"in",
+             SPIECE_UNDERLINE, "<0x39>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+             SPIECE_UNDERLINE+"f", "al", "s", "<0xC3>", "<0xA9>", "."],
         )
         # fmt: on
 
@@ -90,7 +102,9 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: off
         self.assertListEqual(
             back_tokens,
-            ["▁I", "▁was", "▁bor", "n", "▁in", "▁", "<0x39>", "2", "0", "0", "0", ",", "▁and", "▁this", "▁is", "▁f", "al", "s", "<0xC3>", "<0xA9>", "."]
+            [SPIECE_UNDERLINE+"I", SPIECE_UNDERLINE+"was", SPIECE_UNDERLINE+"bor", "n", SPIECE_UNDERLINE+"in",
+             SPIECE_UNDERLINE, "<0x39>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE+"and", SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is",
+             SPIECE_UNDERLINE+"f", "al", "s", "<0xC3>", "<0xA9>", "."]
         )
         # fmt: on
 

@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import FNetTokenizer, FNetTokenizerFast
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow, tooslow
 from transformers.tokenization_utils import AddedToken
 
@@ -60,7 +61,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "<unk>")
-        self.assertEqual(vocab_keys[-1], "▁eloquent")
+        self.assertEqual(vocab_keys[-1], SPIECE_UNDERLINE+"eloquent")
         self.assertEqual(len(vocab_keys), 30_000)
 
     def test_vocab_size(self):
@@ -92,14 +93,33 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = FNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁", "T", "his", "▁is", "▁a", "▁test"])
+        self.assertListEqual(
+            tokens,
+            [SPIECE_UNDERLINE, "T", "his", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"a", SPIECE_UNDERLINE+"test"],
+        )
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [13, 1, 4398, 25, 21, 1289])
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
             tokens,
-            ["▁", "I", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "é", "."],
+            [
+                SPIECE_UNDERLINE,
+                "I",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"born",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"9",
+                "2000",
+                ",",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"fal",
+                "s",
+                "é",
+                ".",
+            ],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [13, 1, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
@@ -108,18 +128,18 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             [
-                "▁",
+                SPIECE_UNDERLINE,
                 "<unk>",
-                "▁was",
-                "▁born",
-                "▁in",
-                "▁9",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"born",
+                SPIECE_UNDERLINE+"in",
+                SPIECE_UNDERLINE+"9",
                 "2000",
                 ",",
-                "▁and",
-                "▁this",
-                "▁is",
-                "▁fal",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"fal",
                 "s",
                 "<unk>",
                 ".",

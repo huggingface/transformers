@@ -27,6 +27,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
@@ -192,9 +193,9 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 expected_results = [
                     ((0, 0), tokenizer_r.cls_token),
-                    ((0, 1), "▁a"),
+                    ((0, 1), SPIECE_UNDERLINE+"a"),
                     ((0, 6), tokenizer_r.mask_token),
-                    ((0, 4), "▁test"),
+                    ((0, 4), SPIECE_UNDERLINE+"test"),
                     ((0, 0), tokenizer_r.sep_token),
                 ]
 

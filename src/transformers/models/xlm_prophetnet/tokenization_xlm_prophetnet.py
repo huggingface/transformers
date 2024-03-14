@@ -18,13 +18,13 @@ import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
+from ...constants.token_constants import SPIECE_UNDERLINE
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 

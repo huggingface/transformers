@@ -17,6 +17,7 @@
 import unittest
 
 from transformers import ErnieMTokenizer
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -59,7 +60,7 @@ class ErnieMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "<unk>")
-        self.assertEqual(vocab_keys[-1], "▁eloquent")
+        self.assertEqual(vocab_keys[-1], SPIECE_UNDERLINE+"eloquent")
         self.assertEqual(len(vocab_keys), 30_000)
 
     def test_vocab_size(self):
@@ -91,14 +92,33 @@ class ErnieMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = ErnieMTokenizer(SAMPLE_VOCAB, do_lower_case=True, unk_token="<unk>", pad_token="<pad>")
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁this", "▁is", "▁a", "▁test"])
+        self.assertListEqual(
+            tokens,
+            [SPIECE_UNDERLINE+"this", SPIECE_UNDERLINE+"is", SPIECE_UNDERLINE+"a", SPIECE_UNDERLINE+"test"],
+        )
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [48, 25, 21, 1289])
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         # ErnieMTokenizer(paddlenlp implementation) outputs '9' instead of '_9' so to mimic that '_9' is changed to '9'
         self.assertListEqual(
-            tokens, ["▁i", "▁was", "▁born", "▁in", "9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "é", "."]
+            tokens,
+            [
+                SPIECE_UNDERLINE+"i",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"born",
+                SPIECE_UNDERLINE+"in",
+                "9",
+                "2000",
+                ",",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"fal",
+                "s",
+                "é",
+                ".",
+            ],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [31, 23, 386, 19, 518, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
@@ -106,7 +126,22 @@ class ErnieMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
-            ["▁i", "▁was", "▁born", "▁in", "9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "."],
+            [
+                SPIECE_UNDERLINE+"i",
+                SPIECE_UNDERLINE+"was",
+                SPIECE_UNDERLINE+"born",
+                SPIECE_UNDERLINE+"in",
+                "9",
+                "2000",
+                ",",
+                SPIECE_UNDERLINE+"and",
+                SPIECE_UNDERLINE+"this",
+                SPIECE_UNDERLINE+"is",
+                SPIECE_UNDERLINE+"fal",
+                "s",
+                "<unk>",
+                ".",
+            ],
         )
 
     def test_sequence_builders(self):

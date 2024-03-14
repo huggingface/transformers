@@ -24,6 +24,7 @@ from transformers import (
     TokenClassificationPipeline,
     pipeline,
 )
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -752,7 +753,13 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         # ensure expected tokenization and correct is_subword values
         self.assertEqual(
             [(entity["word"], entity["is_subword"]) for entity in pre_entities],
-            [("▁I", False), ("▁play", False), ("▁the", False), ("▁there", False), ("min", True)],
+            [
+                (SPIECE_UNDERLINE+"I", False),
+                (SPIECE_UNDERLINE+"play", False),
+                (SPIECE_UNDERLINE+"the", False),
+                (SPIECE_UNDERLINE+"there", False),
+                ("min", True),
+            ],
         )
 
     @require_tf

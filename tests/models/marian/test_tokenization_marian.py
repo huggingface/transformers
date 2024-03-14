@@ -19,6 +19,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
+from transformers.constants.token_constants import SPIECE_UNDERLINE
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, slow
 from transformers.utils import is_sentencepiece_available, is_tf_available, is_torch_available
 
@@ -51,7 +52,17 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
+        vocab = [
+            "</s>",
+            "<unk>",
+            SPIECE_UNDERLINE+"This",
+            SPIECE_UNDERLINE+"is",
+            SPIECE_UNDERLINE+"a",
+            SPIECE_UNDERLINE+"t",
+            "est",
+            "\u0120",
+            "<pad>",
+        ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab"])
