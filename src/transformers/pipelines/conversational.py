@@ -304,15 +304,11 @@ class ConversationalPipeline(Pipeline):
             input_ids = tf.constant([input_ids])
         return {"input_ids": input_ids, "conversation": conversation}
 
-    def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
+    def _forward(self, model_inputs, **generate_kwargs):
         n = model_inputs["input_ids"].shape[1]
         conversation = model_inputs.pop("conversation")
         if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
             generate_kwargs["max_new_tokens"] = 256
-
-        # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-        if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-            generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
 
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:

@@ -419,19 +419,13 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                     "is_last": span_idx == num_spans - 1,
                 }
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, **generate_kwargs):
         p_mask = model_inputs.pop("p_mask", None)
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
         is_last = model_inputs.pop("is_last", False)
 
         if self.model_type == ModelType.VisionEncoderDecoder:
-            generate_kwargs = {}
-
-            # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-            if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-                generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
-
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)

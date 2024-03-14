@@ -125,10 +125,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def _forward(self, model_inputs, **generate_kwargs):
         if self.model.can_generate():
-            # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-            if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-                generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
-
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)

@@ -140,10 +140,6 @@ class TextToAudioPipeline(Pipeline):
             # generate_kwargs get priority over forward_params
             forward_params.update(generate_kwargs)
 
-            # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-            if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-                forward_params["pad_token_id"] = self.tokenizer.pad_token_id
-
             output = self.model.generate(**model_inputs, **forward_params)
         else:
             if len(generate_kwargs):

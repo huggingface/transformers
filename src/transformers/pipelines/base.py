@@ -1091,6 +1091,15 @@ class Pipeline(_ScikitCompat):
         return torch.no_grad
 
     def forward(self, model_inputs, **forward_params):
+        # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
+        # forward params.
+        if (
+            self.tokenizer is not None
+            and self.tokenizer.pad_token_id is not None
+            and self.model.generation_config.pad_token_id is None
+        ):
+            forward_params["pad_token_id"] = self.tokenizer.pad_token_id
+
         with self.device_placement():
             if self.framework == "tf":
                 model_inputs["training"] = False

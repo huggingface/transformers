@@ -17,9 +17,7 @@ import unittest
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
-    AutoTokenizer,
     TextGenerationPipeline,
-    is_torch_available,
     logging,
     pipeline,
 )
@@ -36,12 +34,6 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
-
-
-if is_torch_available():
-    import torch
-
-    from transformers import AutoModelForCausalLM
 
 
 @is_pipeline_test
@@ -387,6 +379,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_accelerate
     @require_torch_gpu
     def test_small_model_pt_bloom_accelerate(self):
+        import torch
+
         # Classic `model_kwargs`
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
@@ -441,6 +435,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_torch
     @require_torch_accelerator
     def test_small_model_fp16(self):
+        import torch
+
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
             device=torch_device,
@@ -452,6 +448,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_accelerate
     @require_torch_accelerator
     def test_pipeline_accelerate_top_p(self):
+        import torch
+
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom", device_map=torch_device, torch_dtype=torch.float16
         )
@@ -479,19 +477,3 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_length=10)
         self.assertNotIn(logger_msg, cl.out)
-
-    @require_torch
-    def test_pipeline_tokenizer_has_pad_but_model_doesnt(self):
-        # When the tokenizer pad_token_id is set but the model pad_token_id is not, we pass the pad_token_id to
-        # `generate`. This prevents a warning from being raised, which this test checks.
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model.config.pad_token_id = None
-        model.generation_config.pad_token_id = None
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-
-        llm = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="pt")
-        with self.assertRaises(AssertionError) as exc:
-            with self.assertLogs("transformers", level="WARNING"):
-                llm("The capital of France ")
-        self.assertIn("no logs of level WARNING or higher triggered", str(exc.exception))

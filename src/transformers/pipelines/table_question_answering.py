@@ -377,7 +377,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         inputs["table"] = table
         return inputs
 
-    def _forward(self, model_inputs, sequential=False):
+    def _forward(self, model_inputs, sequential=False, **generate_kwargs):
         table = model_inputs.pop("table")
 
         if self.type == "tapas":
@@ -386,12 +386,6 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
-            generate_kwargs = {}
-
-            # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-            if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-                generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
-
             outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs

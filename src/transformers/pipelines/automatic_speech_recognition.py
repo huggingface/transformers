@@ -456,10 +456,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
-        if generate_kwargs is None:
-            generate_kwargs = {}
-
+    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         is_last = model_inputs.pop("is_last")
@@ -495,10 +492,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 generate_kwargs["input_features"] = inputs
             else:
                 generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
-
-            # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-            if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-                generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
 
             tokens = self.model.generate(
                 attention_mask=attention_mask,

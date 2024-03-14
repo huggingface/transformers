@@ -323,10 +323,6 @@ class TextGenerationPipeline(Pipeline):
             if not has_min_new_tokens and "min_length" in generate_kwargs:
                 generate_kwargs["min_length"] += prefix_length
 
-        # If the tokenizer has a pad token but the model doesn't, we add it to the `generate` call
-        if self.tokenizer.pad_token_id is not None and self.model.generation_config.pad_token_id is None:
-            generate_kwargs["pad_token_id"] = self.tokenizer.pad_token_id
-
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         out_b = generated_sequence.shape[0]
