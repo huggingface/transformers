@@ -1776,6 +1776,7 @@ class Trainer:
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
+                self._fsdp_qlora_plugin_updates()
                 self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
@@ -4177,3 +4178,20 @@ class Trainer:
         ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
         ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
         ds_plugin.hf_ds_config.trainer_config_process(self.args, auto_find_batch_size)
+
+    def _fsdp_qlora_plugin_updates(self):
+        if self.is_fsdp_enabled and _is_peft_model(self.model):
+            from peft import LoraConfig
+            from peft.utils.other import fsdp_auto_wrap_policy
+
+            if isinstance(self.model.active_peft_config, LoraConfig):
+                fsdp_plugin = self.accelerator.state.fsdp_plugin
+                fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
+            if (
+                getattr(self.model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+                and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
+                and version.parse(accelerate_version) > version.parse("0.27.0")
+            ):
+                fsdp_plugin.set_mixed_precision(
+                    self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
+                )

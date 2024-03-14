@@ -33,6 +33,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class ElectraTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/electra-small-generator"
     tokenizer_class = ElectraTokenizer
     rust_tokenizer_class = ElectraTokenizerFast
     test_rust_tokenizer = True
