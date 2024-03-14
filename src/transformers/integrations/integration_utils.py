@@ -14,7 +14,6 @@
 """
 Integrations with other Python libraries.
 """
-
 import functools
 import importlib.metadata
 import importlib.util
@@ -56,6 +55,7 @@ if _has_comet:
     try:
         import comet_ml  # noqa: F401
 
+        # TODO: It's likely to avoid crashing if NO API Key is set. Is it the right API to call?
         if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
             _has_comet = True
         else:
@@ -944,6 +944,7 @@ class CometCallback(TrainerCallback):
             raise RuntimeError("CometCallback requires comet-ml to be installed. Run `pip install comet-ml`.")
         self._initialized = False
         self._log_assets = False
+        self._experiment = None
 
     def setup(self, args, state, model):
         """
@@ -969,23 +970,57 @@ class CometCallback(TrainerCallback):
         if log_assets in {"TRUE", "1"}:
             self._log_assets = True
         if state.is_world_process_zero:
-            comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
-            experiment = None
-            experiment_kwargs = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
-            if comet_mode == "ONLINE":
-                experiment = comet_ml.Experiment(**experiment_kwargs)
-                experiment.log_other("Created from", "transformers")
-                logger.info("Automatic Comet.ml online logging enabled")
-            elif comet_mode == "OFFLINE":
-                experiment_kwargs["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
-                experiment = comet_ml.OfflineExperiment(**experiment_kwargs)
-                experiment.log_other("Created from", "transformers")
-                logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
-            if experiment is not None:
-                experiment._set_model_graph(model, framework="transformers")
-                experiment._log_parameters(args, prefix="args/", framework="transformers")
-                if hasattr(model, "config"):
-                    experiment._log_parameters(model.config, prefix="config/", framework="transformers")
+            comet_old_mode = os.getenv("COMET_MODE")
+
+            mode = None
+            online = None
+
+            if comet_old_mode is not None:
+                comet_old_mode = comet_old_mode.lower()
+
+                if comet_old_mode == "online":
+                    online = True
+                elif comet_old_mode == "offline":
+                    online = False
+                elif comet_old_mode in ("get", "get_or_create", "create"):
+                    mode = comet_old_mode
+                elif comet_old_mode:
+                    logger.warning("Invalid COMET_MODE env value %r, Comet logging is disabled", comet_old_mode)
+                    return
+
+            # For HPO, we always create a new experiment for each trial
+            if state.is_hyper_param_search:
+                if mode is not None:
+                    logger.warning("Hyperparameter Search is enabled, forcing the creation of new experimetns, COMET_MODE value %r  is ignored", comet_old_mode)
+                mode = "create"
+
+            import comet_ml
+
+            self._experiment = comet_ml.start(online=online, mode=mode)
+            self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
+
+            # Do not use the default run_name as the experiment name
+            if args.run_name is not None and args.run_name != args.output_dir:
+                self._experiment.set_name(args.run_name)
+
+            params = {"args": args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config.to_dict()
+                params["config"] = model_config
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                params["peft_config"] = peft_config
+
+            self._experiment.__internal_api__log_parameters__(
+                params, framework="transformers", source="manual", flatten_nested=True
+            )
+
+            if state.is_hyper_param_search:
+                optimization_id = getattr(state, "trial_name", None)
+                optimization_params = getattr(state, "trial_params", None)
+
+                self._experiment.log_optimization(optimization_id=optimization_id, parameters=optimization_params)
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if not self._initialized:
@@ -995,20 +1030,24 @@ class CometCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
-            experiment = comet_ml.config.get_global_experiment()
-            if experiment is not None:
-                experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
+            if self._experiment is not None:
+                self._experiment.__internal_api__log_metrics__(
+                    logs, step=state.global_step, epoch=state.epoch, framework="transformers"
+                )
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            experiment = comet_ml.config.get_global_experiment()
-            if experiment is not None:
+            if self._experiment is not None:
                 if self._log_assets is True:
                     logger.info("Logging checkpoints. This may take time.")
-                    experiment.log_asset_folder(
+                    self._experiment.log_asset_folder(
                         args.output_dir, recursive=True, log_file_name=True, step=state.global_step
                     )
-                experiment.end()
+
+            # We create one experiment per trial in HPO mode
+            if state.is_hyper_param_search:
+                self._experiment.clean()
+                self._initialized = False
 
 
 class AzureMLCallback(TrainerCallback):
