@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
-    # Check if the package spec exists to avoid importing a local directory
+    # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
     if package_exists:
