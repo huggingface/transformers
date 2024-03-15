@@ -163,7 +163,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Gemma
+# Edited from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Gemma
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -919,7 +919,7 @@ class GemmaModel(GemmaPreTrainedModel):
         # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype = hidden_states.dtype)
         hidden_states = hidden_states * normalizer
-        
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
