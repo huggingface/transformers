@@ -87,6 +87,11 @@ class GenerationTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
 
+        # It is important set set the eos_token_id to None to ensure that no sequences
+        # shorter than `max_length` can be generated
+        config.eos_token_id = None
+        config.forced_eos_token_id = None
+
         # cut to half length & take max batch_size 3
         sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:batch_size, :sequence_length]
@@ -419,11 +424,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
                 model=model, input_ids=input_ids, attention_mask=attention_mask, max_length=max_length
@@ -435,10 +435,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
@@ -469,11 +465,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             if not hasattr(config, "use_cache"):
                 self.skipTest("This model doesn't support caching")
 
@@ -498,11 +489,6 @@ class GenerationTesterMixin:
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
@@ -531,10 +517,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
@@ -578,12 +560,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
                 max_length = 4
@@ -613,12 +589,6 @@ class GenerationTesterMixin:
 
             # disable cache
             config.use_cache = False
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
@@ -662,12 +632,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             # enable cache
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             if not hasattr(config, "use_cache"):
                 self.skipTest("This model doesn't support caching")
@@ -735,12 +699,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
 
             model = model_class(config).to(torch_device).eval()
@@ -766,12 +724,6 @@ class GenerationTesterMixin:
 
             # disable cache
             config.use_cache = False
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
@@ -826,12 +778,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
                 max_length = 4
@@ -872,12 +818,6 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
@@ -923,12 +863,6 @@ class GenerationTesterMixin:
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             max_length = 20
@@ -994,12 +928,6 @@ class GenerationTesterMixin:
             # disable cache
             config.use_cache = False
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
                 max_length = 20
@@ -1057,12 +985,6 @@ class GenerationTesterMixin:
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
                 self.skipTest("This model doesn't support caching")
@@ -1083,12 +1005,6 @@ class GenerationTesterMixin:
                 self.skipTest("Won't fix: old model with different cache format")
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -1121,11 +1037,6 @@ class GenerationTesterMixin:
                 self.skipTest("TODO: fix me")
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
 
             # NOTE: contrastive search only works with cache on at the moment.
             if not hasattr(config, "use_cache"):
@@ -2187,15 +2098,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # lets run beam search using 3 beams
         num_beams = 3
         # define decoder start token ids
-        input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
+        input_ids = torch.ones((1, 1), device=model.device, dtype=torch.long)
         input_ids = input_ids * model.config.decoder_start_token_id
 
         # add encoder_outputs to model keyword arguments
-        model_kwargs = {
-            "encoder_outputs": model.get_encoder()(
-                encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-            )
-        }
+        model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids, return_dict=True)}
 
         outputs = model.generate(
             input_ids, num_beams=num_beams, min_length=5, eos_token_id=model.config.eos_token_id, **model_kwargs
@@ -2398,15 +2305,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # lets run beam search using 5 beams
         num_beams = 5
         # define decoder start token ids
-        input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
+        input_ids = torch.ones((1, 1), device=model.device, dtype=torch.long)
         input_ids = input_ids * model.config.decoder_start_token_id
 
         # add encoder_outputs to model keyword arguments
-        model_kwargs = {
-            "encoder_outputs": model.get_encoder()(
-                encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-            )
-        }
+        model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids, return_dict=True)}
 
         constraint_str = "sind"
         constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # remove eos token
