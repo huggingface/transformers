@@ -115,6 +115,7 @@ class TrainerState:
         if self.stateful_callbacks is None:
             self.stateful_callbacks = {}
         elif isinstance(self.stateful_callbacks, dict):
+            # We are loading the callbacks in from the state file, no need to process them
             pass
         else:
             # Saveable callbacks get stored as dict of kwargs
