@@ -329,9 +329,10 @@ class WhisperGenerationMixin:
             task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
-            language (`str`, *optional*):
-                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
-                find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
+            language (`str` or list of `str`, *optional*):
+                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. For
+                batched generation, a list of language tokens can be passed. You can find all the possible language
+                tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
                 Whether or not the model is multilingual.
             prompt_ids (`torch.Tensor`, *optional*):
