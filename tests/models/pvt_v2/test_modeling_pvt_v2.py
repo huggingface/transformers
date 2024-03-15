@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
+from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -37,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
+    from transformers import AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
 
 
 if is_vision_available():
