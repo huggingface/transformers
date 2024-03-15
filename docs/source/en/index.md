@@ -171,6 +171,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [LeViT](model_doc/levit)                         |       ✅        |         ❌         |      ❌      |
 |                          [LiLT](model_doc/lilt)                          |       ✅        |         ❌         |      ❌      |
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
+|                     [LLaMA-MoE](model_doc/llama_moe)                     |       ✅        |         ❌         |      ❌      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
 |                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |

@@ -550,6 +550,7 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "models.llama_moe": ["LLAMA_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaMoEConfig"],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
@@ -1444,6 +1445,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2515,6 +2517,17 @@ else:
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llama_moe"].extend(
+        [
+            "LLAMA_MOE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LlamaMoEDecoderLayer",
+            "LlamaMoEForCausalLM",
+            "LlamaMoEForQuestionAnswering",
+            "LlamaMoEForSequenceClassification",
+            "LlamaMoEModel",
+            "LlamaMoEPreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
@@ -5368,6 +5381,7 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .models.llama_moe import LLAMA_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaMoEConfig
     from .models.llava import (
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
@@ -7130,6 +7144,17 @@ if TYPE_CHECKING:
             LlamaModel,
             LlamaPreTrainedModel,
         )
+
+        # PyTorch model imports
+        from .models.llama_moe import (
+            LLAMA_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlamaMoEDecoderLayer,
+            LlamaMoEForCausalLM,
+            LlamaMoEForQuestionAnswering,
+            LlamaMoEForSequenceClassification,
+            LlamaMoEModel,
+            LlamaMoEPreTrainedModel,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
@@ -7675,8 +7700,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
