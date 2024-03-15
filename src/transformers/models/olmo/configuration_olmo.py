@@ -19,6 +19,8 @@
 # limitations under the License.
 """ OLMo model configuration"""
 
+from enum import Enum
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -28,6 +30,152 @@ logger = logging.get_logger(__name__)
 OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "allenai/OLMo": "https://huggingface.co/allenai/OLMo/resolve/main/config.json",
 }
+
+
+class StrEnum(str, Enum):
+    """
+    This is equivalent to Python's :class:`enum.StrEnum` since version 3.11.
+    We include this here for compatibility with older version of Python.
+    """
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return f"'{str(self)}'"
+
+
+class LayerNormType(StrEnum):
+    default = "default"
+    """
+    The default LayerNorm implementation, equivalent to PyTorch's built-in version.
+    """
+
+    low_precision = "low_precision"
+    """
+    A low-precision version of the default LayerNorm.
+    """
+
+    rms = "rms"
+    """
+    An RMSNorm implementation. When using ``torch.compile`` this is
+    probably the fastest implementation.
+    """
+
+
+class ActivationType(StrEnum):
+    gelu = "gelu"
+    relu = "relu"
+    swiglu = "swiglu"
+
+
+class ActivationCheckpointingStrategy(StrEnum):
+    whole_layer = "whole_layer"
+    """
+    Checkpoint every transformer layer.
+    """
+
+    one_in_two = "one_in_two"
+    """
+    Checkpoint one in two transformer layers.
+    """
+
+    one_in_three = "one_in_three"
+    """
+    Checkpoint one in three transformer layers.
+    """
+
+    one_in_four = "one_in_four"
+    """
+    Checkpoint one in four transformer layers.
+    """
+
+    fine_grained = "fine_grained"
+    """
+    Focus checkpointing on where it is cheap to recompute and saves most memory.
+    """
+
+
+class InitFnType(StrEnum):
+    mitchell = "mitchell"
+    """
+    The strategy suggested to us by Mitchell Wortsman from UW.
+    This uses a truncated normal distribution with an adaptive standard deviation that depends
+    on the size of the weights as well as the depth of the layer.
+    """
+
+    normal = "normal"
+    """
+    All weights are initialized from the same normal distribution.
+    """
+
+    kaiming_normal = "kaiming_normal"
+    """
+    All weights are initialized with the Kaiming method from a normal distribution.
+    Note this currently won't work with FSDP.
+    """
+
+    fan_in = "fan_in"
+    """
+    "Fan-in variance scaling", i.e. normal with a standard deviation of ``1/sqrt(d_in)`` where ``d_in``
+    is the input dimensionality of the kernel.
+    """
+
+    full_megatron = "full_megatron"
+    """
+    This is what metaseq calls "full megatron init". It is the init used for Llama 2.
+    """
+
+
+class BlockType(StrEnum):
+    sequential = "sequential"
+    parallel = "parallel"
+
+    llama = "llama"
+    """
+    A block similar to the sequential block with slightly different
+    implementations of operations like attention to imitate the behavior of Llama.
+    """
+
+
+class FSDPWrapStrategy(StrEnum):
+    by_block = "by_block"
+    """
+    Wrap each OLMo block with its own FSDP instance.
+    """
+
+    by_block_and_size = "by_block_and_size"
+    """
+    Like 'by_block' but `wte` and `ff_out` will be wrapped separately as well.
+    """
+
+    by_block_group = "by_block_group"
+    """
+    Wrap each block group together into its own FSDP instance.
+    This requires :attr:`~ModelConfig.block_group_size` to be bigger than 1.
+    """
+
+    by_block_group_and_size = "by_block_group_and_size"
+    """
+    Like 'by_block_group' but `wte` and `ff_out` will be wrapped separately as well.
+    """
+
+    size_based = "size_based"
+    """
+    Used PyTorch's default size-based auto wrap policy.
+    """
+
+    one_in_two = "one_in_two"
+    one_in_three = "one_in_three"
+    one_in_four = "one_in_four"
+    one_in_five = "one_in_five"
+
+
+class CheckpointType(StrEnum):
+    sharded = "sharded"
+    unsharded = "unsharded"
+    sharded_ephemeral = "sharded_ephemeral"
+
 
 class OLMoConfig(PretrainedConfig):
     r"""
