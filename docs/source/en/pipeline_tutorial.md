@@ -315,3 +315,25 @@ output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
 Note that you can replace the checkpoint with any of the Hugging Face model that supports large model loading such as BLOOM!
+
+## Creating web demos from pipelines with `gradio`
+
+Pipelines are automatically supported in [the gradio library](https://github.com/gradio-app/gradio/), making it a breeze to create a web demo
+based on your pipeline. For example, here we create a web demo around an image classification model in a single line of code:
+
+```py
+from transformers import pipeline
+import gradio as gr
+
+pipe = pipeline("image-classification", model="google/vit-base-patch16-224")
+
+gr.Interface.from_pipeline(pipe).launch()
+```
+
+which opens an intuitive drag-and-drop interface in your browser:
+
+![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/panda-classification.png)
+
+By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
+link by setting `share=True` in `launch()`. Or, you can host your demo on [Hugging Face Spaces](https://huggingface.co/spaces)https://huggingface.co/spaces for a permanent link. 
+
