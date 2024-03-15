@@ -1154,6 +1154,10 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
     @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template(self):
+        pass
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
     def test_chat_template_batched(self):
         pass
 
