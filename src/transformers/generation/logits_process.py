@@ -2295,12 +2295,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         self.fixed_table = torch.randperm(self.table_size, generator=self.rng, device=device)
 
     def set_seed(self, input_ids: torch.LongTensor):
-        if self.seeding_scheme == "selfhash":
-            a = self.fixed_table[input_ids % self.table_size] + 1
-            b = self.fixed_table[input_ids[-1] % self.table_size] + 1
-            seed = (self.hash_key * a * b).min().item()
-        else:
-            seed = self.hash_key * input_ids[-1].item()
+        seed = self.hash_key * input_ids[-1].item()
         self.rng.manual_seed(seed % (2**64 - 1))
 
     def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
@@ -2317,7 +2312,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         final_greenlist = []
         _, greedy_predictions = scores.sort(dim=-1, descending=True)
         for i in range(40):
-            greenlist_ids = self._get_greenlist_ids(torch.cat([input_ids, greedy_predictions[i, None, None]], dim=-1))
+            greenlist_ids = self._get_greenlist_ids(torch.cat([input_ids, greedy_predictions[i, None]], dim=-1))
             if greedy_predictions[i] in greenlist_ids:
                 final_greenlist.append(greedy_predictions[i])
         return torch.tensor(final_greenlist, device=input_ids.device)
@@ -2325,10 +2320,10 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         greenlist_token_ids = torch.empty(
             scores.shape[0], self.greenlist_size, device=scores.device, dtype=torch.int64
-        )
+        )  
         for b_idx, input_seq in enumerate(input_ids):
             if self.seeding_scheme == "selfhash":
-                greenlist_ids = self._score_rejection_sampling(input_ids, scores[b_idx])
+                greenlist_ids = self._score_rejection_sampling(input_seq, scores[b_idx])
             else:
                 greenlist_ids = self._get_greenlist_ids(input_ids=input_seq)
 

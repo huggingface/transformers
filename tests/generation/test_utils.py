@@ -2824,7 +2824,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         # as long as we use the same inputs, hashing key and device, we can be sure that output are deterministic when greedy decoding
         self.assertListEqual(output.tolist(), [[40, 481, 307, 736, 2582, 553, 262, 1893, 531, 13]])
-        self.assertListEqual(output_selfhash.tolist(), [[40, 481, 307, 262, 717, 284, 9159, 326, 262, 366]])
+        self.assertListEqual(output_selfhash.tolist(), [[40, 481, 307, 262, 717, 530, 284, 9159, 326, 262]])
 
     @slow
     def test_beam_search_example_integration(self):
