@@ -310,10 +310,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
     def __init__(self, config: PalmaConfig):
         super().__init__(config)
         self.vision_model = PalmaSiglipVisionTransformer(config=config.vision_config)
-
-        # Here Moved out AutoModel since the arch is slightly different and we don't want to rewrite .head on-the-fly
-        # AutoModel.from_config(config.vision_config)
-
         self.multi_modal_projector = PalmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
@@ -351,7 +347,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    """
+    
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
@@ -420,7 +416,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
-    """
+    
 
     @add_start_docstrings_to_model_forward(PALMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PalmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -486,12 +482,13 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         )
 
         if inputs_embeds is None:
+            # TODO adapt to Palma from Llava (no interlevaing, etc)
             # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+                image_outputs = self.vision_model(pixel_values, output_hidden_states=True)
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
                 selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
 
@@ -587,6 +584,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
     ):
+        print("Preparing inputs....")
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
@@ -599,6 +597,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                breakpoint()
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
@@ -610,10 +609,12 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
+                breakpoint()
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
+            breakpoint()
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
@@ -622,8 +623,11 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
+            print("First pass")
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
+            print("Next pass")
+
             model_inputs = {"input_ids": input_ids}
 
         model_inputs.update(
