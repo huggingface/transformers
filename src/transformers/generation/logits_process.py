@@ -2291,8 +2291,6 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         self.hash_key = hashing_key
 
         self.rng.manual_seed(hashing_key)
-        self.table_size = 1_000_003
-        self.fixed_table = torch.randperm(self.table_size, generator=self.rng, device=device)
 
     def set_seed(self, input_ids: torch.LongTensor):
         seed = self.hash_key * input_ids[-1].item()
