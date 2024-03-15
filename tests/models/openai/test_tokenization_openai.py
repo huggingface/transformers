@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openai-community/openai-gpt"
     """Tests OpenAIGPTTokenizer that uses BERT BasicTokenizer."""
 
     tokenizer_class = OpenAIGPTTokenizer

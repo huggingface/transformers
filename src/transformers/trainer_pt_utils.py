@@ -39,13 +39,13 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
-from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
+from .utils import is_sagemaker_mp_enabled, is_torch_xla_available, is_training_run_on_sagemaker, logging
 
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
@@ -179,7 +179,7 @@ def nested_detach(tensors):
 
 
 def nested_xla_mesh_reduce(tensors, name):
-    if is_torch_tpu_available():
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         if isinstance(tensors, (list, tuple)):

@@ -37,6 +37,9 @@ like token streaming.
 	- from_pretrained
 	- from_model_config
 	- save_pretrained
+	- update
+	- validate
+	- get_generation_mode
 
 ## GenerationMixin
 
