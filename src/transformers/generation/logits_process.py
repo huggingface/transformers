@@ -2243,7 +2243,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         seeding_scheme (`str`, optional):
             The seeding scheme used for selecting "green" tokens. Accepts values:
                 - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from paper)
-                - "selfhash": "green" tokens selection depends ono the current token itself (Algorithm 3 from paper)
+                - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from paper)
                     The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
 
     Examples:
