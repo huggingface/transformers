@@ -318,8 +318,10 @@ Note that you can replace the checkpoint with any Hugging Face model that suppor
 
 ## Creating web demos from pipelines with `gradio`
 
-Pipelines are automatically supported in [the gradio library](https://github.com/gradio-app/gradio/), making it a breeze to create a web demo
-based on your pipeline. First, make sure you have installed `gradio` with: `pip install gradio`.
+Pipelines are automatically supported in [Gradio](https://github.com/gradio-app/gradio/), a library that makes creating beautiful and user-friendly machine learning apps on the web a breeze. First, make sure you have Gradio installed:
+
+```py
+ pip install gradio
 
 Then, create a web demo around an image classification pipeline (or any other pipeline) in a single line of code:
 
