@@ -134,7 +134,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return torch.int8
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ):
         import bitsandbytes as bnb
 
