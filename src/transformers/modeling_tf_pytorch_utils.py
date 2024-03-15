@@ -452,7 +452,6 @@ def load_sharded_pytorch_safetensors_in_tf2_model(
     _prefix=None,
     tf_to_pt_weight_rename=None,
     ignore_mismatched_sizes=False,
-    skip_logger_warnings=False,
 ):
     all_loading_infos = []
     for shard in safetensors_shards:
@@ -476,8 +475,7 @@ def load_sharded_pytorch_safetensors_in_tf2_model(
     unexpected_keys = sum([info["unexpected_keys"] for info in all_loading_infos], [])
     mismatched_keys = sum([info["mismatched_keys"] for info in all_loading_infos], [])
 
-    if not skip_logger_warnings:
-        _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name=tf_model.__class__.__name__)
+    _log_key_warnings(missing_keys, unexpected_keys, mismatched_keys, class_name=tf_model.__class__.__name__)
 
     if output_loading_info:
         loading_info = {
