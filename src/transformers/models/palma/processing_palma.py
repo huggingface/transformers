@@ -42,7 +42,7 @@ class PalmaProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "SiglipImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -102,10 +102,9 @@ class PalmaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-        else:
-            pixel_values = None
+        if images is None or text is None:
+            raise ValueError("Both `text` and `images` are expected as arguments to a `PalmaProcessor` instance.")
+        pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )

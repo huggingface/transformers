@@ -21,11 +21,13 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ... import PreTrainedModel
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache, StaticCache
+
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...models.siglip.configuration_siglip import SiglipVisionConfig
 from ...models.siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
+from ...models.gemma.configuration_gemma import GemmaConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -35,7 +37,41 @@ from ...utils import (
 )
 from ..auto import AutoModelForCausalLM
 from .configuration_palma import PalmaConfig
+import math
+import warnings
+from typing import List, Optional, Tuple, Union
 
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+    _prepare_4d_causal_attention_mask,
+)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+    replace_return_docstrings,
+)
+from ...utils.import_utils import is_torch_fx_available
+
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+from .language_modeling_palma import PalmaGemmaForCausalLM
 
 logger = logging.get_logger(__name__)
 
@@ -62,6 +98,7 @@ PALMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
+
 class PalmaSiglipVisionTransformer(nn.Module):
     """
     Modified version of Siglip with a linear head and no pooling, used specifically in Palma.
@@ -75,8 +112,6 @@ class PalmaSiglipVisionTransformer(nn.Module):
         self.embeddings = SiglipVisionEmbeddings(config)
         self.encoder = SiglipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        # self.head = nn.Linear(embed_dim, 2048)  # FIXME this is for loading/debugging.
-        # FIXME we should derive final concat embed dim from config
 
     @add_start_docstrings_to_model_forward(PALMA_SIGLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=SiglipVisionConfig)
@@ -109,7 +144,7 @@ class PalmaSiglipVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        if not return_dict:  # FIXME is there a standard for a non-dict returned output? esp for non-pooled output
+        if not return_dict:
             return (last_hidden_state,) + encoder_outputs[1:]
 
         return BaseModelOutput(
@@ -202,7 +237,8 @@ class PalmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["PalmaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
+    _supports_sdpa = True # TODO Palma should support sdpa
 
     def _init_weights(self, module):
         # important: this ported version of Palma isn't meant for training from scratch - only
@@ -312,9 +348,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         self.vision_model = PalmaSiglipVisionTransformer(config=config.vision_config)
         self.multi_modal_projector = PalmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = PalmaGemmaForCausalLM(config=config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -539,7 +573,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -550,9 +583,8 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         logits = outputs[0]
-
+        # logits identical to flax output
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
@@ -597,7 +629,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                breakpoint()
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
@@ -609,12 +640,10 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
-                breakpoint()
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
-            breakpoint()
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
@@ -629,6 +658,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             print("Next pass")
 
             model_inputs = {"input_ids": input_ids}
+                           # "position_ids": position_ids}
 
         model_inputs.update(
             {
