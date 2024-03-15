@@ -1610,6 +1610,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
+        if isinstance(self.chat_template, (list, tuple)):
+            # Chat templates are stored as lists of dicts with fixed key names,
+            # we reconstruct that into a single dict while loading them.
+            self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
         super().__init__(**kwargs)
 
@@ -1697,7 +1701,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
-        **tokenizer_kwargs,
+        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
@@ -1732,7 +1737,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+            tokenizer_kwargs (`Dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
+            **kwargs: Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
 
         Returns:
             `Union[List[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
@@ -1746,8 +1752,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "of tokenizer outputs to return."
             )
 
-        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
-        if chat_template is None:
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
+
+        # First, handle the cases when the model has a dict of multiple templates
+        if isinstance(self.chat_template, dict) or (
+            self.chat_template is None and isinstance(self.default_chat_template, dict)
+        ):
+            template_dict = self.chat_template or self.default_chat_template
+            if chat_template is not None and chat_template in template_dict:
+                # The user can pass the name of a template to the chat template argument instead of an entire template
+                chat_template = template_dict[chat_template]
+            elif chat_template is None and "default" in template_dict:
+                chat_template = template_dict["default"]
+            elif chat_template is None:
+                raise ValueError(
+                    "This model has multiple chat templates with no default specified! Please either pass a chat "
+                    "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                    f"template names are {sorted(template_dict.keys())}."
+                )
+        elif chat_template is None:
+            # These are the cases when the model has a single template
+            # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
             if self.chat_template is not None:
                 chat_template = self.chat_template
             else:
@@ -1774,6 +1800,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
             )
             rendered.append(rendered_chat)
+        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
+        rendered = compiled_template.render(
+            messages=conversation, add_generation_prompt=add_generation_prompt, **template_kwargs
+        )
 
         if not is_batched:
             rendered = rendered[0]
@@ -2438,7 +2468,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config.update(self.special_tokens_map)
 
         if self.chat_template is not None:
-            tokenizer_config["chat_template"] = self.chat_template
+            if isinstance(self.chat_template, dict):
+                # Chat template dicts are saved to the config as lists of dicts with fixed key names.
+                # They will be reconstructed as a single dict during loading.
+                tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+            else:
+                tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)

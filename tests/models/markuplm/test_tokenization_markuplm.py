@@ -41,6 +41,7 @@ logger = logging.get_logger(__name__)
 
 @require_tokenizers
 class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/markuplm-base"
     tokenizer_class = MarkupLMTokenizer
     rust_tokenizer_class = MarkupLMTokenizerFast
     test_rust_tokenizer = True
