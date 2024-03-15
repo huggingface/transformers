@@ -338,5 +338,5 @@ gr.Interface.from_pipeline(pipe).launch()
 ![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/panda-classification.png)
 
 By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
-link by setting `share=True` in `launch()`. Or, you can host your demo on [Hugging Face Spaces](https://huggingface.co/spaces)https://huggingface.co/spaces for a permanent link. 
+link by setting `share=True` in `launch()`. You can also host your demo on [Hugging Face Spaces](https://huggingface.co/spaces) for a permanent link. 
 
