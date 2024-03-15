@@ -44,6 +44,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "internlm/internlm2-chat-7b": 32768,
 }
 
+
 # Modified from transformers.models.llama.tokenization_llama.LlamaTokenizer
 class InternLM2Tokenizer(PreTrainedTokenizer):
     """

@@ -85,6 +85,7 @@ class InternLM2Config(PretrainedConfig):
             `max_position_embeddings` to the expected new maximum.
 
     """
+
     model_type = "internlm2"
 
     def __init__(  # pylint: disable=W0102

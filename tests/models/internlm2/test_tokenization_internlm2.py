@@ -37,9 +37,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = InternLM2Tokenizer.from_pretrained(
-            "internlm/internlm2-chat-7b", revision="v1.0.0"
-        )
+        tokenizer = InternLM2Tokenizer.from_pretrained("internlm/internlm2-chat-7b", revision="v1.0.0")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_text_and_tokens(self):
@@ -51,7 +49,9 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_integration(self, **kwargs):
         text = "This is a test text for internlm2 tokenizer: How are you today?"
         expected = {
-            "input_ids":[[1, 2136, 505, 395, 1420, 1614, 500, 2750, 17912, 314, 45433, 334, 2745, 657, 629, 3514, 345]],
+            "input_ids": [
+                [1, 2136, 505, 395, 1420, 1614, 500, 2750, 17912, 314, 45433, 334, 2745, 657, 629, 3514, 345]
+            ],
             "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
 
@@ -71,9 +71,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_classes.append(self.rust_tokenizer_class)
 
         for tokenizer_class in tokenizer_classes:
-            tokenizer = tokenizer_class.from_pretrained(
-                "internlm/internlm2-chat-7b", revision="v1.0.0"
-            )
+            tokenizer = tokenizer_class.from_pretrained("internlm/internlm2-chat-7b", revision="v1.0.0")
             decoded = ""
             for token in tokens:
                 decoded += tokenizer.decode(token)
@@ -94,9 +92,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_classes.append(self.rust_tokenizer_class)
 
         for tokenizer_class in tokenizer_classes:
-            tokenizer = tokenizer_class.from_pretrained(
-                "internlm/internlm2-chat-7b", revision="v1.0.0"
-            )
+            tokenizer = tokenizer_class.from_pretrained("internlm/internlm2-chat-7b", revision="v1.0.0")
 
             for word, token_id in special_chat_tokens.items():
                 self.assertEqual(tokenizer.convert_tokens_to_ids(word), token_id)

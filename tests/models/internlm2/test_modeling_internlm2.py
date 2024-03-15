@@ -277,9 +277,7 @@ class InternLM2ModelTester:
 @require_torch
 class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (InternLM2Model, InternLM2ForCausalLM, InternLM2ForSequenceClassification)
-        if is_torch_available()
-        else ()
+        (InternLM2Model, InternLM2ForCausalLM, InternLM2ForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (InternLM2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -403,10 +401,7 @@ class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         Overwritting the common test as the test is flaky on tiny models
         """
         model = InternLM2ForCausalLM.from_pretrained(
-            "internlm/internlm2-7b",
-            load_in_4bit=True,
-            device_map={"": 0},
-            revision="v1.0.0"
+            "internlm/internlm2-7b", load_in_4bit=True, device_map={"": 0}, revision="v1.0.0"
         )
 
         tokenizer = InternLM2Tokenizer.from_pretrained("internlm/internlm2-7b", revision="v1.0.0")
@@ -422,7 +417,11 @@ class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_native = tokenizer.batch_decode(output_native)
 
         model = InternLM2ForCausalLM.from_pretrained(
-            "internlm/internlm2-7b", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2", revision="v1.0.0"
+            "internlm/internlm2-7b",
+            load_in_4bit=True,
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
+            revision="v1.0.0",
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -472,7 +471,6 @@ class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 @require_torch
 class InternLM2IntegrationTest(unittest.TestCase):
-
     @require_torch_gpu
     @slow
     def test_model_7b_logits(self):
@@ -481,7 +479,9 @@ class InternLM2IntegrationTest(unittest.TestCase):
         out = model(torch.tensor([input_ids]).cuda()).logits
         out = out.cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-32.2436, 16.4387, 170.1120, 279.2027, 10.0092, -0.8451, 12.2949, 264.5546, 245.7853, 37.2034]])
+        EXPECTED_MEAN = torch.tensor(
+            [[-32.2436, 16.4387, 170.1120, 279.2027, 10.0092, -0.8451, 12.2949, 264.5546, 245.7853, 37.2034]]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([
@@ -501,7 +501,9 @@ class InternLM2IntegrationTest(unittest.TestCase):
         out = model(torch.tensor([input_ids]).cuda()).logits
         out = out.cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[0.3166, -0.7101, -0.1732, 3.7886, -0.2943, 2.5799, 2.0190, 3.3716, -0.2332, -0.5200]])
+        EXPECTED_MEAN = torch.tensor(
+            [[0.3166, -0.7101, -0.1732, 3.7886, -0.2943, 2.5799, 2.0190, 3.3716, -0.2332, -0.5200]]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([
@@ -518,12 +520,16 @@ class InternLM2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_chat_7b_logits(self):
         input_ids = [1, 9843, 346, 1226, 505, 395, 6576, 2049, 3514, 346]
-        model = InternLM2ForCausalLM.from_pretrained("internlm/internlm2-chat-7b", device_map="auto", revision="v1.0.0")
+        model = InternLM2ForCausalLM.from_pretrained(
+            "internlm/internlm2-chat-7b", device_map="auto", revision="v1.0.0"
+        )
         input_ids = torch.tensor([input_ids]).cuda()
         out = model(input_ids).logits
         out = out.cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[49.1164, 227.4299, 330.5746, 387.2284, 289.0935, 256.2116, 356.7249, 372.1883, 350.3138, 188.9861]])
+        EXPECTED_MEAN = torch.tensor(
+            [[49.1164, 227.4299, 330.5746, 387.2284, 289.0935, 256.2116, 356.7249, 372.1883, 350.3138, 188.9861]]
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([
@@ -539,12 +545,28 @@ class InternLM2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_chat_20b_logits(self):
         input_ids = [1, 9843, 346, 1226, 505, 395, 6576, 2049, 3514, 346]
-        model = InternLM2ForCausalLM.from_pretrained("internlm/internlm2-chat-20b", device_map="auto", revision="v1.0.0")
+        model = InternLM2ForCausalLM.from_pretrained(
+            "internlm/internlm2-chat-20b", device_map="auto", revision="v1.0.0"
+        )
         out = model(torch.tensor([input_ids]).cuda()).logits
         out = out.cpu()
 
         EXPECTED_MEAN = torch.tensor(
-            [[-2.7782e-01, 1.3930e-02, 8.2256e+00, 1.6851e+01, 1.3826e+01, 1.6862e+01, 1.5346e+01, 1.6360e+01, 1.4957e+01, 6.2845e+00]], dtype=torch.float32
+            [
+                [
+                    -2.7782e-01,
+                    1.3930e-02,
+                    8.2256e00,
+                    1.6851e01,
+                    1.3826e01,
+                    1.6862e01,
+                    1.5346e01,
+                    1.6360e01,
+                    1.4957e01,
+                    6.2845e00,
+                ]
+            ],
+            dtype=torch.float32,
         )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         EXPECTED_SLICE = torch.tensor([

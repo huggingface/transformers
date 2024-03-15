@@ -337,7 +337,6 @@ class InternLM2Attention(nn.Module):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         bsz, q_len, _ = hidden_states.size()
 
         qkv_states = self.wqkv(hidden_states)
@@ -347,9 +346,7 @@ class InternLM2Attention(nn.Module):
         )
 
         query_states = qkv_states[..., : self.num_key_value_groups, :]
-        query_states = query_states.reshape(
-            bsz, q_len, self.num_heads, self.head_dim
-        )
+        query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim)
         key_states = qkv_states[..., -2, :]
         value_states = qkv_states[..., -1, :]
 
@@ -439,9 +436,7 @@ class InternLM2FlashAttention2(InternLM2Attention):
         )
 
         query_states = qkv_states[..., : self.num_key_value_groups, :]
-        query_states = query_states.reshape(
-            bsz, q_len, self.num_heads, self.head_dim
-        )
+        query_states = query_states.reshape(bsz, q_len, self.num_heads, self.head_dim)
         key_states = qkv_states[..., -2, :]
         value_states = qkv_states[..., -1, :]
 
@@ -467,9 +462,7 @@ class InternLM2FlashAttention2(InternLM2Attention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len
-        )
+        attn_output = self._flash_attention_forward(query_states, key_states, value_states, attention_mask, q_len)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.wo(attn_output)
 
@@ -571,10 +564,12 @@ class InternLM2FlashAttention2(InternLM2Attention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 INTERNLM2_ATTENTION_CLASSES = {
     "eager": InternLM2Attention,
     "flash_attention_2": InternLM2FlashAttention2,
 }
+
 
 # Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class InternLM2DecoderLayer(nn.Module):
@@ -1243,7 +1238,6 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
 
 # Modified from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->InternLM2
 class InternLM2ForSequenceClassification(InternLM2PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
