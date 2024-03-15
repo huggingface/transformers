@@ -1798,7 +1798,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # Indicates it's a Conversation object
                 chat = chat.messages
             rendered_chat = compiled_template.render(
-                messages=conversation, add_generation_prompt=add_generation_prompt, **template_kwargs
+                messages=chat, add_generation_prompt=add_generation_prompt, **template_kwargs
             )
             rendered.append(rendered_chat)
 
