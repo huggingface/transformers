@@ -188,64 +188,95 @@ class OLMoConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 50280):
             Vocabulary size of the OLMo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`OLMoModel`]
+        embedding_size (`Optional[int]`, *optional*, defaults to 50304):
+            The number of embeddings, i.e. the number of tokens. If set to ``None`` it will default
+            to ``vocab_size``. If ``vocab_size`` is not a multiple of 128, setting this to the
+            next multiple of 128 that's greater than ``vocab_size`` can improve throughput
+            substantially.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            The ratio of the inner MLP dimensionality to ``d_model``.
+            This is only used when ``mlp_hidden_size`` is not set.
+        mlp_hidden_size (`Optional[int]`, *optional*, defaults to 22016):
+            Set the exact hidden size for the MLP. Otherwise the inner MLP hidden size will be set to `mlp_ratio * d_model`.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. OLMo 1 supports up to 2048 tokens,
-            OLMo 2 up to 4096, CodeOLMo up to 16384.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalOLMo/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        multi_query_attention (`bool`, *optional*, defaults to `False`):
+            If `True`, the model will use Multi Query Attention (MQA). Otherwise the model will use Multi Head Attention (MHA).
+        activation_type (`ActivationType`, *optional*, defaults to `ActivationType.swiglu`):
+            The non-linear activation function in the decoder.
+        max_sequence_length (`int`, *optional*, defaults to 2048):
+            The maximum input sequence length supported by the model.
+        block_type (`BlockType`, *optional*, defaults to `BlockType.sequential`):
+            The transformer block implementation.
+        block_group_size (`int`, *optional*, defaults to 1):
+            The number of blocks to group together into a single parent block.
+            This has no affect on the number of parameters in the model and is only used to wrap groups
+            of blocks together with a single FSDP wrapper during training.
+        alibi (`bool`, *optional*, defaults to `False`):
+            If ``True``, use ALiBi embeddings. Mutually exclusive with ``rope``.
+        alibi_bias_max (`float`, *optional*, defaults to 8.0):
+            Maximum absolute value of ALiBi bias.
+        rope (`bool`, *optional*, defaults to `True`):
+            Use rotary positional embeddings (RoPE). Mutually exclusive with ``alibi``.
+        rope_full_precision (`bool`, *optional*, defaults to `False`):
+            If ``True``, apply RoPE embeddings at full precision regardless of the input type. Otherwise,
+            apply RoPE at the precision of the input.
+        flash_attention (`bool`, *optional*, defaults to `True`):
+            If ``True``, use ``FlashAttention``.
         attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+            The dropout probability within the attention modules.
+        attention_layer_norm (`bool`, *optional*, defaults to `False`):
+            Apply layer norm to the keys and queries within the attention mechanism.
+            This can help stabilize training.
+        residual_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the MLP and attention output within each block.
+        embedding_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for embeddings.
+        layer_norm_type (`LayerNormType`, *optional*, defaults to `LayerNormType.default`):
+            The layernorm implementation to use.
+        layer_norm_with_affine (`bool`, *optional*, defaults to `False`):
+            Whether to include bias and weight parameters for the layer norms.
+            This only affects layer norms that are immediately followed by a linear layer in the forward pass,
+            so everything except QK-norms. To turn off affines for QK norms as well, set :attr:`attention_layer_norm_with_affine`
+            to ``False``.
+        attention_layer_norm_with_affine (`bool`, *optional*, defaults to `False`):
+            Toggle affine transform for the QK norms.
+        include_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to include bias parameters in linear layers.
+            In PaLM, they got rid of all bias terms because they found that large
+            models tend to have near 0 bias terms anyway.
+        bias_for_layer_norm (`Optional[bool]`, *optional*, defaults to `False`):
+            Whether or not to include bias parameters in layer norm.
+            This is separate from the include_bias parameter, because of a ROCm crash when biases are disabled in
+            layer norm.
+            When this is None, it inherits the setting from include_bias.
+        scale_logits (`bool`, *optional*, defaults to `False`):
+            If ``True``, scale the output logits by ``1 / sqrt(d_model)``.
+        weight_tying (`bool`, *optional*, defaults to `False`):
+            Whether to tie output linear weights to the input embedding.
+        init_device (`Optional[str]`, *optional*, defaults to `meta`):
+            The torch device to use when initializing the model parameters, e.g. "cpu", "cuda:0", "meta".
+        init_fn (`InitFnType`, *optional*, defaults to `InitFnType.mitchell`):
+            The weight initialization strategy.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation to use when initializing weights with a "fixed distribution" ``init_fn``, such
+            as "normal".
+        init_cutoff_factor (`Optional[float]`, *optional*, defaults to `None`):
+            A positive factor used to scale the cutoff values when initializing weights with a "fixed distribution" ``init_fn``, such
+            as "normal". Setting this to None means values are not cutoff.
+        clip_qkv(`Optional[float]`, *optional*, defaults to `None`):
+            Clip QKV to this value when set.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The ID of the token to use for padding.
+        eos_token_id (`int`, *optional*, defaults to 50279):
+            The ID of the end-of-sentence special token.
 
     ```python
     >>> from transformers import OLMoModel, OLMoConfig
@@ -265,56 +296,83 @@ class OLMoConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
+        vocab_size=50280,
+        embedding_size=50304,
         hidden_size=4096,
-        intermediate_size=11008,
+        mlp_ratio=4,
+        mlp_hidden_size=22016,
         num_hidden_layers=32,
         num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
+        multi_query_attention=False,
+        activation_type=ActivationType.swiglu,
+        max_sequence_length=2048,
+        block_type=BlockType.sequential,
+        block_group_size=1,
+        alibi=False,
+        alibi_bias_max=8.0,
+        rope=True,
+        rope_full_precision=False,
+        flash_attention=True,
         attention_dropout=0.0,
+        attention_layer_norm=False,
+        residual_dropout=0.0,
+        embedding_dropout=0.0,
+        layer_norm_type=LayerNormType.default,
+        layer_norm_with_affine=False,
+        attention_layer_norm_with_affine=False,
+        include_bias=False,
+        bias_for_layer_norm=False,
+        scale_logits=False,
+        weight_tying=False,
+        init_device="meta",
+        init_fn=InitFnType.mitchell,
+        init_std=0.02,
+        init_cutoff_factor=None,
+        clip_qkv=None,
+        pad_token_id=1,
+        eos_token_id=50279,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self._rope_scaling_validation()
-        self.attention_bias = attention_bias
+        self.embedding_size = embedding_size
+        self.max_sequence_length = max_sequence_length
+        self.d_model = hidden_size
+        self.mlp_ratio = mlp_ratio
+        self.mlp_hidden_size = mlp_hidden_size
+        self.n_layers = num_hidden_layers
+        self.n_heads = num_attention_heads
+        self.multi_query_attention = multi_query_attention
+        self.activation_type = activation_type
+        self.block_type = block_type
+        self.block_group_size = block_group_size
+        self.alibi = alibi
+        self.alibi_bias_max = alibi_bias_max
+        self.rope = rope
+        self.rope_full_precision = rope_full_precision
+        self.flash_attention = flash_attention
         self.attention_dropout = attention_dropout
+        self.attention_layer_norm = attention_layer_norm
+        self.residual_dropout = residual_dropout
+        self.embedding_dropout = embedding_dropout
+        self.layer_norm_type = layer_norm_type
+        self.layer_norm_with_affine = layer_norm_with_affine
+        self.attention_layer_norm_with_affine = attention_layer_norm_with_affine
+        self.include_bias = include_bias
+        self.bias_for_layer_norm = bias_for_layer_norm
+        self.scale_logits = scale_logits
+        self.weight_tying = weight_tying
+        self.init_device = init_device
+        self.init_fn = init_fn
+        self.init_std = init_std
+        self.init_cutoff_factor = init_cutoff_factor
+        self.clip_qkv = clip_qkv
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
+            tie_word_embeddings=weight_tying,
             **kwargs,
         )
 

@@ -102,7 +102,7 @@ def _get_unpad_data(attention_mask):
 class LayerNormBase(nn.Module):
     def __init__(
         self,
-        config: ModelConfig,
+        config: OLMoConfig,
         *,
         size: Optional[int] = None,
         elementwise_affine: Optional[bool] = True,
@@ -130,7 +130,7 @@ class LayerNormBase(nn.Module):
         raise NotImplementedError
 
     @classmethod
-    def build(cls, config: ModelConfig, size: Optional[int] = None, **kwargs) -> LayerNormBase:
+    def build(cls, config: OLMoConfig, size: Optional[int] = None, **kwargs) -> LayerNormBase:
         if config.layer_norm_type == LayerNormType.default:
             return LayerNorm(config, size=size, low_precision=False, **kwargs)
         elif config.layer_norm_type == LayerNormType.low_precision:
@@ -165,7 +165,7 @@ class LayerNorm(LayerNormBase):
 
     def __init__(
         self,
-        config: ModelConfig,
+        config: OLMoConfig,
         size: Optional[int] = None,
         low_precision: bool = False,
         elementwise_affine: Optional[bool] = None,
@@ -195,7 +195,7 @@ class RMSLayerNorm(LayerNormBase):
 
     def __init__(
         self,
-        config: ModelConfig,
+        config: OLMoConfig,
         size: Optional[int] = None,
         elementwise_affine: Optional[bool] = None,
         eps: float = 1e-5,
@@ -251,7 +251,7 @@ class BufferCache(dict, MutableMapping[str, torch.Tensor]):
     """
 
 
-def _non_meta_init_device(config: ModelConfig) -> torch.device:
+def _non_meta_init_device(config: OLMoConfig) -> torch.device:
     if config.init_device is not None and config.init_device != "meta":
         return torch.device(config.init_device)
     else:
@@ -263,7 +263,7 @@ class RotaryEmbedding(nn.Module):
     [Rotary positional embeddings (RoPE)](https://arxiv.org/abs/2104.09864).
     """
 
-    def __init__(self, config: ModelConfig, cache: BufferCache):
+    def __init__(self, config: OLMoConfig, cache: BufferCache):
         super().__init__()
         self.config = config
         self.__cache = cache
@@ -931,7 +931,7 @@ OLMO_ATTENTION_CLASSES = {
 
 
 class Activation(nn.Module):
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: OLMoConfig):
         super().__init__()
         self.config = config
 
@@ -945,7 +945,7 @@ class Activation(nn.Module):
         raise NotImplementedError
 
     @classmethod
-    def build(cls, config: ModelConfig) -> Activation:
+    def build(cls, config: OLMoConfig) -> Activation:
         if config.activation_type == ActivationType.gelu:
             return cast(Activation, GELU(approximate="none"))
         elif config.activation_type == ActivationType.relu:
@@ -986,7 +986,7 @@ class Dropout(nn.Dropout):
             return F.dropout(input, self.p, self.training, self.inplace)
 
 
-def activation_checkpoint_function(cfg: ModelConfig):
+def activation_checkpoint_function(cfg: OLMoConfig):
     preserve_rng_state = (
         (cfg.attention_dropout == 0.0) and (cfg.embedding_dropout == 0.0) and (cfg.residual_dropout == 0.0)
     )
@@ -1018,7 +1018,7 @@ class ModuleType(StrEnum):
 
 
 def init_weights(
-    config: ModelConfig,
+    config: OLMoConfig,
     module: Union[nn.Linear, nn.Embedding],
     d: Optional[int] = None,
     layer_id: Optional[int] = None,
@@ -1100,7 +1100,7 @@ class OLMoBlock(nn.Module):
     A base class for transformer block implementations.
     """
 
-    def __init__(self, layer_id: int, config: ModelConfig, cache: BufferCache):
+    def __init__(self, layer_id: int, config: OLMoConfig, cache: BufferCache):
         super().__init__()
         self.layer_id = layer_id
         self.config = config
@@ -1294,7 +1294,7 @@ class OLMoBlock(nn.Module):
         raise NotImplementedError
 
     @classmethod
-    def build(cls, layer_id: int, config: ModelConfig, cache: BufferCache) -> OLMoBlock:
+    def build(cls, layer_id: int, config: OLMoConfig, cache: BufferCache) -> OLMoBlock:
         if config.block_type == BlockType.sequential:
             return OLMoSequentialBlock(layer_id, config, cache)
         elif config.block_type == BlockType.parallel:
@@ -1311,7 +1311,7 @@ class OLMoSequentialBlock(OLMoBlock):
     (plus another skip connection).
     """
 
-    def __init__(self, layer_id: int, config: ModelConfig, cache: BufferCache):
+    def __init__(self, layer_id: int, config: OLMoConfig, cache: BufferCache):
         super().__init__(layer_id, config, cache)
         # Layer norms.
         self.attn_norm = LayerNorm.build(config)
@@ -1403,7 +1403,7 @@ class OLMoParallelBlock(OLMoBlock):
     to fuse the output projections, but we found that didn't help.
     """
 
-    def __init__(self, layer_id: int, config: ModelConfig, cache: BufferCache):
+    def __init__(self, layer_id: int, config: OLMoConfig, cache: BufferCache):
         super().__init__(layer_id, config, cache)
         self.norm = LayerNorm.build(config)
         # Fused attention and feed-forward projection.
@@ -1505,7 +1505,7 @@ def get_causal_attention_bias(cache: BufferCache, seq_len: int, device: torch.de
     return causal_bias
 
 
-def alibi_attention_bias(seq_len: int, config: ModelConfig, device: torch.device) -> torch.FloatTensor:
+def alibi_attention_bias(seq_len: int, config: OLMoConfig, device: torch.device) -> torch.FloatTensor:
     alibi_bias = torch.arange(1 - seq_len, 1, dtype=torch.float, device=device).view(1, 1, 1, seq_len)
 
     # shape: (1, 1, seq_len, seq_len)
@@ -1528,7 +1528,7 @@ class OLMoLlamaBlock(OLMoBlock):
     behavior of Llama.
     """
 
-    def __init__(self, layer_id: int, config: ModelConfig, cache: BufferCache):
+    def __init__(self, layer_id: int, config: OLMoConfig, cache: BufferCache):
         super().__init__(layer_id, config, cache)
         # Layer norms.
         self.attn_norm = LayerNorm.build(config)
@@ -1783,7 +1783,7 @@ class OLMoPreTrainedModel(PreTrainedModel):
 
 
 class OLMoBlockGroup(nn.ModuleList):
-    def __init__(self, config: ModelConfig, layer_offset: int, modules: Optional[Iterable[nn.Module]] = None):
+    def __init__(self, config: OLMoConfig, layer_offset: int, modules: Optional[Iterable[nn.Module]] = None):
         super().__init__(modules)
         self.config = config
         self.layer_offset = layer_offset
@@ -1839,7 +1839,7 @@ class OLMoBlockGroup(nn.ModuleList):
 
 
 class OLMo(nn.Module):
-    def __init__(self, config: ModelConfig, init_params: bool = True):
+    def __init__(self, config: OLMoConfig, init_params: bool = True):
         super().__init__()
         self.config = config
         self.__cache = BufferCache()
