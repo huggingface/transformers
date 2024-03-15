@@ -1931,11 +1931,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = (
-            model_kwargs["attention_mask"].shape
-            if model_kwargs.get("attention_mask", None) is not None
-            else input_ids.shape
-        )
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
@@ -2395,11 +2393,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = (
-            model_kwargs["attention_mask"].shape
-            if model_kwargs.get("attention_mask", None) is not None
-            else input_ids.shape
-        )
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
@@ -2699,11 +2695,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = (
-            model_kwargs["attention_mask"].shape
-            if model_kwargs.get("attention_mask", None) is not None
-            else input_ids.shape
-        )
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
@@ -4542,11 +4536,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = batch_size, cur_len = (
-            model_kwargs["attention_mask"].shape
-            if model_kwargs.get("attention_mask", None) is not None
-            else input_ids.shape
-        )
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
