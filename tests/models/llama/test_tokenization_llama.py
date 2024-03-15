@@ -787,7 +787,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         input_ids = self.tokenizer.encode(f"No <s> {SPIECE_UNDERLINE}He")
         self.assertEqual(input_ids, [284, 1, 156])
-        tokens = self.tokenizer.tokenize("No <s> {SPIECE_UNDERLINE}He")
+        tokens = self.tokenizer.tokenize(f"No <s> {SPIECE_UNDERLINE}He")
         self.assertEqual(
             tokens, [SPIECE_UNDERLINE + "No", "<s>", SPIECE_UNDERLINE + "He"]
         )  # spaces are eaten by rstrip / lstrip
