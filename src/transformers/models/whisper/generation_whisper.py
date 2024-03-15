@@ -1190,15 +1190,9 @@ class WhisperGenerationMixin:
                 num_segment_frames=num_segment_frames,
             )
 
-            if torch.unique(lang_ids).shape[0] > 1:
-                raise ValueError(
-                    "Multiple languages detected when trying to predict the most likely target language for transcription. It is currently not supported to transcribe to different languages in a single batch. Please make sure to either force a single language by passing `language='...'` or make sure all input audio is of the same language."
-                )
-
-            lang_id = lang_ids[0].item()
-
             # append or replace lang_id to init_tokens
             for i in range(batch_size):
+                lang_id = lang_ids[i].item()
                 if len(init_tokens[i]) > 1:
                     init_tokens[i][1] = lang_id
                 else:
