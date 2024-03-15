@@ -323,7 +323,7 @@ Pipelines are automatically supported in [Gradio](https://github.com/gradio-app/
 ```py
  pip install gradio
 
-Then, create a web demo around an image classification pipeline (or any other pipeline) in a single line of code:
+Then, you can create a web demo around an image classification pipeline (or any other pipeline) in a single line of code by calling Gradio's [`Interface.from_pipeline`](https://www.gradio.app/docs/interface#interface-from-pipeline) class to launch the pipeline. This creates an intuitive drag-and-drop interface in your browser:
 
 ```py
 from transformers import pipeline
