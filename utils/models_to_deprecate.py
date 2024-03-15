@@ -2,14 +2,16 @@
 Script to find a candidate list of models to deprecate based on the number of downloads and the date of the last commit.
 """
 import argparse
-import os
 import glob
-from pathlib import Path
-from git import Repo
+import json
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
-import json
+from pathlib import Path
+
+from git import Repo
 from huggingface_hub import HfApi
+
 
 api = HfApi()
 
@@ -19,27 +21,31 @@ repo = Repo(PATH_TO_REPO)
 
 def _extract_commit_hash(commits):
     for commit in commits:
-        if commit.startswith('commit '):
-            return commit.split(' ')[1]
+        if commit.startswith("commit "):
+            return commit.split(" ")[1]
     return ""
 
 
 def get_list_of_repo_model_paths(models_dir="src/transformers/models"):
     # Get list of all models in the library
-    models = glob.glob(os.path.join(models_dir, '*'))
+    models = glob.glob(os.path.join(models_dir, "*/modeling_*.py"))
+
+    # Remove flax and tf models
+    models = [model for model in models if "_flax_" not in model]
+    models = [model for model in models if "_tf_" not in model]
 
     # Get list of all deprecated models in the library
-    deprecated_models = glob.glob(os.path.join(models_dir, 'deprecated', '*'))
+    deprecated_models = glob.glob(os.path.join(models_dir, "deprecated", "*"))
     # For each deprecated model, remove the deprecated models from the list of all models as well as the symlink path
     for deprecated_model in deprecated_models:
-        deprecated_model_name = deprecated_model.split('/')[-1]
-        models = [model for model in models if not model.endswith(deprecated_model_name)]
+        deprecated_model_name = "/" + deprecated_model.split("/")[-1] + "/"
+        models = [model for model in models if deprecated_model_name not in models]
     # Remove deprecated models
-    models = [model for model in models if '/deprecated' not in model]
+    models = [model for model in models if "/deprecated" not in model]
     # Remove init
-    models = [model for model in models if '__init__' not in model]
+    models = [model for model in models if "__init__" not in model]
     # Remove auto
-    models = [model for model in models if '/auto/' not in model]
+    models = [model for model in models if "/auto/" not in model]
     return models
 
 
@@ -51,7 +57,7 @@ def get_list_of_models_to_deprecate(
     max_num_models=-1,
 ):
     if thresh_date is None:
-        thresh_date = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year-1)
+        thresh_date = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year - 1)
     else:
         thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
@@ -68,10 +74,10 @@ def get_list_of_models_to_deprecate(
         # Build a dictionary of model info: first commit datetime, commit hash, model path
         models_info = defaultdict(dict)
         for model_path in model_paths:
-            model = model_path.split('/')[-1]
+            model = model_path.split("/")[-2]
             if model in models_info:
                 continue
-            commits = repo.git.log('--diff-filter=A', '--', model_path ).split('\n')
+            commits = repo.git.log("--diff-filter=A", "--", model_path).split("\n")
             commit_hash = _extract_commit_hash(commits)
             commit_obj = repo.commit(commit_hash)
             committed_datetime = commit_obj.committed_datetime
@@ -80,7 +86,9 @@ def get_list_of_models_to_deprecate(
             models_info[model]["model_path"] = model_path
 
         # Filter out models which were added less than a year ago
-        models_info = {model: info for model, info in models_info.items() if info["first_commit_datetime"] < thresh_date}
+        models_info = {
+            model: info for model, info in models_info.items() if info["first_commit_datetime"] < thresh_date
+        }
 
         # For each model on the hub, find it corresponding model based on its tags and update the number of downloads
         for model, info in models_info.items():
@@ -124,9 +132,24 @@ if __name__ == "__main__":
     parser.add_argument("--output_file", type=str, default="models_to_deprecate.json")
     parser.add_argument("--save-model-info", action="store_true")
     parser.add_argument("--use-cache", action="store_true")
-    parser.add_argument("--thresh_num_downloads", type=int, default=1_000, help="Threshold number of downloads below which a model should be deprecated. Default is 1,000.")
-    parser.add_argument("--thresh_date", type=str, default=None, help="Date to consider the first commit from. Format: YYYY-MM-DD, default is one year ago.")
-    parser.add_argument("--max_num_models", type=int, default=-1, help="Maximum number of models to consider from the hub. -1 means all models. Useful for testing.")
+    parser.add_argument(
+        "--thresh_num_downloads",
+        type=int,
+        default=1_000,
+        help="Threshold number of downloads below which a model should be deprecated. Default is 1,000.",
+    )
+    parser.add_argument(
+        "--thresh_date",
+        type=str,
+        default=None,
+        help="Date to consider the first commit from. Format: YYYY-MM-DD, default is one year ago.",
+    )
+    parser.add_argument(
+        "--max_num_models",
+        type=int,
+        default=-1,
+        help="Maximum number of models to consider from the hub. -1 means all models. Useful for testing.",
+    )
     args = parser.parse_args()
 
     models_to_deprecate = get_list_of_models_to_deprecate(
