@@ -34,6 +34,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google-bert/bert-base-uncased"
     tokenizer_class = BertTokenizer
     rust_tokenizer_class = BertTokenizerFast
     test_rust_tokenizer = True

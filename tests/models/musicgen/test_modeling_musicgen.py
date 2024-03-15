@@ -101,7 +101,7 @@ class MusicgenDecoderTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
         is_training=False,
         use_labels=False,
@@ -419,7 +419,7 @@ class MusicgenTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=4,  # need batch_size != num_hidden_layers
         seq_length=7,
         is_training=False,
         use_labels=False,
