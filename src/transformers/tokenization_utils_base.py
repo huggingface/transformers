@@ -1792,18 +1792,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             is_batched = False
 
         rendered = []
+        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         for chat in conversations:
             if hasattr(chat, "messages"):
                 # Indicates it's a Conversation object
                 chat = chat.messages
             rendered_chat = compiled_template.render(
-                messages=chat, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
+                messages=conversation, add_generation_prompt=add_generation_prompt, **template_kwargs
             )
             rendered.append(rendered_chat)
-        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        rendered = compiled_template.render(
-            messages=conversation, add_generation_prompt=add_generation_prompt, **template_kwargs
-        )
 
         if not is_batched:
             rendered = rendered[0]
