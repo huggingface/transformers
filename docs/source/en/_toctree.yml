@@ -380,6 +380,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/internlm2
+        title: InternLM2
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led

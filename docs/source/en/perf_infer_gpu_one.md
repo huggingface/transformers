@@ -45,6 +45,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
+* [InternLM2](https://huggingface.co/docs/transformers/model_doc/internlm2#transformers.InternLM2Model)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
