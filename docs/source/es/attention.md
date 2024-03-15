@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Mecanismos de atención
 
-La mayoría de los modelos de transformers utilizan atención completa, en el sentido de que la matriz de atención es cuadrada. Esto puede ser un gran cuello de botella computacional cuando tienes textos largos. `Longformer` y `reformer` son modelos que intentan ser más eficientes y utilizan una versión dispersa de la matriz de atención para acelerar el entrenamiento.
+La mayoría de los modelos transformers utilizan atención completa, en el sentido de que la matriz de atención es cuadrada. Esto puede ser un gran cuello de botella computacional cuando tienes textos largos. `Longformer` y `reformer` son modelos que intentan ser más eficientes y utilizan una versión dispersa de la matriz de atención para acelerar el entrenamiento.
 
 ## Atención LSH
 
