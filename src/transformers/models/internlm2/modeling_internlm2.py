@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from einops import rearrange
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -343,15 +342,14 @@ class InternLM2Attention(nn.Module):
 
         qkv_states = self.wqkv(hidden_states)
 
-        qkv_states = rearrange(
-            qkv_states,
-            "b q (h gs d) -> b q h gs d",
-            gs=2 + self.num_key_value_groups,
-            d=self.head_dim,
+        qkv_states = qkv_states.reshape(
+            bsz, q_len, self.num_key_value_heads, 2 + self.num_key_value_groups, self.head_dim
         )
 
         query_states = qkv_states[..., : self.num_key_value_groups, :]
-        query_states = rearrange(query_states, "b q h gs d -> b q (h gs) d")
+        query_states = query_states.reshape(
+            bsz, q_len, self.num_heads, self.head_dim
+        )
         key_states = qkv_states[..., -2, :]
         value_states = qkv_states[..., -1, :]
 
@@ -436,15 +434,14 @@ class InternLM2FlashAttention2(InternLM2Attention):
 
         qkv_states = self.wqkv(hidden_states)
 
-        qkv_states = rearrange(
-            qkv_states,
-            "b q (h gs d) -> b q h gs d",
-            gs=2 + self.num_key_value_groups,
-            d=self.head_dim,
+        qkv_states = qkv_states.reshape(
+            bsz, q_len, self.num_key_value_heads, 2 + self.num_key_value_groups, self.head_dim
         )
 
         query_states = qkv_states[..., : self.num_key_value_groups, :]
-        query_states = rearrange(query_states, "b q h gs d -> b q (h gs) d")
+        query_states = query_states.reshape(
+            bsz, q_len, self.num_heads, self.head_dim
+        )
         key_states = qkv_states[..., -2, :]
         value_states = qkv_states[..., -1, :]
 
