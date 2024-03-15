@@ -32,11 +32,10 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import require_torch
-from transformers.trainer import TRAINER_STATE_NAME
 
 
 if is_torch_available():
-    from transformers.trainer import DEFAULT_CALLBACKS
+    from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
     from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
 
