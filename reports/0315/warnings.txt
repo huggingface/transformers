@@ -1,0 +1,23 @@
+=========================================== warnings summary (final) ===========================================
+../../../home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/torchvision/io/image.py:13
+  /home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/torchvision/io/image.py:13: UserWarning: Failed to load image Python extension: ''If you don't plan on using image functionality from `torchvision.io`, you can ignore this warning. Otherwise, there might be something wrong with your environment. Did you have `libjpeg` or `libpng` installed before building `torchvision` from source?
+    warn(
+
+../../../home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/intel_extension_for_pytorch/cpu/tpp/__init__.py:1
+  /home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/intel_extension_for_pytorch/cpu/tpp/__init__.py:1: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
+    import pkg_resources
+
+../../../home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/_pytest/config/__init__.py:1373
+  /home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/_pytest/config/__init__.py:1373: PytestConfigWarning: Unknown config option: doctest_glob
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+src/transformers/deepspeed.py:23
+  /soft/fanli/transformers/src/transformers/deepspeed.py:23: FutureWarning: transformers.deepspeed module is deprecated and will be removed in a future version. Please import deepspeed modules directly from transformers.integrations
+    warnings.warn(
+
+../../../home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:252
+  /home/fan/anaconda3/envs/study2/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:252: UserWarning: Device capability of ccl unspecified, assuming `cpu` and `cuda`. Please specify it via the `devices` argument of `register_backend`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
