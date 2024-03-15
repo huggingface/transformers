@@ -212,6 +212,7 @@ class MambaModelTester:
         # use cache
         token_emb = model.embeddings(input_ids)
         outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
+        self.parent.assertEqual(token_emb.shape, outputs.shape)
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
