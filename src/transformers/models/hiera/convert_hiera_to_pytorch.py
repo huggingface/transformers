@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,21 +14,17 @@
 # limitations under the License.
 
 import argparse
+from PIL import Image
 
 import torch
 
 # from transformers import HieraConfig, HieraModel
 from transformers import HieraConfig, HieraModel
-from transformers.models.hiera.hiera_image_processor import HieraImageProcessor
-
+from transformers import BeitImageProcessor
+from transformers.image_utils import PILImageResampling, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+import requests
 
 def rename_key(name):
-    # if "patch_embed.proj" in name:
-    #     name = name.replace("patch_embed.proj", "patch_embed.projection")
-    # # elif "block.proj" in name:
-    # #     name = name.replace("block.proj", "block.projection")
-    # elif "attn.proj" in name:
-    #     name = name.replace("attn.proj", "attn.projection")
     if ".proj." in name:
         name = name.replace(".proj.", ".projection.")
     if "attn" in name:
@@ -109,7 +105,7 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path, **kwargs)
         checkpoint = pretrained_models_links["hiera_small_224"]["mae_in1k_ft_in1k"]
 
     elif "hiera_base_224" in checkpoint_url:
-        config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3), **kwargs)
+        config = HieraConfig(embedding_dimension=96, number_of_heads=1, stages=(2, 3, 16, 3))
 
         checkpoints = pretrained_models_links["hiera_base_224"]
         checkpoint = pretrained_models_links["hiera_base_224"]["mae_in1k_ft_in1k"]
@@ -197,29 +193,39 @@ def convert_Hiera_checkpoint(checkpoint_url, pytorch_dump_folder_path, **kwargs)
         ):
             strict = False
 
-        model.load_state_dict(state_dict["model_state"], strict)
-        # model.load_state_dict(state_dict["model_state"], strict=strict)
+        model.load_state_dict(state_dict["model_state"], strict=strict)
 
+
+    image_processor = BeitImageProcessor(
+                                        size = {"height":256,"width":256},
+                                        do_rescale=True,
+                                        do_center_crop=True,
+                                        crop_size = {"height":224,"width":224},
+                                        do_normalize=True,
+                                        do_reduce_labels=False,
+                                        do_resize=True,
+                                        image_std=IMAGENET_DEFAULT_STD,
+                                        image_mean=IMAGENET_DEFAULT_MEAN,
+                                        resample = PILImageResampling.BICUBIC)  
+    
+    
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
 
-    image_processor = HieraImageProcessor(size=224)
-    inputs = image_processor.process_image(image_url=url)
-
-    # forward pass
-    out = model(inputs[None, ...])
-
-    # 207: golden retriever  (imagenet-1k)
-    out.last_hidden_state.argmax(dim=-1).item()
-
+    processed_image = image_processor(images=image, return_tensors="pt")  
+    model.load_state_dict(state_dict["model_state"], strict=strict)
+    expected_slice = torch.tensor(
+    [ 0.1825,  0.8655,  0.5779,  1.1550,  1.1025,  0.6381,  1.0288, -0.0624, 0.1455]
+        )
     # If you also want intermediate feature maps
-    out = model(inputs[None, ...], return_intermediates=True)
+    out = model(processed_image.pixel_values)
+    out.last_hidden_state.argmax(dim=-1).item()
+    assert torch.allclose(out.last_hidden_state[0, :9], expected_slice, atol=1e-4)
 
-    for x in out.intermediates:
-        print(x.shape)
 
     print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path, push_to_hub=True, safe_serialization=False)
-
+    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

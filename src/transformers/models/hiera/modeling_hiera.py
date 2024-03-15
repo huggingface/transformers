@@ -624,25 +624,21 @@ class HieraModel(HieraPreTrainedModel):
 
         for i in range(depth):
             output_dim = self.embedding_dimension
-            # Mask unit or global attention.
-            # Lag by 1 block, so that global attention,
-            # applied post pooling on lower resolution
             use_mask_unit_attention = self.mask_unit_attn[cur_stage]
 
             if i - 1 in self.stage_ends:
                 output_dim = int(self.embedding_dimension * self.dim_mul)
-                number_of_heads = int(self.number_of_heads * self.head_mul)
+                self.number_of_heads = int(self.number_of_heads * self.head_mul)  # Update the class variable
                 cur_stage += 1
                 if i in q_pool_blocks:
                     flat_mu_size //= flat_q_stride
-            else:
-                number_of_heads = self.number_of_heads
+
 
             block = HieraBlock(
                 config,
                 input_dim=self.embedding_dimension,
                 output_dim=output_dim,
-                number_of_heads=number_of_heads,
+                number_of_heads=self.number_of_heads,
                 drop_path=dpr[i],
                 norm_layer=norm_layer,
                 q_stride=(flat_q_stride if i in q_pool_blocks else 1),
@@ -650,7 +646,7 @@ class HieraModel(HieraPreTrainedModel):
                 use_mask_unit_attention=use_mask_unit_attention,
             )
 
-            self.embedding_dimension = output_dim
+            self.embedding_dimension = output_dim 
             self.blocks.append(block)
 
         self.norm = norm_layer(self.embedding_dimension)
