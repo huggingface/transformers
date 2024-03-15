@@ -559,6 +559,7 @@ class GemmaSdpaAttention(GemmaAttention):
         
         # 
         # Efficient implementation equivalent to the following:
+        '''
         def debug_scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None) -> torch.Tensor:
             # Efficient implementation equivalent to the following:
             L, S = query.size(-2), key.size(-2)
@@ -590,10 +591,10 @@ class GemmaSdpaAttention(GemmaAttention):
             attn_weight = torch.dropout(attn_weight, dropout_p, train=False)
             # check if np.allclose(encoded_flax.transpose(0, 2, 3, 1, 4)[0], attn_weight @ value)
             return attn_weight @ value # 
+        '''
 
-
-        #attn_output = torch.nn.functional.scaled_dot_product_attention(
-        attn_output = debug_scaled_dot_product_attention(
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+        #attn_output = debug_scaled_dot_product_attention(
             query=query_states,
             key=key_states,
             value=value_states,
@@ -915,7 +916,9 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
+        
+        causal_mask = attention_mask
+        #causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
         # embed positions
         hidden_states = inputs_embeds
 
