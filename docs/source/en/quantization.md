@@ -57,7 +57,6 @@ pip install git+https://github.com/huggingface/transformers.git
 Now you can quantize a model by passing [`QuantoConfig`] object in the [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it contains `torch.nn.Linear` layers. 
 
 The integration with transformers only supports weights quantization. For the more complex use case such as activation quantization, calibration and quantization aware training, you should use [quanto](https://github.com/huggingface/quanto) library instead. 
-<!-- -> add link to quanto library.  -->
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
