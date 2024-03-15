@@ -37,7 +37,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_mps_available,
     is_torch_npu_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     requires_backends,
 )
@@ -340,7 +340,7 @@ def is_main_process(local_rank):
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
-    if is_torch_tpu_available(check_device=True):
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         return xm.get_ordinal() == 0
@@ -351,7 +351,7 @@ def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
-    if is_torch_tpu_available(check_device=True):
+    if is_torch_xla_available():
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()

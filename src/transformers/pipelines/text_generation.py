@@ -194,7 +194,7 @@ class TextGenerationPipeline(Pipeline):
         Complete the prompt(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            text_inputs (`str` or `List[str]`):
                 One or several prompts (or one list of prompts) to complete.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
@@ -217,8 +217,7 @@ class TextGenerationPipeline(Pipeline):
                 - `None` : default strategy where nothing in particular happens
                 - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
-
-            generate_kwargs:
+            generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./model#generative-models)).
 

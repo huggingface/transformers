@@ -549,7 +549,7 @@ class StableLmFlashAttention2(StableLmAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        dropout_rate = self.attention_dropout if self.training else 0.0
+        dropout_rate = self.attention_dropout.p if self.training else 0.0
 
         attn_output = self._flash_attention_forward(
             query_states,
@@ -586,7 +586,7 @@ class StableLmFlashAttention2(StableLmAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
