@@ -18,7 +18,7 @@ import importlib.util
 import re
 from ast import literal_eval
 from dataclasses import dataclass
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Optional
 from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode, logging
@@ -126,16 +126,6 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def resolve_tools(toolbox, remote=False):
-    for name, tool in toolbox.items():
-        if not isinstance(tool, Tool):
-            task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
-            _remote = remote and supports_remote(task_or_repo_id)
-            toolbox[name] = load_tool(task_or_repo_id, remote=_remote)
-
-    return toolbox
-
-
 def clean_code_for_run(code):
     code = code.strip()
     code_lines = code.split("\n")
@@ -162,12 +152,13 @@ def parse_json_tool_call(json_blob: str):
 
 
 def format_prompt(toolbox, prompt_template,tool_description_template):
-    tool_descriptions = "\n".join([get_tool_description_with_args(tool, tool_description_template) for tool in toolbox.values()])
+    tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
     if "<<tool_names>>" in prompt:
-        tool_names = [f"'{tool_name}'" for tool_name in toolbox.keys()]
+        tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
         prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
     return prompt
+
 
 def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
     if isinstance(input, list):
@@ -176,6 +167,61 @@ def to_text(input: Union[List[Dict[str, str]], Dict[str, str], str]) -> str:
         return input["content"]
     else:
         return input
+
+
+class Toolbox():
+    def __init__(self, tools: Optional[List[Tool]] = None):
+        if tools is None:
+            _setup_default_tools()
+            self._tools = HUGGINGFACE_DEFAULT_TOOLS.copy()
+        else:
+            self._tools = {tool.name: tool for tool in tools}
+        self.load_tools_if_needed()
+
+    @property
+    def tools(self) -> Dict[str, Tool]:
+        """Get all tools currently in the toolbox"""
+        return self._tools
+
+    def show_tool_descriptions(self, tool_description_template=None):
+        """Returns the description of all tools in the toolbox"""
+        return "\n".join([
+            get_tool_description_with_args(tool, tool_description_template)
+            for tool in self._tools.values()
+        ])
+
+    def add_tool(self, tool: Tool):
+        """Adds a tool to the toolbox"""
+        if tool.name in self._tools:
+            raise KeyError(f"Error: tool {tool.name} already exists in the toolbox.")
+        self._tools[tool.name] = tool
+
+    def remove_tool(self, tool_name: str):
+        """Removes a tool from the toolbox"""
+        if tool_name not in self._tools:
+            raise KeyError(
+                f"Error: tool {tool_name} not found in toolbox for removal,"
+                f"should be instead one of {[tool_name for tool_name in self._tools.keys()]}."
+            )
+        del self._tools[tool_name]
+
+    def update_tool(self, tool: Tool):
+        """Updates a tool in the toolbox"""
+        if tool.name not in self._tools:
+            raise KeyError(f"Error: tool {tool.name} not found in toolbox for update, should be instead one of {[tool_name for tool_name in self._tools.keys()]}.")
+        self._tools[tool.name] = tool
+
+    def clear_toolbox(self):
+        """Clears the toolbox"""
+        self._tools = {}
+
+    def load_tools_if_needed(self, remote=False):
+        for name, tool in self._tools.items():
+            if not isinstance(tool, Tool):
+                task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id
+                _remote = remote and supports_remote(task_or_repo_id)
+                self._tools[name] = load_tool(task_or_repo_id, remote=_remote)
+
 
 class Agent:
     def __init__(
@@ -186,51 +232,35 @@ class Agent:
             additional_args={},
             max_iterations=1,
             tool_parser=parse_json_tool_call,
-            toolbox=None, 
+            tools: Union[List[Tool], Toolbox, None] = None, 
         ):
         
         self.agent_name = self.__class__.__name__
         self.llm_callable = llm_callable
         self.prompt_template = system_prompt
-        self.tool_description_template = tool_description_template if tool_description_template else self.default_tool_description_template
+        self.tool_description_template = tool_description_template if tool_description_template else OPENAI_TOOL_DESCRIPTION_TEMPLATE
         self.additional_args = additional_args
         self.max_iterations = max_iterations
         self.log = lambda x: print(to_text(x))
         self.tool_parser = tool_parser
 
-        if toolbox is None:
-            _setup_default_tools()
-            self._toolbox = HUGGINGFACE_DEFAULT_TOOLS.copy()
+        if isinstance(tools, Toolbox):
+            self._toolbox = tools
         else:
-            self._toolbox = {tool.name: tool for tool in toolbox}
+            self._toolbox = Toolbox(tools)
 
-        self._toolbox = resolve_tools(self._toolbox)
-
-        self.system_prompt = format_prompt(self.toolbox, self.prompt_template, self.tool_description_template)
+        self.system_prompt = format_prompt(self._toolbox, self.prompt_template, self.tool_description_template)
         self.memory = []
         self.prompt = None
 
 
     @property
     def toolbox(self) -> Dict[str, Tool]:
-        """Get all tools currently available to the agent"""
+        """Get the toolbox currently available to the agent"""
         return self._toolbox
-    
-    @property
-    def default_tool_description_template(self)-> str:
-        """
-        This template is taking can describe a tool as it is expected by the model
-        """
-        logger.warning_once(
-            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
-        )
-        return OPENAI_TOOL_DESCRIPTION_TEMPLATE
     
     def show_memory(self):
         self.log('\n'.join(self.memory))
-
     
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -259,22 +289,22 @@ class Agent:
             split_token (Any): Arguments passed to the Tool. 
         """
 
-        if tool_name not in self.toolbox:
-            raise KeyError(f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.keys()]}.")
+        if tool_name not in self.toolbox.tools:
+            raise KeyError(f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.tools.keys()]}.")
         
         self.log("\n\n==Result==")
         try:
             if isinstance(arguments, str):
-                observation = self.toolbox[tool_name](arguments)
+                observation = self.toolbox.tools[tool_name](arguments)
             else:
-                observation = self.toolbox[tool_name](**arguments)
+                observation = self.toolbox.tools[tool_name](**arguments)
             observation_message = "Observation: " + observation.strip()
             self.log(observation_message)
             self.memory.append(observation_message)
         except Exception as e:
             raise RuntimeError(
                 f"Error in tool call execution: {e}. Correct the arguments if they are incorrect."
-                f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox[tool_name])}."
+                f"As a reminder, this tool description is {get_tool_description_with_args(self.toolbox.tools[tool_name])}."
             )
     
     def run(self, **kwargs):
@@ -368,7 +398,7 @@ class CodeAgent(Agent):
         try: 
             self.log("\n\n==Executing the code below:==")
             self.log(code_action)
-            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox} 
+            available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools} 
             # NOTE: The base python tools are not added to toolbox, since they do not have the proper attributes for a description
             return evaluate_python_code(code_action, available_tools, state=kwargs.copy())
         except Exception as e:
@@ -399,7 +429,7 @@ class ReactAgent(Agent):
             max_iterations=max_iterations,
             **kwargs
         )
-        self._toolbox["final_answer"] = FinalAnswerTool()
+        self._toolbox.add_tool(FinalAnswerTool())
 
     @property
     def default_tool_description_template(self)-> str:
