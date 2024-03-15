@@ -182,6 +182,7 @@ class Seq2seqTrainerTester(TestCasePlus):
                 metrics["eval_samples"] == dataset_len * num_return_sequences
             ), f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
 
+    @require_torch
     def test_bad_generation_config_fail_early(self):
         # Tests that a bad geneartion config causes the trainer to fail early
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
