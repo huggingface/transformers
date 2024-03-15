@@ -613,6 +613,19 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def generate(
+        self,
+        *args,
+        **kwargs,
+    ):
+
+        output = self.language_model.generate(
+            *args,
+            **kwargs,
+        )
+
+        return output
+
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
     ):
