@@ -1792,9 +1792,8 @@ class GenerationMixin:
             # did all peers finish? the reduced sum will be 0.0 then
             if this_peer_finished_flag.item() == 0.0:
                 return False
-        else:
-            if this_peer_finished:
-                return False
+        elif this_peer_finished:
+            return False
         return True
 
     def contrastive_search(self, *args, **kwargs):
