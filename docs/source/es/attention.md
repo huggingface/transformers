@@ -14,48 +14,28 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Attention mechanisms
+# Mecanismos de atención
 
-Most transformer models use full attention in the sense that the attention matrix is square. It can be a big
-computational bottleneck when you have long texts. Longformer and reformer are models that try to be more efficient and
-use a sparse version of the attention matrix to speed up training.
+La mayoría de los modelos de transformadores utilizan atención completa, en el sentido de que la matriz de atención es cuadrada. Esto puede ser un gran cuello de botella computacional cuando tienes textos largos. `Longformer` y `reformer` son modelos que intentan ser más eficientes y utilizan una versión dispersa de la matriz de atención para acelerar el entrenamiento.
 
-## LSH attention
+## Atención LSH
 
-[Reformer](model_doc/reformer) uses LSH attention. In the softmax(QK^t), only the biggest elements (in the softmax
-dimension) of the matrix QK^t are going to give useful contributions. So for each query q in Q, we can consider only
-the keys k in K that are close to q. A hash function is used to determine if q and k are close. The attention mask is
-modified to mask the current token (except at the first position), because it will give a query and a key equal (so
-very similar to each other). Since the hash can be a bit random, several hash functions are used in practice
-(determined by a n_rounds parameter) and then are averaged together.
+[Reformer](https://huggingface.co/docs/transformers/model_doc/reformer) utiliza atención LSH. En el softmax(QK^t), solo los elementos más grandes (en la dimensión softmax) de la matriz QK^t van a dar contribuciones útiles. Entonces, para cada consulta q en Q, podemos considerar solo las claves k en K que estén cerca de q. Se utiliza una función hash para determinar si q y k están cerca. La máscara de atención se modifica para enmascarar el token actual (excepto en la primera posición), porque dará una consulta y una clave iguales (entonces muy similares entre sí). Dado que el hash puede ser un poco aleatorio, en la práctica se utilizan varias funciones hash (determinadas por un parámetro n_rounds) y luego se promedian juntas.
 
-## Local attention
+## Atención local
 
-[Longformer](model_doc/longformer) uses local attention: often, the local context (e.g., what are the two tokens to the
-left and right?) is enough to take action for a given token. Also, by stacking attention layers that have a small
-window, the last layer will have a receptive field of more than just the tokens in the window, allowing them to build a
-representation of the whole sentence.
+[Longformer](https://huggingface.co/docs/transformers/model_doc/longformer) utiliza atención local: a menudo, el contexto local (por ejemplo, ¿cuáles son los dos tokens a la izquierda y a la derecha?) es suficiente para tomar acción para un token dado. Además, apilando capas de atención que tienen una ventana pequeña, la última capa tendrá un campo receptivo mayor que solamente los tokens en la ventana, lo que les permite construir una representación de toda la oración.
 
-Some preselected input tokens are also given global attention: for those few tokens, the attention matrix can access
-all tokens and this process is symmetric: all other tokens have access to those specific tokens (on top of the ones in
-their local window). This is shown in Figure 2d of the paper, see below for a sample attention mask:
+Algunos tokens de entrada preseleccionados también reciben atención global: para esos pocos tokens, la matriz de atención puede acceder a todos los tokens y este proceso es simétrico: todos los demás tokens tienen acceso a esos tokens específicos (además de los que están en su ventana local). Esto se muestra en la Figura 2d del artículo, el cual se puede apreciar un ejemplo de una máscara de atención:
 
 <div class="flex justify-center">
     <img scale="50 %" align="center" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/local_attention_mask.png"/>
 </div>
 
-Using those attention matrices with less parameters then allows the model to have inputs having a bigger sequence
-length.
+El uso de dichas matrices de atención con menos parámetros permite que el modelo tenga entradas con una longitud de secuencia mayor.
 
-## Other tricks
+## Otros trucos
 
-### Axial positional encodings
+### Codificación posicional axial
 
-[Reformer](model_doc/reformer) uses axial positional encodings: in traditional transformer models, the positional encoding
-E is a matrix of size \\(l\\) by \\(d\\), \\(l\\) being the sequence length and \\(d\\) the dimension of the
-hidden state. If you have very long texts, this matrix can be huge and take way too much space on the GPU. To alleviate
-that, axial positional encodings consist of factorizing that big matrix E in two smaller matrices E1 and E2, with
-dimensions \\(l_{1} \times d_{1}\\) and \\(l_{2} \times d_{2}\\), such that \\(l_{1} \times l_{2} = l\\) and
-\\(d_{1} + d_{2} = d\\) (with the product for the lengths, this ends up being way smaller). The embedding for time
-step \\(j\\) in E is obtained by concatenating the embeddings for timestep \\(j \% l1\\) in E1 and \\(j // l1\\)
-in E2.
+[Reformer](https://huggingface.co/docs/transformers/model_doc/reformer) utiliza codificación posicional axial: en los modelos tradicionales de transformadores, la codificación posicional E es una matriz de tamaño \\(l\\) por \\(d\\), donde \\(l\\) es la longitud de la secuencia y \\(d\\) es la dimensión del estado oculto. Si tienes textos muy extensos, esta matriz puede ser enorme y ocupar demasiado espacio en la GPU. Para aliviar eso, las codificaciones posicionales axiales consisten en factorizar esa gran matriz E en dos matrices más pequeñas E1 y E2, con dimensiones \\(l_{1} \times d_{1}\\) y \\(l_{2} \times d_{2}\\), tal que \\(l_{1} \times l_{2} = l\\) y \\(d_{1} + d_{2} = d\\) (con el producto de las longitudes, esto termina siendo mucho más pequeño). La incrustación (embedding) para el paso de tiempo \\(j\\) en E se obtiene concatenando las incrustaciones para el paso de tiempo \\(j \% l1\\) en E1 y \\(j // l1\\) en E2.
