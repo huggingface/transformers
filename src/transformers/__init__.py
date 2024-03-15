@@ -1410,6 +1410,7 @@ else:
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WatermarkLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
         ]
     )
@@ -6207,6 +6208,7 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
         from .modeling_utils import PreTrainedModel

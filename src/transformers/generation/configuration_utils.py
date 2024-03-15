@@ -224,7 +224,19 @@ class GenerationConfig(PushToHubMixin):
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
-
+        watermark (`bool`, *optional*):
+            Watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
+        greenlist_ratio (`float`, *optional*):
+            Used for watermaring. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+        watermark_bias (`float`, *optional*):
+            Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
+        hashing_key (`int`, *optional*):
+            Hahsing key used for watermarking. Defaults to 15485863 (the millionth prime).
+        seeding_scheme (`str`, *optional*):
+            Algorithm to use for watermarking. Accepts values:
+                - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from paper)
+                - "selfhash": "green" tokens selection depends ono the current token itself (Algorithm 3 from paper)
+                    The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
 
         > Parameters that define the output variables of `generate`
 
@@ -340,6 +352,11 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
         self.low_memory = kwargs.pop("low_memory", None)
+        self.watermark = kwargs.pop("watermark", False)
+        self.greenlist_ratio = kwargs.pop("greenlist_ratio", 0.25)
+        self.watermark_bias = kwargs.pop("watermark_bias", 2.0)
+        self.hashing_key = kwargs.pop("hashing_key", 15485863)
+        self.seeding_scheme = kwargs.pop("seeding_scheme", "lefthash")
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)

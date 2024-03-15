@@ -20,6 +20,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
@@ -2214,4 +2215,131 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             do_early_stop = torch.any(do_early_stop, dim=1, keepdim=True)
             scores = torch.where(do_early_stop, early_stop_scores, scores)
 
+        return scores
+
+
+class WatermarkLogitsProcessor(LogitsProcessor):
+    r"""
+    Logits processor for watermarking generated text. The processor modifies model output scores by adding a small bias to
+    randomized set of "green" tokens before generating the next token. "Green" tokens selection process depends on the
+    `seeding_scheme` used.
+
+    See [the paper](https://arxiv.org/abs/2301.10226) for more information.
+
+    Args:
+        vocab_size (`int`):
+            The model tokenizer's vocab_size. Used to calculate "green" tokens ratio.
+        device (`str`):
+            The device where model is allocated.
+        greenlist_ratio (`float`, optional):
+            The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+        bias (`float`, optional):
+            The bias added to the selected "green" tokens' logits. Consider lowering the
+            `bias` if the text generation quality degrades. Recommended values are in the
+            range of [0.5, 2.0]. Defaults to 2.0.
+        hashing_key (`int`, optional):
+            Key used for hashing. If you deploy this watermark, we advise using another private key.
+            Defaults to 15485863 (the millionth prime).
+        seeding_scheme (`str`, optional):
+            The seeding scheme used for selecting "green" tokens. Accepts values:
+                - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from paper)
+                - "selfhash": "green" tokens selection depends ono the current token itself (Algorithm 3 from paper)
+                    The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    >>> inputs = tokenizer(["This is the beginning of a long story"], return_tensors="pt")
+
+    >>> # watermarked outputs
+    >>> out = model.generate(inputs["input_ids"], watermark=True, tokenizer=tokenizer, max_length=20, do_sample=False)
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    "This is the beginning of a long story, but I'll try to keep it short."
+
+    >>> # normal generation
+    >>> out = model.generate(inputs["input_ids"], watermark=False, max_length=20, do_sample=False)
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    "This is the beginning of a long story.\n\nOnce upon a time, there was a"
+    ```
+    """
+
+    def __init__(
+        self,
+        vocab_size,
+        device,
+        greenlist_ratio: float = 0.25,
+        bias: float = 2.0,
+        hashing_key: int = 15485863,
+        seeding_scheme: str = "lefthash",
+    ):
+        if seeding_scheme not in ["selfhash", "lefthash"]:
+            raise ValueError(f"seeding_scheme has to be one of [`selfhash`, `lefthash`], but foind {seeding_scheme}")
+        if greenlist_ratio >= 1.0 or greenlist_ratio <= 0.0:
+            raise ValueError(
+                f"greenlist_ratio has be in range between 0.0 and 1.0, exclusively. but found {greenlist_ratio}"
+            )
+
+        self.vocab_size = vocab_size
+        self.greenlist_size = int(self.vocab_size * greenlist_ratio)
+        self.bias = bias
+        self.seeding_scheme = seeding_scheme
+        self.rng = torch.Generator(device=device)
+        self.hash_key = hashing_key
+
+        self.rng.manual_seed(hashing_key)
+        self.table_size = 1_000_003
+        self.fixed_table = torch.randperm(self.table_size, generator=self.rng, device=device)
+
+    def set_seed(self, input_ids: torch.LongTensor):
+        if self.seeding_scheme == "selfhash":
+            a = self.fixed_table[input_ids % self.table_size] + 1
+            b = self.fixed_table[input_ids[-1] % self.table_size] + 1
+            seed = (self.hash_key * a * b).min().item()
+        else:
+            seed = self.hash_key * input_ids[-1].item()
+        self.rng.manual_seed(seed % (2**64 - 1))
+
+    def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        self.set_seed(input_ids)
+        vocab_permutation = torch.randperm(self.vocab_size, device=input_ids.device, generator=self.rng)
+        greenlist_ids = vocab_permutation[: self.greenlist_size]
+        return greenlist_ids
+
+    def _score_rejection_sampling(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.LongTensor:
+        """
+        Generate greenlist based on current candidate next token. Reject and move on if necessary.
+        Runs for a fixed number of steps only for efficiency, since the methods is not batched.
+        """
+        final_greenlist = []
+        _, greedy_predictions = scores.sort(dim=-1, descending=True)
+        for i in range(40):
+            greenlist_ids = self._get_greenlist_ids(torch.cat([input_ids, greedy_predictions[i, None, None]], dim=-1))
+            if greedy_predictions[i] in greenlist_ids:
+                final_greenlist.append(greedy_predictions[i])
+        return torch.tensor(final_greenlist, device=input_ids.device)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        greenlist_token_ids = torch.empty(
+            scores.shape[0], self.greenlist_size, device=scores.device, dtype=torch.int64
+        )
+        for b_idx, input_seq in enumerate(input_ids):
+            if self.seeding_scheme == "selfhash":
+                greenlist_ids = self._score_rejection_sampling(input_ids, scores[b_idx])
+            else:
+                greenlist_ids = self._get_greenlist_ids(input_ids=input_seq)
+
+            # Greenlists could differ in length in selfhash, so we pad it by duplicating the last token
+            if greenlist_ids.shape[-1] < greenlist_token_ids.shape[-1]:
+                max_diff = greenlist_token_ids.shape[-1] - greenlist_ids.shape[-1]
+                greenlist_ids = F.pad(greenlist_ids, (0, max_diff), value=greenlist_ids[-1])
+            greenlist_token_ids[b_idx] = greenlist_ids
+
+        green_tokens_mask = torch.full_like(scores, False, dtype=torch.bool)
+        batch_indices = torch.arange(scores.shape[0]).unsqueeze(1)
+        green_tokens_mask[batch_indices, greenlist_token_ids] = True
+        scores[green_tokens_mask] = scores[green_tokens_mask] + self.bias
         return scores
