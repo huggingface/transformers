@@ -2982,6 +2982,7 @@ class Trainer:
     def _load_callback_state(self):
         """If callback states exist and were passed in, restore their states"""
         # Callback states are stored in stateful_callbacks
+        not_found = []
         for stored_callback, data in self.state.stateful_callbacks.items():
             if any(callback.__class__.__name__ == stored_callback for callback in self.callback_handler.callbacks):
                 for callback in self.callback_handler.callbacks:
@@ -2994,6 +2995,12 @@ class Trainer:
                         self.callback_handler.remove_callback(callback)
                         self.callback_handler.add_callback(new_callback)
                 logger.info("  Continuing training from checkpoint, restoring any callbacks that were passed in")
+            else:
+                not_found.append(stored_callback)
+        if len(not_found) > 0:
+            logger.warning(
+                f"  Checkpoint included callbacks not included in current configuration. Ignoring. ({', '.join(not_found)})"
+            )
 
     def hyperparameter_search(
         self,

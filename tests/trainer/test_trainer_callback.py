@@ -279,3 +279,27 @@ class TrainerCallbackTest(unittest.TestCase):
         ][0]
         assert cb.early_stopping_patience == 5
         assert cb.early_stopping_threshold == 0.2
+
+    def test_missing_stateful_callback(self):
+        cb = EarlyStoppingCallback()
+        trainer = self.get_trainer(
+            callbacks=[cb],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            max_steps=2,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        # warning should be emitted for not-present callbacks
+        with patch("transformers.trainer.logger.warning") as warn_mock:
+            trainer.train(resume_from_checkpoint=checkpoint)
+            assert "EarlyStoppingCallback" in warn_mock.call_args[0][0]
