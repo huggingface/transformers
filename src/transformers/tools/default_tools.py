@@ -19,21 +19,20 @@ from .base import Tool
 
 
 class CalculatorTool(Tool):
-    try:
-        import numexpr
-    except ImportError:
-        raise ImportError("Please install numexpr to use this tool.")
-    
     name = "calculator"
     description = "This is a tool that calculates. It can be used to perform simple arithmetic operations."
 
     inputs = {"expression": {"type": str, "description": "The expression to be evaluated.The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers"}}
     output_type = str
 
+    def __init__(self):
+        import numexpr
+        self.numexpr = numexpr
+
     def __call__(self, expression):
         local_dict = {"pi": math.pi, "e": math.e}
         output = str(
-            numexpr.evaluate(
+            self.numexpr.evaluate(
                 expression.strip(),
                 global_dict={},  # restrict access to globals
                 local_dict=local_dict,  # add common mathematical functions
