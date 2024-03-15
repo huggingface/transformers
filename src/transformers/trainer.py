@@ -1503,6 +1503,8 @@ class Trainer:
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
         self.save_model(output_dir, _internal_call=True)
         if self.args.should_save:
+            # Update the `TrainerControl` state to where we are currently
+            self.state.stateful_callbacks["TrainerControl"] = self.control.save_state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2795,6 +2797,7 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
+            # Update the `TrainerControl` state to where we are currently
             self.state.stateful_callbacks["TrainerControl"] = self.control.save_state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
