@@ -161,6 +161,7 @@ else:
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
         "FlaxWhisperTimeStampLogitsProcessor",
+        "FlaxNoRepeatNGramLogitsProcessor",
     ]
     _import_structure["flax_utils"] = [
         "FlaxGenerationMixin",
@@ -298,6 +299,7 @@ if TYPE_CHECKING:
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
             FlaxWhisperTimeStampLogitsProcessor,
+            FlaxNoRepeatNGramLogitsProcessor,
         )
         from .flax_utils import FlaxBeamSearchOutput, FlaxGenerationMixin, FlaxGreedySearchOutput, FlaxSampleOutput
 else:

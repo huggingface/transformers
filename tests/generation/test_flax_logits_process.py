@@ -36,6 +36,7 @@ if is_flax_available():
         FlaxTemperatureLogitsWarper,
         FlaxTopKLogitsWarper,
         FlaxTopPLogitsWarper,
+        FlaxNoRepeatNGramLogitsProcessor,
     )
 
 
@@ -196,6 +197,28 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len=cur_len)
         self.assertFalse(jnp.isinf(scores).any())
+
+    def test_no_repeat_ngram_dist_processor(self):
+        vocab_size = 3
+        batch_size = 2
+
+        cur_len = 4
+        input_ids = np.array([[1, 1, 2, 1], [0, 1, 0, 1]], dtype="i4")
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        no_repeat_proc_2_gram = FlaxNoRepeatNGramLogitsProcessor(2)
+        no_repeat_proc_3_gram = FlaxNoRepeatNGramLogitsProcessor(3)
+
+        filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores, cur_len=cur_len)
+        filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores, cur_len=cur_len)
+
+        # 2-gram would forbid 2nd and 3rd token (1,2) at 1st batch and 1st token (0) at 2nd batch
+        self.assertListEqual(jnp.isinf(filtered_scores_2_gram).tolist(), [[False, True, True], [True, False, False]])
+
+        # 3-gram would forbid no token at 1st batch and 1st token (0) at 2nd batch
+        self.assertListEqual(
+            jnp.isinf(filtered_scores_3_gram).tolist(), [[False, False, False], [True, False, False]]
+        )
 
     def test_processor_list(self):
         batch_size = 4
