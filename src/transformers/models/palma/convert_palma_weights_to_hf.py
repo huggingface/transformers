@@ -26,7 +26,7 @@ import torch
 from numpy import load
 from PIL import Image
 
-from transformers import AutoTokenizer, PalmaConfig, PalmaForConditionalGeneration
+from transformers import AutoTokenizer, PalmaConfig, PalmaForConditionalGeneration, SiglipImageProcessor, LlamaTokenizerFast
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import normalize, rescale, to_channel_dimension_format
 from transformers.image_utils import (
@@ -42,37 +42,33 @@ device = 'cpu'
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+PALMA_VARIANTS = ['2b']  # TODO add 7b
 
-def get_palma_config():
+def get_palma_config(variant:str):
     config = PalmaConfig()
 
-    vocab_size = 257152
-    image_size = 224
-    patch_size = 14
+    if variant=='2b':
+        vocab_size = 257152
+        image_size = 224
+        patch_size = 14
+        config.vision_config.image_size = image_size
+        config.vision_config.patch_size = patch_size
+        config.text_config.vocab_size = vocab_size
 
-    # size of the architecture
-    config.vision_config.image_size = image_size
-    config.vision_config.patch_size = patch_size
-    config.text_config.vocab_size = vocab_size
-
-    # elif "so400m" in model_name:
-
-    config.vision_config.hidden_size = 1152
-    config.vision_config.intermediate_size = 4304
-    config.vision_config.num_hidden_layers = 27
-    config.vision_config.num_attention_heads = 16
-    config.vision_config.projector_hidden_act = "gelu_fast"
-    """
+        config.vision_config.hidden_size = 1152
+        config.vision_config.intermediate_size = 4304
+        config.vision_config.num_hidden_layers = 27
+        config.vision_config.num_attention_heads = 16
+        config.vision_config.projector_hidden_act = "gelu_fast"
+        config.text_config.vocab_size = vocab_size
+        config.text_config.num_hidden_layers = 18
+        config.text_config.num_key_value_heads = 1
+        config.text_config.head_dim = 256
+        config.text_config.torch_dtype = "float32"
+        config.text_config.hidden_size = 2048
+        config.text_config.hidden_act = "gelu_fast"
     else:
-        raise ValueError("Model not supported")
-    """
-    config.text_config.vocab_size = vocab_size
-    config.text_config.num_hidden_layers = 18
-    config.text_config.num_key_value_heads = 1
-    config.text_config.head_dim = 256
-    config.text_config.torch_dtype = "float32"
-    config.text_config.hidden_size = 2048
-    config.text_config.hidden_act = "gelu_fast"
+        raise ValueError(f"Identifier {variant} not supported. Available: {PALMA_VARIANTS}")
     return config
 
 
@@ -239,16 +235,13 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     return dict(items)
 
 
-def verify_logits(model):
+def verify_logits(model, variant):
     tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
     tokenizer.padding_side = 'right'
-    # First load intermediates given, and test prompt
-
-    # all intermediates activations
     intermediates_path = "/home/ubuntu/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
-    # intermediates_path = "/home/pablo/Downloads/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
     cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
-    # cow_on_beach_path = "/home/pablo/Downloads/gvhf/cow_beach_1.png"
+    outputs_logits_flax = np.load("/home/ubuntu/temp/output_logits_flax.npy")
+
     intermediates = np.load(intermediates_path)
 
     # These steps mimic what should be taken in the processor - for an image we don't resize (given image is already 224px)
@@ -275,6 +268,12 @@ def verify_logits(model):
 
     image_tensor = BatchFeature(data={"pixel_values": images}, tensor_type="pt").to(device)
 
+    image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+
+    if variant == "2b":
+        image_processor.size = {"width":224, "height":224}
+
+    breakpoint()
     with torch.inference_mode():
         vision_outputs = model.vision_model(
             pixel_values=image_tensor["pixel_values"], output_hidden_states=True
@@ -289,26 +288,27 @@ def verify_logits(model):
 
     # text logits
     prompt = "answer en Where is the cow standing?\n"
+
     prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length').to(device)
+
+
+
     with torch.inference_mode():
         text_token_embeddings = model.language_model.model.embed_tokens(prompt_input_ids)
-        max_length = 16
-        unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
-        attention_mask = torch.cat((torch.ones((1, unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
-        # z_txt = model.language_model(input_embeds=text_token_embeddings, attention_mask=attention_mask)
 
-    concat_embeddings = torch.cat((projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
-    # This matches exactly the gemma embeddings
-    # Verify generation
-    with torch.inference_mode():
-        max_length = 16
+        # Here we scale the text embeddings with the hidden size. 
+        # TODO replace 2048 with hidden_size from config
+        concat_embeddings = torch.cat((projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
+
+        max_length = 16 # hardcoded for logit verification.
+
         unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
 
         attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
+        #attention_mask = torch.ones((1, projector_output.shape[1] + unpadded_length))
         attention_mask= attention_mask.bool()
-        # check raw outputs before generate
+
         outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
-        outputs_logits_flax = np.load("/home/ubuntu/temp/output_logits_flax.npy")
 
         if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=4e-3):
             raise ValueError("Logits do not match.")
@@ -316,85 +316,53 @@ def verify_logits(model):
             print("Full forward pass works. Amazing!")
             manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
             next_token_id = torch.argmax(manual_probs, dim=-1)
-            if not tokenizer.decode(next_token_id[0]) != "beach":
+            if tokenizer.decode(next_token_id[0]) != "beach":
                 raise ValueError("Next token prediction is wrong.")
             else:
-                print("It seems that the forward pass predicts a correct next token. Go to generate()!")
+                print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
+        #position_ids = torch.arange(projector_output.shape[1] + unpadded_length).unsqueeze(0)
 
-        generation = tokenizer.decode(model.language_model.generate(inputs_embeds=concat_embeddings, max_new_tokens=10, attention_mask=attention_mask)[0])
+        generation = tokenizer.decode(
+            model.generate(
+                inputs_embeds=concat_embeddings,
+                max_new_tokens=10,
+                attention_mask=attention_mask,
+                #position_ids=position_ids,
+                )[0]
+            )
         print(generation)
         if generation != "beach":
             raise ValueError("Generation does not match.")
         else:
             print("Generation matches. You're almost done!")
 
-    #with torch.inference_mode():
-    #    outputs_activations_text = model.language_model(prompt_input_ids).logits
-    """
-    if not np.allclose(outputs_activations_text.cpu().numpy()[0], intermediates['text_logits'][0], rtol=1e-3, atol=5e-3):
-        print(outputs_activations_text.cpu().numpy()[0, 0, 0:10], intermediates['text_logits'][0, 0, 0:10])
-        raise ValueError("Text activations do not match.")
-    else:
-        print("Text activations match.")
-    """
-
-    # Verify pre logits
-    with torch.inference_mode():
-        outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
-
-        for h in outputs.hidden_states:
-            print((h.cpu().numpy()-intermediates['llm/pre_logits']).mean())
-            # last entry gives a close to 0.000 mean, which is encouraging
-        '''
-        pre_logits = outputs.hidden_states[-1]
-
-        if not np.allclose(intermediates['llm/pre_logits'], pre_logits, atol=1e-3, rtol=1e-3):
-            raise ValueError("concatenated pre logits do not match.")
-        else:
-            print("Concatenated pre logits match.")
-        '''
-
 
 @torch.no_grad()
-def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path):
+def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:str, do_verify_logits=True, do_convert_weights=False):
     """
-    Copy/paste/tweak model's weights to our SigLIP structure.
+    Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     # define default SigLIP configuration
-    config = get_palma_config()
-    # get checkpoint (move to args)
-
-    do_convert_weights = False
+    config = get_palma_config(variant)
 
     if do_convert_weights:
         checkpoint_path = "/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz" 
-        # load original state dict
-        print("Loading original jax state dict...")
         data = load(checkpoint_path)
-        print("State dict loaded. Flattening...")
         state_dict = flatten_nested_dict(data)
         del data
-        print("Flattened state dict. Starting slice and replace...")
-        print(state_dict.keys())
+
 
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
-        # load HuggingFace model
-        print("Instantiating model...")
         model = PalmaForConditionalGeneration(config).to(device).eval()
-        print("Model setup done. Loading new weights...")
-        # load jax-imported state dictionary to model
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
         model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
     else:
-        print("Loading locally transformed weights...")
         model = PalmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
-    print("New weights loaded. Verifying logits...")
 
-    do_verify_logits = True
 
     if do_verify_logits:
         print("Verifying logits...")
