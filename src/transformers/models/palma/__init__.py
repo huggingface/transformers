@@ -31,6 +31,8 @@ else:
         "PalmaPreTrainedModel",
     ]
     _import_structure["processing_palma"] = ["PalmaProcessor"]
+    _import_structure["language_modeling_palma"] = ["PalmaGemmaModel",
+                                                    "PalmaGemmaForCausalLM"]
 
 
 if TYPE_CHECKING:
@@ -48,6 +50,7 @@ if TYPE_CHECKING:
             PalmaPreTrainedModel,
         )
         from .processing_palma import PalmaProcessor
+        from .language_modeling_palma import PalmaGemmaModel, PalmaGemmaForCausalLM
 
 
 else:
