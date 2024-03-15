@@ -84,6 +84,9 @@ class TrainerState:
         is_hyper_param_search (`bool`, *optional*, defaults to `False`):
             Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
             impact the way data will be logged in TensorBoard.
+        stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
+            Callbacks attached to the `Trainer` that should have their states be saved or restored.
+            Relevent callbacks should implement a `save_state` and `from_state` function.
     """
 
     epoch: Optional[float] = None
@@ -104,10 +107,25 @@ class TrainerState:
     is_hyper_param_search: bool = False
     trial_name: str = None
     trial_params: Dict[str, Union[str, float, int, bool]] = None
+    stateful_callbacks: List["StatefulTrainerCallback"] = None
 
     def __post_init__(self):
         if self.log_history is None:
             self.log_history = []
+        if self.stateful_callbacks is None:
+            self.stateful_callbacks = {}
+        elif isinstance(self.stateful_callbacks, dict):
+            pass
+        else:
+            # Saveable callbacks get stored as dict of kwargs
+            stateful_callbacks = {}
+            for callback in self.stateful_callbacks:
+                if not isinstance(callback, (StatefulTrainerCallback)):
+                    raise TypeError(
+                        f"All callbacks passed to be saved must be a `StatefulTrainerCallback`, but received {type(callback)}"
+                    )
+                stateful_callbacks[callback.__class__.__name__] = callback.save_state()
+            self.stateful_callbacks = stateful_callbacks
 
     def save_to_json(self, json_path: str):
         """Save the content of this instance in JSON format inside `json_path`."""
@@ -303,6 +321,51 @@ class TrainerCallback:
         Event called after a prediction step.
         """
         pass
+
+
+class StatefulTrainerCallback(TrainerCallback):
+    # no-format
+    """
+    A class for `TrainerCallbacks` that include the ability to have its state
+    be saved during `Trainer._save_checkpoint` and loaded back in during
+    `Trainer._load_from_checkpoint`.
+
+    These must implement a `save_state` function that gets called during the respective
+    Trainer function call. It should only include parameters and attributes needed to
+    recreate the state at a particular time, to avoid utilizing pickle/maintain standard
+    file IO writing.
+
+    Example:
+
+    ```python
+    class EarlyStoppingCallback(StatefulTrainerCallback):
+        def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
+            self.early_stopping_patience = early_stopping_patience
+            self.early_stopping_threshold = early_stopping_threshold
+            # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
+            self.early_stopping_patience_counter = 0
+
+        def save_state(self) -> dict:
+            return {
+                "args": {
+                    "early_stopping_patience": self.early_stopping_patience,
+                    "early_stopping_threshold": self.early_stopping_threshold,
+                },
+                "attributes": {
+                    "early_stopping_patience_counter": self.early_stopping_patience_counter,
+                }
+            }
+    ```"""
+
+    def save_state(self) -> dict:
+        raise NotImplementedError("You must implement a `save_state` function to utilize this class.")
+
+    @classmethod
+    def from_state(cls, state):
+        instance = cls(**state["args"])
+        for k, v in state["attributes"].items():
+            setattr(instance, k, v)
+        return instance
 
 
 class CallbackHandler(TrainerCallback):
@@ -546,9 +609,9 @@ class PrinterCallback(TrainerCallback):
             print(logs)
 
 
-class EarlyStoppingCallback(TrainerCallback):
+class EarlyStoppingCallback(StatefulTrainerCallback):
     """
-    A [`TrainerCallback`] that handles early stopping.
+    A [`StatefulTrainerCallback`] that handles early stopping.
 
     Args:
         early_stopping_patience (`int`):
@@ -605,3 +668,14 @@ class EarlyStoppingCallback(TrainerCallback):
         self.check_metric_value(args, state, control, metric_value)
         if self.early_stopping_patience_counter >= self.early_stopping_patience:
             control.should_training_stop = True
+
+    def save_state(self) -> dict:
+        return {
+            "args": {
+                "early_stopping_patience": self.early_stopping_patience,
+                "early_stopping_threshold": self.early_stopping_threshold,
+            },
+            "attributes": {
+                "early_stopping_patience_counter": self.early_stopping_patience_counter,
+            },
+        }

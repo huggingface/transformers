@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import os
 import shutil
 import tempfile
 import unittest
@@ -19,6 +21,7 @@ from unittest.mock import patch
 
 from transformers import (
     DefaultFlowCallback,
+    EarlyStoppingCallback,
     IntervalStrategy,
     PrinterCallback,
     ProgressCallback,
@@ -243,3 +246,36 @@ class TrainerCallbackTest(unittest.TestCase):
                 callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
             )
             assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]
+
+    def test_stateful_callbacks(self):
+        # Use something with non-defaults
+        cb = EarlyStoppingCallback(early_stopping_patience=5, early_stopping_threshold=0.2)
+        trainer = self.get_trainer(
+            callbacks=[cb],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            callbacks=[EarlyStoppingCallback()],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            evaluation_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.train(resume_from_checkpoint=checkpoint)
+        cb = [
+            callback for callback in trainer.callback_handler.callbacks if isinstance(callback, EarlyStoppingCallback)
+        ][0]
+        assert cb.early_stopping_patience == 5
+        assert cb.early_stopping_threshold == 0.2
