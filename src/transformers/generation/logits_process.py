@@ -2320,7 +2320,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         greenlist_token_ids = torch.empty(
             scores.shape[0], self.greenlist_size, device=scores.device, dtype=torch.int64
-        )  
+        )
         for b_idx, input_seq in enumerate(input_ids):
             if self.seeding_scheme == "selfhash":
                 greenlist_ids = self._score_rejection_sampling(input_seq, scores[b_idx])
