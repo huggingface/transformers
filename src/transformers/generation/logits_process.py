@@ -1213,10 +1213,10 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     ...     In this case, `batch_id` is not used, but you can set rules for each batch member.
     ...     '''
     ...     if input_ids[-1] == entity[0]:
-    ...         return entity[1]
+    ...         return entity[0:1].tolist()
     ...     elif input_ids[-2] == entity[0] and input_ids[-1] == entity[1]:
-    ...         return entity[2]
-    ...     return torch.arange(tok.vocab_size)  # If no match, allow all tokens
+    ...         return entity[1:2].tolist()
+    ...     return list(range(tokenizer.vocab_size))   # If no match, allow all tokens
 
     >>> outputs = model.generate(**inputs, max_new_tokens=5, prefix_allowed_tokens_fn=prefix_allowed_tokens_fn)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
@@ -1234,8 +1234,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
         for batch_id, beam_sent in enumerate(input_ids.view(-1, self._num_beams, input_ids.shape[-1])):
             for beam_id, sent in enumerate(beam_sent):
                 prefix_allowed_tokens = self._prefix_allowed_tokens_fn(batch_id, sent)
-                # 0-dim tensors don't have length, but they cannot be empty either
-                if prefix_allowed_tokens.dim() != 0 and len(prefix_allowed_tokens) == 0:
+                if len(prefix_allowed_tokens) == 0:
                     raise ValueError(
                         f"`prefix_allowed_tokens_fn` returned an empty list for batch ID {batch_id}."
                         f"This means that the constraint is unsatisfiable. Please check your implementation"
@@ -1375,7 +1374,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 batch_idx * self._num_beams : batch_idx * self._num_beams + group_start_idx
             ]
             token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(scores.device)
-            scores_processed[batch_idx * group_size : (batch_idx + 1) * group_size] -= self._diversity_penalty * token_frequency
+            scores_processed[batch_idx * group_size : (batch_idx + 1) * group_size] -= (
+                self._diversity_penalty * token_frequency
+            )
 
         return scores_processed
 
@@ -1715,6 +1716,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
         suppress_token_mask = torch.isin(vocab_tensor, suppress_tokens)
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
+
 
 class ForceTokensLogitsProcessor(LogitsProcessor):
     r"""
