@@ -35,9 +35,17 @@ class BenchMark:
         self._buffer["report_kwargs"] = {}
 
     def _measure(self, func, **measure_kwargs):
+        """Return a callable that, when called, will return some measurement results for the argument `func`.
+
+        See `SpeedBenchMark` for an example implementation.
+        """
         raise NotImplementedError
 
     def _target(self, **target_kwargs):
+        """Return a callable against which we would like to perform benchmark.
+
+        See `FromPretrainedBenchMark` and `CacheBenchMark` for example implementations.
+        """
         raise NotImplementedError
 
     def _inputs(self, **inputs_kwargs):
