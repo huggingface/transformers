@@ -38,8 +38,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # We have a SentencePiece fixture for testing
         tokenizer = InternLM2Tokenizer.from_pretrained(
-            "internlm/internlm2-chat-7b",
-            revision="5b50661e5ba16c9ded1047a51e394280b3b9bda1"
+            "internlm/internlm2-chat-7b", revision="v1.0.0"
         )
         tokenizer.save_pretrained(self.tmpdirname)
 
@@ -60,7 +59,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             sequences=[text],
             expected_encoding=expected,
             model_name="internlm/internlm2-chat-7b",
-            revision="5b50661e5ba16c9ded1047a51e394280b3b9bda1",
+            revision="v1.0.0",
             padding=False,
         )
 
@@ -73,7 +72,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer_class in tokenizer_classes:
             tokenizer = tokenizer_class.from_pretrained(
-                "internlm/internlm2-chat-7b", revision="5b50661e5ba16c9ded1047a51e394280b3b9bda1"
+                "internlm/internlm2-chat-7b", revision="v1.0.0"
             )
             decoded = ""
             for token in tokens:
@@ -96,7 +95,7 @@ class InternLM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer_class in tokenizer_classes:
             tokenizer = tokenizer_class.from_pretrained(
-                "internlm/internlm2-chat-7b", revision="5b50661e5ba16c9ded1047a51e394280b3b9bda1"
+                "internlm/internlm2-chat-7b", revision="v1.0.0"
             )
 
             for word, token_id in special_chat_tokens.items():

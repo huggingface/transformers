@@ -403,12 +403,13 @@ class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         Overwritting the common test as the test is flaky on tiny models
         """
         model = InternLM2ForCausalLM.from_pretrained(
-            " /mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-7b/",
+            "internlm/internlm2-7b",
             load_in_4bit=True,
             device_map={"": 0},
+            revision="v1.0.0"
         )
 
-        tokenizer = InternLM2Tokenizer.from_pretrained("/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-7b/")
+        tokenizer = InternLM2Tokenizer.from_pretrained("internlm/internlm2-7b", revision="v1.0.0")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -421,7 +422,7 @@ class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         output_native = tokenizer.batch_decode(output_native)
 
         model = InternLM2ForCausalLM.from_pretrained(
-            "/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-7b/", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "internlm/internlm2-7b", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2", revision="v1.0.0"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -440,7 +441,7 @@ class InternLM2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model.save_pretrained(tmp_dir)
 
                 new_model = InternLM2ForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
+                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16, revision="v1.0.0"
                 ).to("cuda")
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
@@ -476,7 +477,7 @@ class InternLM2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [1, 9843, 346, 1226, 505, 395, 6576, 2049, 3514, 346]
-        model = InternLM2ForCausalLM.from_pretrained("/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-7b/", device_map="auto")
+        model = InternLM2ForCausalLM.from_pretrained("internlm/internlm2-7b", device_map="auto", revision="v1.0.0")
         out = model(torch.tensor([input_ids]).cuda()).logits
         out = out.cpu()
         # Expected mean on dim = -1
@@ -496,7 +497,7 @@ class InternLM2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_20b_logits(self):
         input_ids = [1, 9843, 346, 1226, 505, 395, 6576, 2049, 3514, 346]
-        model = InternLM2ForCausalLM.from_pretrained("/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-20b/", device_map="auto")
+        model = InternLM2ForCausalLM.from_pretrained("internlm/internlm2-20b", device_map="auto", revision="v1.0.0")
         out = model(torch.tensor([input_ids]).cuda()).logits
         out = out.cpu()
         # Expected mean on dim = -1
@@ -517,7 +518,7 @@ class InternLM2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_chat_7b_logits(self):
         input_ids = [1, 9843, 346, 1226, 505, 395, 6576, 2049, 3514, 346]
-        model = InternLM2ForCausalLM.from_pretrained("/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-chat-7b/", device_map="auto")
+        model = InternLM2ForCausalLM.from_pretrained("internlm/internlm2-chat-7b", device_map="auto", revision="v1.0.0")
         input_ids = torch.tensor([input_ids]).cuda()
         out = model(input_ids).logits
         out = out.cpu()
@@ -538,7 +539,7 @@ class InternLM2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_chat_20b_logits(self):
         input_ids = [1, 9843, 346, 1226, 505, 395, 6576, 2049, 3514, 346]
-        model = InternLM2ForCausalLM.from_pretrained("/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-chat-20b/", device_map="auto")
+        model = InternLM2ForCausalLM.from_pretrained("internlm/internlm2-chat-20b", device_map="auto", revision="v1.0.0")
         out = model(torch.tensor([input_ids]).cuda()).logits
         out = out.cpu()
 
@@ -561,10 +562,10 @@ class InternLM2IntegrationTest(unittest.TestCase):
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that “the laws of physics are the same for all non-accelerating observers, and that the speed of light in a vacuum is the same no matter the speed at which an observer travels.”\nWhat is the theory of relativity in simple terms?\nThe theory of relativity is a scientific theory that Albert Einstein"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = InternLM2Tokenizer.from_pretrained("/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-7b/")
+        tokenizer = InternLM2Tokenizer.from_pretrained("internlm/internlm2-7b", revision="v1.0.0")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = InternLM2ForCausalLM.from_pretrained(
-            "/mnt/inspurfs/xingshuhao/repo/huggingface_repo/internlm2-7b/", device_map="sequential", use_safetensors=False
+            "internlm/internlm2-7b", device_map="sequential", use_safetensors=False, revision="v1.0.0"
         )
 
         # greedy generation outputs
