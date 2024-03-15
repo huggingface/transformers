@@ -293,13 +293,13 @@ if TYPE_CHECKING:
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxNoRepeatNGramLogitsProcessor,
             FlaxSuppressTokensAtBeginLogitsProcessor,
             FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
             FlaxWhisperTimeStampLogitsProcessor,
-            FlaxNoRepeatNGramLogitsProcessor,
         )
         from .flax_utils import FlaxBeamSearchOutput, FlaxGenerationMixin, FlaxGreedySearchOutput, FlaxSampleOutput
 else:

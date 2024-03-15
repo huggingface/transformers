@@ -33,10 +33,10 @@ if is_flax_available():
         FlaxForcedEOSTokenLogitsProcessor,
         FlaxLogitsProcessorList,
         FlaxMinLengthLogitsProcessor,
+        FlaxNoRepeatNGramLogitsProcessor,
         FlaxTemperatureLogitsWarper,
         FlaxTopKLogitsWarper,
         FlaxTopPLogitsWarper,
-        FlaxNoRepeatNGramLogitsProcessor,
     )
 
 
@@ -216,9 +216,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertListEqual(jnp.isinf(filtered_scores_2_gram).tolist(), [[False, True, True], [True, False, False]])
 
         # 3-gram would forbid no token at 1st batch and 1st token (0) at 2nd batch
-        self.assertListEqual(
-            jnp.isinf(filtered_scores_3_gram).tolist(), [[False, False, False], [True, False, False]]
-        )
+        self.assertListEqual(jnp.isinf(filtered_scores_3_gram).tolist(), [[False, False, False], [True, False, False]])
 
     def test_processor_list(self):
         batch_size = 4
