@@ -334,7 +334,6 @@ pipe = pipeline("image-classification", model="google/vit-base-patch16-224")
 gr.Interface.from_pipeline(pipe).launch()
 ```
 
-which opens an intuitive drag-and-drop interface in your browser:
 
 ![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/panda-classification.png)
 
