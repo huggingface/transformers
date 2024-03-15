@@ -107,10 +107,14 @@ class SpeedBenchMark(BenchMark):
         self._buffer["measure_kwargs"]["number"] = number
         self._buffer["measure_kwargs"]["repeat"] = repeat
 
-        def wrapper():
+        def wrapper(*args, **kwargs):
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
+
+            def _func():
+                func(*args, **kwargs)
+
             runtimes = timeit.repeat(
-                func,
+                _func,
                 repeat=repeat,
                 number=number,
             )
