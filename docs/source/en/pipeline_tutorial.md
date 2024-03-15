@@ -314,12 +314,14 @@ pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"loa
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
-Note that you can replace the checkpoint with any of the Hugging Face model that supports large model loading such as BLOOM!
+Note that you can replace the checkpoint with any Hugging Face model that supports large model loading, such as BLOOM.
 
 ## Creating web demos from pipelines with `gradio`
 
 Pipelines are automatically supported in [the gradio library](https://github.com/gradio-app/gradio/), making it a breeze to create a web demo
-based on your pipeline. For example, here we create a web demo around an image classification model in a single line of code:
+based on your pipeline. First, make sure you have installed `gradio` with: `pip install gradio`.
+
+Then, create a web demo around an image classification pipeline (or any other pipeline) in a single line of code:
 
 ```py
 from transformers import pipeline
