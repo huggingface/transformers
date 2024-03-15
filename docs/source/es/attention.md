@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Mecanismos de atención
 
-La mayoría de los modelos de transformadores utilizan atención completa, en el sentido de que la matriz de atención es cuadrada. Esto puede ser un gran cuello de botella computacional cuando tienes textos largos. `Longformer` y `reformer` son modelos que intentan ser más eficientes y utilizan una versión dispersa de la matriz de atención para acelerar el entrenamiento.
+La mayoría de los modelos de transformers utilizan atención completa, en el sentido de que la matriz de atención es cuadrada. Esto puede ser un gran cuello de botella computacional cuando tienes textos largos. `Longformer` y `reformer` son modelos que intentan ser más eficientes y utilizan una versión dispersa de la matriz de atención para acelerar el entrenamiento.
 
 ## Atención LSH
 
@@ -38,4 +38,4 @@ El uso de dichas matrices de atención con menos parámetros permite que el mode
 
 ### Codificación posicional axial
 
-[Reformer](https://huggingface.co/docs/transformers/model_doc/reformer) utiliza codificación posicional axial: en los modelos tradicionales de transformadores, la codificación posicional E es una matriz de tamaño \\(l\\) por \\(d\\), donde \\(l\\) es la longitud de la secuencia y \\(d\\) es la dimensión del estado oculto. Si tienes textos muy extensos, esta matriz puede ser enorme y ocupar demasiado espacio en la GPU. Para aliviar eso, las codificaciones posicionales axiales consisten en factorizar esa gran matriz E en dos matrices más pequeñas E1 y E2, con dimensiones \\(l_{1} \times d_{1}\\) y \\(l_{2} \times d_{2}\\), tal que \\(l_{1} \times l_{2} = l\\) y \\(d_{1} + d_{2} = d\\) (con el producto de las longitudes, esto termina siendo mucho más pequeño). La incrustación (embedding) para el paso de tiempo \\(j\\) en E se obtiene concatenando las incrustaciones para el paso de tiempo \\(j \% l1\\) en E1 y \\(j // l1\\) en E2.
+[Reformer](https://huggingface.co/docs/transformers/model_doc/reformer) utiliza codificación posicional axial: en los modelos transformers tradicionales, la codificación posicional E es una matriz de tamaño \\(l\\) por \\(d\\), donde \\(l\\) es la longitud de la secuencia y \\(d\\) es la dimensión del estado oculto. Si tienes textos muy extensos, esta matriz puede ser enorme y ocupar demasiado espacio en la GPU. Para aliviar eso, las codificaciones posicionales axiales consisten en factorizar esa gran matriz E en dos matrices más pequeñas E1 y E2, con dimensiones \\(l_{1} \times d_{1}\\) y \\(l_{2} \times d_{2}\\), tal que \\(l_{1} \times l_{2} = l\\) y \\(d_{1} + d_{2} = d\\) (con el producto de las longitudes, esto termina siendo mucho más pequeño). La incrustación (embedding) para el paso de tiempo \\(j\\) en E se obtiene concatenando las incrustaciones para el paso de tiempo \\(j \% l1\\) en E1 y \\(j // l1\\) en E2.
