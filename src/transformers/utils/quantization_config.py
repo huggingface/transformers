@@ -24,12 +24,18 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
 
 
 if is_torch_available():
     import torch
 
+if is_hqq_available():
+    from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
+    hqq_default_config = HQQBaseQuantizeConfig(nbits=4, group_size=64, offload_meta=False)
+else:
+    hqq_default_config = None
 
 logger = logging.get_logger(__name__)
 
@@ -39,6 +45,7 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    HQQ = "hqq"
 
 
 class AWQLinearVersion(str, Enum):
@@ -176,6 +183,83 @@ class QuantizationConfigMixin:
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+
+@dataclass
+class HQQConfig(QuantizationConfigMixin):
+    """
+    Main HQQConfig.
+
+    Args:
+        quant_config (`HQQBaseQuantizeConfig, Dict[HQQBaseQuantizeConfig]`):
+            Dictionaries used for detailed quantization config. If it's a single HQQBaseQuantizeConfig, linear layers will the same config.
+            If the dictionary contains linear tags, each linear tag will use the corresponding config
+        skip_modules (List[str])::
+            nn,Linear layers to skip.
+        show_progress (bool):
+            Show tqdm quantization for each shard
+        kwargs (`Dict[str, Any]`):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        quant_config=hqq_default_config,
+        skip_modules=["lm_head"],
+        show_progress=True,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.HQQ
+        self.quant_config = quant_config
+        self.skip_modules = skip_modules
+        self.show_progress = show_progress
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        pass
+
+    def is_quantizable(self):
+        r"""
+        Returns `True` if the model is quantizable, `False` otherwise.
+        """
+        return True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return self.quant_config
+
+    def __repr__(self):
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+    def to_diff_dict(self) -> Dict[str, Any]:
+        """
+        Removes all attributes from config which correspond to the default config attributes for better readability and
+        serializes to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        config_dict = self.to_dict()
+
+        # get the default config dict
+        default_config_dict = HQQConfig().to_dict()
+
+        serializable_config_dict = {}
+
+        # only serialize values that differ from the default config
+        for key, value in config_dict.items():
+            if value != default_config_dict[key]:
+                serializable_config_dict[key] = value
+
+        return serializable_config_dict
 
 
 @dataclass

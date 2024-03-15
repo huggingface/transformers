@@ -95,6 +95,7 @@ _accelerate_available, _accelerate_version = _is_package_available("accelerate",
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_hqq_available = _is_package_available("hqq")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -709,6 +710,17 @@ def is_bitsandbytes_available():
     import torch
 
     return _bitsandbytes_available and torch.cuda.is_available()
+
+
+def is_hqq_available():
+    if not is_torch_available():
+        return False
+
+    # bitsandbytes throws an error if cuda is not available
+    # let's avoid that by adding a simple check
+    import torch
+
+    return _hqq_available and torch.cuda.is_available()
 
 
 def is_flash_attn_2_available():

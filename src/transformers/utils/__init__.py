@@ -125,6 +125,7 @@ from .import_utils import (
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
+    is_hqq_available,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
