@@ -512,6 +512,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.internlm2": ["INTERNLM2_PRETRAINED_CONFIG_ARCHIVE_MAP", "InternLM2Config", "InternLM2Tokenizer"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -1123,6 +1124,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gemma"].append("GemmaTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
+    _import_structure["models.internlm2"].append("InternLM2TokenizerFast")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
@@ -1192,6 +1194,7 @@ else:
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
+    _import_structure["models.internlm2"].append("InternLM2TokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
@@ -1442,6 +1445,7 @@ else:
             "AlignVisionModel",
         ]
     )
+
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2427,6 +2431,14 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.internlm2"].extend(
+        [
+            "InternLM2ForCausalLM",
+            "InternLM2ForSequenceClassification",
+            "InternLM2Model",
+            "InternLM2PreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -5320,6 +5332,12 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.internlm2 import (
+        INTENRLM2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        INTERNLM2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        InternLM2Config,
+        InternLM2Tokenizer,
+    )
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -5986,6 +6004,7 @@ if TYPE_CHECKING:
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
+        from .models.internlm2 import InternLM2TokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.layoutlmv3 import LayoutLMv3TokenizerFast
@@ -7050,6 +7069,14 @@ if TYPE_CHECKING:
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
         )
+
+        # PyTorch model imports
+        from .models.internlm2 import (
+            InternLM2ForCausalLM,
+            InternLM2ForSequenceClassification,
+            InternLM2Model,
+            InternLM2PreTrainedModel,
+        )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
@@ -7656,8 +7683,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,

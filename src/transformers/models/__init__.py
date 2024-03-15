@@ -112,6 +112,7 @@ from . import (
     imagegpt,
     informer,
     instructblip,
+    internlm2,
     jukebox,
     kosmos2,
     layoutlm,

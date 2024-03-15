@@ -1434,6 +1434,69 @@ class MarkupLMConverter(Converter):
         return tokenizer
 
 
+class InternLM2Converter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        decoders_sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if self.proto.normalizer_spec.add_dummy_prefix:
+            decoders_sequence.append(decoders.Strip(content=" ", left=1))
+        return decoders.Sequence(decoders_sequence)
+
+    def tokenizer(self, proto):
+        model_type = proto.trainer_spec.model_type
+        vocab_scores = self.vocab(proto)
+        # special tokens
+        added_tokens = self.original_tokenizer.added_tokens_decoder
+        for i in range(len(vocab_scores)):
+            piece, score = vocab_scores[i]
+            if i in added_tokens:
+                vocab_scores[i] = (added_tokens[i].content, score)
+        if model_type == 1:
+            raise RuntimeError("InternLM2 is supposed to be a BPE model!")
+
+        elif model_type == 2:
+            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            tokenizer = Tokenizer(
+                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True)
+            )
+            tokenizer.add_special_tokens([added_token for index, added_token in added_tokens.items()])
+        else:
+            raise Exception(
+                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
+            )
+
+        return tokenizer
+
+    def normalizer(self, proto):
+        normalizers_list = []
+        if proto.normalizer_spec.add_dummy_prefix:
+            normalizers_list.append(normalizers.Prepend(prepend="▁"))
+        normalizers_list.append(normalizers.Replace(pattern=" ", content="▁"))
+        return normalizers.Sequence(normalizers_list)
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return None
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -1456,6 +1519,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
+    "InternLM2Tokenizer": InternLM2Converter,
     "LayoutLMTokenizer": BertConverter,
     "LayoutLMv2Tokenizer": BertConverter,
     "LayoutLMv3Tokenizer": RobertaConverter,
