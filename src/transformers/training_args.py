@@ -702,7 +702,7 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
-        optim_target_modules (`List[str]`, *optional*):
+        optim_target_modules (`Union[str, List[str]]`, *optional*):
             The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
             https://arxiv.org/abs/2403.03507
             See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
