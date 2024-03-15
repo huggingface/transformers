@@ -186,6 +186,7 @@ class TokenizerTesterMixin:
     space_between_special_tokens = False
     from_pretrained_kwargs = None
     from_pretrained_filter = None
+    from_pretrained_id = None
     from_pretrained_vocab_key = "vocab_file"
     test_seq2seq = True
 
@@ -200,19 +201,13 @@ class TokenizerTesterMixin:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
         if self.test_rust_tokenizer:
-            tokenizers_list = [
+            self.tokenizers_list = [
                 (
                     self.rust_tokenizer_class,
-                    pretrained_name,
+                    self.from_pretrained_id,
                     self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {},
                 )
-                for pretrained_name in self.rust_tokenizer_class.pretrained_vocab_files_map[
-                    self.from_pretrained_vocab_key
-                ].keys()
-                if self.from_pretrained_filter is None
-                or (self.from_pretrained_filter is not None and self.from_pretrained_filter(pretrained_name))
             ]
-            self.tokenizers_list = tokenizers_list[:1]  # Let's just test the first pretrained vocab for speed
         else:
             self.tokenizers_list = []
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
@@ -1122,6 +1117,52 @@ class TokenizerTesterMixin:
                 output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
                 tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
+
+    @require_jinja
+    def test_chat_template_dict(self):
+        dummy_template_1 = "{{'a'}}"
+        dummy_template_2 = "{{'b'}}"
+        dummy_conversation = [
+            {"role": "user", "content": "user message"},
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                output1 = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template_1, tokenize=False
+                )
+                output1_via_dict = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template="template1", tokenize=False
+                )
+                self.assertEqual(output1, output1_via_dict)
+                output2 = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template_2, tokenize=False
+                )
+                output2_via_dict = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template="template2", tokenize=False
+                )
+                self.assertEqual(output2, output2_via_dict)
+
+    @require_jinja
+    def test_chat_template_dict_saving(self):
+        dummy_template_1 = "{{'a'}}"
+        dummy_template_2 = "{{'b'}}"
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    tokenizer.save_pretrained(tmp_dir_name)
+                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    # Assert that chat templates are correctly serialized as lists of dictionaries
+                    self.assertEqual(
+                        config_dict["chat_template"],
+                        [{"name": "template1", "template": "{{'a'}}"}, {"name": "template2", "template": "{{'b'}}"}],
+                    )
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                # Assert that the serialized list is correctly reconstructed as a single dict
+                self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

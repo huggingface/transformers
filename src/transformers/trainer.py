@@ -134,6 +134,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     PushInProgress,
+    PushToHubMixin,
     can_return_loss,
     find_labels,
     is_accelerate_available,
@@ -149,7 +150,7 @@ from .utils import (
     is_torch_compile_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     logging,
     strtobool,
 )
@@ -170,7 +171,7 @@ if is_apex_available():
 if is_datasets_available():
     import datasets
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.spmd as xs
@@ -508,7 +509,7 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        if is_torch_tpu_available() and self.optimizer is not None:
+        if is_torch_xla_available() and self.optimizer is not None:
             for param in self.model.parameters():
                 model_device = param.device
                 break
@@ -856,7 +857,7 @@ class Trainer:
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
         # Deprecated code
         if self.args.use_legacy_prediction_loop:
-            if is_torch_tpu_available():
+            if is_torch_xla_available():
                 return SequentialDistributedSampler(
                     eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
                 )
@@ -888,6 +889,11 @@ class Trainer:
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
+
+        # If we have persistent workers, don't do a fork bomb especially as eval datasets
+        # don't change during training
+        if hasattr(self, "_eval_dataloader") and self.args.dataloader_persistent_workers:
+            return self.accelerator.prepare(self._eval_dataloader)
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         data_collator = self.data_collator
 
@@ -909,7 +915,13 @@ class Trainer:
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
-        return self.accelerator.prepare(DataLoader(eval_dataset, **dataloader_params))
+        # accelerator.free_memory() will destroy the references, so
+        # we need to store the non-prepared version
+        eval_dataloader = DataLoader(eval_dataset, **dataloader_params)
+        if self.args.dataloader_persistent_workers:
+            self._eval_dataloader = eval_dataloader
+
+        return self.accelerator.prepare(eval_dataloader)
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         """
@@ -1765,6 +1777,7 @@ class Trainer:
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
+                self._fsdp_qlora_plugin_updates()
                 self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
@@ -1964,7 +1977,7 @@ class Trainer:
 
                 if (
                     args.logging_nan_inf_filter
-                    and not is_torch_tpu_available()
+                    and not is_torch_xla_available()
                     and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
                 ):
                     # if loss is nan or inf simply add the average of previous logged losses
@@ -2016,7 +2029,7 @@ class Trainer:
                             if hasattr(grad_norm, "item"):
                                 grad_norm = grad_norm.item()
                         else:
-                            grad_norm = _grad_norm.item() if _grad_norm is not None else None
+                            grad_norm = _grad_norm
 
                     # Optimizer step
                     self.optimizer.step()
@@ -2039,7 +2052,7 @@ class Trainer:
                     # PyTorch/XLA relies on the data loader to insert the mark_step for
                     # each step. Since we are breaking the loop early, we need to manually
                     # insert the mark_step here.
-                    if is_torch_tpu_available():
+                    if is_torch_xla_available():
                         xm.mark_step()
                     break
             if step < 0:
@@ -2054,7 +2067,7 @@ class Trainer:
             self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
-                if is_torch_tpu_available():
+                if is_torch_xla_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                     xm.master_print(met.metrics_report())
                 else:
@@ -2072,7 +2085,7 @@ class Trainer:
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             # Wait for everyone to get here so we are sure the model has been saved by process 0.
-            if is_torch_tpu_available():
+            if is_torch_xla_available():
                 xm.rendezvous("load_best_model_at_end")
             elif args.parallel_mode == ParallelMode.DISTRIBUTED:
                 dist.barrier()
@@ -2391,7 +2404,7 @@ class Trainer:
 
     def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
-            if is_torch_tpu_available():
+            if is_torch_xla_available():
                 xm.mark_step()
 
             logs: Dict[str, float] = {}
@@ -2404,7 +2417,7 @@ class Trainer:
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if grad_norm is not None:
-                logs["grad_norm"] = grad_norm
+                logs["grad_norm"] = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             logs["learning_rate"] = self._get_learning_rate()
 
             self._total_loss_scalar += tr_loss_scalar
@@ -2467,7 +2480,7 @@ class Trainer:
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
         if is_torch_npu_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
@@ -2545,7 +2558,7 @@ class Trainer:
             else:
                 rng_states["cuda"] = torch.cuda.random.get_rng_state()
 
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             rng_states["xla"] = xm.get_rng_state()
 
         if is_torch_npu_available():
@@ -2564,7 +2577,7 @@ class Trainer:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
     def _save_optimizer_and_scheduler(self, output_dir):
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
             with warnings.catch_warnings(record=True) as caught_warnings:
@@ -2609,7 +2622,7 @@ class Trainer:
         if (
             self.args.should_save
             and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
-            and not is_torch_tpu_available()
+            and not is_torch_xla_available()
         ):
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2646,7 +2659,7 @@ class Trainer:
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
-            if is_torch_tpu_available():
+            if is_torch_xla_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 optimizer_state = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
                 with warnings.catch_warnings(record=True) as caught_warnings:
@@ -2953,7 +2966,7 @@ class Trainer:
         if output_dir is None:
             output_dir = self.args.output_dir
 
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
@@ -2999,6 +3012,7 @@ class Trainer:
 
         logger.info(f"Saving model checkpoint to {output_dir}")
         model = self.model
+        xm.mark_step()
         model.to("cpu")
 
         if xm.is_master_ordinal():
@@ -3007,9 +3021,10 @@ class Trainer:
 
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
+        supported_classes = (PushToHubMixin,)
         xm.rendezvous("saving_checkpoint")
-        if not isinstance(model, PreTrainedModel):
-            if isinstance(unwrap_model(model), PreTrainedModel):
+        if not isinstance(model, supported_classes):
+            if isinstance(unwrap_model(model), supported_classes):
                 unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
@@ -3394,7 +3409,7 @@ class Trainer:
             main_input_name = getattr(self.model, "main_input_name", "input_ids")
             inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
-            if is_torch_tpu_available():
+            if is_torch_xla_available():
                 xm.mark_step()
 
             # Update containers on host
@@ -3518,7 +3533,7 @@ class Trainer:
         """
         if tensors is None:
             return
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             if name is None:
                 name = "nested_gather"
             tensors = nested_xla_mesh_reduce(tensors, name)
@@ -4034,7 +4049,7 @@ class Trainer:
         """
         if tensors is None:
             return
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
@@ -4145,3 +4160,20 @@ class Trainer:
         ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
         ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
         ds_plugin.hf_ds_config.trainer_config_process(self.args, auto_find_batch_size)
+
+    def _fsdp_qlora_plugin_updates(self):
+        if self.is_fsdp_enabled and _is_peft_model(self.model):
+            from peft import LoraConfig
+            from peft.utils.other import fsdp_auto_wrap_policy
+
+            if isinstance(self.model.active_peft_config, LoraConfig):
+                fsdp_plugin = self.accelerator.state.fsdp_plugin
+                fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
+            if (
+                getattr(self.model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+                and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
+                and version.parse(accelerate_version) > version.parse("0.27.0")
+            ):
+                fsdp_plugin.set_mixed_precision(
+                    self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
+                )
