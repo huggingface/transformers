@@ -27,7 +27,7 @@ from .default_tools import FinalAnswerTool
 from .prompts import DEFAULT_REACT_SYSTEM_PROMPT, DEFAULT_CODE_SYSTEM_PROMPT
 from .python_interpreter import evaluate as evaluate_python_code
 
-
+logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 _tools_are_initialized = False
@@ -241,7 +241,7 @@ class Agent:
         self.tool_description_template = tool_description_template if tool_description_template else OPENAI_TOOL_DESCRIPTION_TEMPLATE
         self.additional_args = additional_args
         self.max_iterations = max_iterations
-        self.log = lambda x: print(to_text(x))
+        self.log = logger
         self.tool_parser = tool_parser
 
         if isinstance(tools, Toolbox):
@@ -260,7 +260,7 @@ class Agent:
         return self._toolbox
     
     def show_memory(self):
-        self.log('\n'.join(self.memory))
+        self.log.info('\n'.join(self.memory))
     
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -275,7 +275,7 @@ class Agent:
             split = llm_output.split(split_token)
             _, action = split[-2], split[-1] # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
         except Exception as e:
-            self.log(e)
+            self.log.error(e, exc_info=1)
             raise RuntimeError(f"Error: No '{split_token}' token provided. Be sure to include an action, prefaced with '{split_token}'!")
         return action
      
@@ -290,16 +290,18 @@ class Agent:
         """
 
         if tool_name not in self.toolbox.tools:
-            raise KeyError(f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.tools.keys()]}.")
+            error_msg = f"Error: unknown tool {tool_name}, should be instead one of {[tool_name for tool_name in self.toolbox.tools.keys()]}."
+            self.log.error(error_msg, exc_info=1)
+            raise KeyError(error_msg)
         
-        self.log("\n\n==Result==")
+        self.log.info("\n\n==Result==")
         try:
             if isinstance(arguments, str):
                 observation = self.toolbox.tools[tool_name](arguments)
             else:
                 observation = self.toolbox.tools[tool_name](**arguments)
             observation_message = "Observation: " + observation.strip()
-            self.log(observation_message)
+            self.log.info(observation_message)
             self.memory.append(observation_message)
         except Exception as e:
             raise RuntimeError(
@@ -375,8 +377,8 @@ class CodeAgent(Agent):
         # Run LLM
         self.prompt = self.system_prompt + f"\nTask: {task}"
         llm_output = self.llm_callable(self.prompt, stop=["Task:"])
-        self.log("====Executing with this prompt====")
-        self.log(self.prompt)
+        self.log.info("====Executing with this prompt====")
+        self.log.info(self.prompt)
 
         if return_generated_code:
             return llm_output
@@ -391,19 +393,19 @@ class CodeAgent(Agent):
             code_action = self.clean_code_for_run(code_action)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
-            self.log(error_msg)
+            self.log.error(error_msg)
             return error_msg
 
         # Execute
         try: 
-            self.log("\n\n==Executing the code below:==")
-            self.log(code_action)
+            self.log.info("\n\n==Executing the code below:==")
+            self.log.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools} 
             # NOTE: The base python tools are not added to toolbox, since they do not have the proper attributes for a description
             return evaluate_python_code(code_action, available_tools, state=kwargs.copy())
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
-            self.log(error_msg)
+            self.log.error(error_msg, exc_info=1)
             return error_msg
 
 
@@ -475,14 +477,14 @@ class ReactAgent(Agent):
             try:
                 final_answer = self.step()
             except Exception as e:
-                self.log(e)
+                self.log.error(e)
                 error_message = str(e) + ". Now let's retry."
                 self.memory.append(error_message)
             finally:
                 iteration += 1
         
         if not final_answer and iteration == self.max_iterations:
-            self.log("Failed by reaching max iterations, returning None.")
+            self.log.error("Failed by reaching max iterations, returning None.")
 
         return final_answer
     
@@ -491,14 +493,14 @@ class ReactAgent(Agent):
         """
         Runs agent step with the current prompt (task + state)
         """
-        self.log("=====Calling LLM with these messages:=====")
+        self.log.info("=====Calling LLM with these messages:=====")
         memory_as_text = '\n'.join(self.memory)
         self.prompt = memory_as_text
-        self.log(self.prompt)
+        self.log.info(self.prompt)
 
         llm_output = self.llm_callable(self.prompt, stop=["Observation:"])
-        self.log("=====Output message of the LLM:=====")
-        self.log(llm_output)
+        self.log.info("=====Output message of the LLM:=====")
+        self.log.info(llm_output)
 
         self.memory.append(llm_output)
 
