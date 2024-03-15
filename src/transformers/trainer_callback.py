@@ -107,7 +107,7 @@ class TrainerState:
     is_hyper_param_search: bool = False
     trial_name: str = None
     trial_params: Dict[str, Union[str, float, int, bool]] = None
-    stateful_callbacks: List["StatefulTrainerCallback"] = None
+    stateful_callbacks: List["TrainerCallback"] = None
 
     def __post_init__(self):
         if self.log_history is None:
@@ -121,9 +121,9 @@ class TrainerState:
             # Saveable callbacks get stored as dict of kwargs
             stateful_callbacks = {}
             for callback in self.stateful_callbacks:
-                if not isinstance(callback, (StatefulTrainerCallback)):
+                if not isinstance(callback, (ExportableState)):
                     raise TypeError(
-                        f"All callbacks passed to be saved must be a `StatefulTrainerCallback`, but received {type(callback)}"
+                        f"All callbacks passed to be saved must inherit `ExportableState`, but received {type(callback)}"
                     )
                 stateful_callbacks[callback.__class__.__name__] = callback.save_state()
             self.stateful_callbacks = stateful_callbacks
@@ -142,8 +142,52 @@ class TrainerState:
         return cls(**json.loads(text))
 
 
+class ExportableState:
+    """
+    A class for objects that include the ability to have its state
+    be saved during `Trainer._save_checkpoint` and loaded back in during
+    `Trainer._load_from_checkpoint`.
+
+    These must implement a `save_state` function that gets called during the respective
+    Trainer function call. It should only include parameters and attributes needed to
+    recreate the state at a particular time, to avoid utilizing pickle/maintain standard
+    file IO writing.
+
+    Example:
+
+    ```python
+    class EarlyStoppingCallback(StatefulTrainerCallback):
+        def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
+            self.early_stopping_patience = early_stopping_patience
+            self.early_stopping_threshold = early_stopping_threshold
+            # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
+            self.early_stopping_patience_counter = 0
+
+        def save_state(self) -> dict:
+            return {
+                "args": {
+                    "early_stopping_patience": self.early_stopping_patience,
+                    "early_stopping_threshold": self.early_stopping_threshold,
+                },
+                "attributes": {
+                    "early_stopping_patience_counter": self.early_stopping_patience_counter,
+                }
+            }
+    ```"""
+
+    def save_state(self) -> dict:
+        raise NotImplementedError("You must implement a `save_state` function to utilize this class.")
+
+    @classmethod
+    def from_state(cls, state):
+        instance = cls(**state["args"])
+        for k, v in state["attributes"].items():
+            setattr(instance, k, v)
+        return instance
+
+
 @dataclass
-class TrainerControl:
+class TrainerControl(ExportableState):
     """
     A class that handles the [`Trainer`] control flow. This class is used by the [`TrainerCallback`] to activate some
     switches in the training loop.
@@ -190,6 +234,18 @@ class TrainerControl:
         self.should_save = False
         self.should_evaluate = False
         self.should_log = False
+
+    def save_state(self) -> dict:
+        return {
+            "args": {
+                "should_training_stop": self.should_training_stop,
+                "should_epoch_stop": self.should_epoch_stop,
+                "should_save": self.should_save,
+                "should_evaluate": self.should_evaluate,
+                "should_log": self.should_log,
+            },
+            "attributes": {},
+        }
 
 
 class TrainerCallback:
@@ -322,51 +378,6 @@ class TrainerCallback:
         Event called after a prediction step.
         """
         pass
-
-
-class StatefulTrainerCallback(TrainerCallback):
-    # no-format
-    """
-    A class for `TrainerCallbacks` that include the ability to have its state
-    be saved during `Trainer._save_checkpoint` and loaded back in during
-    `Trainer._load_from_checkpoint`.
-
-    These must implement a `save_state` function that gets called during the respective
-    Trainer function call. It should only include parameters and attributes needed to
-    recreate the state at a particular time, to avoid utilizing pickle/maintain standard
-    file IO writing.
-
-    Example:
-
-    ```python
-    class EarlyStoppingCallback(StatefulTrainerCallback):
-        def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
-            self.early_stopping_patience = early_stopping_patience
-            self.early_stopping_threshold = early_stopping_threshold
-            # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
-            self.early_stopping_patience_counter = 0
-
-        def save_state(self) -> dict:
-            return {
-                "args": {
-                    "early_stopping_patience": self.early_stopping_patience,
-                    "early_stopping_threshold": self.early_stopping_threshold,
-                },
-                "attributes": {
-                    "early_stopping_patience_counter": self.early_stopping_patience_counter,
-                }
-            }
-    ```"""
-
-    def save_state(self) -> dict:
-        raise NotImplementedError("You must implement a `save_state` function to utilize this class.")
-
-    @classmethod
-    def from_state(cls, state):
-        instance = cls(**state["args"])
-        for k, v in state["attributes"].items():
-            setattr(instance, k, v)
-        return instance
 
 
 class CallbackHandler(TrainerCallback):
@@ -610,9 +621,9 @@ class PrinterCallback(TrainerCallback):
             print(logs)
 
 
-class EarlyStoppingCallback(StatefulTrainerCallback):
+class EarlyStoppingCallback(TrainerCallback, ExportableState):
     """
-    A [`StatefulTrainerCallback`] that handles early stopping.
+    A [`TrainerCallback`] that handles early stopping.
 
     Args:
         early_stopping_patience (`int`):

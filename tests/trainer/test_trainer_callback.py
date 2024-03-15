@@ -27,10 +27,12 @@ from transformers import (
     ProgressCallback,
     Trainer,
     TrainerCallback,
+    TrainerState,
     TrainingArguments,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch
+from transformers.trainer import TRAINER_STATE_NAME
 
 
 if is_torch_available():
@@ -303,3 +305,19 @@ class TrainerCallbackTest(unittest.TestCase):
         with patch("transformers.trainer.logger.warning") as warn_mock:
             trainer.train(resume_from_checkpoint=checkpoint)
             assert "EarlyStoppingCallback" in warn_mock.call_args[0][0]
+
+    def test_stateful_control(self):
+        trainer = self.get_trainer(
+            max_steps=2,
+            save_strategy="steps",
+            save_steps=2,
+        )
+        trainer.train()
+        # Load it back in and verify values
+        trainer = self.get_trainer(
+            max_steps=2,
+        )
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        trainer._load_callback_state()
+        assert trainer.control.should_training_stop

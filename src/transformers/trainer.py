@@ -78,9 +78,9 @@ from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
+    ExportableState,
     PrinterCallback,
     ProgressCallback,
-    StatefulTrainerCallback,
     TrainerCallback,
     TrainerControl,
     TrainerState,
@@ -650,15 +650,15 @@ class Trainer:
         else:
             self.label_smoother = None
 
+        self.control = TrainerControl()
+
         self.state = TrainerState(
             is_local_process_zero=self.is_local_process_zero(),
             is_world_process_zero=self.is_world_process_zero(),
             stateful_callbacks=[
-                cb for cb in self.callback_handler.callbacks if isinstance(cb, StatefulTrainerCallback)
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ],
         )
-
-        self.control = TrainerControl()
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
@@ -1976,7 +1976,7 @@ class Trainer:
 
         self.state = TrainerState(
             stateful_callbacks=[
-                cb for cb in self.callback_handler.callbacks if isinstance(cb, StatefulTrainerCallback)
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ]
         )
         self.state.is_hyper_param_search = trial is not None
@@ -2795,6 +2795,7 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
+            self.state.stateful_callbacks["TrainerControl"] = self.control.save_state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
@@ -2984,16 +2985,23 @@ class Trainer:
         # Callback states are stored in stateful_callbacks
         not_found = []
         for stored_callback, data in self.state.stateful_callbacks.items():
-            if any(callback.__class__.__name__ == stored_callback for callback in self.callback_handler.callbacks):
-                for callback in self.callback_handler.callbacks:
+            if any(
+                callback.__class__.__name__ == stored_callback
+                for callback in self.callback_handler.callbacks + [self.control]
+            ):
+                for callback in self.callback_handler.callbacks + [self.control]:
                     if callback.__class__.__name__ == stored_callback:
                         args, attributes = data.values()
                         new_callback = type(callback)(**args)
                         for attribute, value in attributes.items():
                             setattr(new_callback, attribute, value)
-                        # We remove the existing callback and add a new one
-                        self.callback_handler.remove_callback(callback)
-                        self.callback_handler.add_callback(new_callback)
+                        if isinstance(callback, TrainerControl):
+                            # Specifically for restoring the `control` state
+                            self.control = new_callback
+                        else:
+                            # We remove the existing callback and add a new one
+                            self.callback_handler.remove_callback(callback)
+                            self.callback_handler.add_callback(new_callback)
                 logger.info("  Continuing training from checkpoint, restoring any callbacks that were passed in")
             else:
                 not_found.append(stored_callback)
