@@ -51,12 +51,6 @@ class ImageProcessorUtilTester(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = ViTImageProcessor.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-vit/resolve/main/preprocessor_config.json"
-        )
-
     def test_image_processor_from_pretrained_subfolder(self):
         with self.assertRaises(OSError):
             # config is in subfolder, the following should not work without specifying the subfolder
