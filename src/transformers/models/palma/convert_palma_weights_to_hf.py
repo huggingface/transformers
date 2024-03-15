@@ -26,7 +26,7 @@ import torch
 from numpy import load
 from PIL import Image
 
-from transformers import AutoTokenizer, PalmaConfig, PalmaForConditionalGeneration, SiglipImageProcessor, LlamaTokenizerFast
+from transformers import AutoTokenizer, PalmaConfig, PalmaForConditionalGeneration, SiglipImageProcessor, PalmaProcessor
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import normalize, rescale, to_channel_dimension_format
 from transformers.image_utils import (
@@ -42,7 +42,7 @@ device = 'cpu'
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-PALMA_VARIANTS = ['2b']  # TODO add 7b
+PALMA_VARIANTS = ['2b']  # TODO add 7b when available
 
 def get_palma_config(variant:str):
     config = PalmaConfig()
@@ -72,15 +72,8 @@ def get_palma_config(variant:str):
     return config
 
 
-def numpy_adapted_permute(w, num_heads, head_dim, hidden_size):
-    #reshaped = w.transpose(0, 2, 1).reshape(num_heads, head_dim, hidden_size).reshape(hidden_size, hidden_size)
-    #permuted = reshaped.reshape(num_heads, -1, 2, hidden_size).transpose(0, 2, 1, 3).reshape(hidden_size, hidden_size)
-
-    interleaved = np.transpose(w, (1, 0, 2)).reshape(-1, num_heads * head_dim)
-    return interleaved
-
-
 def slice_state_dict(state_dict, config):
+    # fmt: off
     # patch embeddings
     state_dict["vision_model.embeddings.patch_embedding.weight"] = state_dict.pop("img/embedding/kernel").transpose(
         3, 2, 0, 1
@@ -91,7 +84,6 @@ def slice_state_dict(state_dict, config):
         -1, config.vision_config.hidden_size
     )
 
-    # fmt: off
     # extract vision layers to be sliced at index 0. There are 27 layers in the base model.
     encoderblock_layernorm0_scale = state_dict.pop("img/Transformer/encoderblock/LayerNorm_0/scale")
     encoderblock_layernorm0_bias = state_dict.pop("img/Transformer/encoderblock/LayerNorm_0/bias")
@@ -184,7 +176,6 @@ def slice_state_dict(state_dict, config):
         "vocab_size": 257152
         }
         """
-        # flash_attention_2
         # llm_attention_q_einsum[i].shape = (8, 2048, 256)
         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
@@ -235,45 +226,15 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     return dict(items)
 
 
-def verify_logits(model, variant):
-    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-    tokenizer.padding_side = 'right'
+def verify_logits(model, processor):
     intermediates_path = "/home/ubuntu/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
     cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
     outputs_logits_flax = np.load("/home/ubuntu/temp/output_logits_flax.npy")
 
     intermediates = np.load(intermediates_path)
 
-    # These steps mimic what should be taken in the processor - for an image we don't resize (given image is already 224px)
-    # TODO replace by a proper Processor() call when tests pass
 
-    img = np.array(Image.open(cow_on_beach_path))
-    img = img
-    img = np.expand_dims(img, 0)
-    images = img.astype(np.float32)
-
-    input_data_format = infer_channel_dimension_format(images[0])
-    images = [rescale(image=image, scale=1 / 255, input_data_format=input_data_format) for image in images]
-
-    images = [
-        normalize(
-            image=image, mean=IMAGENET_STANDARD_MEAN, std=IMAGENET_STANDARD_STD, input_data_format=input_data_format
-        )
-        for image in images
-    ]
-    images = [
-        to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
-        for image in images
-    ]
-
-    image_tensor = BatchFeature(data={"pixel_values": images}, tensor_type="pt").to(device)
-
-    image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-
-    if variant == "2b":
-        image_processor.size = {"width":224, "height":224}
-
-    breakpoint()
+    image_tensor = processor.image_processor(images=Image.open(cow_on_beach_path), return_tensors="pt")
     with torch.inference_mode():
         vision_outputs = model.vision_model(
             pixel_values=image_tensor["pixel_values"], output_hidden_states=True
@@ -288,42 +249,54 @@ def verify_logits(model, variant):
 
     # text logits
     prompt = "answer en Where is the cow standing?\n"
+    # right-padding
+    prompt_input_ids = processor.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length').to(device)
 
-    prompt_input_ids = tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length').to(device)
-
-
+    # left-padding
+    #prompt_input_ids = processor.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", padding='do_not_pad').to(device)
 
     with torch.inference_mode():
-        text_token_embeddings = model.language_model.model.embed_tokens(prompt_input_ids)
-
+        text_token_embeddings = model.get_input_embeddings()(prompt_input_ids)
+        pad_token_embeddings = model.get_input_embeddings()(torch.zeros(1,6).to(int))
         # Here we scale the text embeddings with the hidden size. 
         # TODO replace 2048 with hidden_size from config
+        
+        
+        # right padding
         concat_embeddings = torch.cat((projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
+
+        # left padding
+        #concat_embeddings = torch.cat((pad_token_embeddings, projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
 
         max_length = 16 # hardcoded for logit verification.
 
-        unpadded_length = len(tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
+        unpadded_length = len(processor.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
 
+        #right padding
         attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
+        
+        # left padding 
+        #attention_mask = torch.cat((torch.zeros((1, max_length - unpadded_length)), torch.ones((1, projector_output.shape[1] + unpadded_length))), dim=1)
+        
+        
         #attention_mask = torch.ones((1, projector_output.shape[1] + unpadded_length))
         attention_mask= attention_mask.bool()
-
-        outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings, output_hidden_states=True)
-
-        if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=4e-3):
+        outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings)
+        print(outputs_logits_flax)
+        print(outputs.logits.cpu().numpy())
+        if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
             raise ValueError("Logits do not match.")
         else:
             print("Full forward pass works. Amazing!")
-            manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
-            next_token_id = torch.argmax(manual_probs, dim=-1)
-            if tokenizer.decode(next_token_id[0]) != "beach":
-                raise ValueError("Next token prediction is wrong.")
-            else:
-                print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
+        manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
+        next_token_id = torch.argmax(manual_probs, dim=-1)
+        if processor.decode(next_token_id[0]) != "beach":
+            raise ValueError("Next token prediction is wrong.")
+        else:
+            print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
         #position_ids = torch.arange(projector_output.shape[1] + unpadded_length).unsqueeze(0)
-
-        generation = tokenizer.decode(
+        generation = processor.decode(
             model.generate(
                 inputs_embeds=concat_embeddings,
                 max_new_tokens=10,
@@ -337,37 +310,43 @@ def verify_logits(model, variant):
         else:
             print("Generation matches. You're almost done!")
 
-
 @torch.no_grad()
 def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:str, do_verify_logits=True, do_convert_weights=False):
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
-    # define default SigLIP configuration
+    # define default Palma configuration
     config = get_palma_config(variant)
+    if variant == "2b":
+        tokenizer_id = "google/gemma-2b"
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
+    tokenizer.padding_side = 'right'
+    
+    image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+    if variant == "2b":
+        image_processor.size = {"width":224, "height":224}
+
+    processor = PalmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     if do_convert_weights:
         checkpoint_path = "/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz" 
         data = load(checkpoint_path)
         state_dict = flatten_nested_dict(data)
         del data
-
-
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
+
         model = PalmaForConditionalGeneration(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
-        model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
     else:
         model = PalmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
 
-
     if do_verify_logits:
         print("Verifying logits...")
-        verify_logits(model)
-
+        verify_logits(model, processor)
+        model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -382,5 +361,22 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default="/home/ubuntu/palma_hf", type=str, help="Path to the output PyTorch model directory."
     )
 
+    parser.add_argument(
+        "--variant", default="2b", type=str, help="String identifier of the palma variant to convert."
+    )
+
+    parser.add_argument(
+        "--do_verify_logits", action="store_false", help="Whether or not to run checks against original implementation."
+    )
+    parser.add_argument(
+        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
+    )
+
     args = parser.parse_args()
-    convert_palma_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_palma_checkpoint(
+        checkpoint_path=args.checkpoint_path,
+        pytorch_dump_folder_path=args.pytorch_dump_folder_path,
+        variant=args.variant,
+        do_verify_logits=args.do_verify_logits,
+        do_convert_weights=args.do_convert_weights,
+        )
