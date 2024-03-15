@@ -2994,7 +2994,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         elif safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_sharded_pytorch_safetensors_in_tf2_model
 
-            # Load from sharded PyTorch safetensors checkpoint
             return load_sharded_pytorch_safetensors_in_tf2_model(
                 model,
                 resolved_archive_file,
