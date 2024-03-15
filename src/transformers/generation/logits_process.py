@@ -2277,7 +2277,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         seeding_scheme: str = "lefthash",
     ):
         if seeding_scheme not in ["selfhash", "lefthash"]:
-            raise ValueError(f"seeding_scheme has to be one of [`selfhash`, `lefthash`], but foind {seeding_scheme}")
+            raise ValueError(f"seeding_scheme has to be one of [`selfhash`, `lefthash`], but found {seeding_scheme}")
         if greenlist_ratio >= 1.0 or greenlist_ratio <= 0.0:
             raise ValueError(
                 f"greenlist_ratio has be in range between 0.0 and 1.0, exclusively. but found {greenlist_ratio}"
