@@ -1538,8 +1538,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
 
         # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
+        # -1 is a temp hack until `generate` is refactored to work better with VLMs
         if not self.language_model.config.is_encoder_decoder:
-            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1]
+            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1] - 1
             generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
 
         outputs = self.language_model.generate(
