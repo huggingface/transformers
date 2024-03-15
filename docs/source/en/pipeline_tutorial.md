@@ -320,10 +320,11 @@ Note that you can replace the checkpoint with any Hugging Face model that suppor
 
 Pipelines are automatically supported in [Gradio](https://github.com/gradio-app/gradio/), a library that makes creating beautiful and user-friendly machine learning apps on the web a breeze. First, make sure you have Gradio installed:
 
-```py
+```
  pip install gradio
+```
 
-Then, you can create a web demo around an image classification pipeline (or any other pipeline) in a single line of code by calling Gradio's [`Interface.from_pipeline`](https://www.gradio.app/docs/interface#interface-from-pipeline) class to launch the pipeline. This creates an intuitive drag-and-drop interface in your browser:
+Then, you can create a web demo around an image classification pipeline (or any other pipeline) in a single line of code by calling Gradio's [`Interface.from_pipeline`](https://www.gradio.app/docs/interface#interface-from-pipeline) function to launch the pipeline. This creates an intuitive drag-and-drop interface in your browser:
 
 ```py
 from transformers import pipeline
