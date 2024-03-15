@@ -475,8 +475,8 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
 
     def get_previous_ngrams(self, input_ids: jnp.ndarray, vocab_size: int, cur_len: int):
         """
-        get a matrix of size [batch_size, vocab_size, vocab_size, vocab_size] (for 3-grams) that
-        represent the 3-grams that occured previously.
+        get a matrix of size (batch_size,) + (vocab_size,)*n (for n-grams) that
+        represent the n-grams that occured previously.
         The BCOO representation allow to store only the few non-zero entries, instead of the full (huge) matrix
         """
         batch_size, seq_len = input_ids.shape
@@ -530,7 +530,7 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
             )
 
             # compute the banned tokens, ie all the tokens that when added to the latest tokens lead to a n-gram that was previously generated
-            banned_tokens_indices_mask = jnp.isclose(self.get_banned_tokens_mask(latest_tokens, previous_ngrams), 1)
+            banned_tokens_indices_mask = jnp.invert(jnp.isclose(self.get_banned_tokens_mask(latest_tokens, previous_ngrams), 0))
             return jnp.where(banned_tokens_indices_mask, -float("inf"), scores)
 
         output = jax.lax.cond((cur_len >= self.ngram_size - 1), true_fn, lambda: scores)
