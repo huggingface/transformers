@@ -16,14 +16,14 @@
 """Tokenization Fast class for InternLM2."""
 import os
 from shutil import copyfile
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from tokenizers import processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-
 from .tokenization_internlm2 import InternLM2Tokenizer
+
 
 logger = logging.get_logger(__name__)
 
@@ -154,7 +154,7 @@ class InternLM2TokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-    
+
     # Copied from transformers.models.internlm2.tokenization_internlm2.InternLM2Tokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
@@ -166,7 +166,7 @@ class InternLM2TokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
-    
+
     # Copied from transformers.models.internlm2.tokenization_internlm2.InternLM2Tokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

@@ -18,9 +18,9 @@ import inspect
 import unittest
 
 from transformers import AddedToken, InternLM2Tokenizer, InternLM2TokenizerFast
-from transformers.testing_utils import require_tokenizers, slow
+from transformers.testing_utils import require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, SpecialTokensMixin, SMALL_TRAINING_CORPUS
+from ...test_tokenization_common import SMALL_TRAINING_CORPUS, SpecialTokensMixin, TokenizerTesterMixin
 
 
 @require_tokenizers
