@@ -539,7 +539,11 @@ class InformerModelIntegrationTests(unittest.TestCase):
             )
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
-
+        self.assertEqual(outputs.distribution, "student_t")
+        self.assertEqual(outputs.params["df"].snape, expected_shape)
+        self.assertEqual(outputs.params["loc"].snape, expected_shape)
+        self.assertEqual(outputs.params["scale"].snape, expected_shape)
+        
         expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
