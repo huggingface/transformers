@@ -2149,6 +2149,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             sequences=future_samples.reshape(
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             ),
-            params = {key: param for key, param in zip(self.distribution_output.args_dim, params)},
-            distribution = self.config.distribution_output 
+            params=dict(zip(self.distribution_output.args_dim, params)),
+            distribution=self.config.distribution_output,
         )
