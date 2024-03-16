@@ -212,10 +212,10 @@ class MambaModelTester:
         # use cache
         token_emb = model.embeddings(input_ids)
         outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
-        self.parent.assertEqual(token_emb.shape, outputs.shape)
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
+        self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
         loss.backward()
 
     def create_and_check_mamba_lm_head_forward_and_backwards(
