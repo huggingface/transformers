@@ -534,6 +534,7 @@ class WhisperGenerationMixin:
         # pass self.config for backward compatibility
         init_tokens = self._retrieve_init_tokens(
             input_features,
+            batch_size=batch_size,
             generation_config=generation_config,
             config=self.config,
             num_segment_frames=num_segment_frames,
@@ -1082,7 +1083,7 @@ class WhisperGenerationMixin:
                 )
             generation_config.task = task
 
-    def _retrieve_init_tokens(self, input_features, generation_config, config, num_segment_frames, kwargs):
+    def _retrieve_init_tokens(self, input_features, batch_size, generation_config, config, num_segment_frames, kwargs):
         def replace_or_add(lst: List[int], num: int, itr: Iterator[int]):
             """short function to replace num with a itr in lst"""
             found = any(i in lst for i in itr)
@@ -1092,7 +1093,6 @@ class WhisperGenerationMixin:
                 lst.append(num)
             return lst
 
-        batch_size = input_features.shape[0]
         task = getattr(generation_config, "task", None)
         language = getattr(generation_config, "language", None)
 
@@ -1230,7 +1230,7 @@ class WhisperGenerationMixin:
             # let's make sure we don't pass `None` tokens as prompt tokens
             init_tokens[i] = [t for t in init_tokens[i] if t is not None]
 
-        return torch.as_tensor(init_tokens, dtype=torch.long, device=input_features.device)
+        return torch.as_tensor(init_tokens, dtype=torch.long, device=self.device)
 
     def detect_language(
         self,
