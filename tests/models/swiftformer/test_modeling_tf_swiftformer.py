@@ -25,8 +25,8 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.utils import cached_property, is_tf_available, is_vision_available
+from transformers.modeling_tf_utils import keras
 
-from ....src.transformers.modeling_tf_utils import keras
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
