@@ -140,6 +140,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
