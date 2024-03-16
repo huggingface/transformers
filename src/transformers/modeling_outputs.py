@@ -1714,6 +1714,8 @@ class SampleTSPredictionOutput(ModelOutput):
     """
 
     sequences: torch.FloatTensor = None
+    params: torch.FloatTensor = None
+    distribution: str = None
 
 
 @dataclass
