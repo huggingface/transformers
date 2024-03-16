@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
+from ....src.transformers.modeling_tf_utils import keras
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -168,7 +169,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
         for model_class in self.all_model_classes:
             model = model_class(config)
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
