@@ -981,6 +981,9 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
 def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True):
     def docstring_decorator(fn):
         docstrings = fn.__doc__
+        if docstrings is None:
+            # Example: -OO
+            return fn
         lines = docstrings.split("\n")
         i = 0
         while i < len(lines) and re.search(r"^(\s*)List options\s*$", lines[i]) is None:
