@@ -22,12 +22,12 @@ from typing import List
 from transformers import (
     AddedToken,
     SpecialTokensMixin,
+    UdopTokenizer,
     UdopTokenizerFast,
     is_tf_available,
     is_torch_available,
     logging,
 )
-from transformers.models.udop.tokenization_udop import UdopTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
@@ -54,6 +54,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/udop-large"
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
     test_rust_tokenizer = True
@@ -1715,6 +1716,10 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
+        pass
+
+    @unittest.skip("#TODO will be removed in main")
+    def test_pretrained_model_lists(self):
         pass
 
     @unittest.skip("UDOP tokenizer requires boxes besides sequences.")

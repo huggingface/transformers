@@ -1232,8 +1232,9 @@ if __name__ == "__main__":
         if commit_flags["test_all"]:
             print("Force-launching all tests")
 
+        is_main_branch = not repo.head.is_detached and repo.head.ref == repo.refs.main
         diff_with_last_commit = args.diff_with_last_commit
-        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
+        if not diff_with_last_commit and is_main_branch:
             print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
@@ -1243,7 +1244,7 @@ if __name__ == "__main__":
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
                     json_output_file=args.json_output_file,
-                    filter_models=not commit_flags["no_filter"],
+                    filter_models=(not commit_flags["no_filter"] or is_main_branch),
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:
