@@ -48,13 +48,10 @@ class LlavaNextConfig(PretrainedConfig):
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the CLIP backbone.
+            The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the LlavaNext model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaNextForConditionalGeneration`]
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
@@ -92,7 +89,6 @@ class LlavaNextConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
-        vocab_size=32000,
         image_grid_pinpoints=None,
         **kwargs,
     ):
@@ -137,11 +133,9 @@ class LlavaNextConfig(PretrainedConfig):
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            vocab_size = text_config.vocab_size
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-        self.vocab_size = vocab_size
 
         super().__init__(**kwargs)

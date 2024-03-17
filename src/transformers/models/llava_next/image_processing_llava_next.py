@@ -135,6 +135,23 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
         return result
 
 
+def _get_patch_output_size(image, target_resolution, input_data_format):
+    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
+    target_height, target_width = target_resolution
+
+    scale_w = target_width / original_width
+    scale_h = target_height / original_height
+
+    if scale_w < scale_h:
+        new_width = target_width
+        new_height = min(math.ceil(original_height * scale_w), target_height)
+    else:
+        new_height = target_height
+        new_width = min(math.ceil(original_width * scale_h), target_width)
+
+    return new_height, new_width
+
+
 class LlavaNextImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa-NeXT image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
@@ -385,18 +402,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         Returns:
             np.array: The resized and padded image.
         """
-        original_height, original_width = get_image_size(image, channel_dim=input_data_format)
-        target_height, target_width = target_resolution
-
-        scale_w = target_width / original_width
-        scale_h = target_height / original_height
-
-        if scale_w < scale_h:
-            new_width = target_width
-            new_height = min(math.ceil(original_height * scale_w), target_height)
-        else:
-            new_height = target_height
-            new_width = min(math.ceil(original_width * scale_h), target_width)
+        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
         resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
@@ -409,19 +415,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
-
-        original_height, original_width = get_image_size(image, channel_dim=input_data_format)
         target_height, target_width = target_resolution
-
-        scale_w = target_width / original_width
-        scale_h = target_height / original_height
-
-        if scale_w < scale_h:
-            new_width = target_width
-            new_height = min(math.ceil(original_height * scale_w), target_height)
-        else:
-            new_height = target_height
-            new_width = min(math.ceil(original_width * scale_h), target_width)
+        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
 
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
