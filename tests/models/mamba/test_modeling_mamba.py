@@ -23,6 +23,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.utils.import_utils import is_mamba_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -401,6 +402,12 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+    @unittest.skipIf(
+        not is_mamba_ssm_available(), reason="mamba_ssm to huggingface conversion depends on the `mamba_ssm` package"
+    )
+    def test_model_from_mamba_ssm_conversion(self):
+        pass
 
 
 @require_torch
