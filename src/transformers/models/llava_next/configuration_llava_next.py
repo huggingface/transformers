@@ -21,17 +21,16 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "llava-hf/llava-1.6-mistral-7b": "https://huggingface.co/llava-hf/llava-1.6-mistral-7b/resolve/main/config.json",
+    "llava-hf/llava-v1.6-mistral-7b-hf": "https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf/resolve/main/config.json",
 }
 
 
 class LlavaNextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaNextForConditionalGeneration`]. It is used to instantiate an
-    LlavaNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LlavaNext-9B.
-
-    e.g. [llava_next-hf/llava_next-9b](https://huggingface.co/llava_next-hf/llava_next-9b)
+    Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the [llava-hf/llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf)
+    model.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -67,10 +66,10 @@ class LlavaNextConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a Llava-Next llava-next-mistral-7b-hf style configuration
+    >>> # Initializing a Llava-Next llava-hf/llava-v1.6-mistral-7b-hf style configuration
     >>> configuration = LlavaNextConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the llava-next-mistral-hf style configuration
+    >>> # Initializing a model from the llava-hf/llava-v1.6-mistral-7b-hf style configuration
     >>> model = LlavaNextForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
