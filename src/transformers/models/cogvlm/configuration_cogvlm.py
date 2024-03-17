@@ -55,8 +55,7 @@ class CogvlmVisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used for layernorm layers.
         initializer_range (`float`, *optional*, defaults to 1e-10):

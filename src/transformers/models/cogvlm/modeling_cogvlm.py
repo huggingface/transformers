@@ -491,10 +491,14 @@ class CogvlmDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
+        print_values=False,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
+
+        if print_values:
+            print("Hidden states before self attention:", hidden_states[0,:3,:3])
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -506,6 +510,10 @@ class CogvlmDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
+
+        if print_values:
+            print("Hidden states after self attention:", hidden_states[0,:3,:3])
+
         hidden_states = residual + hidden_states
 
         # Fully Connected
@@ -700,11 +708,39 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:, 1:]], dim=1)
                 attention_mask = torch.tensor([1] * input_ids.shape[1]).repeat(batch_size, 1).to(input_ids.device)
 
+                print("HF final input_ids:", input_ids)
+
                 inputs_embeds = self.embed_tokens(input_ids)
+
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+
+                print("First values of text embeddings:", inputs_embeds[0, :3, :3])
+                print("First values of images_features:", images_features[0, :3])
+
+                from huggingface_hub import hf_hub_download
+
+                filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="images_features.pt", repo_type="dataset")
+                original_images_features = torch.load(filepath)
+                filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="inputs_embeds.pt", repo_type="dataset")
+                original_inputs_embeds = torch.load(filepath)
+                filepath = hf_hub_download(repo_id="nielsr/test-cogvlm", filename="token_type_ids.pt", repo_type="dataset")
+                original_token_type_ids = torch.load(filepath)
+
+                print("Mean of original image features:", original_images_features.mean())
+                print("Mean of HF image features:", images_features.mean())
+
+                # verify
+                # assert torch.allclose(images_features, original_images_features.to(images_features.device))
+                assert torch.allclose(inputs_embeds, original_inputs_embeds.to(inputs_embeds.device))
+                assert token_type_ids[0].tolist() == original_token_type_ids[0].tolist()
+
+                print("Token type ids:", token_type_ids)
+
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
+
+                print("First values of inputs_embeds after index_put:", inputs_embeds[0, :3, :3])
 
             else:
                 # TODO verify single-modality
@@ -771,9 +807,9 @@ class CogvlmModel(CogvlmPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if idx in [0, 31]:
+            if idx in [0, 1, 2]:
                 print(f"Hidden states before layer {idx}", hidden_states[0, :3, :3])
-                print("Dtype of hidden states:", hidden_states.type())
+                print(f"Mean of hidden states before layer {idx}", hidden_states.mean())
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
             layer_outputs = decoder_layer(
@@ -784,6 +820,7 @@ class CogvlmModel(CogvlmPreTrainedModel):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                print_values=idx in [0, 1, 2],
             )
             hidden_states = layer_outputs[0]
 

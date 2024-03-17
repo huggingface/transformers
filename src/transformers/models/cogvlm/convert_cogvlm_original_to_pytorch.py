@@ -160,6 +160,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # for k, v in inputs.items():
     #     print(k, v.shape)
 
+    print("Original input_ids:", original_inputs["input_ids"])
+    print("HF input_ids:", inputs["input_ids"])
+
     # verify logits
     with torch.no_grad():
         original_logits = original_model(**original_inputs).logits
