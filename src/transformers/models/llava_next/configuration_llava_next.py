@@ -37,10 +37,10 @@ class LlavaNextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`LlavaNextVisionConfig`, *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
+            The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
@@ -115,15 +115,13 @@ class LlavaNextConfig(PretrainedConfig):
         )
         self.image_grid_pinpoints = image_grid_pinpoints
 
-        self.vision_config = vision_config
-
-        if isinstance(self.vision_config, dict):
+        if isinstance(vision_config, dict):
             vision_config["model_type"] = (
                 vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
             )
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip_vision_model"](
+            vision_config = CONFIG_MAPPING["clip_vision_model"](
                 intermediate_size=4096,
                 hidden_size=1024,
                 patch_size=14,
@@ -133,6 +131,8 @@ class LlavaNextConfig(PretrainedConfig):
                 vocab_size=32000,
                 projection_dim=768,
             )
+
+        self.vision_config = vision_config
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"

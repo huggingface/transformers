@@ -476,7 +476,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
 
-        # make sure that all patches use the input data format
+        # make sure that all patches are in the input data format
         patches = [
             to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
             for patch in patches

@@ -49,7 +49,7 @@ class LlavaNextProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
