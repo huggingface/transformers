@@ -372,18 +372,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("Not yet supported.")
-    def test_disk_offload_bin(self):
-        super().test_disk_offload()
-
-    @unittest.skip("Not yet supported.")
-    def test_disk_offload_safetensors(self):
-        super().test_disk_offload()
-
-    @unittest.skip("Not yet supported.")
-    def test_model_parallelism(self):
-        super().test_model_parallelism()
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in UDOP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -552,10 +540,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     )
     def test_save_load_low_cpu_mem_usage(self):
         pass
-
-    @unittest.skip("Not yet supported.")
-    def test_model_parallelism(self):
-        super().test_model_parallelism()
 
 
 @require_torch
