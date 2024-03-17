@@ -164,9 +164,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     """
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
     test_pruning = False
-    test_resize_embeddings = True
     test_head_masking = False
 
     def setUp(self):

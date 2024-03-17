@@ -158,9 +158,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
-    fx_compatible = False
     test_pruning = False
-    test_resize_embeddings = True
     test_head_masking = False
 
     def setUp(self):
