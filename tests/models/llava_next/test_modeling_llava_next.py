@@ -19,6 +19,7 @@ import gc
 import unittest
 
 import requests
+from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
@@ -27,7 +28,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -399,7 +400,11 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("llava_next-hf/bakLlavaNext-v1-hf")
+        self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+        url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
+        self.image = Image.open(requests.get(url, stream=True).raw)
+
+        self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 
     def tearDown(self):
         gc.collect()
@@ -408,21 +413,40 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaNextForConditionalGeneration.from_pretrained(
-            "llava_next-hf/bakLlavaNext-v1-hf", load_in_4bit=True
+            "llava-hf/llava-v1.6-mistral-7b-hf", load_in_4bit=True
         )
 
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava_next-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        inputs = self.processor(self.prompt, self.raw_image, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
+        # verify inputs against original implementation
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
+        original_input_ids = torch.load(filepath, map_location="cpu")
+        # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
+        original_input_ids[original_input_ids == -200] = model.config.image_token_index
+        assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset"
+        )
+        original_pixel_values = torch.load(filepath, map_location="cpu")
+        assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
+
+        # verify single forward pass
+        inputs = inputs.to(torch_device)
+        with torch.no_grad():
+            output = model(**inputs)
+
+        expected_slice = torch.tensor(
+            [[-4.7695, -4.5664, -0.2786], [-10.6172, -10.8906, -2.5234], [-6.7344, -7.2422, -0.6758]],
+            dtype=torch.float32,
+            device=torch_device,
+        )
+        assert torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=100)
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -431,155 +455,22 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_small_model_integration_test_llama(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.6-mistral-7b"
-
-        model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-1.6-mistral-7b", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava_next-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
-
-        self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.6-mistral-7b"
-
-        model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-1.6-mistral-7b", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://llava_next-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
-        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
-        # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaNextForConditionalGeneration.from_pretrained(
-            "llava_next-hf/bakLlavaNext-v1-hf", load_in_4bit=True
+            "llava-hf/llava-v1.6-mistral-7b-hf", load_in_4bit=True
         )
-        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://llava_next-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        cats_image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along', 'USER:  \nWhat is this?\nASSISTANT: Cats']  # fmt: skip
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched_regression(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "llava-hf/llava-1.6-mistral-7b"
-
-        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = LlavaNextForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.6-mistral-7b", load_in_4bit=True, attn_implementation="eager"
-        )
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
-
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://llava_next-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this serene location, one should be cautious about the weather conditions and potential', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
-    def test_llava_next_index_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
-        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
-        # more details
-        model_id = "llava-hf/llava-1.6-mistral-7b"
-        model = LlavaNextForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # Simulate a super long prompt
-        user_prompt = "Describe the image:?\n" * 200
-        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-
-        # Make sure that `generate` works
-        _ = model.generate(**inputs, max_new_tokens=20)
-
-    @slow
-    @require_torch_gpu
-    def test_llava_next_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/llava-1.6-mistral-7b"
-        model = LlavaNextForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
+        inputs = self.processor(
+            [self.prompt, self.prompt], images=[self.image, cats_image], return_tensors="pt", padding=True
         ).to(torch_device)
 
-        # Simulate some user inputs
-        pixel_values = torch.randn(
-            (2, 3, 336, 336),
-            dtype=torch.float,
-            device=torch_device,
-        )
-        input_ids = torch.tensor(
-            [
-                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            dtype=torch.long,
-            device=torch_device,
-        )
+        # make sure image_sizes are the same
+        # as otherwise batched generation doesn't work
+        inputs.image_sizes[1] = inputs.image_sizes[0]
 
-        # Make sure that the loss is properly computed
-        loss = model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        ).loss
-        loss.backward()
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
