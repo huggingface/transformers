@@ -105,13 +105,14 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         image_token_index = 32000
     elif model_id == "liuhaotian/llava-v1.6-34b":
         text_model_id = "NousResearch/Nous-Hermes-2-Yi-34B"
-        image_token_index = 64002
+        image_token_index = 64000
     vision_model_id = data["mm_vision_tower"]
 
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+    use_fast = False if model_id == "liuhaotian/llava-v1.6-34b" else True
+    tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=use_fast)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
@@ -146,19 +147,22 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # We add an image token so we resize the model
     # Pad to 64 for performance reasons
     pad_shape = 64
+    vocab_size = config.text_config.vocab_size
     if model_id == "liuhaotian/llava-v1.6-34b":
         # this one has 3 additional tokens, namely <|startoftext|>, <|endoftext|> and <image>
-        num_tokens = config.text_config.vocab_size + 3
+        num_tokens = vocab_size + 3
     else:
         # this one has 2 additional tokens, namely <image> and <pad>
-        num_tokens = config.text_config.vocab_size + 2
+        num_tokens = vocab_size + 2
     model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
-    model.language_model.model.embed_tokens.weight.data[image_token_index:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[image_token_index:].shape[0]))),
+    model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
+        tuple(
+            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
+        ),
         dim=0,
     )
-    model.language_model.lm_head.weight.data[image_token_index:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[image_token_index:].shape[0]))),
+    model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
         dim=0,
     )
 
@@ -172,27 +176,37 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
         prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT:"
     elif model_id == "liuhaotian/llava-v1.6-34b":
-        prompt = '<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n'
+        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
     inputs = processor(images=image, text=prompt, return_tensors="pt")
 
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
-    original_input_ids = torch.load(filepath, map_location="cpu")
+    # verify inputs
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
     original_pixel_values = torch.load(filepath, map_location="cpu")
+    assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
-    # verify inputs
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
-        # replace -200 by 32000 (since we use token ID = 32000 for the image token)
-        original_input_ids[original_input_ids == -200] = 32000
+        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
+        original_input_ids = torch.load(filepath, map_location="cpu")
+        # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
+        original_input_ids[original_input_ids == -200] = image_token_index
         print(tokenizer.decode([id for id in original_input_ids.tolist()[0] if id != -200]))
 
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
-        assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
-    # verify single forward pass
+    elif model_id == "liuhaotian/llava-v1.6-34b":
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-image", filename="llava_1_6_34b_input_ids.pt", repo_type="dataset"
+        )
+        original_input_ids = torch.load(filepath, map_location="cpu")
+        # replace -200 by image_token_index
+        original_input_ids[original_input_ids == -200] = image_token_index
+
+        assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
+
     image_sizes = torch.tensor([[899, 1024]])
     assert image_sizes[0].tolist() == inputs.image_sizes[0].tolist()
 
+    # verify single forward pass
     print("Single forward pass")
     with torch.inference_mode():
         inputs = inputs.to(device)
@@ -213,13 +227,16 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
                 device=device,
             )
         elif model_id == "liuhaotian/llava-v1.6-34b":
-            # NOTE todo verify logits
-            pass
+            expected_slice = torch.tensor(
+                [[-9.0859, -9.1406, 5.9453], [-5.9570, -5.9766, 2.2754], [-5.7305, -5.7539, 4.0000]],
+                dtype=torch.float32,
+                device=device,
+            )
         else:
             raise ValueError(f"Model {model_id} not supported")
 
-        # assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
-        # print("Logits are ok!")
+        assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+        print("Logits are ok!")
 
     # verify generation
     output_ids = model.generate(
@@ -230,14 +247,14 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
 
-    print("Generated text:", generated_text)
+    print("Generated text:", repr(generated_text))
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         expected_text = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular radar chart, there are several axes labeled with different metrics or benchmarks, such as "MMM-Vet," "MMM-Bench," "LLaVA-Bench," "SLED-Bench," "'
     elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
         expected_text = """A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER:  \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmarking study comparing the performance of various models or systems. It\'s a scatter plot with a circular layout, where each point represents a different model or system, and the axes represent different metrics or dimensions of comparison.\n\nThe metrics are likely related to machine learning or artificial intelligence performance, as indicated by the terms like "BLIP-2," "Instruct BLIP," "POE," "QWA," "V"""
     elif model_id == "liuhaotian/llava-v1.6-34b":
-        expected_text == ""
+        expected_text = "<|im_start|> system\nAnswer the questions. <|im_start|> user\n\nWhat is shown in this image? <|im_start|> assistant\nThe image appears to be a radar chart, also known as a spider chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular chart, there are several datasets represented by different colors and labeled with various acronyms such as MM-Vet, LLaVA-Bench, SEED-Bench, MM-Bench-CN, MM-"
     else:
         raise ValueError(f"Model {model_id} not supported")
 
