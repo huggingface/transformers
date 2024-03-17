@@ -76,7 +76,6 @@ class LlavaVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "batch_size": 12,
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
