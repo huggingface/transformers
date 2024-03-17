@@ -600,6 +600,9 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
+        if aspect_ratio_setting not in ["clip", "pad", "anyres"]:
+            raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
+
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
@@ -615,9 +618,6 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
-
-        if aspect_ratio_setting not in ["clip", "pad", "anyres"]:
-            raise ValueError(f"Invalid aspect ratio setting: {aspect_ratio_setting}")
 
         new_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
