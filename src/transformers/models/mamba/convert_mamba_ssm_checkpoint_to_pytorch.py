@@ -16,6 +16,7 @@
 
 import argparse
 import json
+import math
 
 import torch
 
@@ -36,6 +37,9 @@ def convert_ssm_config_to_hf_config(config_ssm: MambaConfig_ssm) -> MambaConfig:
     hf_config = MambaConfig()
     # Set config hidden size, num hidden layers, and vocab size directly from the original config
     hf_config.hidden_size = config_ssm.d_model
+    hf_config.intermediate_size = config_ssm.d_model * 2
+    hf_config.time_step_rank = math.ceil(config_ssm.d_model / 16)
+
     hf_config.num_hidden_layers = config_ssm.n_layer
     vocab_size = config_ssm.vocab_size
     pad_vocab_size_multiple = config_ssm.pad_vocab_size_multiple
@@ -45,22 +49,18 @@ def convert_ssm_config_to_hf_config(config_ssm: MambaConfig_ssm) -> MambaConfig:
     return hf_config
 
 
-def convert_mamba_ssm_checkpoint_to_pytorch(mamba_checkpoint_path, config_file, output_dir):
+def convert_mamba_ssm_checkpoint_to_huggingface_model(
+    original_state_dict: dict, original_ssm_config_dict: dict
+) -> tuple[MambaForCausalLM, AutoTokenizer]:
     if not is_mamba_ssm_available():
         raise ImportError(
-            "Calling convert_mamba_ssm_checkpoint_to_pytorch requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
+            "Calling convert_mamba_ssm_checkpoint_to_huggingface_model requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
         )
-    logger.info(f"Loading model from {mamba_checkpoint_path} based on config from {config_file}")
-    # Load config from path
-    with open(config_file, "r", encoding="utf-8") as json_file:
-        original_ssm_config_json = json.load(json_file)
-    original_ssm_config = MambaConfig_ssm(**original_ssm_config_json)
+    original_ssm_config = MambaConfig_ssm(**original_ssm_config_dict)
 
     # Convert mamba_ssm config to huggingface MambaConfig
     hf_config = convert_ssm_config_to_hf_config(original_ssm_config)
 
-    # Load model checkpoint from mamba_checkpoint_path
-    original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu")
     # Rename weights
     original_state_dict["backbone.embeddings.weight"] = original_state_dict["backbone.embedding.weight"]
     original_state_dict.pop("backbone.embedding.weight")
@@ -69,6 +69,22 @@ def convert_mamba_ssm_checkpoint_to_pytorch(mamba_checkpoint_path, config_file, 
     hf_model = MambaForCausalLM(hf_config)
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     hf_model.load_state_dict(original_state_dict)
+    return (hf_model, tokenizer)
+
+
+def convert_mamba_checkpoint_file_to_huggingface_model_file(
+    mamba_checkpoint_path: str, config_json_file: str, output_dir: str
+) -> None:
+    logger.info(f"Loading model from {mamba_checkpoint_path} based on config from {config_json_file}")
+    # Load weights and config from paths
+    original_state_dict = torch.load(mamba_checkpoint_path, map_location="cpu")
+    with open(config_json_file, "r", encoding="utf-8") as json_file:
+        original_ssm_config_dict = json.load(json_file)
+
+    # Convert the model
+    hf_model, tokenizer = convert_mamba_ssm_checkpoint_to_huggingface_model(
+        original_state_dict, original_ssm_config_dict
+    )
 
     # Save new model to pytorch_dump_path
     hf_model.save_pretrained(output_dir)
@@ -86,7 +102,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-c",
-        "--config_file",
+        "--config_json_file",
         type=str,
         required=True,
         help="Path to a `config.json` file corresponding to a MambaConfig of the original mamba_ssm model.",
@@ -96,4 +112,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    convert_mamba_ssm_checkpoint_to_pytorch(args.mamba_checkpoint_file, args.config_file, args.output_dir)
+    convert_mamba_checkpoint_file_to_huggingface_model_file(
+        args.mamba_checkpoint_file, args.config_json_file, args.output_dir
+    )
