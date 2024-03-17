@@ -1154,6 +1154,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             is_module_matched = check_target_module_exists(simple_regex, module_name)
             self.assertTrue(is_module_matched == expected_value)
 
+        target_modules = ["attn", "mlp"]
+
+        module_names = [
+            "model.transformer.h.0.ln_1",
+            "model.transformer.h.0.attn.q_proj",
+            "model.lm_head",
+            "model.transformer.h.0.mlp.up_proj",
+        ]
+        expected_values = [False, True, False, True]
+
+        for expected_value, module_name in zip(expected_values, module_names):
+            is_module_matched = check_target_module_exists(target_modules, module_name)
+            self.assertTrue(is_module_matched == expected_value)
+
     @require_galore_torch
     @require_torch_gpu
     def test_galore(self):

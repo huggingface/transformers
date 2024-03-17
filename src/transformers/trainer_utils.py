@@ -806,7 +806,7 @@ def check_target_module_exists(optim_target_modules, key: str):
         # this module is specified directly in target_modules
         target_module_found = True
     else:
-        target_module_found = any(key.endswith(f".{target_key}") for target_key in optim_target_modules)
+        target_module_found = any(target_key in key for target_key in optim_target_modules)
         # Check also if the user passed a list of regex
         if not target_module_found:
             target_module_found = any(
