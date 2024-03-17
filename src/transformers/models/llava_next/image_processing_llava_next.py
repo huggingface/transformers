@@ -105,7 +105,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
         list: A list of np.array representing the patches.
     """
     patches = []
-    height, width = image.shape[:-1] if input_data_format == ChannelDimension.LAST else image.shape[1:]
+    height, width = get_image_size(image, channel_dim=input_data_format)
     for i in range(0, height, patch_size):
         for j in range(0, width, patch_size):
             if input_data_format == ChannelDimension.LAST:
@@ -497,7 +497,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        aspect_ratio_setting=None,
+        aspect_ratio_setting: Optional[str] = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         image_grid_pinpoints: List = None,

@@ -37,7 +37,7 @@ class LlavaNextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`LlavaNextVisionConfig`,  *optional*):
+        vision_config (`LlavaNextVisionConfig`, *optional*):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
@@ -49,6 +49,7 @@ class LlavaNextConfig(PretrainedConfig):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
+            Can be one of `"default"` or `"full"`.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -107,7 +108,6 @@ class LlavaNextConfig(PretrainedConfig):
 
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
-        self.vocab_size = vocab_size
         image_grid_pinpoints = (
             image_grid_pinpoints
             if image_grid_pinpoints is not None
@@ -133,15 +133,15 @@ class LlavaNextConfig(PretrainedConfig):
                 vocab_size=32000,
                 projection_dim=768,
             )
-        self.vocab_size = self.vocab_size
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            vocab_size = text_config.vocab_size
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
-        elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+        self.vocab_size = vocab_size
 
         super().__init__(**kwargs)

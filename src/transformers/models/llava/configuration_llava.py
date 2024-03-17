@@ -96,7 +96,6 @@ class LlavaConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
-        self.vocab_size = vocab_size
 
         self.vision_config = vision_config
 
@@ -116,15 +115,15 @@ class LlavaConfig(PretrainedConfig):
                 vocab_size=32000,
                 projection_dim=768,
             )
-        self.vocab_size = self.vocab_size
 
-        self.text_config = text_config
-
-        if isinstance(self.text_config, dict):
+        if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            vocab_size = text_config.vocab_size
         elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+            text_config = CONFIG_MAPPING["llama"]()
+
+        self.vocab_size = vocab_size
+        self.text_config = text_config
 
         super().__init__(**kwargs)
