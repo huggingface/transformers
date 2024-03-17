@@ -1983,7 +1983,7 @@ class Trainer:
                     # if loss is nan or inf simply add the average of previous logged losses
                     tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
                 else:
-                    tr_loss += tr_loss_step
+                    tr_loss += tr_loss_step.to(tr_loss.device)
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
