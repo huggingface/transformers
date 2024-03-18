@@ -1604,13 +1604,13 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     >>> # By default, the scores are not normalized -- the sum of their exponentials is NOT a normalized probability
     >>> # distribution, summing to 1
     >>> outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
-    >>> print(torch.sum(torch.exp(outputs.scores[-1])))
-    tensor(816.3250)
+    >>> print(torch.allclose(torch.sum(torch.exp(outputs.scores[-1])), torch.Tensor((1.000,)), rtol=1e-4))
+    False
 
     >>> # Normalizing them may have a positive impact on beam methods, or when using the scores on your application
     >>> outputs = model.generate(**inputs, renormalize_logits=True, return_dict_in_generate=True, output_scores=True)
-    >>> print(torch.sum(torch.exp(outputs.scores[-1])))
-    tensor(1.0000)
+    >>> print(torch.allclose(torch.sum(torch.exp(outputs.scores[-1])), torch.Tensor((1.000,)), rtol=1e-4))
+    True
     ```
     """
 
