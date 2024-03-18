@@ -256,8 +256,8 @@ class TemperatureLogitsWarper(LogitsWarper):
     >>> generate_kwargs = {"max_new_tokens": 10, "do_sample": True, "temperature": 1.0, "num_return_sequences": 2}
     >>> outputs = model.generate(**inputs, **generate_kwargs)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-    ['Hugging Face Company is a joint venture between GEO Group, one of',
-    'Hugging Face Company is not an exact science – but what we believe does']
+    ['Hugging Face Company is one of these companies that is going to take a',
+    "Hugging Face Company is a brand created by Brian A. O'Neil"]
 
     >>> # However, with temperature close to 0, it approximates greedy decoding strategies (invariant)
     >>> generate_kwargs["temperature"] = 0.0001
@@ -414,7 +414,7 @@ class TopPLogitsWarper(LogitsWarper):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> set_seed(0)
+    >>> set_seed(1)
     >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
@@ -423,7 +423,9 @@ class TopPLogitsWarper(LogitsWarper):
     >>> # With sampling, the output is unexpected -- sometimes too unexpected.
     >>> outputs = model.generate(**inputs, do_sample=True)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    A sequence: 1, 2, 0, 2, 2. 2, 2, 2, 2
+    A sequence: 1, 2, 3 | < 4 (left-hand pointer) ;
+    <BLANKLINE>
+    <BLANKLINE>
 
     >>> # With `top_p` sampling, the output gets restricted to high-probability tokens.
     >>> # Pro tip: In practice, LLMs use `top_p` in the 0.9-0.95 range.
@@ -478,7 +480,7 @@ class TopKLogitsWarper(LogitsWarper):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> set_seed(0)
+    >>> set_seed(1)
     >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
@@ -487,7 +489,7 @@ class TopKLogitsWarper(LogitsWarper):
     >>> # With sampling, the output is unexpected -- sometimes too unexpected.
     >>> outputs = model.generate(**inputs, do_sample=True)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    A sequence: A, B, C, D, G, H, I. A, M
+    A sequence: A, B, C, D, E — S — O, P — R
 
     >>> # With `top_k` sampling, the output gets restricted the k most likely tokens.
     >>> # Pro tip: In practice, LLMs use `top_k` in the 5-50 range.
@@ -619,7 +621,7 @@ class EpsilonLogitsWarper(LogitsWarper):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> set_seed(0)
+    >>> set_seed(1)
     >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
@@ -628,7 +630,9 @@ class EpsilonLogitsWarper(LogitsWarper):
     >>> # With sampling, the output is unexpected -- sometimes too unexpected.
     >>> outputs = model.generate(**inputs, do_sample=True)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    A sequence: 1, 2, 0, 2, 2. 2, 2, 2, 2
+    A sequence: 1, 2, 3 | < 4 (left-hand pointer) ;
+    <BLANKLINE>
+    <BLANKLINE>
 
     >>> # With epsilon sampling, the output gets restricted to high-probability tokens. Note that this is similar to
     >>> # Top P sampling, which restricts tokens based on their cumulative probability.
@@ -696,7 +700,7 @@ class EtaLogitsWarper(LogitsWarper):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> set_seed(0)
+    >>> set_seed(1)
     >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 
@@ -705,7 +709,9 @@ class EtaLogitsWarper(LogitsWarper):
     >>> # With sampling, the output is unexpected -- sometimes too unexpected.
     >>> outputs = model.generate(**inputs, do_sample=True)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    A sequence: 1, 2, 0, 2, 2. 2, 2, 2, 2
+    A sequence: 1, 2, 3 | < 4 (left-hand pointer) ;
+    <BLANKLINE>
+    <BLANKLINE>
 
     >>> # With eta sampling, the output gets restricted to high-probability tokens. You can see it as a dynamic form of
     >>> # epsilon sampling that adapts its cutoff probability based on the entropy (high entropy = lower cutoff).
@@ -1204,16 +1210,16 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 
     >>> # We can contrain it with `prefix_allowed_tokens_fn` to force a certain behavior based on a prefix.
     >>> # For instance, we can force an entire entity to be generated when its beginning is detected.
-    >>> entity =  tokenizer(" Bob Marley", return_tensors="pt").input_ids[0]  # 3 tokens
+    >>> entity = tokenizer(" Bob Marley", return_tensors="pt").input_ids[0]  # 3 tokens
     >>> def prefix_allowed_tokens_fn(batch_id, input_ids):
     ...     '''
     ...     Attempts to generate 'Bob Marley' when 'Bob' is detected.
     ...     In this case, `batch_id` is not used, but you can set rules for each batch member.
     ...     '''
     ...     if input_ids[-1] == entity[0]:
-    ...         return entity[1]
+    ...         return [entity[1].item()]
     ...     elif input_ids[-2] == entity[0] and input_ids[-1] == entity[1]:
-    ...         return entity[2]
+    ...         return [entity[2].item()]
     ...     return list(range(tokenizer.vocab_size))  # If no match, allow all tokens
 
     >>> outputs = model.generate(**inputs, max_new_tokens=5, prefix_allowed_tokens_fn=prefix_allowed_tokens_fn)
@@ -1641,7 +1647,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     >>> # Whisper has `begin_suppress_tokens` set by default (= `[220, 50256]`). 50256 is the EOS token, so this means
     >>> # it can't generate and EOS token in the first iteration, but it can in the others.
     >>> outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
-    >>> print(outputs.scores[1][0, 50256])  # 1 (and not 0) is the first freely generated token
+    >>> print(outputs.scores[0][0, 50256])
     tensor(-inf)
     >>> print(outputs.scores[-1][0, 50256])  # in other places we can see some probability mass for EOS
     tensor(29.9010)
@@ -1650,7 +1656,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     >>> outputs = model.generate(
     ...     **inputs, return_dict_in_generate=True, output_scores=True, begin_suppress_tokens=None
     ... )
-    >>> print(outputs.scores[1][0, 50256])
+    >>> print(outputs.scores[0][0, 50256])
     tensor(11.2027)
     ```
     """
@@ -1695,7 +1701,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     >>> # If we disable `suppress_tokens`, we can generate it.
     >>> outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True, suppress_tokens=None)
     >>> print(outputs.scores[1][0, 1])
-    tensor(5.7738)
+    tensor(6.0678)
     ```
     """
 
@@ -1714,36 +1720,6 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
     indices that will be forced before generation. The processor will set their log probs to `inf` so that they are
     sampled at their corresponding index. Originally created for
     [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper).
-
-    Examples:
-    ```python
-    >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
-    >>> from datasets import load_dataset
-
-    >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
-    >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-
-    >>> # This Whisper model forces the generation to start with `50362` at the first position by default, i.e.
-    >>> # `"forced_decoder_ids": [[1, 50362]]`. This means all other tokens are masked out.
-    >>> outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
-    >>> print(
-    ...     all(outputs.scores[0][0, i] == float("-inf") for i in range(processor.tokenizer.vocab_size) if i != 50362)
-    ... )
-    True
-    >>> print(outputs.scores[0][0, 50362])
-    tensor(0.)
-
-    >>> # If we disable `forced_decoder_ids`, we stop seeing that effect
-    >>> outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True, forced_decoder_ids=None)
-    >>> print(
-    ...     all(outputs.scores[0][0, i] == float("-inf") for i in range(processor.tokenizer.vocab_size) if i != 50362)
-    ... )
-    False
-    >>> print(outputs.scores[0][0, 50362])
-    tensor(19.3140)
-    ```
     """
 
     def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
