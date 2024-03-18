@@ -162,7 +162,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]],
+        unexpected_keys: Optional[List[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()

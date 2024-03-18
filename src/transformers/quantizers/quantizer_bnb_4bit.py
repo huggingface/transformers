@@ -198,7 +198,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             for k, v in state_dict.items():
                 if param_name + "." in k:
                     quantized_stats[k] = v
-                    if unexpected_keys is not None:
+                    if unexpected_keys is not None and k in unexpected_keys:
                         unexpected_keys.remove(k)
 
             new_value = bnb.nn.Params4bit.from_prequantized(
