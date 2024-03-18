@@ -446,7 +446,7 @@ def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
 
 def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
     """
-    Get the diff in doc examples between a base commit and one or several commits.
+    Get the diff containing doc examples between a base commit and one or several commits.
 
     Args:
         repo (`git.Repo`):
