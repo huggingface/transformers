@@ -151,11 +151,12 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        cur_len = input_ids.shape[-1]
+        vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
+        eos_token_id = torch.tensor(self.eos_token_id, device=scores.device)
+        eos_token_mask = torch.isin(vocab_tensor, eos_token_id)
         scores_processed = scores.clone()
-        if cur_len < self.min_length:
-            for i in self.eos_token_id:
-                scores_processed[:, i] = -float("inf")
+        if input_ids.shape[-1] < self.min_length:
+            scores_processed = torch.where(eos_token_mask, -math.inf, scores)
         return scores_processed
 
 
@@ -215,9 +216,11 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
+        vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
+        eos_token_id = torch.tensor(self.eos_token_id, device=scores.device)
+        eos_token_mask = torch.isin(vocab_tensor, eos_token_id)
         if new_tokens_length < self.min_new_tokens:
-            for i in self.eos_token_id:
-                scores_processed[:, i] = -float("inf")
+            scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
         return scores_processed
 
