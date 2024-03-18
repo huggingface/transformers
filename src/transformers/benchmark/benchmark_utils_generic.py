@@ -103,6 +103,7 @@ class BenchMark:
 
 class SpeedBenchMark(BenchMark):
     """A simple class used to benchmark the running time of a callable."""
+
     def _measure(self, func, number=3, repeat=1):
         self._buffer["measure_kwargs"]["number"] = number
         self._buffer["measure_kwargs"]["repeat"] = repeat
