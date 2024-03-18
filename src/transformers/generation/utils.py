@@ -86,7 +86,6 @@ from .stopping_criteria import (
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-    from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
@@ -758,7 +757,6 @@ class GenerationMixin:
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
         device: str = None,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
@@ -875,20 +873,16 @@ class GenerationMixin:
                 FutureWarning,
             )
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
-        if generation_config.watermark:
-            if tokenizer is None:
-                raise ValueError(
-                    "Generation config's 'watermark' is set to `True` but tokenizer not found. "
-                    "Pass the model's tokenizer as input to `generate`."
-                )
+        if generation_config.watermarking_args is not None:
             processors.append(
                 WatermarkLogitsProcessor(
-                    vocab_size=tokenizer.vocab_size,
+                    vocab_size=self.config.vocab_size,
                     device=device,
-                    greenlist_ratio=generation_config.greenlist_ratio,
-                    bias=generation_config.watermark_bias,
-                    hashing_key=generation_config.hashing_key,
-                    seeding_scheme=generation_config.seeding_scheme,
+                    greenlist_ratio=generation_config.watermarking_args["greenlist_ratio"],
+                    bias=generation_config.watermarking_args["bias"],
+                    hashing_key=generation_config.watermarking_args["hashing_key"],
+                    seeding_scheme=generation_config.watermarking_args["seeding_scheme"],
+                    context_width=generation_config.watermarking_args["context_width"],
                 )
             )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
@@ -1341,7 +1335,6 @@ class GenerationMixin:
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
-        tokenizer = kwargs.pop("tokenizer", None)
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
 
@@ -1495,7 +1488,6 @@ class GenerationMixin:
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
-            tokenizer=tokenizer,
             device=inputs_tensor.device,
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,

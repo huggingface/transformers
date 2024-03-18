@@ -20,7 +20,6 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
@@ -2222,9 +2221,9 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     r"""
     Logits processor for watermarking generated text. The processor modifies model output scores by adding a small bias to
     randomized set of "green" tokens before generating the next token. "Green" tokens selection process depends on the
-    `seeding_scheme` used.
+    `seeding_scheme` used. The code was absed on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
 
-    See [the paper](https://arxiv.org/abs/2301.10226) for more information.
+    See [the paper](https://arxiv.org/abs/2306.04634) for more information.
 
     Args:
         vocab_size (`int`):
@@ -2251,19 +2250,20 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-    >>> inputs = tokenizer(["This is the beginning of a long story"], return_tensors="pt")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+    >>> inputs = tokenizer(["Alice and Bob are"], return_tensors="pt")
 
     >>> # watermarked outputs
-    >>> out = model.generate(inputs["input_ids"], watermark=True, tokenizer=tokenizer, max_length=20, do_sample=False)
+    >>> watermarking_args = {"bias": 1.5, "context_width": 1, "seeding_scheme": "lefthash", "greenlist_ratio": 0.25, "hashing_key": 15485863}
+    >>> out = model.generate(inputs["input_ids"], watermarking_args=watermarking_args, max_length=20, do_sample=False)
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
-    "This is the beginning of a long story, but I'll try to keep it short."
+    "Alice and Bob are both in the same room.\n\n"I\'m not"
 
     >>> # normal generation
     >>> out = model.generate(inputs["input_ids"], watermark=False, max_length=20, do_sample=False)
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
-    "This is the beginning of a long story.\n\nOnce upon a time, there was a"
+    "Alice and Bob are the only two people to be able to talk to each other"
     ```
     """
 
@@ -2275,6 +2275,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         bias: float = 2.0,
         hashing_key: int = 15485863,
         seeding_scheme: str = "lefthash",
+        context_width: int = 1,
     ):
         if seeding_scheme not in ["selfhash", "lefthash"]:
             raise ValueError(f"seeding_scheme has to be one of [`selfhash`, `lefthash`], but found {seeding_scheme}")
@@ -2289,11 +2290,18 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         self.seeding_scheme = seeding_scheme
         self.rng = torch.Generator(device=device)
         self.hash_key = hashing_key
+        self.context_width = context_width
 
         self.rng.manual_seed(hashing_key)
 
     def set_seed(self, input_ids: torch.LongTensor):
-        seed = self.hash_key * input_ids[-1].item()
+        input_ids = input_ids[-self.context_width :]
+        if self.seeding_scheme == "selfhash":
+            a = self.fixed_table[input_ids % self.table_size] + 1
+            b = self.fixed_table[input_ids[-1] % self.table_size] + 1
+            seed = (self.hash_key * a * b).min().item()
+        else:
+            seed = self.hash_key * input_ids[-1].item()
         self.rng.manual_seed(seed % (2**64 - 1))
 
     def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
@@ -2316,23 +2324,19 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         return torch.tensor(final_greenlist, device=input_ids.device)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        greenlist_token_ids = torch.empty(
-            scores.shape[0], self.greenlist_size, device=scores.device, dtype=torch.int64
-        )
+        if input_ids.shape[-1] < self.context_width:
+            logger.warning(
+                f"`input_ids` should have at least `{self.context_width}` tokens but has {input_ids.shape[-1]}. "
+                "The seeding will be skipped for this generation step!"
+            )
+            return scores
+
+        scores_processed = scores.clone()
         for b_idx, input_seq in enumerate(input_ids):
             if self.seeding_scheme == "selfhash":
                 greenlist_ids = self._score_rejection_sampling(input_seq, scores[b_idx])
             else:
                 greenlist_ids = self._get_greenlist_ids(input_ids=input_seq)
+            scores_processed[b_idx, greenlist_ids] = scores_processed[b_idx, greenlist_ids] + self.bias
 
-            # Greenlists could differ in length in selfhash, so we pad it by duplicating the last token
-            if greenlist_ids.shape[-1] < greenlist_token_ids.shape[-1]:
-                max_diff = greenlist_token_ids.shape[-1] - greenlist_ids.shape[-1]
-                greenlist_ids = F.pad(greenlist_ids, (0, max_diff), value=greenlist_ids[-1])
-            greenlist_token_ids[b_idx] = greenlist_ids
-
-        green_tokens_mask = torch.full_like(scores, False, dtype=torch.bool)
-        batch_indices = torch.arange(scores.shape[0]).unsqueeze(1)
-        green_tokens_mask[batch_indices, greenlist_token_ids] = True
-        scores[green_tokens_mask] = scores[green_tokens_mask] + self.bias
-        return scores
+        return scores_processed
