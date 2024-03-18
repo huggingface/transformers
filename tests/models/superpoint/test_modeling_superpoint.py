@@ -250,11 +250,11 @@ def prepare_imgs():
 class SuperPointModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("stevenbucaille/superpoint") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("magic-leap-community/superpoint") if is_vision_available() else None
 
     @slow
     def test_inference(self):
-        model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
+        model = SuperPointModel.from_pretrained("magic-leap-community/superpoint").to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)

@@ -51,8 +51,8 @@ import requests
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-model = AutoModel.from_pretrained("stevenbucaille/superpoint")
+processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
+model = AutoModel.from_pretrained("magic-leap-community/superpoint")
 
 inputs = processor(image, return_tensors="pt")
 outputs = model(**inputs)
@@ -76,8 +76,8 @@ image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
 
 images = [image_1, image_2]
 
-processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-model = AutoModel.from_pretrained("stevenbucaille/superpoint")
+processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
+model = AutoModel.from_pretrained("magic-leap-community/superpoint")
 
 inputs = processor(images, return_tensors="pt")
 outputs = model(**inputs)

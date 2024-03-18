@@ -20,7 +20,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stevenbucaille/superpoint": "https://huggingface.co/stevenbucaille/superpoint/blob/main/config.json"
+    "magic-leap-community/superpoint": "https://huggingface.co/magic-leap-community/superpoint/blob/main/config.json"
 }
 
 
@@ -29,7 +29,7 @@ class SuperPointConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`SuperPointModel`]. It is used to instantiate a
     SuperPoint model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperPoint
-    [stevenbucaille/superpoint](https://huggingface.co/stevenbucaille/superpoint) architecture.
+    [magic-leap-community/superpoint](https://huggingface.co/magic-leap-community/superpoint) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

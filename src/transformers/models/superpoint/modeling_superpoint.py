@@ -38,9 +38,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SuperPointConfig"
 
-_CHECKPOINT_FOR_DOC = "stevenbucaille/superpoint"
+_CHECKPOINT_FOR_DOC = "magic-leap-community/superpoint"
 
-SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superpoint"]
+SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["magic-leap-community/superpoint"]
 
 
 def remove_keypoints_from_borders(
@@ -440,8 +440,8 @@ class SuperPointModel(SuperPointPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-        >>> model = AutoModel.from_pretrained("stevenbucaille/superpoint")
+        >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
+        >>> model = AutoModel.from_pretrained("magic-leap-community/superpoint")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
