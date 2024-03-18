@@ -413,12 +413,6 @@ class SuperPointModel(SuperPointPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ImagePointDescriptionOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-    )
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
