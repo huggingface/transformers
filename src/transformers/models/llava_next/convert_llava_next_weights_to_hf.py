@@ -103,6 +103,9 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
         text_model_id = "lmsys/vicuna-7b-v1.5"
         image_token_index = 32000
+    elif model_id == "liuhaotian/llava-v1.6-vicuna-13b":
+        text_model_id = "lmsys/vicuna-13b-v1.5"
+        image_token_index = 32000
     elif model_id == "liuhaotian/llava-v1.6-34b":
         text_model_id = "NousResearch/Nous-Hermes-2-Yi-34B"
         image_token_index = 64000
@@ -173,7 +176,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     image = load_image()
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
-    elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
+    elif model_id in ["liuhaotian/llava-v1.6-vicuna-7b", "liuhaotian/llava-v1.6-vicuna-13b"]:
         prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT:"
     elif model_id == "liuhaotian/llava-v1.6-34b":
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
@@ -226,6 +229,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
                 dtype=torch.float32,
                 device=device,
             )
+        elif model_id == "liuhaotian/llava-v1.6-vicuna-13b":
+            expected_slice = torch.tensor(
+                [[-0.9614, 7.3125, 0.2106], [-7.2695, -8.5469, 3.6211], [-6.3750, -8.1875, 5.4688]],
+                dtype=torch.float32,
+                device=device,
+            )
         elif model_id == "liuhaotian/llava-v1.6-34b":
             expected_slice = torch.tensor(
                 [[-9.0859, -9.1406, 5.9453], [-5.9570, -5.9766, 2.2754], [-5.7305, -5.7539, 4.0000]],
@@ -253,6 +262,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         expected_text = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular radar chart, there are several axes labeled with different metrics or benchmarks, such as "MMM-Vet," "MMM-Bench," "LLaVA-Bench," "SLED-Bench," "'
     elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
         expected_text = """A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human\'s questions. USER:  \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a benchmarking study comparing the performance of various models or systems. It\'s a scatter plot with a circular layout, where each point represents a different model or system, and the axes represent different metrics or dimensions of comparison.\n\nThe metrics are likely related to machine learning or artificial intelligence performance, as indicated by the terms like "BLIP-2," "Instruct BLIP," "POE," "QWA," "V"""
+    elif model_id == "liuhaotian/llava-v1.6-vicuna-13b":
+        expected_text = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER:  \nWhat is shown in this image? ASSISTANT: The image appears to be a radar chart, also known as a spider chart or star chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular radar chart, there are several variables represented:\n\n- MM-Vet\n- LLa-Va-Bench\n- SEED-Bench\n- MM"
     elif model_id == "liuhaotian/llava-v1.6-34b":
         expected_text = "<|im_start|> system\nAnswer the questions. <|im_start|> user\n\nWhat is shown in this image? <|im_start|> assistant\nThe image appears to be a radar chart, also known as a spider chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point.\n\nIn this particular chart, there are several datasets represented by different colors and labeled with various acronyms such as MM-Vet, LLaVA-Bench, SEED-Bench, MM-Bench-CN, MM-"
     else:
@@ -305,7 +316,12 @@ if __name__ == "__main__":
         "--model_id",
         help="Hub location of the model to convert",
         default="liuhaotian/llava-v1.6-mistral-7b",
-        choices=["liuhaotian/llava-v1.6-mistral-7b", "liuhaotian/llava-v1.6-vicuna-7b", "liuhaotian/llava-v1.6-34b"],
+        choices=[
+            "liuhaotian/llava-v1.6-mistral-7b",
+            "liuhaotian/llava-v1.6-vicuna-7b",
+            "liuhaotian/llava-v1.6-vicuna-13b",
+            "liuhaotian/llava-v1.6-34b",
+        ],
         required=False,
     )
     parser.add_argument(
