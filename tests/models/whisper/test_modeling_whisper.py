@@ -1777,7 +1777,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # Both languages in the same batch
         generated_ids = model.generate(
-            input_features.repeat(2, 1, 1), do_sample=False, max_length=20, language=["<|ja|>", "<|en|>"], task="transcribe"
+            input_features.repeat(2, 1, 1),
+            do_sample=False,
+            max_length=20,
+            language=["<|ja|>", "<|en|>"],
+            task="transcribe",
         )
         [transcript_ja, transcript_en] = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(transcript_ja, EXPECTED_TRANSCRIPT_JA)
