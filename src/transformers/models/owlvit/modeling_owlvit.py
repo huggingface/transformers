@@ -1297,20 +1297,18 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def normalize_grid_corner_coordinates(self, num_patches: int, device: torch.device) -> torch.Tensor:
         """
         Computes normalized xy corner coordinates from feature_map.
-
         Args:
             num_patches: Number of patches in the feature map.
             device: Device on which to create the tensor.
-
         Returns:
             box_coordinates: Normalized xy corner coordinates.
         """
         box_coordinates = torch.stack(
             torch.meshgrid(torch.arange(1, num_patches + 1), torch.arange(1, num_patches + 1)), dim=-1
         ).to(torch.float32)
-        box_coordinates /= num_patches
 
         # Flatten (h, w, 2) -> (h*w, 2)
+        box_coordinates /= num_patches
         box_coordinates = box_coordinates.reshape(
             box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
         ).to(device)
@@ -1320,7 +1318,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def compute_box_bias(self, num_patches: int, device: torch.device) -> torch.FloatTensor:
         """
         Computes box bias for bounding box prediction (the box center is biased to its position on feature grid).
-
         Args:
             num_patches: Number of patches in the feature map.
             device: Device on which to create the tensor.
@@ -1336,8 +1333,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # The box size is biased to the patch size
         box_size = torch.full_like(box_coord_bias, 1.0 / num_patches)
         box_size_bias = torch.log(box_size + 1e-4) - torch.log1p(-box_size + 1e-4)
-
         box_bias = torch.cat([box_coord_bias, box_size_bias], dim=-1)
+
         return box_bias
 
     def box_predictor(
