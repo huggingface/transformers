@@ -347,7 +347,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 

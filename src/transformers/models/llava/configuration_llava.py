@@ -13,6 +13,8 @@
 # limitations under the License.
 """ Llava model configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -52,9 +54,6 @@ class LlavaConfig(PretrainedConfig):
             Can be one of `"default"` or `"full"`.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`]
 
     Example:
 
@@ -89,12 +88,21 @@ class LlavaConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
-        vocab_size=32000,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+
+        if "vocab_size" in kwargs and text_config is not None:
+            warnings.warn(
+                "The `vocab_size` argument is deprecated and will be removed in v4.40, since it can be inferred from the `text_config`.",
+                FutureWarning,
+            )
+            if isinstance(text_config, dict):
+                text_config["vocab_size"] = kwargs.pop("vocab_size")
+            else:
+                text_config.vocab_size = kwargs.pop("vocab_size")
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -127,11 +135,9 @@ class LlavaConfig(PretrainedConfig):
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            vocab_size = text_config.vocab_size
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
 
-        self.vocab_size = vocab_size
         self.text_config = text_config
 
         super().__init__(**kwargs)
