@@ -1359,7 +1359,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        pred_boxes += self.box_bias
+        pred_boxes += self.box_bias.to(feature_map.device)
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
