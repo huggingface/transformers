@@ -1292,11 +1292,25 @@ class GenerationTesterMixin:
                 ]
             ):
                 self.skipTest("May fix in the future: need model-specific fixes")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "marian",
+                    "mbart",
+                    "pegasus",
+                ]
+            ):
+                self.skipTest("DoLa is not supported for the models without returning layerwise hidden states")
 
             # enable cache if the model is not openai-gpt
             config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
             config.use_cache = True
-            if "openaigpt" in model_class.__name__.lower():
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "openaigpt",
+                ]
+            ):
                 config.use_cache = False
 
             # Encoder Decoder models are not supported
@@ -1307,7 +1321,7 @@ class GenerationTesterMixin:
 
             # if the model does not support dola_decoding due to the absent of model.lm_head, skip the test
             if not hasattr(model, "lm_head"):
-                self.skipTest("This model doesn't support dola_decoding due to the absent of model.lm_head")
+                self.skipTest("DoLa is not supported for the models without `model.lm_head`")
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of

@@ -2420,7 +2420,7 @@ class GenerationMixin:
         ... )
 
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today is a beautiful day, and you\'re welcome to enjoy it!"\n\nAfterwards, she']
+        ['Today is a beautiful day, and you should celebrate it!"\n\nShe smiled as she hugged me']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
