@@ -19,6 +19,8 @@ URL: https://github.com/haotian-liu/LLaVA/tree/main.
 
 The command used to obtain original logits is the following:
 python llava/eval/run_llava.py --model-path "liuhaotian/llava-v1.6-mistral-7b" --image-file "images/llava_v1_5_radar.jpg" --query "What is shown in this image?" --max_new_tokens 100 --temperature 0
+
+Note: logits are tested with torch==2.1.2.
 """
 
 import argparse

@@ -454,9 +454,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
+        >>> from transformers import AutoProcessor, LlavaNextForConditionalGeneration
 
-        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+        >>> model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
         >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
@@ -501,6 +501,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     selected_image_feature = selected_image_feature[:, 1:]
                 elif vision_feature_select_strategy == "full":
                     selected_image_feature = selected_image_feature
+
                 image_features = self.multi_modal_projector(selected_image_feature)
 
                 # split up image_features for each of the individual images
