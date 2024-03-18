@@ -27,7 +27,6 @@ from transformers.models.superpoint.configuration_superpoint import SuperPointCo
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
