@@ -104,6 +104,10 @@ else:
         "GenerateDecoderOnlyOutput",
         "GenerateEncoderDecoderOutput",
     ]
+    _import_structure["watermarking"] = [
+        "WatermarkDetector",
+        "WatermarkDetectorOutput",
+    ]
 
 try:
     if not is_tf_available():
@@ -241,6 +245,10 @@ if TYPE_CHECKING:
             GreedySearchEncoderDecoderOutput,
             SampleDecoderOnlyOutput,
             SampleEncoderDecoderOutput,
+        )
+        from .watermarking import (
+            WatermarkDetector,
+            WatermarkDetectorOutput,
         )
 
     try:

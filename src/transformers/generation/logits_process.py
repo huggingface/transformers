@@ -2244,6 +2244,8 @@ class WatermarkLogitsProcessor(LogitsProcessor):
                 - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from paper)
                 - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from paper)
                     The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
+        context_width(`int`):
+            The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
 
     Examples:
 
@@ -2293,6 +2295,8 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         self.context_width = context_width
 
         self.rng.manual_seed(hashing_key)
+        self.table_size = 1_000_003
+        self.fixed_table = torch.randperm(self.table_size, generator=self.rng, device=device)
 
     def set_seed(self, input_ids: torch.LongTensor):
         input_ids = input_ids[-self.context_width :]
@@ -2317,6 +2321,8 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         """
         final_greenlist = []
         _, greedy_predictions = scores.sort(dim=-1, descending=True)
+
+        # 40 is an arbitrary number chosen to save compute and not run for long (taken from orig repo)
         for i in range(40):
             greenlist_ids = self._get_greenlist_ids(torch.cat([input_ids, greedy_predictions[i, None]], dim=-1))
             if greedy_predictions[i] in greenlist_ids:

@@ -1410,6 +1410,7 @@ else:
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WatermarkDetector",
             "WatermarkLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
         ]
@@ -6208,6 +6209,7 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkDetector,
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )

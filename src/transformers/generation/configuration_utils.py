@@ -629,33 +629,28 @@ class GenerationConfig(PushToHubMixin):
         # check watermarking arguments
         if self.watermarking_args is not None:
             watermark_missing_arg_msg = (
-                "Some of the keys in `watermarking_args` are defined. However, `{key}` is set to `None`"
+                "Some of the keys in `watermarking_args` are defined. However, `{key}` is set to `None`. "
                 "You should set all the keys to use watermarking."
             )
             if self.watermarking_args.get("greenlist_ratio") is None:
-                warnings.warn(
+                raise ValueError(
                     watermark_missing_arg_msg.format(key="greenlist_ratio"),
-                    UserWarning,
                 )
             if self.watermarking_args.get("bias") is None:
-                warnings.warn(
+                raise ValueError(
                     watermark_missing_arg_msg.format(key="bias"),
-                    UserWarning,
                 )
             if self.watermarking_args.get("hashing_key") is None:
-                warnings.warn(
+                raise ValueError(
                     watermark_missing_arg_msg.format(key="hashing_key"),
-                    UserWarning,
                 )
             if self.watermarking_args.get("seeding_scheme") is None:
-                warnings.warn(
+                raise ValueError(
                     watermark_missing_arg_msg.format(key="seeding_scheme"),
-                    UserWarning,
                 )
-            if self.watermarking_args.get("context width") is None:
-                warnings.warn(
-                    watermark_missing_arg_msg.format(key="context"),
-                    UserWarning,
+            if self.watermarking_args.get("context_width") is None:
+                raise ValueError(
+                    watermark_missing_arg_msg.format(key="context_width"),
                 )
 
         # 5. check common issue: passing `generate` arguments inside the generation config
