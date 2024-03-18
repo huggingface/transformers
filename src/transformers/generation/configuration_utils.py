@@ -306,11 +306,15 @@ class GenerationConfig(PushToHubMixin):
         max_matching_ngram_size (`int`, *optional*, default to `None`):
             The maximum ngram size to be considered for matching in the prompt. Default to 2 if not provided.
 
-        > Generation parameters exclusive to [dola decoding](https://arxiv.org/abs/2309.03883)
+        > Generation parameters exclusive to [DoLa decoding](https://arxiv.org/abs/2309.03883)
 
-        relative_top (`float`, *optional*):
-            The relative top value used in DoLa decoding. It is a float value between 0 and 1, which determines the subset of tokens to be considered in DoLa decoding.
-            See adaptive plausibility constraint in Section 2.3.
+        dola_layers (`str` or `List[int]`, *optional*):
+            The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
+            be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively,
+            If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
+            The 0-th layer is the word embedding layer of the model. For most of the cases, `dola_layers='low'` is recommended,
+            as described in [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language
+            Models](https://arxiv.org/abs/2309.03883).
 
         > Parameters specific to the caching mechanism:
 
@@ -404,8 +408,8 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
 
-        # DoLa decoding
-        self.relative_top = kwargs.pop("relative_top", 0.1)
+        # DoLa generation
+        self.dola_layers = kwargs.pop("dola_layers", None)
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
@@ -460,7 +464,7 @@ class GenerationConfig(PushToHubMixin):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
     def get_generation_mode(
-        self, assistant_model: Optional["PreTrainedModel"] = None, dola_layers: Optional[List[int]] = None
+        self, assistant_model: Optional["PreTrainedModel"] = None
     ) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
@@ -509,7 +513,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # DoLa generation may extend some generation modes
-        if dola_layers is not None:
+        if self.dola_layers is not None:
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.DOLA_GENERATION
             else:

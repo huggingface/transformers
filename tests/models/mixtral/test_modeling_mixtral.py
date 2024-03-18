@@ -492,6 +492,55 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Mixtral flash attention does not support right padding")
 
+    @require_torch_gpu
+    @slow
+    def test_dola_decoding(self):
+        import torch
+
+        max_new_tokens = 30
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = torch.tensor([[94, 47, 92, 32, 11, 62, 94, 89, 37, 63, 37]]).to(torch_device)
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = torch.ones_like(dummy_input)
+                # NOTE: Mixtral apparently does not support right padding + use_cache with FA2.
+                dummy_attention_mask[:, -1] = 1
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                dola_output = model.generate(
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                    dola_layers='low',
+                    repetition_penalty=1.2,
+                )
+                text = dola_output[0].tolist()
+            # check that the output is matching the expected output
+            EXPECTED_OUTPUT = [94, 47, 92, 32, 11, 62, 94, 89, 37, 63, 37, 63, 30, 71, 15, 66, 17, 68, 80, 70, 39, 76, 80, 13, 85, 20, 89, 33, 87, 88, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            self.assertListEqual(text, EXPECTED_OUTPUT)
+
+
     # Ignore copy
     def test_load_balancing_loss(self):
         r"""
@@ -633,18 +682,27 @@ class MixtralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
 
-        torch.testing.assert_close(
-            logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
+
+    @slow
+    @require_torch_gpu
+    def test_small_model_logits(self):
+        model_id = "hf-internal-testing/Mixtral-tiny"
+        dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
+
+        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
         )
-        torch.testing.assert_close(
-            logits[0, -3:, -3:],
-            EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version],
-            atol=1e-3,
-            rtol=1e-3,
-        )
-        torch.testing.assert_close(
-            logits[1, -3:, -3:],
-            EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_compute_capability_major_version],
-            atol=1e-3,
-            rtol=1e-3,
-        )
+        # TODO: might need to tweak it in case the logits do not match on our daily runners
+        # these logits have been obtained with the original megablocks impelmentation.
+        EXPECTED_LOGITS = torch.Tensor(
+            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
+        ).to(torch_device)
+
+        with torch.no_grad():
+            logits = model(dummy_input).logits
+
+        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)

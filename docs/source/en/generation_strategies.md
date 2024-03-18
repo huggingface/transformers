@@ -493,6 +493,7 @@ layers versus earlier layers, thus amplify the factual knowledge localized to pa
 To activate DoLa decoding, set the `dola_layers` argument when calling the `model.generate` function.
 `dola_layers` can be set to a string or a list of integers. If set to a string, it can be one of `low`, `high`.
 If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model.
+Set `repetition_penalty = 1.2` is recommended to reduce repetition in DoLa decoding.
 See the following example for DoLa decoding with the 32-layer LLaMA-7B model.
 
 ```python
@@ -514,19 +515,24 @@ See the following example for DoLa decoding with the 32-layer LLaMA-7B model.
 ['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
 
 # DoLa decoding with contrasting lower part of layers (layers 0,2,...,14)
->>> dola_low_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='low')
+>>> dola_low_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='low', repetition_penalty=1.2)
 >>> tokenizer.batch_decode(dola_low_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
 ['\nThe Declaration of Independence was signed on July 4, 1776.\nWhat was the date of the signing of the Declaration of Independence?\nThe Declaration of Independence was signed on July 4,']
 
 # DoLa decoding with contrasting higher part of layers (layers 16,18,...,30)
->>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high')
+>>> dola_high_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers='high', repetition_penalty=1.2)
 >>> tokenizer.batch_decode(dola_high_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
 ['\nJuly 4, 1776, when the Continental Congress voted to separate from Great Britain. The 56 delegates to the Continental Congress signed the Declaration on August 2, 1776.']
 
 # DoLa decoding with contrasting specific layers (layers 28 and 30)
->>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30])
+>>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30], repetition_penalty=1.2)
 >>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
 ['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
 ```
+
+Setting `dola_layers` to `'low'` or `'high'` will contrast the lower or higher part of the layers, respectively.
+- For `N`-layer models with `N <= 40` layers, the layers of `range(0, N // 2, 2)` and `range(N // 2, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+- For models with `N > 40` layers, the layers of `range(0, 20, 2)` and `range(N - 20, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+- if the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function.
 
 The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, and VicunaQA. Applying DoLa to smaller models like GPT-2 is not recommended, as shown in the Appendix N of the paper.

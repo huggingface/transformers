@@ -1264,6 +1264,66 @@ class GenerationTesterMixin:
             for output in (output_greedy, output_prompt_lookup):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
+    def test_dola_decoding_sample(self):
+        # This test ensures that the DoLa generation does not introduce output changes over greedy search.
+        # NOTE (1): The sentence above is true most of the time, there is a tiny difference in the logits due to matmul
+        # shape differences -- and it may result in a different output. The input shape difference happens in the
+        # main model, that runs the forward pass with several candidates at once (as opposed to generating one token at
+        # a time). See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535 for more info.
+        # NOTE (2): It breaks the pattern in the tests above, for multiple reasons:
+        # - dola_decoding does not support `batch_size > 1`
+        # - dola_decoding does not support encoder-decoder models
+
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest("Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bigbirdpegasus",
+                    "led",
+                    "mega",
+                    "speech2text",
+                    "git",
+                    "prophetnet",
+                    "seamlessm4t",
+                    "clvp",
+                ]
+            ):
+                self.skipTest("May fix in the future: need model-specific fixes")
+
+            # enable cache
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
+
+            # Encoder Decoder models are not supported
+            if config.is_encoder_decoder:
+                self.skipTest("DoLa is not supported for encoder-decoder models")
+            config.use_cache = True
+            config.is_decoder = True
+            model = model_class(config).to(torch_device).eval()
+            # Sets assisted generation arguments such that:
+            # a) no EOS is generated, to ensure generation doesn't break early
+            # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of
+            #    the assistant model is correct
+            # c) there are at least two forward passes in the main model, to ensure the input preparation of
+            #    the main model is correct
+            generation_kwargs = {
+                "eos_token_id": -1,  # see a)
+                "max_new_tokens": 4,  # see c)
+                "num_beams": 1,
+                "do_sample": True,
+                "output_scores": True,
+                "output_logits": True,
+                "output_hidden_states": True,
+                "output_attentions": True,
+                "return_dict_in_generate": True,
+            }
+            output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+            generation_kwargs.update({"dola_layers": 'low'})
+            output_dola = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            self._check_outputs(output_dola, input_ids, model.config, use_cache=True)
+
     def test_assisted_decoding_sample(self):
         # In this test we don't check assisted vs non-assisted output -- seeded assisted decoding with sample will not
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
