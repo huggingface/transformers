@@ -27,7 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "Qwen/Qwen1.5-7B"
+    from_pretrained_id = "Qwen/Qwen1.5-0.5B"
     tokenizer_class = Qwen2Tokenizer
     rust_tokenizer_class = Qwen2TokenizerFast
     test_slow_tokenizer = True

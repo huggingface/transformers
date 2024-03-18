@@ -498,8 +498,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
     def test_model_450m_generation(self):
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-450m-beta", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen1.5-0.5B", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
