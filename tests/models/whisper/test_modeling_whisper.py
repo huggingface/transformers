@@ -557,6 +557,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generate(input_features, language=["<|en|>"] * input_features.shape[0])
         # test language name list
         model.generate(input_features, language=["English"] * input_features.shape[0])
+        # test list of the wrong length
+        with self.assertRaises(ValueError):
+            model.generate(input_features, language=["en"] * (input_features.shape[0] + 1))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
