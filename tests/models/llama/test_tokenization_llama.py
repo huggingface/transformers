@@ -54,6 +54,7 @@ if is_torch_available():
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LlamaTokenizer
     rust_tokenizer_class = LlamaTokenizerFast
+    pretrained_tokenizers_to_test = [(LlamaTokenizer, "meta-llama/Llama-2-7b-hf", None)]
 
     test_rust_tokenizer = False
     test_sentencepiece = True

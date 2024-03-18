@@ -51,7 +51,7 @@ if is_torch_available():
 class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = GemmaTokenizer
     rust_tokenizer_class = GemmaTokenizerFast
-
+    pretrained_tokenizers_to_test = [(GemmaTokenizer, "google/gemma-2b", None)]
     test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}

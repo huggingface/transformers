@@ -40,6 +40,7 @@ else:
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = T5Tokenizer
     rust_tokenizer_class = T5TokenizerFast
+    pretrained_tokenizers_to_test = [(T5Tokenizer, "google-t5/t5-base", None)]
     test_rust_tokenizer = True
     test_sentencepiece = True
 

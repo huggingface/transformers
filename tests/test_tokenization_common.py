@@ -51,6 +51,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
     require_jinja,
+    require_read_token,
     require_tf,
     require_tokenizers,
     require_torch,
@@ -180,6 +181,7 @@ def check_subword_sampling(
 
 class TokenizerTesterMixin:
     tokenizer_class = None
+    pretrained_tokenizer_to_test = None
     rust_tokenizer_class = None
     test_slow_tokenizer = True
     test_rust_tokenizer = True
@@ -214,7 +216,9 @@ class TokenizerTesterMixin:
             ]
             self.tokenizers_list = tokenizers_list[:1]  # Let's just test the first pretrained vocab for speed
         else:
-            self.tokenizers_list = []
+            self.tokenizers_list = (
+                [] if self.pretrained_tokenizer_to_test is None else self.pretrained_tokenizer_to_test
+            )
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
@@ -1502,6 +1506,60 @@ class TokenizerTesterMixin:
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens[-(2 + stride) :])
+
+    @slow
+    @require_read_token
+    def test_encode_decode_fast_slow_all_tokens(self):
+        if self.rust_tokenizer_class is not None:
+            if len(self.pretrained_tokenizers_to_test) < 0:
+                raise ValueError(
+                    "You have to define a `pretrained_tokenizers_to_test` attribute to the {self.class} to make sure all functionalities are properly tested."
+                )
+            for slow_tokenizer, pretrained_name, kwargs in self.pretrained_tokenizers_to_test:
+                print(pretrained_name)
+                slow_tokenizer = slow_tokenizer.from_pretrained(pretrained_name, legacy=False)
+                with self.subTest(f"{pretrained_name}"):
+                    rust_tokenizer = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, from_slow=True, legacy=False
+                    )
+                    input_full_vocab_ids = list(
+                        range(len(slow_tokenizer))
+                    )  # TODO let's maybe shuffle this! And run it 4 times. This way we cover more cmbinations
+                    input_full_vocab_string = rust_tokenizer.convert_tokens_to_string(
+                        rust_tokenizer.convert_ids_to_tokens(input_full_vocab_ids)
+                    )
+                    print(f"Length of the input string that is tested: {len(input_full_vocab_string)}")
+
+                    for chunk in range(0, len(input_full_vocab_string) - 1024, 1024):
+                        string_to_check = input_full_vocab_string[chunk : chunk + 1024]
+                        with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
+                            slow_encode = slow_tokenizer.encode(string_to_check)
+                            fast_encode = rust_tokenizer.encode(string_to_check)
+                            self.assertEquals(
+                                slow_encode,
+                                fast_encode,
+                                "Hint: the following tokenization diff were obtained for slow vs fast:\n "
+                                f"elements in slow: {set(slow_tokenizer.tokenize(string_to_check))-set(rust_tokenizer.tokenize(string_to_check))} \nvs\n "
+                                f"elements in fast: {set(rust_tokenizer.tokenize(string_to_check))-set(slow_tokenizer.tokenize(string_to_check))} \n"
+                                f"string used     : {string_to_check}",
+                            )
+                    print(f"Length of the input ids that is tested: {len(input_full_vocab_ids)}")
+                    for chunk in range(0, len(input_full_vocab_ids) - 100, 100):
+                        ids_to_decode = input_full_vocab_ids[chunk : chunk + 100]
+                        with self.subTest(f"{(chunk/len(input_full_vocab_string))*100}%"):
+                            self.assertEquals(
+                                slow_tokenizer.decode(
+                                    ids_to_decode,
+                                    space_between_special_tokens=False,
+                                    clean_up_tokenization_spaces=False,
+                                ),
+                                rust_tokenizer.decode(
+                                    ids_to_decode,
+                                    space_between_special_tokens=False,
+                                    clean_up_tokenization_spaces=False,
+                                ),
+                                f"Hint here are the tokens being decoded.: {slow_tokenizer.convert_ids_to_tokens(ids_to_decode)}",
+                            )
 
     # def test_encode_input_type(self):
     #     tokenizers = self.get_tokenizers(do_lower_case=False)
