@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ if is_torch_available():
         RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST,
         Rwkv5ForCausalLM,
         Rwkv5Model,
+        Rwkv5Tokenizer
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
@@ -513,32 +514,32 @@ class Rwkv5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertIsNotNone(model)
 
 
-# @unittest.skipIf(
-#     not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-# )
-# @slow
-# class RWKVIntegrationTests(unittest.TestCase):
-#     def setUp(self):
-#         self.model_id = "RWKV/rwkv-4-169m-pile"
-#         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+)
+@slow
+class RWKVIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.model_id = "RWKV/rwkv-5-169m-pile"
+        self.tokenizer = Rwkv5Tokenizer.from_pretrained(self.model_id)
 
-#     def test_simple_generate(self):
-#         expected_output = "Hello my name is Jasmine and I am a newbie to the"
-#         model = Rwkv5ForCausalLM.from_pretrained(self.model_id).to(torch_device)
+    def test_simple_generate(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
+        model = Rwkv5ForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
-#         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-#         output = model.generate(input_ids, max_new_tokens=10)
-#         output_sentence = self.tokenizer.decode(output[0].tolist())
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
 
-#         self.assertEqual(output_sentence, expected_output)
+        self.assertEqual(output_sentence, expected_output)
 
-#     def test_simple_generate_bf16(self):
-#         expected_output = "Hello my name is Jasmine and I am a newbie to the"
+    def test_simple_generate_bf16(self):
+        expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
-#         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-#         model = Rwkv5ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = Rwkv5ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
-#         output = model.generate(input_ids, max_new_tokens=10)
-#         output_sentence = self.tokenizer.decode(output[0].tolist())
+        output = model.generate(input_ids, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
 
-#         self.assertEqual(output_sentence, expected_output)
+        self.assertEqual(output_sentence, expected_output)

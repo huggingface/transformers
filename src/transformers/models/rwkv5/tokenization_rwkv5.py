@@ -15,8 +15,8 @@
 """Tokenization classes for RWKV5."""
 
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple
 import re
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
 from transformers.utils import logging
@@ -35,7 +35,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "ArthurZ/rwkv-5-utf": "https://huggingface.co/ArthurZ/rwkv-5-utf/blob/main/vocab.txt",
     },
 }
-
 
 
 def whitespace_tokenize(text):
