@@ -102,7 +102,7 @@ class MusicgenMelodyDecoderTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden_layers because of #29297
         seq_length=7,
         is_training=False,
         use_labels=False,
@@ -436,7 +436,7 @@ class MusicgenMelodyTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden_layers because of #29297
         seq_length=7,
         is_training=False,
         use_labels=False,
@@ -736,8 +736,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             hidden_states = outputs.encoder_hidden_states
 
-            # Ignore copy
-            expected_num_layers = self.model_tester.num_hidden_layers
+            expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # Ignore copy
