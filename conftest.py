@@ -33,8 +33,6 @@ NOT_DEVICE_TESTS = {
     "test_feature_extraction",
     "test_image_processing",
     "test_image_processor",
-    "test_image_transforms",
-    "test_optimization",
     "test_retrieval",
     "test_config",
     "test_from_pretrained_no_checkpoint",
