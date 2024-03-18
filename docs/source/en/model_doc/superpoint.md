@@ -119,9 +119,4 @@ The original code can be found [here](https://github.com/magicleap/SuperPointPre
 
 - forward
 
-## SuperPointForInterestPointDescription
-
-[[autodoc]] SuperPointForInterestPointDescription
-
-- forward
 
