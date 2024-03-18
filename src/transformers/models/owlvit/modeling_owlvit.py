@@ -1293,6 +1293,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.sigmoid = nn.Sigmoid()
 
         self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
+        self.box_bias = self.compute_box_bias(self.sqrt_num_patches, self.owlvit.device)
 
     def normalize_grid_corner_coordinates(self, num_patches: int, device: torch.device) -> torch.Tensor:
         """
@@ -1317,19 +1318,26 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
-    def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
-        # The box center is biased to its position on the feature grid
-        box_coordinates = self.normalize_grid_corner_coordinates(feature_map.shape[1], feature_map.device)
+    def compute_box_bias(self, num_patches: int, device: torch.device) -> torch.FloatTensor:
+        """
+        Computes box bias for bounding box prediction (the box center is biased to its position on feature grid).
+        
+        Args:
+            num_patches: Number of patches in the feature map.
+            device: Device on which to create the tensor.
+        Returns:
+            box_bias: bias term of the bounding box prediction.
+        """
+        box_coordinates = self.normalize_grid_corner_coordinates(num_patches, device)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
 
         # Unnormalize xy
         box_coord_bias = torch.log(box_coordinates + 1e-4) - torch.log1p(-box_coordinates + 1e-4)
 
         # The box size is biased to the patch size
-        box_size = torch.full_like(box_coord_bias, 1.0 / feature_map.shape[-2])
+        box_size = torch.full_like(box_coord_bias, 1.0 / num_patches)
         box_size_bias = torch.log(box_size + 1e-4) - torch.log1p(-box_size + 1e-4)
 
-        # Compute box bias
         box_bias = torch.cat([box_coord_bias, box_size_bias], dim=-1)
         return box_bias
 
@@ -1352,7 +1360,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        pred_boxes += self.compute_box_bias(feature_map)
+        pred_boxes += self.box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
