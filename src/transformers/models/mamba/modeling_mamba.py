@@ -362,10 +362,10 @@ class MambaPreTrainedModel(PreTrainedModel):
             with torch.no_grad():
                 module.dt_proj.bias.copy_(inv_dt)
             module.dt_proj.bias._no_reinit = True
-        elif isinstance(module, MambaClassificationHead):
-            for name, p in module.named_parameters():
-                if name in ["dense.weight", "out_proj.weight"]:
-                    nn.init.normal_(p, std=self.config.initializer_range)
+        # elif isinstance(module, MambaClassificationHead):
+        #     for name, p in module.named_parameters():
+        #         if name in ["dense.weight", "out_proj.weight"]:
+        #             nn.init.normal_(p, std=self.config.initializer_range)
 
         if isinstance(module, nn.Linear):
             if module.bias is not None:
@@ -720,19 +720,23 @@ class MambaClassificationHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.activation = ACT2FN[config.hidden_act]
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # self.activation = ACT2FN[config.hidden_act]
+        # self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+        # module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        self.out_proj.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
         self.config = config
 
     def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = self.activation(x)
-        x = self.dropout(x)
+        # x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        # x = self.dropout(x)
+        # x = self.dense(x)
+        # x = self.activation(x)
+        # x = self.dropout(x)
+        x = features
         x = self.out_proj(x)
         return x
 
@@ -748,6 +752,7 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         self.num_labels = config.num_labels
         self.backbone = MambaModel(config)
         self.classifier = MambaClassificationHead(config)
+        # self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         for param in self.base_model.parameters():
             param.requires_grad = False
@@ -791,6 +796,31 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         sequence_output = mamba_outputs[0]
         logits = self.classifier(sequence_output)
 
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape[:2]
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
+        assert (
+            self.config.pad_token_id is not None or batch_size == 1
+        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
+            else:
+                sequence_lengths = -1
+                print(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
@@ -804,22 +834,22 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
                 if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
                 else:
-                    loss = loss_fct(logits, labels)
+                    loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
-            output = (logits,) + mamba_outputs[1:]
+            output = (pooled_logits,) + mamba_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return MambaSequenceClassifierOutput(
             loss=loss,
-            logits=logits,
+            logits=pooled_logits,
             cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
         )
