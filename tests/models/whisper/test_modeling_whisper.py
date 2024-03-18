@@ -1757,29 +1757,40 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
+        # Japanese transcription, batch size 1
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|ja|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+        EXPECTED_TRANSCRIPT_JA = "木村さんに電話を貸してもらいました"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT_JA)
 
+        # English transcription, batch size 1
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Kimura-san called me."
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+        EXPECTED_TRANSCRIPT_EN = " Kimura-san called me."
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT_EN)
 
+        # Both languages in the same batch
+        generated_ids = model.generate(
+            input_features.repeat(2, 1, 1), do_sample=False, max_length=20, language=["<|ja|>", "<|en|>"], task="transcribe"
+        )
+        [transcript_ja, transcript_en] = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(transcript_ja, EXPECTED_TRANSCRIPT_JA)
+        self.assertEqual(transcript_en, EXPECTED_TRANSCRIPT_EN)
+
+        # Translation
         generated_ids = model.generate(
             input_features, do_sample=False, max_length=20, language="<|ja|>", task="translate"
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+        EXPECTED_TRANSLATION = " I borrowed a phone from Kimura san"
+        self.assertEqual(transcript, EXPECTED_TRANSLATION)
 
     @slow
     def test_large_batched_generation(self):
