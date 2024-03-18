@@ -23,6 +23,7 @@ class BenchMark:
 
     All the methods except `run` are designed to be private: only the `run` method should be used by an end user.
     """
+
     def __init__(self, *arg, **kwargs):
         self._buffer = {
             "init_kwargs": {},
