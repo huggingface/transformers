@@ -28,25 +28,25 @@ from transformers.utils.import_utils import is_mamba_ssm_available
 if is_mamba_ssm_available():
     from mamba_ssm.models.config_mamba import MambaConfig as MambaConfig_ssm
 
+    def convert_ssm_config_to_hf_config(config_ssm: MambaConfig_ssm) -> MambaConfig:
+        """Convert a MambaConfig from mamba_ssm to a MambaConfig from transformers."""
+        hf_config = MambaConfig()
+        # Set config hidden size, num hidden layers, and vocab size directly from the original config
+        hf_config.hidden_size = config_ssm.d_model
+        hf_config.intermediate_size = config_ssm.d_model * 2
+        hf_config.time_step_rank = math.ceil(config_ssm.d_model / 16)
+
+        hf_config.num_hidden_layers = config_ssm.n_layer
+        vocab_size = config_ssm.vocab_size
+        pad_vocab_size_multiple = config_ssm.pad_vocab_size_multiple
+        if (vocab_size % pad_vocab_size_multiple) != 0:
+            vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
+        hf_config.vocab_size = vocab_size
+        return hf_config
+
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
-
-
-def convert_ssm_config_to_hf_config(config_ssm: MambaConfig_ssm) -> MambaConfig:
-    """Convert a MambaConfig from mamba_ssm to a MambaConfig from transformers."""
-    hf_config = MambaConfig()
-    # Set config hidden size, num hidden layers, and vocab size directly from the original config
-    hf_config.hidden_size = config_ssm.d_model
-    hf_config.intermediate_size = config_ssm.d_model * 2
-    hf_config.time_step_rank = math.ceil(config_ssm.d_model / 16)
-
-    hf_config.num_hidden_layers = config_ssm.n_layer
-    vocab_size = config_ssm.vocab_size
-    pad_vocab_size_multiple = config_ssm.pad_vocab_size_multiple
-    if (vocab_size % pad_vocab_size_multiple) != 0:
-        vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
-    hf_config.vocab_size = vocab_size
-    return hf_config
 
 
 def convert_mamba_ssm_checkpoint_to_huggingface_model(
