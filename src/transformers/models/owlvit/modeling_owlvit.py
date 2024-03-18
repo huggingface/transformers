@@ -18,7 +18,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
@@ -1321,7 +1320,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def compute_box_bias(self, num_patches: int, device: torch.device) -> torch.FloatTensor:
         """
         Computes box bias for bounding box prediction (the box center is biased to its position on feature grid).
-        
+
         Args:
             num_patches: Number of patches in the feature map.
             device: Device on which to create the tensor.
