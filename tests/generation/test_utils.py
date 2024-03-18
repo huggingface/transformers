@@ -87,11 +87,6 @@ class GenerationTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
 
-        # It is important set set the eos_token_id to None to ensure that no sequences
-        # shorter than `max_length` can be generated
-        config.eos_token_id = None
-        config.forced_eos_token_id = None
-
         # cut to half length & take max batch_size 3
         sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:batch_size, :sequence_length]
@@ -107,6 +102,11 @@ class GenerationTesterMixin:
                 config.eos_token_id = [config.eos_token_id]
             config.pad_token_id = config.eos_token_id[0]
         attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :sequence_length]
+
+        # It is important set set the eos_token_id to None to ensure that no sequences
+        # shorter than `max_length` can be generated
+        config.eos_token_id = None
+        config.forced_eos_token_id = None
 
         return config, input_ids, attention_mask, max_length
 
@@ -766,6 +766,10 @@ class GenerationTesterMixin:
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:
             return
+
+        # hack in case they are equal, otherwise the attn mask will be [0]
+        if config.bos_token_id == config.pad_token_id:
+            config.pad_token_id = None
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
