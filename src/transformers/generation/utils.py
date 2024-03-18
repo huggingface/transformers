@@ -1778,6 +1778,24 @@ class GenerationMixin:
 
         return result
 
+    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
+        """
+        Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
+        fed through `this_peer_finished`. ZeRO stage 3-friendly.
+        """
+        if synced_gpus:
+            # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+            # The following logic allows an early break if all peers finished generating their sequence
+            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
+            # send 0.0 if we finished, 1.0 otherwise
+            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+            # did all peers finish? the reduced sum will be 0.0 then
+            if this_peer_finished_flag.item() == 0.0:
+                return False
+        elif this_peer_finished:
+            return False
+        return True
+
     def contrastive_search(self, *args, **kwargs):
         logger.warning_once(
             "Calling `contrastive_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
@@ -1937,19 +1955,9 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None:
@@ -2185,12 +2193,7 @@ class GenerationMixin:
 
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -2396,21 +2399,11 @@ class GenerationMixin:
         batch_size, cur_len = input_ids.shape
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
+        this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2476,13 +2469,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -2698,22 +2685,11 @@ class GenerationMixin:
         batch_size, cur_len = input_ids.shape
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
+        this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
-        # auto-regressive generation
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2781,13 +2757,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -3046,20 +3016,11 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
 
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # if sequential is True, split the input to batches of batch_size and run sequentially
@@ -3186,10 +3147,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,
@@ -3435,20 +3393,10 @@ class GenerationMixin:
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -3543,10 +3491,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,
@@ -3798,20 +3743,10 @@ class GenerationMixin:
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
 
@@ -3949,10 +3884,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         final_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None
         sequence_outputs = beam_scorer.finalize(
@@ -4207,20 +4139,10 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -4314,10 +4236,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if constrained_beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         sequence_outputs = constrained_beam_scorer.finalize(
             input_ids,
@@ -4545,18 +4464,8 @@ class GenerationMixin:
         # other auxiliary variables
         max_len = stopping_criteria[0].max_length
 
-        this_peer_finished = False  # used by synced_gpus only
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        this_peer_finished = False
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
@@ -4725,13 +4634,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
