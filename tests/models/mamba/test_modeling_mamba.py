@@ -19,6 +19,7 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
+import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
@@ -500,13 +501,20 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-    @unittest.skipIf(
-        MambaLMHeadModel is None or torch_device == "cpu",
-        reason="The `mamba_ssm` package is not available and the original mamba_ssm does not support cpu, we cannot test the conversion if we cannot run the original model",
-    )
     @parameterized.expand([("state-spaces/mamba-130m",)])
     def test_model_from_mamba_ssm_conversion(self, original_model_name):
         """Test that converting a model from the `state-spaces/mamba` repository into a huggingface compatible `MambaForCausalLM` returns a model which returns the same output as the original."""
+        # Skip this test if our current fixture is not compatible.
+        # Performing these checks from within the test since `@unittest.skipIf` isn't working.
+        if MambaLMHeadModel is None:
+            pytest.skip(
+                "The `mamba_ssm` package is not available, we cannot test the conversion if we cannot run the original model."
+            )
+        if torch_device == "cpu":
+            pytest.skip(
+                "The original mamba_ssm does not support cpu, we cannot test the conversion if we cannot run the original model."
+            )
+
         # Pull a model from the `state-spaces/mamba` repository
         # Currently only pulling the tiny model for speed.
         original_model = MambaLMHeadModel.from_pretrained(original_model_name).to(torch_device)
