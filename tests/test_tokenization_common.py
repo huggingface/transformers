@@ -393,6 +393,10 @@ class TokenizerTesterMixin:
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
+    def test_pretrained_tokenizer_is_fully_tested(self):
+        if self.pretrained_tokenizer_to_test is None:
+            raise ValueError("This tokenizer test does not define a `pretrained_tokenizer_to_test`. This is now required. Make sure to add one.")
+
     # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
