@@ -1294,31 +1294,32 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
 
-    def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
-        # Computes normalized xy corner coordinates from feature_map.
-        if not feature_map.ndim == 4:
-            raise ValueError("Expected input shape is [batch_size, num_patches, num_patches, hidden_dim]")
+    def normalize_grid_corner_coordinates(self, num_patches: int, device: torch.device) -> torch.Tensor:
+        """
+        Computes normalized xy corner coordinates from feature_map.
 
-        device = feature_map.device
-        num_patches = feature_map.shape[1]
+        Args:
+            num_patches: Number of patches in the feature map.
+            device: Device on which to create the tensor.
 
-        # TODO: Remove numpy usage.
-        box_coordinates = np.stack(
-            np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
-        ).astype(np.float32)
-        box_coordinates /= np.array([num_patches, num_patches], np.float32)
+        Returns:
+            box_coordinates: Normalized xy corner coordinates.
+        """
+        box_coordinates = torch.stack(
+            torch.meshgrid(torch.arange(1, num_patches + 1), torch.arange(1, num_patches + 1)), dim=-1
+        ).to(torch.float32)
+        box_coordinates /= num_patches
 
         # Flatten (h, w, 2) -> (h*w, 2)
         box_coordinates = box_coordinates.reshape(
             box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
-        )
-        box_coordinates = torch.from_numpy(box_coordinates).to(device)
+        ).to(device)
 
         return box_coordinates
 
     def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
         # The box center is biased to its position on the feature grid
-        box_coordinates = self.normalize_grid_corner_coordinates(feature_map)
+        box_coordinates = self.normalize_grid_corner_coordinates(feature_map.shape[1], feature_map.device)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
 
         # Unnormalize xy
