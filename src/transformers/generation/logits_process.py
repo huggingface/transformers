@@ -1617,6 +1617,7 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         scores = scores.log_softmax(dim=-1)
+        scores = scores + 1  # this should trigger the doctests (and fail them here!)
         return scores
 
 
