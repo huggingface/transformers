@@ -3769,7 +3769,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
