@@ -1137,10 +1137,7 @@ class WhisperGenerationMixin:
 
         is_lang_id_undefined = len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None)
 
-        # Expand init_tokens to batch_size
-        init_tokens = [copy.deepcopy(init_tokens) for _ in range(batch_size)]
-
-        # Expand language to batch_size
+        # Make sure language is a list of strings of the correct length
         if isinstance(language, (list, tuple)):
             if any(l is None for l in language):
                 raise TypeError(
@@ -1152,13 +1149,16 @@ class WhisperGenerationMixin:
                     f"Expected length of {batch_size}, but got {len(language)}"
                 )
         else:
-            language = [language] * batch_size
+            language = [language]  # Use a length-1 list now, broadcast later
+
+        # Separate init_tokens for each language
+        init_tokens = [copy.deepcopy(init_tokens) for _ in language]
 
         # from v4.39 the forced decoder ids are always None in favour of decoder input ids
         generation_config.forced_decoder_ids = None
 
         if language[0] is not None:
-            for i in range(batch_size):
+            for i in range(len(init_tokens)):
                 if language[i] in generation_config.lang_to_id.keys():
                     language_token = language[i]
                 elif language[i] in TO_LANGUAGE_CODE.keys():
@@ -1191,14 +1191,14 @@ class WhisperGenerationMixin:
             )
 
             # append or replace lang_id to init_tokens
-            for i in range(batch_size):
+            for i in range(len(init_tokens)):
                 lang_id = lang_ids[i].item()
                 if len(init_tokens[i]) > 1:
                     init_tokens[i][1] = lang_id
                 else:
                     init_tokens[i].append(lang_id)
 
-        for i in range(batch_size):
+        for i in range(len(init_tokens)):
             if task is not None:
                 if task in TASK_IDS:
                     init_tokens[i].append(generation_config.task_to_id[generation_config.task])
@@ -1230,7 +1230,7 @@ class WhisperGenerationMixin:
             # let's make sure we don't pass `None` tokens as prompt tokens
             init_tokens[i] = [t for t in init_tokens[i] if t is not None]
 
-        return torch.as_tensor(init_tokens, dtype=torch.long, device=self.device)
+        return torch.as_tensor(init_tokens, dtype=torch.long, device=self.device).expand(batch_size, -1)
 
     def detect_language(
         self,
