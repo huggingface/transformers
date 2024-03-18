@@ -383,72 +383,36 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
     
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        num_images, num_image_patches, embed_dim = image_features.shape
+        # Here input_embeds is strictly the text embedding, unscaled. They need to be scaled before concatenation.
+
+        _, num_image_tokens, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where special image tokens are
-        special_image_token_mask = input_ids == self.config.image_token_index
-        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
+        # left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged image-text sequence.
-        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
-        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
-        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        if left_padding:
-            new_token_positions += nb_image_pad[:, None]  # offset for left padding
-        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
+        # max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
+        full_sequence_length = num_image_tokens + sequence_length # sequence length includes padding
+        
+        # 3. Create the full embedding, already padded
         final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+            batch_size, full_sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
         final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
+            batch_size, full_sequence_length, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
         if labels is not None:
             final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+                (batch_size, full_sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
             )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
+        final_embedding[:, 0:num_image_tokens] = image_features # We expect an image for all elements of a batch
+        final_embedding[:, num_image_tokens:full_sequence_length] = (self.config.hidden_size)**0.5 * inputs_embeds
 
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        if labels is not None:
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
+        final_attention_mask[:, 0:num_image_tokens] = 1
+        final_attention_mask[:, num_image_tokens:full_sequence_length] = attention_mask
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
-            )
-
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
         if labels is None:
             final_labels = None
-
         return final_embedding, final_attention_mask, final_labels, position_ids
     
 
@@ -462,8 +426,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -506,35 +468,15 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
 
         if inputs_embeds is None:
-            # TODO adapt to Palma from Llava (no interlevaing, etc)
             # 1. Extra the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_model(pixel_values, output_hidden_states=True)
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-
-                if vision_feature_select_strategy == "default":
-                    selected_image_feature = selected_image_feature[:, 1:]
-                elif vision_feature_select_strategy == "full":
-                    selected_image_feature = selected_image_feature
-                else:
-                    raise ValueError(
-                        f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                    )
-
+                image_outputs = self.vision_model(pixel_values)
+                selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
@@ -584,7 +526,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs[0]
-        # logits identical to flax output
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n

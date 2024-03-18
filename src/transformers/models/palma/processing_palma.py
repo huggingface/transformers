@@ -24,7 +24,9 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+import logging
 
+logger = logging.getLogger(__name__)
 
 class PalmaProcessor(ProcessorMixin):
     r"""
@@ -102,8 +104,15 @@ class PalmaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if images is None or text is None:
-            raise ValueError("Both `text` and `images` are expected as arguments to a `PalmaProcessor` instance.")
+        if images is None:
+            raise ValueError("`images` are expected as arguments to a `PalmaProcessor` instance.")
+        if text is None:
+            logger.warning_once("You are using Palma without text prefix. It will perform as a picture-captioning model.")
+
+        if isinstance(text, List) and isinstance(images, List):
+            if len(images) < len(text):
+                raise ValueError(f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image.")
+            
         pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length

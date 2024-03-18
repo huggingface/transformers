@@ -548,9 +548,6 @@ class PalmaGemmaSdpaAttention(PalmaGemmaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
-            #expanded_mask = causal_mask[:, None, None, :].expand(bsz, self.num_heads, q_len, q_len)
-            #causal_mask = expanded_mask.bool() # torch.where(expanded_mask.byte(), expanded_mask, torch.tensor(float('-inf'), device=expanded_mask.device))
-            #causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
             causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
@@ -561,7 +558,6 @@ class PalmaGemmaSdpaAttention(PalmaGemmaAttention):
             value_states = value_states.contiguous()
         
         attn_output = torch.nn.functional.scaled_dot_product_attention(
-        #attn_output = debug_scaled_dot_product_attention(
             query=query_states,
             key=key_states,
             value=value_states,
@@ -570,9 +566,7 @@ class PalmaGemmaSdpaAttention(PalmaGemmaAttention):
         )
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
-        # with causal mask changed to full block attention for image tokens, above works well
         attn_output = self.o_proj(attn_output)
-        # This is fixed when taking a full attention mask (attend to everything in the input)
         return attn_output, None, past_key_value
 
 
@@ -824,6 +818,7 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
         causal_mask = torch.full(
             (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
         )
+
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
@@ -885,13 +880,13 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
         
         #causal_mask = attention_mask
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values)
         
         # embed positions
         hidden_states = inputs_embeds
 
         # normalized
-        # FIXME commented out because image hidden states should not be scaled (are not scaled in palma)
+        # Commented out because image hidden states should not be scaled in palma. Scaling is done in modeling_palma.
         # hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         # decoder layers
@@ -957,7 +952,7 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor):
+    def _update_causal_mask(self, attention_mask, input_tensor, past_key_values):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -978,18 +973,54 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
         causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
 
         causal_mask = causal_mask.to(dtype=dtype, device=device)
+
         if attention_mask is not None and attention_mask.dim() == 2:
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        
-        block_size = 266 # image tokens + unpadded text input length
-        if seq_length > block_size:
-            causal_mask[:, :, :block_size, :block_size] = torch.full((batch_size, 1, block_size, block_size), fill_value=0.0, dtype=torch.float32)
-            for i in range(block_size, seq_length):
-                causal_mask[:, :, i, :i+1] = torch.full((batch_size, 1, 1, i+1), fill_value=0.0, dtype=torch.float32)
-        
+        if past_key_values is not None:
+            # If we are at first generation, we need to do full block attention for the whole prefix. 
+            # However, if past_key_values is not None, it means
+            # we already generated one pass of tokens. 
+            # Then, don't change attention mask, keep it causal for new tokens.
+            block_sizes = attention_mask.sum(dim=1)
+
+            # block attention on prefix tokens, triangular after.
+            # causal_mask.fill_(-3.4028e38)
+
+            
+            # 
+
+            for b in range(batch_size):
+                block_size = block_sizes[b].item()
+
+                # Full block attention for the prefix
+                causal_mask[b, :, :block_size, :block_size] = 0
+                
+                # Causal attention pattern starts right after block_size
+                for i in range(block_size, seq_length):
+                    # This creates a triangular pattern of allowed attention
+                    causal_mask[b, :, i, :i+1] = 0
+
+            """
+            for b in range(batch_size):
+                block_size = block_sizes[b]
+
+                causal_mask[b, :, :block_size, :block_size] = 0
+                
+                for i in range(block_size, seq_length):
+                    # Apply causal attention, up to the end of actual sequence length without padding
+                    end_of_attention = min(seq_length, block_sizes[b].item())
+                    causal_mask[b, :, i, :end_of_attention] = 0
+                    # Beyond the actual content, ensure it's blocked
+                    if end_of_attention < seq_length:
+                        causal_mask[b, :, i, end_of_attention:] = float('-inf')
+                    """
+            breakpoint()
+
+
+
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
@@ -1006,7 +1037,6 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
                 # Details: https://github.com/pytorch/pytorch/issues/110213
                 causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
         return causal_mask
 
 
@@ -1199,7 +1229,7 @@ class PalmaGemmaForCausalLM(PalmaGemmaPreTrainedModel):
 
         model_inputs.update(
             {
-                #"position_ids": position_ids,
+                "position_ids": position_ids,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),

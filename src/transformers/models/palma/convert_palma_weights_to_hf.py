@@ -53,13 +53,13 @@ def get_palma_config(variant:str):
         patch_size = 14
         config.vision_config.image_size = image_size
         config.vision_config.patch_size = patch_size
-        config.text_config.vocab_size = vocab_size
-
+        config.vision_config.num_image_tokens = int(config.vision_config.image_size**2 / config.vision_config.patch_size**2)
         config.vision_config.hidden_size = 1152
         config.vision_config.intermediate_size = 4304
         config.vision_config.num_hidden_layers = 27
         config.vision_config.num_attention_heads = 16
         config.vision_config.projector_hidden_act = "gelu_fast"
+
         config.text_config.vocab_size = vocab_size
         config.text_config.num_hidden_layers = 18
         config.text_config.num_key_value_heads = 1
@@ -67,6 +67,10 @@ def get_palma_config(variant:str):
         config.text_config.torch_dtype = "float32"
         config.text_config.hidden_size = 2048
         config.text_config.hidden_act = "gelu_fast"
+        config.pad_token_id = 0
+        config.bos_token_id = 2
+        config.eos_token_id = 1
+
     else:
         raise ValueError(f"Identifier {variant} not supported. Available: {PALMA_VARIANTS}")
     return config
@@ -229,65 +233,16 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 def verify_logits(model, processor):
     intermediates_path = "/home/ubuntu/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
     cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
+
+    list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     outputs_logits_flax = np.load("/home/ubuntu/temp/output_logits_flax.npy")
+    prompt = ["answer en Where is the cow standing?\n", ""]
 
-    intermediates = np.load(intermediates_path)
-
-
-    image_tensor = processor.image_processor(images=Image.open(cow_on_beach_path), return_tensors="pt")
+    model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
     with torch.inference_mode():
-        vision_outputs = model.vision_model(
-            pixel_values=image_tensor["pixel_values"], output_hidden_states=True
-        ).last_hidden_state
-        projector_output = model.multi_modal_projector(vision_outputs)
-
-    if not np.allclose(projector_output.cpu().numpy()[0], intermediates["img/zimg"][0], rtol=1e-3, atol=5e-3):
-        raise ValueError("image activations do not match.")
-    else:
-        print("Vision activations match.")
-
-
-    # text logits
-    prompt = "answer en Where is the cow standing?\n"
-    # right-padding
-    prompt_input_ids = processor.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=16, padding='max_length').to(device)
-
-    # left-padding
-    #prompt_input_ids = processor.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", padding='do_not_pad').to(device)
-
-    with torch.inference_mode():
-        text_token_embeddings = model.get_input_embeddings()(prompt_input_ids)
-        pad_token_embeddings = model.get_input_embeddings()(torch.zeros(1,6).to(int))
-        # Here we scale the text embeddings with the hidden size. 
-        # TODO replace 2048 with hidden_size from config
-        
-        
-        # right padding
-        concat_embeddings = torch.cat((projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
-
-        # left padding
-        #concat_embeddings = torch.cat((pad_token_embeddings, projector_output, np.sqrt(2048) * text_token_embeddings), dim=1)
-
-        max_length = 16 # hardcoded for logit verification.
-
-        unpadded_length = len(processor.tokenizer.encode(prompt, add_special_tokens=True, return_tensors="pt", max_length=max_length, padding='do_not_pad')[0])
-
-        #right padding
-        attention_mask = torch.cat((torch.ones((1, projector_output.shape[1] + unpadded_length)), torch.zeros((1, max_length - unpadded_length))), dim=1)
-        
-        # left padding 
-        #attention_mask = torch.cat((torch.zeros((1, max_length - unpadded_length)), torch.ones((1, projector_output.shape[1] + unpadded_length))), dim=1)
-        
-        
-        #attention_mask = torch.ones((1, projector_output.shape[1] + unpadded_length))
-        attention_mask= attention_mask.bool()
-        outputs = model.language_model(attention_mask=attention_mask, inputs_embeds=concat_embeddings)
-        print(outputs_logits_flax)
-        print(outputs.logits.cpu().numpy())
-        if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
-            raise ValueError("Logits do not match.")
-        else:
-            print("Full forward pass works. Amazing!")
+        outputs = model(**model_inputs)
+        #FIXME All the token embeddings up to pad tokens are correct. But 
+        # generate() and forward() take [:, -1, :].
         manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
         next_token_id = torch.argmax(manual_probs, dim=-1)
         if processor.decode(next_token_id[0]) != "beach":
@@ -295,16 +250,20 @@ def verify_logits(model, processor):
         else:
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
+
+        if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
+            raise ValueError("Logits do not match.")
+        else:
+            print("Full forward pass works. Amazing!")
+
+
         #position_ids = torch.arange(projector_output.shape[1] + unpadded_length).unsqueeze(0)
         generation = processor.decode(
             model.generate(
-                inputs_embeds=concat_embeddings,
+                **model_inputs,
                 max_new_tokens=10,
-                attention_mask=attention_mask,
-                #position_ids=position_ids,
                 )[0]
             )
-        print(generation)
         if generation != "beach":
             raise ValueError("Generation does not match.")
         else:
