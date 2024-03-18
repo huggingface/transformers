@@ -166,7 +166,7 @@ if __name__ == "__main__":
     prefill_num_iter = 3
     num_iter = 16
 
-    benchmakr = CacheSpeedBenchMark(repo_id=repo_id, prefill_num_iter=prefill_num_iter, num_iter=num_iter)
+    benchmark = CacheSpeedBenchMark(repo_id=repo_id, prefill_num_iter=prefill_num_iter, num_iter=num_iter)
 
     # all_batch_size = [1, 2, 4]
     # all_max_cache_length = [4096, 2048, 1024, 512]
@@ -203,7 +203,7 @@ if __name__ == "__main__":
                             "report_kwargs": {"output_path": "benchmark_report.json"},
                         }
 
-                        result = benchmakr.run(**run_kwargs)
+                        result = benchmark.run(**run_kwargs)
                         results.append(result)
 
     print(json.dumps(results, indent=4))
