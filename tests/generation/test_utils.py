@@ -1288,19 +1288,26 @@ class GenerationTesterMixin:
                     "prophetnet",
                     "seamlessm4t",
                     "clvp",
+                    "wav2vec",
                 ]
             ):
                 self.skipTest("May fix in the future: need model-specific fixes")
 
-            # enable cache
+            # enable cache if the model is not openai-gpt
             config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
+            config.use_cache = True
+            if "openaigpt" in model_class.__name__.lower():
+                config.use_cache = False
 
             # Encoder Decoder models are not supported
             if config.is_encoder_decoder:
                 self.skipTest("DoLa is not supported for encoder-decoder models")
-            config.use_cache = True
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
+
+            # if the model does not support dola_decoding due to the absent of model.lm_head, skip the test
+            if not hasattr(model, "lm_head"):
+                self.skipTest("This model doesn't support dola_decoding due to the absent of model.lm_head")
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of
@@ -1318,11 +1325,12 @@ class GenerationTesterMixin:
                 "output_attentions": True,
                 "return_dict_in_generate": True,
             }
-            output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
-
+            print("Input size", input_ids.size())
+            print("Attneion mask size", attention_mask.size())
             generation_kwargs.update({"dola_layers": 'low'})
             output_dola = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
-            self._check_outputs(output_dola, input_ids, model.config, use_cache=True)
+            print("Output size", output_dola[0].size())
+            self._check_outputs(output_dola, input_ids, model.config, use_cache=config.use_cache)
 
     def test_assisted_decoding_sample(self):
         # In this test we don't check assisted vs non-assisted output -- seeded assisted decoding with sample will not
