@@ -2602,8 +2602,10 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         image_hidden_states = kwargs.get("image_hidden_states", None)
         if image_hidden_states is not None:
             pixel_values = None
+            pixel_attention_mask = None
         else:
             pixel_values = kwargs.get("pixel_values", None)
+            pixel_attention_mask = kwargs.get("pixel_attention_mask", None)
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -2611,6 +2613,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "pixel_attention_mask": pixel_attention_mask,
                 "image_hidden_states": image_hidden_states,
             }
         )
