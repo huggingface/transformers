@@ -1064,8 +1064,15 @@ def infer_tests_to_run(
     impacted_files = sorted(set(impacted_files))
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
+    model_impacted = sorted(set(["/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")]))
+
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
+        test_files_to_run = ["tests", "examples"]
+        repo_utils_launch = True
+    # The number `30` is just a heuristic to determine if we `guess` all models are impacted.
+    elif not filter_models and len(model_impacted) > 30:
+        print(f"More than 30 models are impacted and `filter_models=False`. CI is configured to test everything.")
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
     else:
@@ -1244,7 +1251,7 @@ if __name__ == "__main__":
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
                     json_output_file=args.json_output_file,
-                    filter_models=(not commit_flags["no_filter"] or is_main_branch),
+                    filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:
