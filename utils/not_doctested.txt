@@ -1021,4 +1021,3 @@ src/transformers/utils/quantization_config.py
 src/transformers/utils/sentencepiece_model_pb2.py
 src/transformers/utils/sentencepiece_model_pb2_new.py
 src/transformers/utils/versions.py
-
