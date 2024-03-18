@@ -201,6 +201,7 @@ class TokenizerTesterMixin:
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
+        self.tokenizers_list = []
         if self.test_rust_tokenizer:
             tokenizers_list = [
                 (
@@ -215,10 +216,10 @@ class TokenizerTesterMixin:
                 or (self.from_pretrained_filter is not None and self.from_pretrained_filter(pretrained_name))
             ]
             self.tokenizers_list = tokenizers_list[:1]  # Let's just test the first pretrained vocab for speed
-        else:
-            self.tokenizers_list = (
-                [] if self.pretrained_tokenizer_to_test is None else self.pretrained_tokenizer_to_test
-            )
+            
+        if self.pretrained_tokenizer_to_test is not None:
+            self.tokenizers_list += self.pretrained_tokenizer_to_test 
+
         with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
