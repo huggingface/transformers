@@ -56,8 +56,8 @@ class WatermarkDetectorOutput(ModelOutput):
     green_fraction: np.array = None
     z_score: np.array = None
     p_value: np.array = None
-    prediction: Optional[torch.Tensor] = None
-    confidence: Optional[torch.Tensor] = None
+    prediction: Optional[np.array] = None
+    confidence: Optional[np.array] = None
 
 
 class WatermarkDetector:
