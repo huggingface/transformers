@@ -1256,7 +1256,7 @@ if __name__ == "__main__":
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
                     json_output_file=args.json_output_file,
-                    filter_models=True,
+                    filter_models=False,
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:
