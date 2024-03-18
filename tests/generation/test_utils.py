@@ -1341,7 +1341,7 @@ class GenerationTesterMixin:
             }
             print("Input size", input_ids.size())
             print("Attneion mask size", attention_mask.size())
-            generation_kwargs.update({"dola_layers": 'low'})
+            generation_kwargs.update({"dola_layers": "low"})
             output_dola = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             print("Output size", output_dola[0].size())
             self._check_outputs(output_dola, input_ids, model.config, use_cache=config.use_cache)

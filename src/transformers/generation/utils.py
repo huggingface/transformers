@@ -2482,7 +2482,9 @@ class GenerationMixin:
                 candidate_premature_layers = [start_layer]
             else:
                 candidate_premature_layers = (
-                    list(range(start_layer, mature_layer // 2, 2)) if mature_layer <= 40 else list(range(start_layer, 20, 2))
+                    list(range(start_layer, mature_layer // 2, 2))
+                    if mature_layer <= 40
+                    else list(range(start_layer, 20, 2))
                 )
             if len(candidate_premature_layers) == 0:
                 raise ValueError(
@@ -2507,7 +2509,9 @@ class GenerationMixin:
 
         # of the model doesnot have self.lm_head, raise an error
         if not hasattr(self, "lm_head"):
-            raise ValueError(f"The model {self.__class__.__name__} does not have an lm_head attribute to use DoLa decoding.")
+            raise ValueError(
+                f"The model {self.__class__.__name__} does not have an lm_head attribute to use DoLa decoding."
+            )
 
         while True:
             if synced_gpus:
@@ -4688,7 +4692,7 @@ def _relative_top_filter(
     baseline_scores: torch.FloatTensor,
     relative_top: float = 0.1,
     filter_value: float = -float("Inf"),
-    base_filter_value = -1e-3,
+    base_filter_value=-1e-3,
     min_tokens_to_keep: int = 1,
 ) -> torch.FloatTensor:
     """Reference: https://github.com/XiangLi1999/ContrastiveDecoding/blob/170e9142e92159c1237d731e240f5eb14aabf428/transformers/src/transformers/generation_logits_process.py#L235"""

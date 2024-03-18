@@ -900,8 +900,8 @@ class GemmaIntegrationTest(unittest.TestCase):
     def test_model_2b_bf16_dola(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
-            'Hello I am doing an experiment and need to get the mass of a block. The problem is, it has no scale',
-            'Hi today we have the review for a <strong>2016/2017</strong> season of',
+            "Hello I am doing an experiment and need to get the mass of a block. The problem is, it has no scale",
+            "Hi today we have the review for a <strong>2016/2017</strong> season of",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -911,7 +911,9 @@ class GemmaIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, dola_layers='low', repetition_penalty=1.2)
+        output = model.generate(
+            **inputs, max_new_tokens=20, do_sample=False, dola_layers="low", repetition_penalty=1.2
+        )
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
