@@ -1610,7 +1610,7 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     >>> # Normalizing them may have a positive impact on beam methods, or when using the scores on your application
     >>> outputs = model.generate(**inputs, renormalize_logits=True, return_dict_in_generate=True, output_scores=True)
     >>> print(torch.sum(torch.exp(outputs.scores[-1])))
-    tensor(1.0000)
+    tensor(1.0001)
     ```
     """
 
