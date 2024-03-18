@@ -19,6 +19,10 @@ import timeit
 
 
 class BenchMark:
+    """Base class specifying the methods to be implemented in benchmark subclasses.
+
+    All the methods except `run` are designed to be private: only the `run` method should be used by an end user.
+    """
     def __init__(self, *arg, **kwargs):
         self._buffer = {
             "init_kwargs": {},
