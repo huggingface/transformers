@@ -80,6 +80,7 @@ if is_tf_available():
         TFSampleDecoderOnlyOutput,
         TFSampleEncoderDecoderOutput,
     )
+    from transformers.modeling_tf_utils import keras
 
     tf.config.experimental.enable_tensor_float_32_execution(False)
 
@@ -365,7 +366,7 @@ class TFModelTesterMixin:
             and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
-            and tf.keras.layers.Layer in module_member.__bases__
+            and keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         }
         for main_layer_class in tf_main_layer_classes:
@@ -379,17 +380,17 @@ class TFModelTesterMixin:
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
 
-            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
                 if "T5" in main_layer_class.__name__:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath,
                         custom_objects={
                             main_layer_class.__name__: main_layer_class,
@@ -397,10 +398,10 @@ class TFModelTesterMixin:
                         },
                     )
                 else:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath, custom_objects={main_layer_class.__name__: main_layer_class}
                     )
-                assert isinstance(model, tf.keras.Model)
+                assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
@@ -610,7 +611,7 @@ class TFModelTesterMixin:
         tf_outputs = tf_model(tf_inputs_dict)
 
         # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+        # (see `hf_compute_loss`: it uses `keras.losses.Reduction.NONE`)
         # Change it here to a scalar to match PyTorch models' loss
         tf_loss = getattr(tf_outputs, "loss", None)
         if tf_loss is not None:
@@ -697,7 +698,7 @@ class TFModelTesterMixin:
             # These are maximally general inputs for the model, with multiple None dimensions
             # Hopefully this will catch any conditionals that fail for flexible shapes
             functional_inputs = {
-                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                key: keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
                 for key, val in model.input_signature.items()
                 if key in model.dummy_inputs
             }
@@ -706,7 +707,7 @@ class TFModelTesterMixin:
             hidden_states = outputs_dict[0]
 
             # Compile extended model
-            functional_model = tf.keras.Model(inputs=functional_inputs, outputs=hidden_states)
+            functional_model = keras.Model(inputs=functional_inputs, outputs=hidden_states)
             model_out = functional_model.predict(model.dummy_inputs)  # Check we can pass inputs with the Keras API
             self.assertTrue(model_out is not None)
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -918,12 +919,12 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            self.assertIsInstance(model.get_input_embeddings(), keras.layers.Layer)
 
             legacy_text_in_text_out = model.get_lm_head() is not None
             if model_class in text_in_text_out_models or legacy_text_in_text_out:
                 out_embeddings = model.get_output_embeddings()
-                self.assertIsInstance(out_embeddings, tf.keras.layers.Layer)
+                self.assertIsInstance(out_embeddings, keras.layers.Layer)
                 bias = model.get_bias()
                 if bias is not None:
                     self.assertIsInstance(bias, dict)
@@ -931,7 +932,7 @@ class TFModelTesterMixin:
                         self.assertIsInstance(v, tf.Variable)
             elif model_class in speech_in_text_out_models:
                 out_embeddings = model.get_output_embeddings()
-                self.assertIsInstance(out_embeddings, tf.keras.layers.Layer)
+                self.assertIsInstance(out_embeddings, keras.layers.Layer)
                 bias = model.get_bias()
                 self.assertIsNone(bias)
             else:
@@ -1079,14 +1080,14 @@ class TFModelTesterMixin:
 
     def test_resize_token_embeddings(self):
         # TODO (joao): after the embeddings refactor is complete, rework this test so as to rely exclusively on
-        # tf.keras.layers.Embedding
+        # keras.layers.Embedding
 
         if not self.test_resize_embeddings:
             return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def _get_word_embedding_weight(model, embedding_layer):
-            if isinstance(embedding_layer, tf.keras.layers.Embedding):
+            if isinstance(embedding_layer, keras.layers.Embedding):
                 # builds the embeddings layer
                 model.build_in_name_scope()
                 return embedding_layer.embeddings
@@ -1456,7 +1457,7 @@ class TFModelTesterMixin:
             ]
             for accuracy_class in accuracy_classes:
                 if model.__class__.__name__.endswith(accuracy_class):
-                    metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+                    metrics = [keras.metrics.SparseCategoricalAccuracy()]
                     break
             else:
                 metrics = []
@@ -1472,7 +1473,7 @@ class TFModelTesterMixin:
             model_weights = model.get_weights()
 
             # Run eagerly to save some expensive compilation times
-            model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
+            model.compile(optimizer=keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
             # Make sure the model fits without crashing regardless of where we pass the labels
             history1 = model.fit(
                 prepared_for_class,
@@ -1557,7 +1558,7 @@ class TFModelTesterMixin:
             # After testing that the model accepts all int inputs, confirm that its dummies are int32
             for key, tensor in model.dummy_inputs.items():
                 self.assertTrue(
-                    isinstance(tensor, tf.Tensor) or tf.keras.backend.is_keras_tensor(tensor),
+                    isinstance(tensor, tf.Tensor) or keras.backend.is_keras_tensor(tensor),
                     "Dummy inputs should be tf.Tensor!",
                 )
                 if tensor.dtype.is_integer:

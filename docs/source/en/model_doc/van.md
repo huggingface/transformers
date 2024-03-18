@@ -39,7 +39,7 @@ Tips:
 
 - VAN does not have an embedding layer, thus the `hidden_states` will have a length equal to the number of stages.
 
-The figure below illustrates the architecture of a Visual Aattention Layer. Taken from the [original paper](https://arxiv.org/abs/2202.09741).
+The figure below illustrates the architecture of a Visual Attention Layer. Taken from the [original paper](https://arxiv.org/abs/2202.09741).
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/van_architecture.png"/>
 

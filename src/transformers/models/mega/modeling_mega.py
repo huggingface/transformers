@@ -169,7 +169,7 @@ class MegaRotaryRelativePositionalBias(nn.Module):
     def get_sinusoid_embeddings(max_positions: int, embedding_dim: int):
         half_dim = embedding_dim // 2
         emb = math.log(10000) / half_dim
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
         emb = torch.arange(max_positions, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
         return torch.sin(emb), torch.cos(emb)
 

@@ -71,8 +71,8 @@ class SamVisionEncoderOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -106,9 +106,9 @@ class SamImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class SamPatchEmbeddings(nn.Module):

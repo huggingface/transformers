@@ -23,13 +23,13 @@ from ..utils import (
     logging,
 )
 from .audio_classification import ffmpeg_read
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_feature_extractor=True, has_tokenizer=True))
 class ZeroShotAudioClassificationPipeline(Pipeline):
     """
     Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you

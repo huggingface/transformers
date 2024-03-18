@@ -35,6 +35,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -121,7 +122,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFConv1dSubsampler(tf.keras.layers.Layer):
+class TFConv1dSubsampler(keras.layers.Layer):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
     via gated linear units (https://arxiv.org/abs/1911.08460)
@@ -137,7 +138,7 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         self.kernel_sizes = config.conv_kernel_sizes
 
         self.conv_layers = [
-            tf.keras.layers.Conv1D(
+            keras.layers.Conv1D(
                 filters=self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
                 kernel_size=k,
                 strides=2,
@@ -176,7 +177,7 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
                     layer.build([None, None, self.in_channels] if i == 0 else [None, None, self.mid_channels // 2])
 
 
-class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
+class TFSpeech2TextSinusoidalPositionalEmbedding(keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs):
@@ -236,7 +237,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Speech2Text
-class TFSpeech2TextAttention(tf.keras.layers.Layer):
+class TFSpeech2TextAttention(keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -252,7 +253,7 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -262,10 +263,10 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
@@ -406,20 +407,20 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
                 self.out_proj.build([None, None, self.embed_dim])
 
 
-class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
+class TFSpeech2TextEncoderLayer(keras.layers.Layer):
     def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
         self.self_attn = TFSpeech2TextAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
+        self.fc1 = keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         self.config = config
 
     def call(
@@ -482,7 +483,7 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
-class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
+class TFSpeech2TextDecoderLayer(keras.layers.Layer):
     def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -494,11 +495,11 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
             name="self_attn",
             is_decoder=True,
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TFSpeech2TextAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -506,10 +507,10 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
             name="encoder_attn",
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.encoder_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.fc1 = keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         self.config = config
 
     def call(
@@ -655,7 +656,7 @@ SPEECH_TO_TEXT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -777,7 +778,7 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFSpeech2TextEncoder(tf.keras.layers.Layer):
+class TFSpeech2TextEncoder(keras.layers.Layer):
     config_class = Speech2TextConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -791,7 +792,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
@@ -808,7 +809,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
         self.layers = [TFSpeech2TextEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
@@ -964,7 +965,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFSpeech2TextDecoder(tf.keras.layers.Layer):
+class TFSpeech2TextDecoder(keras.layers.Layer):
     config_class = Speech2TextConfig
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFSpeech2TextDecoderLayer`]
@@ -991,9 +992,9 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
         )
 
         self.layers = [TFSpeech2TextDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -1204,7 +1205,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
+class TFSpeech2TextMainLayer(keras.layers.Layer):
     config_class = Speech2TextConfig
 
     def __init__(self, config: Speech2TextConfig, **kwargs):
@@ -1417,7 +1418,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
         self.model = TFSpeech2TextMainLayer(config, name="model")
-        self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False, name="lm_head")
+        self.lm_head = keras.layers.Dense(self.config.vocab_size, use_bias=False, name="lm_head")
         # TODO (Joao): investigate why Speech2Text has numerical issues in XLA generate
         self.supports_xla_generation = False
         self.config = config

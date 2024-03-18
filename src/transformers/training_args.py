@@ -49,7 +49,7 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     logging,
     requires_backends,
@@ -66,11 +66,15 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
 
-if is_torch_tpu_available(check_device=False):
+    from .trainer_pt_utils import AcceleratorConfig
+
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_neuroncore_available(check_device=False):
@@ -126,7 +130,9 @@ def get_xla_device_type(device: "torch.device") -> Optional[str]:
     """
     Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
     """
-    if is_torch_tpu_available():
+    if is_torch_xla_available():
+        if device.type == "cpu":
+            return "CPU"
         return xm.xla_real_devices([device])[0].split(":")[0]
     return None
 
@@ -155,6 +161,9 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
     RMSPROP = "rmsprop"
+    RMSPROP_BNB = "rmsprop_bnb"
+    RMSPROP_8BIT = "rmsprop_bnb_8bit"
+    RMSPROP_32BIT = "rmsprop_bnb_32bit"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -265,7 +274,7 @@ class TrainingArguments:
                 - `"steps"`: Logging is done every `logging_steps`.
 
         logging_first_step (`bool`, *optional*, defaults to `False`):
-            Whether to log and evaluate the first `global_step` or not.
+            Whether to log the first `global_step` or not.
         logging_steps (`int` or `float`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`. Should be an integer or a float in
             range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
@@ -487,6 +496,32 @@ class TrainingArguments:
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
+
+        accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
+            Config to be used with the internal `Accelerator` implementation. The value is either a location of
+            accelerator json config file (e.g., `accelerator_config.json`), an already loaded json file as `dict`,
+            or an instance of [`~trainer_pt_utils.AcceleratorConfig`].
+
+            A list of config and its options:
+                - split_batches (`bool`, *optional*, defaults to `False`):
+                    Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
+                    `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
+                    round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
+                    in your script multiplied by the number of processes.
+                - dispatch_batches (`bool`, *optional*):
+                    If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
+                    and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
+                    underlying dataset is an `IterableDataset`, `False` otherwise.
+                - even_batches (`bool`, *optional*, defaults to `True`):
+                    If set to `True`, in cases where the total batch size across all processes does not exactly divide the
+                    dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
+                    all workers.
+                - use_seedable_sampler (`bool`, *optional*, defaults to `True`):
+                    Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
+                    training results are fully reproducable using a different sampling technique. While seed-to-seed results
+                    may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+                    also be ran with [`~utils.set_seed`] for the best results.
+
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -532,6 +567,9 @@ class TrainingArguments:
             If True, the data loader will not shut down the worker processes after a dataset has been consumed once.
             This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will
             increase RAM usage. Will default to `False`.
+        dataloader_prefetch_factor (`int`, *optional*):
+            Number of batches loaded in advance by each worker.
+            2 means there will be a total of 2 * num_workers batches prefetched across all workers.
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
@@ -989,7 +1027,16 @@ class TrainingArguments:
             )
         },
     )
-
+    dataloader_prefetch_factor: Optional[int] = field(
+        default=None if not is_torch_available() or is_torch_greater_or_equal_than_2_0 else 2,
+        metadata={
+            "help": (
+                "Number of batches loaded in advance by each worker. "
+                "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
+                "Default is 2 for PyTorch < 2.0.0 and otherwise None."
+            )
+        },
+    )
     past_index: int = field(
         default=-1,
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
@@ -1054,7 +1101,7 @@ class TrainingArguments:
         },
     )
     # Do not touch this type annotation or it will stop working in CLI
-    fsdp_config: Optional[str] = field(
+    fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1069,6 +1116,16 @@ class TrainingArguments:
             "help": (
                 "This parameter is deprecated. Transformer layer class name (case-sensitive) to wrap, e.g,"
                 " `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed)."
+            )
+        },
+    )
+    # Do not touch this type annotation or it will stop working in CLI
+    accelerator_config: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Config to be used with the internal Accelerator object initializtion. The value is either a "
+                "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
     )
@@ -1270,20 +1327,12 @@ class TrainingArguments:
 
     dispatch_batches: Optional[bool] = field(
         default=None,
-        metadata={
-            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
-            "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
-            "underlying dataset is an `IterableDataset`, `False` otherwise."
-        },
+        metadata={"help": "Deprecated. Pass {'dispatch_batches':VALUE} to `accelerator_config`."},
     )
 
     split_batches: Optional[bool] = field(
-        default=False,
-        metadata={
-            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
-            "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
-            "round multiple of the number of processes you are using (such as GPUs)."
-        },
+        default=None,
+        metadata={"help": "Deprecated. Pass {'split_batches':True} to `accelerator_config`."},
     )
 
     include_tokens_per_second: Optional[bool] = field(
@@ -1298,7 +1347,7 @@ class TrainingArguments:
         },
     )
 
-    neftune_noise_alpha: float = field(
+    neftune_noise_alpha: Optional[float] = field(
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
@@ -1428,7 +1477,7 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
+                if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_xla_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
@@ -1483,7 +1532,7 @@ class TrainingArguments:
             and (self.device.type != "cuda")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
-            and (get_xla_device_type(self.device) != "GPU")
+            and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
@@ -1497,7 +1546,7 @@ class TrainingArguments:
             and (self.device.type != "cuda")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
-            and (get_xla_device_type(self.device) != "GPU")
+            and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
             and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
             and (self.bf16 or self.bf16_full_eval)
@@ -1642,11 +1691,13 @@ class TrainingArguments:
         ):
             raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
         self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
+        self.fsdp_config["xla_fsdp_v2"] = self.fsdp_config.get("xla_fsdp_v2", False)
         self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
             if len(self.fsdp) > 0:
                 # store XLA fsdp configuration parameters into a dictionary
-                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {})
+                # Copy the config to avoid modifying the original config (which may be used for JSON serialization)
+                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {}).copy()
                 # apply appropriate string to torch.dtype conversions for parameters
                 if "compute_dtype" in self.xla_fsdp_config:
                     self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
@@ -1670,8 +1721,10 @@ class TrainingArguments:
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ[f"{prefix}SHARDING_STRATEGY"] = str(
-                        FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
+                    os.environ[f"{prefix}SHARDING_STRATEGY"] = (
+                        str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
+                        if is_accelerate_available("0.26.0")
+                        else fsdp_option.upper()
                     )
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
@@ -1684,11 +1737,35 @@ class TrainingArguments:
                         os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
+            prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
+
+        if is_accelerate_available():
+            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
+                if self.accelerator_config is None:
+                    self.accelerator_config = AcceleratorConfig()
+                elif isinstance(self.accelerator_config, dict):
+                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
+                else:
+                    self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+            if self.dispatch_batches is not None:
+                warnings.warn(
+                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
+                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
+                    FutureWarning,
+                )
+                self.accelerator_config.dispatch_batches = self.dispatch_batches
+
+            if self.split_batches is not None:
+                warnings.warn(
+                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
+                    " `--accelerator_config {'split_batches':VALUE} instead",
+                    FutureWarning,
+                )
+                self.accelerator_config.split_batches = self.split_batches
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -1736,6 +1813,16 @@ class TrainingArguments:
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
+
+        if (
+            (not is_torch_available() or is_torch_greater_or_equal_than_2_0)
+            and self.dataloader_num_workers == 0
+            and self.dataloader_prefetch_factor is not None
+        ):
+            raise ValueError(
+                "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
+                " when --dataloader_num_workers > 1."
+            )
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -1844,11 +1931,6 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
-        elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
-            os.environ["ACCELERATE_USE_XPU"] = "true"
-            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
-            device = torch.device("xpu:0")
-            self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
             self.distributed_state = PartialState(_use_sagemaker_dp=True)
             self._n_gpu = 1
@@ -1871,18 +1953,12 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
             # Already set _n_gpu
             pass
-        elif self.distributed_state.distributed_type == DistributedType.MULTI_XPU:
-            if "ACCELERATE_USE_XPU" not in os.environ:
-                os.environ["ACCELERATE_USE_XPU"] = "true"
-            self._n_gpu = 1
-            device = torch.device("xpu:0")
-            torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 warnings.warn(
@@ -1958,7 +2034,7 @@ class TrainingArguments:
         - `ParallelMode.TPU`: several TPU cores.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             return ParallelMode.TPU
         elif is_sagemaker_mp_enabled():
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
@@ -2109,7 +2185,7 @@ class TrainingArguments:
                     # tell all replicas to wait
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
 
-                    if is_torch_tpu_available():
+                    if is_torch_xla_available():
                         xm.rendezvous(desc)
                     else:
                         dist.barrier()
@@ -2118,7 +2194,7 @@ class TrainingArguments:
                 if is_main_process:
                     # the wait is over
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
-                    if is_torch_tpu_available():
+                    if is_torch_xla_available():
                         xm.rendezvous(desc)
                     else:
                         dist.barrier()
@@ -2149,6 +2225,9 @@ class TrainingArguments:
                 d[k] = [x.value for x in v]
             if k.endswith("_token"):
                 d[k] = f"<{k.upper()}>"
+            # Handle the accelerator_config if passed
+            if is_accelerate_available() and isinstance(v, AcceleratorConfig):
+                d[k] = v.to_dict()
         return d
 
     def to_json_string(self):
@@ -2414,9 +2493,9 @@ class TrainingArguments:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
                 The logging strategy to adopt during training. Possible values are:
 
-                    - `"no"`: No save is done during training.
-                    - `"epoch"`: Save is done at the end of each epoch.
-                    - `"steps"`: Save is done every `save_steps`.
+                    - `"no"`: No logging is done during training.
+                    - `"epoch"`: Logging is done at the end of each epoch.
+                    - `"steps"`: Logging is done every `logging_steps`.
 
             steps (`int`, *optional*, defaults to 500):
                 Number of update steps between two logs if `strategy="steps"`.
@@ -2645,6 +2724,7 @@ class TrainingArguments:
         num_workers: int = 0,
         pin_memory: bool = True,
         persistent_workers: bool = False,
+        prefetch_factor: Optional[int] = None,
         auto_find_batch_size: bool = False,
         ignore_data_skip: bool = False,
         sampler_seed: Optional[int] = None,
@@ -2665,6 +2745,9 @@ class TrainingArguments:
                 If True, the data loader will not shut down the worker processes after a dataset has been consumed
                 once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training,
                 but will increase RAM usage. Will default to `False`.
+            prefetch_factor (`int`, *optional*):
+                Number of batches loaded in advance by each worker.
+                2 means there will be a total of 2 * num_workers batches prefetched across all workers.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
                 avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -2695,6 +2778,7 @@ class TrainingArguments:
         self.dataloader_num_workers = num_workers
         self.dataloader_pin_memory = pin_memory
         self.dataloader_persistent_workers = persistent_workers
+        self.dataloader_prefetch_factor = prefetch_factor
         self.auto_find_batch_size = auto_find_batch_size
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed

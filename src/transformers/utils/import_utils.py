@@ -39,16 +39,32 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
-    # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
+    # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
     if package_exists:
         try:
+            # Primary method to get the package version
             package_version = importlib.metadata.version(pkg_name)
-            package_exists = True
         except importlib.metadata.PackageNotFoundError:
-            package_exists = False
-        logger.debug(f"Detected {pkg_name} version {package_version}")
+            # Fallback method: Only for "torch" and versions containing "dev"
+            if pkg_name == "torch":
+                try:
+                    package = importlib.import_module(pkg_name)
+                    temp_version = getattr(package, "__version__", "N/A")
+                    # Check if the version contains "dev"
+                    if "dev" in temp_version:
+                        package_version = temp_version
+                        package_exists = True
+                    else:
+                        package_exists = False
+                except ImportError:
+                    # If the package can't be imported, it's not available
+                    package_exists = False
+            else:
+                # For packages other than "torch", don't attempt the fallback and set as not available
+                package_exists = False
+        logger.debug(f"Detected {pkg_name} version: {package_version}")
     if return_version:
         return package_exists, package_version
     else:
@@ -62,6 +78,9 @@ USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
+# Try to run a native pytorch job in an environment with TorchXLA installed by setting this value to 0.
+USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
+
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
 # `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
@@ -74,6 +93,7 @@ FSDP_MIN_VERSION = "1.12.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_aqlm_available = _is_package_available("aqlm")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
@@ -111,6 +131,7 @@ _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
+_quanto_available = _is_package_available("quanto")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -135,7 +156,7 @@ if _sklearn_available:
 _smdistributed_available = importlib.util.find_spec("smdistributed") is not None
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
-_sudachipy_available = _is_package_available("sudachipy")
+_sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
 _tensorflow_probability_available = _is_package_available("tensorflow_probability")
 _tensorflow_text_available = _is_package_available("tensorflow_text")
 _tf2onnx_available = _is_package_available("tf2onnx")
@@ -144,6 +165,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
+_mlx_available = _is_package_available("mlx")
 
 
 _torch_version = "N/A"
@@ -247,6 +269,13 @@ if _torch_available:
     )
 
 
+_torch_xla_available = False
+if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
+    _torch_xla_available, _torch_xla_version = _is_package_available("torch_xla", return_version=True)
+    if _torch_xla_available:
+        logger.info(f"Torch XLA version {_torch_xla_version} available.")
+
+
 def is_kenlm_available():
     return _kenlm_available
 
@@ -305,6 +334,27 @@ def is_torch_cuda_available():
         return False
 
 
+def is_mamba_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            return _is_package_available("mamba_ssm")
+    return False
+
+
+def is_causal_conv1d_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        return _is_package_available("causal_conv1d")
+    return False
+
+
 def is_torch_mps_available():
     if is_torch_available():
         import torch
@@ -359,6 +409,14 @@ def is_torch_fp16_available_on_device(device):
     try:
         x = torch.zeros(2, 2, dtype=torch.float16).to(device)
         _ = x @ x
+
+        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
+        # models use this layer.
+        batch, sentence_length, embedding_dim = 3, 4, 5
+        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
+        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        _ = layer_norm(embedding)
+
     except:  # noqa: E722
         # TODO: more precise exception matching, if possible.
         # most backends should return `RuntimeError` however this is not guaranteed.
@@ -453,6 +511,12 @@ def is_g2p_en_available():
 @lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    warnings.warn(
+        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
+        "Please use the `is_torch_xla_available` instead.",
+        FutureWarning,
+    )
+
     if not _torch_available:
         return False
     if importlib.util.find_spec("torch_xla") is not None:
@@ -469,10 +533,31 @@ def is_torch_tpu_available(check_device=True):
     return False
 
 
+@lru_cache
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
+    """
+    Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
+    the USE_TORCH_XLA to false.
+    """
+    assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
+
+    if not _torch_xla_available:
+        return False
+
+    import torch_xla
+
+    if check_is_gpu:
+        return torch_xla.runtime.device_type() in ["GPU", "CUDA"]
+    elif check_is_tpu:
+        return torch_xla.runtime.device_type() == "TPU"
+
+    return True
+
+
 @lru_cache()
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
-        return is_torch_tpu_available(check_device)
+        return is_torch_xla_available()
     return False
 
 
@@ -560,6 +645,10 @@ def is_sacremoses_available():
 
 def is_apex_available():
     return _apex_available
+
+
+def is_aqlm_available():
+    return _aqlm_available
 
 
 def is_ninja_available():
@@ -652,14 +741,6 @@ def is_flash_attn_greater_or_equal_2_10():
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
-def is_flash_attn_available():
-    logger.warning(
-        "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. "
-        "Please use `is_flash_attn_2_available` instead."
-    )
-    return is_flash_attn_2_available()
-
-
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -708,6 +789,10 @@ def is_auto_awq_available():
     return _auto_awq_available
 
 
+def is_quanto_available():
+    return _quanto_available
+
+
 def is_auto_gptq_available():
     return _auto_gptq_available
 
@@ -728,6 +813,7 @@ def is_tokenizers_available():
     return _tokenizers_available
 
 
+@lru_cache
 def is_vision_available():
     _pil_available = importlib.util.find_spec("PIL") is not None
     if _pil_available:
@@ -888,6 +974,19 @@ def is_sudachi_available():
     return _sudachipy_available
 
 
+def get_sudachi_version():
+    return _sudachipy_version
+
+
+def is_sudachi_projection_available():
+    if not is_sudachi_available():
+        return False
+
+    # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
+    # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
+    return version.parse(_sudachipy_version) >= version.parse("0.6.8")
+
+
 def is_jumanpp_available():
     return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
 
@@ -902,6 +1001,10 @@ def is_jieba_available():
 
 def is_jinja_available():
     return _jinja_available
+
+
+def is_mlx_available():
+    return _mlx_available
 
 
 # docstyle-ignore

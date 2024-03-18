@@ -46,6 +46,7 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
+    from accelerate import PartialState
     from accelerate.utils import send_to_device
 
 
@@ -185,6 +186,14 @@ class Tool:
         """
         Loads a tool defined on the Hub.
 
+        <Tip warning={true}>
+
+        Loading a tool from the Hub means that you'll download the tool and execute it locally.
+        ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+        installing a package using pip/npm/apt.
+
+        </Tip>
+
         Args:
             repo_id (`str`):
                 The name of the repo on the Hub where your tool is defined.
@@ -228,6 +237,7 @@ class Tool:
             TOOL_CONFIG_FILE,
             token=token,
             **hub_kwargs,
+            _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
         )
@@ -238,6 +248,7 @@ class Tool:
                 CONFIG_NAME,
                 token=token,
                 **hub_kwargs,
+                _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
             )
@@ -529,7 +540,7 @@ class PipelineTool(Tool):
             if self.device_map is not None:
                 self.device = list(self.model.hf_device_map.values())[0]
             else:
-                self.device = get_default_device()
+                self.device = PartialState().default_device
 
         if self.device_map is None:
             self.model.to(self.device)
@@ -597,23 +608,6 @@ def launch_gradio_demo(tool_class: Tool):
     ).launch()
 
 
-# TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
-def get_default_device():
-    logger.warning(
-        "`get_default_device` is deprecated and will be replaced with `accelerate`'s `PartialState().default_device` "
-        "in version 4.38 of 🤗 Transformers. "
-    )
-    if not is_torch_available():
-        raise ImportError("Please install torch in order to use this tool.")
-
-    if torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
-
-
 TASK_MAPPING = {
     "document-question-answering": "DocumentQuestionAnsweringTool",
     "image-captioning": "ImageCaptioningTool",
@@ -643,6 +637,14 @@ def supports_remote(task_or_repo_id):
 def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **kwargs):
     """
     Main function to quickly load a tool, be it on the Hub or in the Transformers library.
+
+    <Tip warning={true}>
+
+    Loading a tool means that you'll download the tool and execute it locally.
+    ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+    installing a package using pip/npm/apt.
+
+    </Tip>
 
     Args:
         task_or_repo_id (`str`):
@@ -691,6 +693,12 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
         else:
             return tool_class(model_repo_id, token=token, **kwargs)
     else:
+        logger.warning_once(
+            f"You're loading a tool from the Hub from {model_repo_id}. Please make sure this is a source that you "
+            f"trust as the code within that tool will be executed on your machine. Always verify the code of "
+            f"the tools that you load. We recommend specifying a `revision` to ensure you're loading the "
+            f"code that you have checked."
+        )
         return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, remote=remote, **kwargs)
 
 

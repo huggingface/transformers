@@ -237,10 +237,10 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
 
     @slow
     def test_batch_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="</s>", padding_side="left")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2", pad_token="</s>", padding_side="left")
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
-        model = FlaxGPT2LMHeadModel.from_pretrained("gpt2")
+        model = FlaxGPT2LMHeadModel.from_pretrained("openai-community/gpt2")
         model.do_sample = False
         model.config.pad_token_id = model.config.eos_token_id
 
@@ -359,6 +359,6 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("gpt2", from_pt=True)
+            model = model_class_name.from_pretrained("openai-community/gpt2", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)

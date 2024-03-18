@@ -262,7 +262,7 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 class TFOPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):
-        model = TFOpenAIGPTLMHeadModel.from_pretrained("openai-gpt")
+        model = TFOpenAIGPTLMHeadModel.from_pretrained("openai-community/openai-gpt")
         input_ids = tf.convert_to_tensor([[481, 4735, 544]], dtype=tf.int32)  # the president is
         expected_output_ids = [
             481,

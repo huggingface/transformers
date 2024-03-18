@@ -54,6 +54,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertConfig"),
         ("canine", "CanineConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clip_vision_model", "CLIPVisionConfig"),
@@ -61,6 +62,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clvp", "ClvpConfig"),
         ("code_llama", "LlamaConfig"),
         ("codegen", "CodeGenConfig"),
+        ("cohere", "CohereConfig"),
         ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
         ("convnext", "ConvNextConfig"),
@@ -76,6 +78,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("decision_transformer", "DecisionTransformerConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
+        ("depth_anything", "DepthAnythingConfig"),
         ("deta", "DetaConfig"),
         ("detr", "DetrConfig"),
         ("dinat", "DinatConfig"),
@@ -101,6 +104,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
         ("fuyu", "FuyuConfig"),
+        ("gemma", "GemmaConfig"),
         ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
@@ -134,6 +138,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("luke", "LukeConfig"),
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
+        ("mamba", "MambaConfig"),
         ("marian", "MarianConfig"),
         ("markuplm", "MarkupLMConfig"),
         ("mask2former", "Mask2FormerConfig"),
@@ -181,6 +186,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pop2piano", "Pop2PianoConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
+        ("pvt_v2", "PvtV2Config"),
         ("qdqbert", "QDQBertConfig"),
         ("qwen2", "Qwen2Config"),
         ("rag", "RagConfig"),
@@ -199,6 +205,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TConfig"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Config"),
         ("segformer", "SegformerConfig"),
+        ("seggpt", "SegGptConfig"),
         ("sew", "SEWConfig"),
         ("sew-d", "SEWDConfig"),
         ("siglip", "SiglipConfig"),
@@ -209,6 +216,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5Config"),
         ("splinter", "SplinterConfig"),
         ("squeezebert", "SqueezeBertConfig"),
+        ("stablelm", "StableLmConfig"),
+        ("starcoder2", "Starcoder2Config"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
@@ -225,6 +234,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("trocr", "TrOCRConfig"),
         ("tvlt", "TvltConfig"),
         ("tvp", "TvpConfig"),
+        ("udop", "UdopConfig"),
         ("umt5", "UMT5Config"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
@@ -246,6 +256,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
+        ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
         ("whisper", "WhisperConfig"),
@@ -293,6 +304,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("clipseg", "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("clvp", "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("codegen", "CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("cohere", "COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("conditional_detr", "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convbert", "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -307,6 +319,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deformable_detr", "DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("depth_anything", "DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("deta", "DETA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dinat", "DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -331,6 +344,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fuyu", "FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("gemma", "GEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -363,6 +377,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("luke", "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("lxmert", "LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mamba", "MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("markuplm", "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mask2former", "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -405,6 +420,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("pop2piano", "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pvt", "PVT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("pvt_v2", "PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qwen2", "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -421,6 +437,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("seamless_m4t_v2", "SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("seggpt", "SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("siglip", "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -429,6 +446,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("stablelm", "STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("starcoder2", "STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swiftformer", "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin2sr", "SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -442,6 +461,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("tvlt", "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("tvp", "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("udop", "UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("univnet", "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -459,6 +479,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vits", "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("wav2vec2-bert", "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("whisper", "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xclip", "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -506,6 +527,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
         ("chinese_clip", "Chinese-CLIP"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clip_vision_model", "CLIPVisionModel"),
@@ -513,6 +535,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("clvp", "CLVP"),
         ("code_llama", "CodeLlama"),
         ("codegen", "CodeGen"),
+        ("cohere", "Cohere"),
         ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),
         ("convnext", "ConvNeXT"),
@@ -530,6 +553,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
         ("deplot", "DePlot"),
+        ("depth_anything", "Depth Anything"),
         ("deta", "DETA"),
         ("detr", "DETR"),
         ("dialogpt", "DialoGPT"),
@@ -559,6 +583,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
         ("fuyu", "Fuyu"),
+        ("gemma", "Gemma"),
         ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -596,6 +621,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lxmert", "LXMERT"),
         ("m2m_100", "M2M100"),
         ("madlad-400", "MADLAD-400"),
+        ("mamba", "Mamba"),
         ("marian", "Marian"),
         ("markuplm", "MarkupLM"),
         ("mask2former", "Mask2Former"),
@@ -650,6 +676,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pop2piano", "Pop2Piano"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
+        ("pvt_v2", "PVTv2"),
         ("qdqbert", "QDQBert"),
         ("qwen2", "Qwen2"),
         ("rag", "RAG"),
@@ -668,6 +695,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("seamless_m4t", "SeamlessM4T"),
         ("seamless_m4t_v2", "SeamlessM4Tv2"),
         ("segformer", "SegFormer"),
+        ("seggpt", "SegGPT"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),
         ("siglip", "SigLIP"),
@@ -678,6 +706,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("speecht5", "SpeechT5"),
         ("splinter", "Splinter"),
         ("squeezebert", "SqueezeBERT"),
+        ("stablelm", "StableLm"),
+        ("starcoder2", "Starcoder2"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),
@@ -696,6 +726,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("trocr", "TrOCR"),
         ("tvlt", "TVLT"),
         ("tvp", "TVP"),
+        ("udop", "UDOP"),
         ("ul2", "UL2"),
         ("umt5", "UMT5"),
         ("unispeech", "UniSpeech"),
@@ -718,6 +749,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
+        ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
         ("wavlm", "WavLM"),
@@ -764,6 +796,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("siglip_vision_model", "siglip"),
+        ("chinese_clip_vision_model", "chinese_clip"),
     ]
 )
 
@@ -1008,8 +1041,7 @@ class AutoConfig:
                 Can be either:
 
                     - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                      huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                      namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      huggingface.co.
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
@@ -1052,7 +1084,7 @@ class AutoConfig:
         >>> from transformers import AutoConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased")
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 
         >>> # Download configuration from huggingface.co (user-uploaded) and cache.
         >>> config = AutoConfig.from_pretrained("dbmdz/bert-base-german-cased")
@@ -1064,12 +1096,12 @@ class AutoConfig:
         >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/my_configuration.json")
 
         >>> # Change some config attributes when loading a pretrained config.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         >>> config.output_attentions
         True
 
         >>> config, unused_kwargs = AutoConfig.from_pretrained(
-        ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        ...     "google-bert/bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         ... )
         >>> config.output_attentions
         True

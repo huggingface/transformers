@@ -131,6 +131,8 @@ class TableTransformerModelTester:
             num_labels=self.num_labels,
             use_timm_backbone=False,
             backbone_config=resnet_config,
+            backbone=None,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -198,7 +200,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        {"image-feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -207,6 +209,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -410,6 +413,22 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         self.assertIsNotNone(encoder_attentions.grad)
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
+
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.auxiliary_loss = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

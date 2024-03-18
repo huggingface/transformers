@@ -405,7 +405,7 @@ Assistant:
 Therefore it is important that the examples of the custom `chat` prompt template also make use of this format.
 You can overwrite the `chat` template at instantiation as follows.
 
-```
+```python
 template = """ [...] """
 
 agent = HfAgent(url_endpoint=your_endpoint, chat_prompt_template=template)
@@ -426,6 +426,15 @@ To upload your custom prompt on a repo on the Hub and share it with the communit
 - to put the prompt template for the `chat` command in a file named `chat_prompt_template.txt`
 
 ## Using custom tools
+
+<Tip warning={true}>
+
+Using custom tools in your local runtime means that you'll download code to run on your machine.
+
+ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+installing a package using pip/npm/apt.
+
+</Tip>
 
 In this section, we'll be leveraging two existing custom tools that are specific to image generation:
 
@@ -586,7 +595,7 @@ model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
-For the task `text-classification`, this returns `'facebook/bart-large-mnli'`, for `translation` it returns `'t5-base`.
+For the task `text-classification`, this returns `'facebook/bart-large-mnli'`, for `translation` it returns `'google-t5/t5-base`.
 
 How do we convert this to a tool that the agent can leverage? All tools depend on the superclass `Tool` that holds the
 main attributes necessary. We'll create a class that inherits from it:

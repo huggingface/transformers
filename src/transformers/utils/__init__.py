@@ -20,6 +20,7 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
+from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
@@ -105,6 +106,7 @@ from .import_utils import (
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
@@ -118,7 +120,6 @@ from .import_utils import (
     is_essentia_available,
     is_faiss_available,
     is_flash_attn_2_available,
-    is_flash_attn_available,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_fsdp_available,
@@ -133,6 +134,7 @@ from .import_utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_mlx_available,
     is_natten_available,
     is_ninja_available,
     is_nltk_available,
@@ -150,6 +152,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quanto_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -163,6 +166,7 @@ from .import_utils import (
     is_spacy_available,
     is_speech_available,
     is_sudachi_available,
+    is_sudachi_projection_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -186,10 +190,12 @@ from .import_utils import (
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
+    is_torchdynamo_compiling,
     is_torchvision_available,
     is_training_run_on_sagemaker,
     is_vision_available,
@@ -217,6 +223,7 @@ SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
+PROCESSOR_NAME = "processor_config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 

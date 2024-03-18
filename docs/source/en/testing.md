@@ -451,7 +451,7 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 - `require_torch_multi_gpu` - as `require_torch` plus requires at least 2 GPUs
 - `require_torch_non_multi_gpu` - as `require_torch` plus requires 0 or 1 GPUs
 - `require_torch_up_to_2_gpus` - as `require_torch` plus requires 0 or 1 or 2 GPUs
-- `require_torch_tpu` - as `require_torch` plus requires at least 1 TPU
+- `require_torch_xla` - as `require_torch` plus requires at least 1 TPU
 
 Let's depict the GPU requirements in the following table:
 
@@ -976,7 +976,7 @@ Some decorators like `@parameterized` rewrite test names, therefore `@slow` and 
 `@require_*` have to be listed last for them to work correctly. Here is an example of the correct usage:
 
 ```python no-style
-@parameteriz ed.expand(...)
+@parameterized.expand(...)
 @slow
 def test_integration_foo():
 ```
@@ -1312,3 +1312,19 @@ You can vote for this feature and see where it is at these CI-specific threads:
 
 - [Github Actions:](https://github.com/actions/toolkit/issues/399)
 - [CircleCI:](https://ideas.circleci.com/ideas/CCI-I-344)
+
+## DeepSpeed integration
+
+For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn’t mean the DeepSpeed tests pass.
+
+To run DeepSpeed tests:
+
+```bash
+RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
+```
+
+Any changes to the modeling or PyTorch examples code requires running the model zoo tests as well.
+
+```bash
+RUN_SLOW=1 pytest tests/deepspeed
+```

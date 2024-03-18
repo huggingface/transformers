@@ -38,6 +38,7 @@ else:
 @require_sentencepiece
 @require_tokenizers
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google-t5/t5-small"
     tokenizer_class = T5Tokenizer
     rust_tokenizer_class = T5TokenizerFast
     test_rust_tokenizer = True
@@ -138,11 +139,11 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def t5_base_tokenizer(self):
-        return T5Tokenizer.from_pretrained("t5-base")
+        return T5Tokenizer.from_pretrained("google-t5/t5-base")
 
     @cached_property
     def t5_base_tokenizer_fast(self):
-        return T5TokenizerFast.from_pretrained("t5-base")
+        return T5TokenizerFast.from_pretrained("google-t5/t5-base")
 
     def get_tokenizer(self, **kwargs) -> T5Tokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -373,7 +374,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="t5-base",
+            model_name="google-t5/t5-base",
             revision="5a7ff2d8f5117c194c7e32ec1ccbf04642cca99b",
         )
 
@@ -400,7 +401,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
 
     def test_some_edge_cases(self):
-        tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
 
         sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
@@ -423,6 +424,71 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize(" ▁")
         self.assertEqual(tokens, [])
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+    def test_fast_slow_edge_cases(self):
+        # We are testing spaces before and spaces after special tokens + space transformations
+        slow_tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-base", legacy=False)
+        fast_tokenizer = T5TokenizerFast.from_pretrained("google-t5/t5-base", legacy=False, from_slow=True)
+        slow_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
+        fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
+
+        edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
+        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"]  # fmt: skip
+        with self.subTest(f"slow {edge_case} normalized = False"):
+            self.assertEqual(slow_tokenizer.tokenize(edge_case), EXPECTED_SLOW)
+        with self.subTest(f"Fast {edge_case} normalized = False"):
+            self.assertEqual(fast_tokenizer.tokenize(edge_case), EXPECTED_SLOW)
+
+        hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
+        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "▁Hey", "<new_token_test_>", "▁", "!", "▁", "."]  # fmt: skip
+        with self.subTest(f"slow {edge_case} normalized = False"):
+            self.assertEqual(slow_tokenizer.tokenize(hard_case), EXPECTED_SLOW)
+        with self.subTest(f"fast {edge_case} normalized = False"):
+            self.assertEqual(fast_tokenizer.tokenize(hard_case), EXPECTED_SLOW)
+
+        fast_tokenizer = T5TokenizerFast.from_pretrained("google-t5/t5-base", legacy=False, from_slow=True)
+        fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
+
+        # `normalized=True` is the default normalization scheme when adding a token. Normalize -> don't strip the space.
+        # the issue now is that our slow tokenizer should NOT strip the space if we want to simulate sentencepiece token addition.
+
+        EXPECTED_FAST = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"]  # fmt: skip
+        with self.subTest(f"fast {edge_case} normalized = True"):
+            self.assertEqual(fast_tokenizer.tokenize(edge_case), EXPECTED_FAST)
+
+        EXPECTED_FAST = ['▁Hey', '!', '▁', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey','▁', '<new_token_test_>', '▁', '!', '▁', '.']  # fmt: skip
+        with self.subTest(f"fast {edge_case} normalized = False"):
+            self.assertEqual(fast_tokenizer.tokenize(hard_case), EXPECTED_FAST)
+
+    def test_add_prefix_space(self):
+        pretrained_name = "google-t5/t5-base"
+        inputs = "Hey how are you doing"
+        EXPECTED_WITH_SPACE = [9459, 149, 33, 25, 692, 1]
+        EXPECTED_WO_SPACE = [3845, 63, 149, 33, 25, 692, 1]
+
+        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
+        fast_ = self.rust_tokenizer_class.from_pretrained(
+            pretrained_name, add_prefix_space=False, legacy=False, from_slow=True
+        )
+        self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
+        self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
+        self.assertEqual(slow_.tokenize(inputs), ["He", "y", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True), inputs)
+        self.assertEqual(
+            slow_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
+            fast_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
+        )
+
+        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
+        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
+        self.assertEqual(slow_.encode(inputs), EXPECTED_WITH_SPACE)
+        self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
+        self.assertEqual(slow_.tokenize(inputs), ["▁Hey", "▁how", "▁are", "▁you", "▁doing"])
+        self.assertEqual(slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True), inputs)
+        self.assertEqual(
+            slow_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True),
+            fast_.decode(EXPECTED_WITH_SPACE, skip_special_tokens=True),
+        )
 
 
 @require_sentencepiece
@@ -569,7 +635,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
                 )
 
         # Test with T5
-        hf_tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        hf_tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         vocab_path = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"
         t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
         for text in input_texts:

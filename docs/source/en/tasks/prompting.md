@@ -35,7 +35,7 @@ practices that help to achieve optimal results more consistently.
 This guide covers the prompt engineering best practices to help you craft better LLM prompts and solve various NLP tasks. 
 You'll learn:
 
-- [Basics of prompting](#basic-prompts)
+- [Basics of prompting](#basics-of-prompting)
 - [Best practices of LLM prompting](#best-practices-of-llm-prompting)
 - [Advanced prompting techniques: few-shot prompting and chain-of-thought](#advanced-prompting-techniques)
 - [When to fine-tune instead of prompting](#prompting-vs-fine-tuning)
@@ -76,7 +76,7 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 
->>> generator = pipeline('text-generation', model = 'gpt2')
+>>> generator = pipeline('text-generation', model = 'openai-community/gpt2')
 >>> prompt = "Hello, I'm a language model"
 
 >>> generator(prompt, max_length = 30)

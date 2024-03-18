@@ -381,6 +381,7 @@ class OwlViTModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -428,7 +429,10 @@ class OwlViTModelTester:
 class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": OwlViTModel, "zero-shot-object-detection": OwlViTForObjectDetection}
+        {
+            "feature-extraction": OwlViTModel,
+            "zero-shot-object-detection": OwlViTForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -582,6 +586,7 @@ class OwlViTForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()

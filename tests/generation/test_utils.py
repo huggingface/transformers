@@ -52,7 +52,6 @@ if is_torch_available():
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
-        top_k_top_p_filtering,
     )
     from transformers.cache_utils import DynamicCache
     from transformers.generation import (
@@ -88,6 +87,7 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
+    from transformers.generation.utils import _speculative_sampling
 
 
 class GenerationTesterMixin:
@@ -268,6 +268,7 @@ class GenerationTesterMixin:
         attention_mask,
         max_length,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -292,6 +293,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
+            output_logits=output_logits,
             return_dict_in_generate=return_dict_in_generate,
             **logits_process_kwargs,
             **model_kwargs,
@@ -316,6 +318,7 @@ class GenerationTesterMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
                 **model_kwargs,
@@ -334,6 +337,7 @@ class GenerationTesterMixin:
         logits_warper_kwargs,
         process_kwargs,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -347,6 +351,7 @@ class GenerationTesterMixin:
             max_length=max_length,
             num_return_sequences=num_return_sequences,
             output_scores=output_scores,
+            output_logits=output_logits,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
@@ -378,6 +383,7 @@ class GenerationTesterMixin:
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
@@ -398,6 +404,7 @@ class GenerationTesterMixin:
         logits_processor,
         logits_process_kwargs,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -408,6 +415,7 @@ class GenerationTesterMixin:
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
+            output_logits=output_logits,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
@@ -439,6 +447,7 @@ class GenerationTesterMixin:
                 max_length=max_length,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
@@ -458,6 +467,7 @@ class GenerationTesterMixin:
         logits_warper,
         logits_warper_kwargs,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -469,6 +479,7 @@ class GenerationTesterMixin:
             do_sample=True,
             max_length=max_length,
             output_scores=output_scores,
+            output_logits=output_logits,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
@@ -505,6 +516,7 @@ class GenerationTesterMixin:
                 logits_warper=logits_warper,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
@@ -525,6 +537,7 @@ class GenerationTesterMixin:
         logits_processor,
         logits_process_kwargs,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -535,6 +548,7 @@ class GenerationTesterMixin:
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
+            output_logits=output_logits,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
@@ -566,6 +580,7 @@ class GenerationTesterMixin:
                 max_length=max_length,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
@@ -586,6 +601,7 @@ class GenerationTesterMixin:
         logits_processor,
         logits_process_kwargs,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -596,6 +612,7 @@ class GenerationTesterMixin:
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
+            output_logits=output_logits,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
@@ -628,6 +645,7 @@ class GenerationTesterMixin:
                 max_length=max_length,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
@@ -643,6 +661,7 @@ class GenerationTesterMixin:
         attention_mask,
         max_length,
         output_scores=False,
+        output_logits=False,
         output_attentions=False,
         output_hidden_states=False,
         return_dict_in_generate=False,
@@ -672,6 +691,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
+            output_logits=output_logits,
             return_dict_in_generate=return_dict_in_generate,
             **logits_process_kwargs,
             **model_kwargs,
@@ -698,6 +718,7 @@ class GenerationTesterMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
+                output_logits=output_logits,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
                 **model_kwargs,
@@ -728,6 +749,7 @@ class GenerationTesterMixin:
                 attention_mask=attention_mask,
                 max_length=max_length,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -768,6 +790,7 @@ class GenerationTesterMixin:
                 attention_mask=attention_mask,
                 max_length=max_length,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -852,6 +875,7 @@ class GenerationTesterMixin:
                 logits_warper_kwargs=logits_warper_kwargs,
                 process_kwargs=process_kwargs,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -963,6 +987,7 @@ class GenerationTesterMixin:
                 logits_process_kwargs=logits_process_kwargs,
                 logits_processor=logits_processor,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -1031,6 +1056,7 @@ class GenerationTesterMixin:
                 logits_process_kwargs=logits_process_kwargs,
                 logits_processor=logits_processor,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -1047,6 +1073,9 @@ class GenerationTesterMixin:
     @require_torch_multi_accelerator
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
+            if "xpu" in torch_device:
+                return unittest.skip("device_map='auto' does not work with XPU devices")
+
             if model_class._no_split_modules is None:
                 continue
 
@@ -1125,6 +1154,7 @@ class GenerationTesterMixin:
                 logits_warper=logits_warper,
                 logits_warper_kwargs=logits_warper_kwargs,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -1261,6 +1291,7 @@ class GenerationTesterMixin:
                 logits_processor=logits_processor,
                 logits_process_kwargs=logits_process_kwargs,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -1292,6 +1323,8 @@ class GenerationTesterMixin:
                     output, input_ids, model.config, num_return_sequences=num_return_sequences * beam_scorer.num_beams
                 )
 
+    # TODO: @gante
+    @is_flaky()
     def test_constrained_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -1418,6 +1451,7 @@ class GenerationTesterMixin:
                 logits_processor=logits_processor,
                 logits_process_kwargs=logits_process_kwargs,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -1490,6 +1524,7 @@ class GenerationTesterMixin:
                 attention_mask=attention_mask,
                 max_length=max_length,
                 output_scores=True,
+                output_logits=True,
                 output_hidden_states=True,
                 output_attentions=True,
                 return_dict_in_generate=True,
@@ -1536,6 +1571,39 @@ class GenerationTesterMixin:
                 low_memory=False,
                 max_length=max_length,
                 attention_mask=attention_mask,
+            )
+            self.assertListEqual(low_output.tolist(), high_output.tolist())
+
+    def test_beam_search_low_memory(self):
+        # Check that choosing 'low_memory' does not change the model output
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest("Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bloom",
+                    "ctrl",
+                    "gptbigcode",
+                    "transo_xl",
+                    "xlnet",
+                    "cpm",
+                ]
+            ):
+                self.skipTest("May fix in the future: need model-specific fixes")
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=2)
+            # batch_size=1 is ok, but batch_size>1 will cause non-identical output
+
+            config.use_cache = True
+            config.is_decoder = True
+
+            # test output equality of low versus high memory
+            model = model_class(config).to(torch_device).eval()
+
+            low_output = model.generate(input_ids, max_new_tokens=8, num_beams=5, early_stopping=True, low_memory=True)
+
+            high_output = model.generate(
+                input_ids, max_new_tokens=8, num_beams=5, early_stopping=True, low_memory=False
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
@@ -1592,6 +1660,7 @@ class GenerationTesterMixin:
                 "num_beams": 1,
                 "do_sample": False,
                 "output_scores": True,
+                "output_logits": True,
                 "output_hidden_states": True,
                 "output_attentions": True,
                 "return_dict_in_generate": True,
@@ -1654,6 +1723,7 @@ class GenerationTesterMixin:
                 "num_beams": 1,
                 "do_sample": False,
                 "output_scores": True,
+                "output_logits": True,
                 "output_hidden_states": True,
                 "output_attentions": True,
                 "return_dict_in_generate": True,
@@ -1717,6 +1787,7 @@ class GenerationTesterMixin:
                 "do_sample": True,
                 "assistant_model": assistant_model,
                 "output_scores": True,
+                "output_logits": True,
                 "output_hidden_states": True,
                 "output_attentions": True,
                 "return_dict_in_generate": True,
@@ -1765,49 +1836,68 @@ class GenerationTesterMixin:
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     def test_left_padding_compatibility(self):
-        # The check done in this test is fairly difficult -- depending on the model architecture, passing the right
-        # position index for the position embeddings can still result in a different output, due to numerical masking.
-        # On the other hand, for some types of position embeddings, an incorrect position index can have a minimal
-        # impact on the output.
-        # There are two tricks employed to check whether left-padding compatibility is in place:
-        # 1 - To reduce the negative impact of the numerical attention mask on a correct position index, we set the
-        # padding size to 1.
-        # 2 - To reduce the chance of false positives (i.e. passing when it should be failing), we run the check
-        # multiple times with random inputs, and it has to pass with all of them.
-        # NOTE: because of 2), there is some chance of false positives in this test.
+        # NOTE: left-padding results in small numerical differences. This is expected.
+        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
 
+        # First, filter out models that don't support left padding
+        # - The model must have generative capabilities
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(reason="No generative architecture available for this model.")
+
+        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
+        decoder_only_classes = []
         for model_class in self.all_generative_model_classes:
             config, _, _, _ = self._get_input_ids_and_config()
             if config.is_encoder_decoder:
-                continue  # skip for encoder-decoder models -- they don't need left-padding compatibility
+                continue
+            else:
+                decoder_only_classes.append(model_class)
+        if len(decoder_only_classes) == 0:
+            self.skipTest(reason="No decoder-only architecture available for this model.")
+
+        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
+        #   added support for it yet. We skip these models for now.
+        has_encoder_attributes = any(
+            attr_name
+            for attr_name in config.to_dict().keys()
+            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+        )
+        if has_encoder_attributes:
+            self.skipTest(
+                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
+            )
+
+        # Then, test left-padding
+        def _prepare_model_kwargs(input_ids, attention_mask, signature):
+            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
+            if "position_ids" in signature:
+                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                model_kwargs["position_ids"] = position_ids
+            if "cache_position" in signature:
+                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
+                model_kwargs["cache_position"] = cache_position
+            return model_kwargs
+
+        for model_class in decoder_only_classes:
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
-            no_failures = True
-            for _ in range(10):  # there may be false positives with 10 runs, we rely on the CI to catch the flakiness
-                _, input_ids, attention_mask, _ = self._get_input_ids_and_config()
-                model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-                if "position_ids" in signature:
-                    position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                    position_ids.masked_fill_(attention_mask == 0, 1)
-                    model_kwargs["position_ids"] = position_ids
-                next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
+            # Without padding
+            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
+            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
 
-                pad_size = (input_ids.shape[0], 1)
-                padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
-                padded_input_ids = torch.cat((padding, input_ids), dim=1)
-                padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-                model_kwargs = {"input_ids": padded_input_ids, "attention_mask": padded_attention_mask}
-                if "position_ids" in signature:
-                    position_ids = torch.cumsum(padded_attention_mask, dim=-1) - 1
-                    position_ids.masked_fill_(padded_attention_mask == 0, 1)
-                    model_kwargs["position_ids"] = position_ids
-                next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-                if not torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-7):
-                    no_failures = False
-                    break
+            # With left-padding (length 32)
+            pad_size = (input_ids.shape[0], 32)
+            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * config.pad_token_id
+            padded_input_ids = torch.cat((padding, input_ids), dim=1)
+            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
-            self.assertTrue(no_failures)
+            # They should result in very similar logits
+            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
 
     def test_past_key_values_format(self):
         # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
@@ -1927,7 +2017,7 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(
                 outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
-                outputs_from_embeds_wo_ids[:, 1:].tolist(),
+                outputs_from_embeds_wo_ids.tolist(),
             )
 
     def test_generate_continue_from_past_key_values(self):
@@ -2069,12 +2159,16 @@ class GenerationTesterMixin:
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
+
         gen_len = (
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
         )
 
         # scores
         self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+
+        # unprocessed logits
+        self._check_logits(num_sequences_in_output, output.logits, config=config)
 
         # Attentions
         if config.is_encoder_decoder:
@@ -2154,6 +2248,14 @@ class GenerationTesterMixin:
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
+
+    def _check_logits(self, batch_size, scores, config):
+        self.assertIsInstance(scores, tuple)
+        self.assertListEqual([iter_scores.shape[0] for iter_scores in scores], [batch_size] * len(scores))
+        # vocabulary difference equal to one (imagegptmodel?) or zero (all other models)
+        vocab_diff = config.vocab_size - scores[0].shape[-1]
+        self.assertTrue(vocab_diff in [0, 1])
+        self.assertListEqual([config.vocab_size - score.shape[-1] for score in scores], [vocab_diff] * len(scores))
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -2264,132 +2366,42 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
-    # tests whether the top_k_top_p function behaves as expected
-    def test_top_k_top_p_filtering(self):
-        logits = torch.tensor(
+    def test_speculative_sampling(self):
+        # assume vocab size 10, input length 5 + 3 generated candidates
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
+        candidate_logits = torch.tensor(
             [
                 [
-                    8.2220991,  # 3rd highest value; idx. 0
-                    -0.5620044,
-                    5.23229752,
-                    4.0386393,
-                    -6.8798378,
-                    -0.54785802,
-                    -3.2012153,
-                    2.92777176,
-                    1.88171953,
-                    7.35341276,
-                    8.43207833,  # 2nd highest value; idx. 10
-                    -9.85711836,
-                    -5.96209236,
-                    -1.13039161,
-                    -7.1115294,
-                    -0.8369633,
-                    -5.3186408,
-                    7.06427407,
-                    0.81369344,
-                    -0.82023817,
-                    -5.9179796,
-                    0.58813443,
-                    -6.99778438,
-                    4.71551189,
-                    -0.18771637,
-                    7.44020759,  # 4th highest value; idx. 25
-                    9.38450987,  # 1st highest value; idx. 26
-                    2.12662941,
-                    -9.32562038,
-                    2.35652522,
-                ],  # cummulative prob of 4 highest values <= 0.6
-                [
-                    0.58425518,
-                    4.53139238,
-                    -5.57510464,
-                    -6.28030699,
-                    -7.19529503,
-                    -4.02122551,
-                    1.39337037,
-                    -6.06707057,
-                    1.59480517,
-                    -9.643119,
-                    0.03907799,
-                    0.67231762,
-                    -8.88206726,
-                    6.27115922,  # 4th highest value; idx. 13
-                    2.28520723,
-                    4.82767506,
-                    4.30421368,
-                    8.8275313,  # 2nd highest value; idx. 17
-                    5.44029958,
-                    -4.4735794,
-                    7.38579536,  # 3rd highest value; idx. 20
-                    -2.91051663,
-                    2.61946077,
-                    -2.5674762,
-                    -9.48959302,
-                    -4.02922645,
-                    -1.35416918,
-                    9.67702323,  # 1st highest value; idx. 27
-                    -5.89478553,
-                    1.85370467,
-                ],  # cummulative prob of 4 highest values <= 0.6
-            ],
-            dtype=torch.float,
-            device=torch_device,
-        )
-
-        non_inf_expected_idx = torch.tensor(
-            [[0, 0], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 20], [1, 27]],
-            dtype=torch.long,
-            device=torch_device,
-        )  # expected non filtered idx as noted above
-
-        non_inf_expected_output = torch.tensor(
-            [
-                8.2221,
-                8.4321,
-                7.4402,
-                9.3845,
-                6.2712,
-                8.8275,
-                7.3858,
-                9.6770,
-            ],  # expected non filtered values as noted above
-            dtype=torch.float,
-            device=torch_device,
-        )
-
-        output = top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
-        non_inf_output = output[output != -float("inf")].to(device=torch_device)
-        non_inf_idx = (output != -float("inf")).nonzero().to(device=torch_device)
-
-        self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
-        self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
-
-    # tests whether the function uses filter_value instead of default -inf
-    def test_top_k_top_p_filtering_with_filter_value(self):
-        logits = torch.tensor(
-            [
-                [
-                    1,
-                    1,
-                    1,
-                    0.99,  # get filtered by top-p filtering
-                    0.98,  # get filtered by top-k filtering
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
                 ]
-            ],
-            dtype=torch.float,
-            device=torch_device,
+            ]
         )
-
-        expected_output = torch.tensor(
-            [[1, 1, 1, 0, 0]],
-            dtype=torch.float,
-            device=torch_device,
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
+                ]
+            ]
         )
-
-        output = top_k_top_p_filtering(logits, top_k=4, top_p=0.5, filter_value=0.0)
-
-        self.assertTrue(torch.allclose(expected_output, output, atol=1e-12))
+        last_assistant_token_is_eos = False
+        max_matches = 5
+        validated_tokens, n_matches = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            last_assistant_token_is_eos,
+            max_matches,
+        )
+        self.assertTrue(n_matches.item() == 2)
+        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
 
 
 @require_torch
@@ -2657,6 +2669,20 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 **model_kwargs,
             )
 
+    def test_max_length_if_input_embeds(self):
+        # PT-only test: TF doesn't have StoppingCriteria
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+
+        max_length = 20
+        input_len = input_ids.shape[-1]
+        out_gen = model.generate(input_ids=input_ids, max_length=max_length)
+        out_gen_embeds = model.generate(inputs_embeds=inputs_embeds, max_length=max_length)
+        self.assertEqual(out_gen.shape[-1], input_len + out_gen_embeds.shape[-1])
+
     def test_custom_stopping_criteria_overload_error(self):
         # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2766,13 +2792,26 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
+    def test_beam_search_low_memory(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
+
+        low_output = model.generate(model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=True)
+
+        high_output = model.generate(
+            model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
+        )
+        self.assertListEqual(low_output.tolist(), high_output.tolist())
+
     @slow
     def test_beam_search_example_integration(self):
         # PT-only test: TF doesn't have a BeamSearchScorer
         # exactly the example provided in the docstrings of beam search, which previously
         # failed after directly copying from it. Refer to PR #15555
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -2812,8 +2851,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
@@ -2850,8 +2889,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
         flexible_phrases = tokenizer(
@@ -2891,8 +2930,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_mixed_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         force_word = "scared"
         force_flexible = ["scream", "screams", "screaming", "screamed"]
@@ -2928,8 +2967,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @slow
     def test_cfg_mixin(self):
-        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         input = tokenizer(["The dragon flew over Paris,"], return_tensors="pt", return_attention_mask=True)
         input["input_ids"] = input["input_ids"].to(torch_device)
@@ -2969,8 +3008,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_translation_mixin(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         force_words = ["sind"]
@@ -2994,8 +3033,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     @slow
     def test_constrained_beam_search_example_integration(self):
         # PT-only test: TF doesn't have constrained beam search
-        tokenizer = AutoTokenizer.from_pretrained("t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
 
         encoder_input_str = "translate English to German: How old are you?"
         encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -3076,6 +3115,26 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         with self.assertRaises(ValueError):
             model.generate(input_ids, force_words_ids=[[[-1]]])
+
+    def test_batched_decoder_start_id(self):
+        # PT-only test: TF doesn't support batched_decoder_start_id
+        articles = [
+            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
+            "Michael Phelps is arguably the most decorated Olympian of all time.",
+        ]
+        bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        input_ids = bart_tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        decoder_start_token_id = bart_model.generation_config.decoder_start_token_id
+        decoder_start_token_id_batch = [decoder_start_token_id] * input_ids.shape[0]
+
+        outputs = bart_model.generate(input_ids, decoder_start_token_id=decoder_start_token_id)
+
+        outputs_batched_ids = bart_model.generate(input_ids, decoder_start_token_id=decoder_start_token_id_batch)
+
+        self.assertListEqual(outputs.tolist(), outputs_batched_ids.tolist())
 
     def test_contrastive_search_batched(self):
         # PT-only test: TF doesn't have constrained beam search
@@ -3370,3 +3429,106 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             encoder_outputs=encoder_outputs,
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+    def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
+        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 5
+        assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic"
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "assistant_model": assistant_model,
+        }
+        model.generate(**inputs, **generation_kwargs)
+        # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
+        self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
+
+    def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
+        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 5
+        assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic_transient"
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "assistant_model": assistant_model,
+        }
+        model.generate(**inputs, **generation_kwargs)
+        # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
+        self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)
+
+    def test_compare_unprocessed_logit_scores(self):
+        # Get unprocessed logit scores back from model generate function.
+        # Assert that unprocessed logits from generate() are same as those from modal eval()
+
+        # tell model to generate text and return unprocessed/unwarped logit scores
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = "generate yes or no: "
+        input_ids = tokenizer([text], return_tensors="pt").input_ids.to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        with torch.no_grad():
+            # Get logits for the next token from fwd pass
+            logits_fwd = model(input_ids).logits[:, -1, :][0]
+
+        # Get logits for the next token from generate function
+        outputs = model.generate(
+            input_ids=input_ids,
+            return_dict_in_generate=True,
+            output_logits=True,
+            max_new_tokens=1,
+            do_sample=True,
+        )
+        logits_gen = outputs.logits[0][0]
+
+        # assert that unprocessed logits from generate() are same as those from modal eval()
+        self.assertListEqual(logits_fwd.tolist(), logits_gen.tolist())
+
+    def test_return_unprocessed_logit_scores(self):
+        # tell model to generate text and return unprocessed/unwarped logit scores
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = "generate yes or no: "
+        input_ids = tokenizer([text], return_tensors="pt").input_ids.to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids, return_dict_in_generate=True, output_logits=True, max_new_tokens=3
+        )
+
+        # perform dummy check if unpreprocessed logits make sense.
+        # do preselection on high probabilities; find scores of y and n tokens
+        probs_all = torch.nn.functional.softmax(outputs.logits[2][0], dim=-1)
+        indices = torch.argwhere(probs_all > 0.001)
+        indices = indices[:, -1]
+        tokens_max = tokenizer.batch_decode(indices, skip_special_tokens=True)
+        probs_max = probs_all[probs_all > 0.001]
+
+        self.assertTrue(len(indices) >= 2)
+        next_token_dict = {str(t): p for t, p in zip(tokens_max, probs_max)}
+        self.assertTrue("n" in next_token_dict)
+        self.assertTrue("y" in next_token_dict)
+        y_prob = next_token_dict["y"]
+        n_prob = next_token_dict["n"]
+
+        self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
+        self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)

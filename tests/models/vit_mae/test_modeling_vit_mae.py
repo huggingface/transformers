@@ -164,7 +164,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": ViTMAEModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": ViTMAEModel} if is_torch_available() else {}
 
     test_pruning = False
     test_torchscript = False
@@ -268,6 +268,10 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(reason="ViTMAE returns a random mask + ids_restore in each forward pass")
+    def test_batching_equivalence(self):
         pass
 
     @slow

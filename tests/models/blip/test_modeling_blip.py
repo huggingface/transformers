@@ -387,6 +387,7 @@ class BlipModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -429,7 +430,11 @@ class BlipModelTester:
 class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": BlipModel, "image-to-text": BlipForConditionalGeneration}
+        {
+            "feature-extraction": BlipModel,
+            "image-to-text": BlipForConditionalGeneration,
+            "visual-question-answering": BlipForQuestionAnswering,
+        }
         if is_torch_available()
         else {}
     )
@@ -592,6 +597,7 @@ class BlipTextRetrievalModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -639,6 +645,7 @@ class BlipTextImageModelsModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -687,6 +694,7 @@ class BlipVQAModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
