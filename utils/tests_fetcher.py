@@ -235,30 +235,25 @@ def diff_is_docstring_only(repo: Repo, branching_point: str, filename: str) -> b
     return old_content_clean == new_content_clean
 
 
-def diff_contains_doc_examples(repo: Repo, branching_point: str, filename: str) -> bool:
+def file_contains_doc_examples(repo: Repo, filename: str) -> bool:
     """
     Check if the diff is only in code examples of the doc in a filename.
 
     Args:
         repo (`git.Repo`): A git repository (for instance the Transformers repo).
-        branching_point (`str`): The commit reference of where to compare for the diff.
         filename (`str`): The filename where we want to know if the diff is only in codes examples.
 
     Returns:
         `bool`: Whether the diff is only in code examples of the doc or not.
     """
     folder = Path(repo.working_dir)
-    with checkout_commit(repo, branching_point):
-        with open(folder / filename, "r", encoding="utf-8") as f:
-            old_content = f.read()
 
     with open(folder / filename, "r", encoding="utf-8") as f:
         new_content = f.read()
 
-    old_content_clean = keep_doc_examples_only(old_content)
-    new_content_clean = keep_doc_examples_only(new_content)
-
-    return old_content_clean != new_content_clean
+    doctest_string = keep_doc_examples_only(new_content)
+    has_doctest = len(doctest_string) > 0
+    return has_doctest
 
 
 def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> List[str]:
@@ -462,8 +457,8 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
-        modified are returned if the diff in the file is only in doctest examples).
+        `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned,
+        files modified are returned if they contain doctest examples).
     """
     print("\n### DIFF ###\n")
     code_diff = []
@@ -481,8 +476,8 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
                 if diff_obj.a_path != diff_obj.b_path:
                     code_diff.extend([diff_obj.a_path, diff_obj.b_path])
                 else:
-                    # Otherwise, we check modifications contain some doc example(s).
-                    if diff_contains_doc_examples(repo, commit, diff_obj.b_path):
+                    # Otherwise, we check if the modifications were done in files with doc examples.
+                    if file_contains_doc_examples(repo, diff_obj.b_path):
                         code_diff.append(diff_obj.a_path)
                     else:
                         print(f"Ignoring diff in {diff_obj.b_path} as it doesn't contain any doc example.")
