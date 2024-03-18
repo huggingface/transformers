@@ -95,6 +95,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [CLVP](model_doc/clvp)                          |       ✅        |         ❌         |      ❌      |
 |                       [CodeGen](model_doc/codegen)                       |       ✅        |         ❌         |      ❌      |
 |                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ✅      |
+|                        [Cohere](model_doc/cohere)                        |       ✅        |         ❌         |      ❌      |
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
@@ -206,6 +207,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [MRA](model_doc/mra)                           |       ✅        |         ❌         |      ❌      |
 |                           [MT5](model_doc/mt5)                           |       ✅        |         ✅         |      ✅      |
 |                      [MusicGen](model_doc/musicgen)                      |       ✅        |         ❌         |      ❌      |
+|               [MusicGen Melody](model_doc/musicgen_melody)               |       ✅        |         ❌         |      ❌      |
 |                           [MVP](model_doc/mvp)                           |       ✅        |         ❌         |      ❌      |
 |                           [NAT](model_doc/nat)                           |       ✅        |         ❌         |      ❌      |
 |                         [Nezha](model_doc/nezha)                         |       ✅        |         ❌         |      ❌      |
