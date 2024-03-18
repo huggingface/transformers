@@ -4240,6 +4240,9 @@ else:
     _import_structure["models.mbart"].extend(
         ["TFMBartForConditionalGeneration", "TFMBartModel", "TFMBartPreTrainedModel"]
     )
+    _import_structure["models.mistral"].extend(
+        ["TFMistralModel", "TFMistralForCausalLM", "TFMistralForSequenceClassification"]
+    )
     _import_structure["models.mobilebert"].extend(
         [
             "TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -8551,6 +8554,11 @@ if TYPE_CHECKING:
             TFMBartForConditionalGeneration,
             TFMBartModel,
             TFMBartPreTrainedModel,
+        )
+        from .models.mistral import (
+            TFMistralModel,
+            TFMistralForCausalLM,
+            TFMistralForSequenceClassification,
         )
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
