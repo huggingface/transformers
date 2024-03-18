@@ -20,6 +20,7 @@ import pytest
 
 from transformers.audio_utils import (
     amplitude_to_db,
+    chroma_filter_bank,
     hertz_to_mel,
     mel_filter_bank,
     mel_to_hertz,
@@ -27,6 +28,11 @@ from transformers.audio_utils import (
     spectrogram,
     window_function,
 )
+from transformers.testing_utils import is_librosa_available, require_librosa
+
+
+if is_librosa_available():
+    from librosa.filters import chroma
 
 
 class AudioUtilsFunctionTester(unittest.TestCase):
@@ -755,3 +761,57 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             amplitude_to_db(spectrogram, min_value=0.0)
         with pytest.raises(ValueError):
             amplitude_to_db(spectrogram, db_range=-80)
+
+    @require_librosa
+    def test_chroma_equivalence(self):
+        num_frequency_bins = 25
+        num_chroma = 6
+        sampling_rate = 24000
+
+        # test default parameters
+        original_chroma = chroma(sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins)
+        utils_chroma = chroma_filter_bank(
+            num_frequency_bins=num_frequency_bins, num_chroma=num_chroma, sampling_rate=sampling_rate
+        )
+
+        self.assertTrue(np.allclose(original_chroma, utils_chroma))
+
+        # test no weighting_parameters
+        original_chroma = chroma(sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins, octwidth=None)
+        utils_chroma = chroma_filter_bank(
+            num_frequency_bins=num_frequency_bins,
+            num_chroma=num_chroma,
+            sampling_rate=sampling_rate,
+            weighting_parameters=None,
+        )
+
+        self.assertTrue(np.allclose(original_chroma, utils_chroma))
+
+        # test with L1 norm
+        original_chroma = chroma(sr=sampling_rate, n_chroma=num_chroma, n_fft=num_frequency_bins, norm=1.0)
+        utils_chroma = chroma_filter_bank(
+            num_frequency_bins=num_frequency_bins, num_chroma=num_chroma, sampling_rate=sampling_rate, power=1.0
+        )
+
+        self.assertTrue(np.allclose(original_chroma, utils_chroma))
+
+        # test starting at 'A' chroma, power = None, tuning = 0, different weighting_parameters
+        original_chroma = chroma(
+            sr=sampling_rate,
+            n_chroma=num_chroma,
+            n_fft=num_frequency_bins,
+            norm=None,
+            base_c=None,
+            octwidth=1.0,
+            ctroct=4.0,
+        )
+        utils_chroma = chroma_filter_bank(
+            num_frequency_bins=num_frequency_bins,
+            num_chroma=num_chroma,
+            sampling_rate=sampling_rate,
+            power=None,
+            start_at_c_chroma=False,
+            weighting_parameters=(4.0, 1.0),
+        )
+
+        self.assertTrue(np.allclose(original_chroma, utils_chroma))

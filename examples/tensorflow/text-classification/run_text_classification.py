@@ -526,7 +526,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just use any default
         if is_regression:
             metrics = []
         else:

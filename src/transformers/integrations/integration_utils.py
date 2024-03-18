@@ -72,7 +72,7 @@ if TYPE_CHECKING and _has_neptune:
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402
-from ..utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
+from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 
 
 # Integration functions:
@@ -752,7 +752,7 @@ class WandbCallback(TrainerCallback):
 
             # keep track of model topology and gradients, unsupported on TPU
             _watch_model = os.getenv("WANDB_WATCH", "false")
-            if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
+            if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
             self._wandb.run._label(code="transformers_trainer")
 
@@ -802,13 +802,25 @@ class WandbCallback(TrainerCallback):
                 self._wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
         if self._wandb is None:
             return
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
-            logs = rewrite_logs(logs)
-            self._wandb.log({**logs, "train/global_step": state.global_step})
+            for k, v in logs.items():
+                if k in single_value_scalars:
+                    self._wandb.run.summary[k] = v
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._wandb.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
         if self._log_model == "checkpoint" and self._initialized and state.is_world_process_zero:
@@ -960,9 +972,9 @@ class MLflowCallback(TrainerCallback):
             remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
             [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
             storage will just copy the files to your artifact location.
-        - **MLFLOW_TRACKING_URI** (`str`, *optional*, defaults to `""`):
-            Whether to store runs at a specific path or remote server. Default to an empty string which will store runs
-            at `./mlruns` locally.
+        - **MLFLOW_TRACKING_URI** (`str`, *optional*):
+            Whether to store runs at a specific path or remote server. Unset by default, which skips setting the
+            tracking URI entirely.
         - **MLFLOW_EXPERIMENT_NAME** (`str`, *optional*, defaults to `None`):
             Whether to use an MLflow experiment_name under which to launch the run. Default to `None` which will point
             to the `Default` experiment in MLflow. Otherwise, it is a case sensitive name of the experiment to be
@@ -982,7 +994,7 @@ class MLflowCallback(TrainerCallback):
         """
         self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
-        self._tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "")
+        self._tracking_uri = os.getenv("MLFLOW_TRACKING_URI", None)
         self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
         self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self._run_id = os.getenv("MLFLOW_RUN_ID", None)
@@ -997,12 +1009,17 @@ class MLflowCallback(TrainerCallback):
             f" tags={self._nested_run}, tracking_uri={self._tracking_uri}"
         )
         if state.is_world_process_zero:
-            self._ml_flow.set_tracking_uri(self._tracking_uri)
-
-            if self._tracking_uri == "":
-                logger.debug(f"MLflow tracking URI is not set. Runs will be stored at {os.path.realpath('./mlruns')}")
+            if not self._ml_flow.is_tracking_uri_set():
+                if self._tracking_uri:
+                    self._ml_flow.set_tracking_uri(self._tracking_uri)
+                    logger.debug(f"MLflow tracking URI is set to {self._tracking_uri}")
+                else:
+                    logger.debug(
+                        "Environment variable `MLFLOW_TRACKING_URI` is not provided and therefore will not be"
+                        " explicitly set."
+                    )
             else:
-                logger.debug(f"MLflow tracking URI is set to {self._tracking_uri}")
+                logger.debug(f"MLflow tracking URI is set to {self._ml_flow.get_tracking_uri()}")
 
             if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
                 if self._experiment_name:
@@ -1260,7 +1277,9 @@ class NeptuneCallback(TrainerCallback):
         self._stop_run_if_exists()
 
         try:
-            self._run = init_run(**self._init_run_kwargs, **additional_neptune_kwargs)
+            run_params = additional_neptune_kwargs.copy()
+            run_params.update(self._init_run_kwargs)
+            self._run = init_run(**run_params)
             self._run_id = self._run["sys/id"].fetch()
         except (NeptuneMissingProjectNameException, NeptuneMissingApiTokenException) as e:
             raise NeptuneMissingConfiguration() from e
