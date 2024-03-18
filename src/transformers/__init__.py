@@ -42,6 +42,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchaudio_available,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -637,6 +638,11 @@ _import_structure = {
         "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MusicgenConfig",
         "MusicgenDecoderConfig",
+    ],
+    "models.musicgen_melody": [
+        "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MusicgenMelodyConfig",
+        "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
@@ -2787,6 +2793,15 @@ else:
             "MusicgenProcessor",
         ]
     )
+    _import_structure["models.musicgen_melody"].extend(
+        [
+            "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MusicgenMelodyForCausalLM",
+            "MusicgenMelodyForConditionalGeneration",
+            "MusicgenMelodyModel",
+            "MusicgenMelodyPreTrainedModel",
+        ]
+    )
     _import_structure["models.mvp"].extend(
         [
             "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4552,6 +4567,21 @@ else:
     _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
     _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
 
+try:
+    if not is_torchaudio_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import (
+        dummy_torchaudio_objects,
+    )
+
+    _import_structure["utils.dummy_torchaudio_objects"] = [
+        name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyProcessor")
+
 
 # FLAX-backed objects
 try:
@@ -5458,6 +5488,11 @@ if TYPE_CHECKING:
         MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MusicgenConfig,
         MusicgenDecoderConfig,
+    )
+    from .models.musicgen_melody import (
+        MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MusicgenMelodyConfig,
+        MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
@@ -7360,6 +7395,13 @@ if TYPE_CHECKING:
             MusicgenPreTrainedModel,
             MusicgenProcessor,
         )
+        from .models.musicgen_melody import (
+            MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MusicgenMelodyForCausalLM,
+            MusicgenMelodyForConditionalGeneration,
+            MusicgenMelodyModel,
+            MusicgenMelodyPreTrainedModel,
+        )
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
@@ -8811,6 +8853,13 @@ if TYPE_CHECKING:
             Pop2PianoTokenizer,
         )
 
+    try:
+        if not is_torchaudio_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_torchaudio_objects import *
+    else:
+        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
