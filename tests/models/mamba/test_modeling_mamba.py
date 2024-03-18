@@ -49,6 +49,8 @@ if is_mamba_ssm_available():
     from transformers.models.mamba.convert_mamba_ssm_checkpoint_to_pytorch import (
         convert_mamba_ssm_checkpoint_to_huggingface_model,
     )
+else:
+    MambaLMHeadModel = None
 
 
 class MambaModelTester:
@@ -499,11 +501,8 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @unittest.skipIf(
-        not is_mamba_ssm_available(), reason="mamba_ssm to huggingface conversion depends on the `mamba_ssm` package"
-    )
-    @unittest.skipIf(
-        torch_device == "cpu",
-        reason="The original mamba_ssm does not support cpu, we cannot test the conversion if we cannot run the original model",
+        MambaLMHeadModel is None or torch_device == "cpu",
+        reason="The `mamba_ssm` package is not available and the original mamba_ssm does not support cpu, we cannot test the conversion if we cannot run the original model",
     )
     @parameterized.expand([("state-spaces/mamba-130m",)])
     def test_model_from_mamba_ssm_conversion(self, original_model_name):
