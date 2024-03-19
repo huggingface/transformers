@@ -894,7 +894,7 @@ class GemmaModel(GemmaPreTrainedModel):
         hidden_states = inputs_embeds
 
         # normalized
-        # hidden_states = hidden_states * (self.config.hidden_size**0.5)
+        hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -989,15 +989,7 @@ class GemmaModel(GemmaPreTrainedModel):
                 mask_shape = attention_mask.shape
                 mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
                 causal_mask[: mask_shape[0], : mask_shape[1], : mask_shape[2], : mask_shape[3]] = mask_slice
-        
-        # minimal addition to gemma
-        # -----------------
-        block_size = 266 # image tokens + unpadded text input length
-        if seq_length > block_size:
-            causal_mask[:, :, :block_size, :block_size] = torch.full((batch_size, 1, block_size, block_size), fill_value=0.0, dtype=torch.float32)
-            for i in range(block_size, seq_length):
-                causal_mask[:, :, i, :i+1] = torch.full((batch_size, 1, 1, i+1), fill_value=0.0, dtype=torch.float32)
-        # -------------------
+
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
