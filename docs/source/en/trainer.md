@@ -108,6 +108,12 @@ You can save your checkpoints (the optimizer state is not saved by default) to t
 
 When you resume training from a checkpoint, the [`Trainer`] tries to keep the Python, NumPy, and PyTorch RNG states the same as they were when the checkpoint was saved. But because PyTorch has various non-deterministic default settings, the RNG states aren't guaranteed to be the same. If you want to enable full determinism, take a look at the [Controlling sources of randomness](https://pytorch.org/docs/stable/notes/randomness#controlling-sources-of-randomness) guide to learn what you can enable to make your training fully deterministic. Keep in mind though that by making certain settings deterministic, training may be slower.
 
+If you encounter an error loading the model when resuming from a checkpoint, it may be caused by a lack of support in the Trainer for loading the type of model in your checkpoint.  If you are able to load the model yourself and pass that as the _model_ parameter to the Trainer constructor, you can use the _without_checkpoint_model_ parameter to the train() method to force the Trainer to skip re-loading your model during resumption from a checkpoint.  e.g.:
+
+# resume from specific checkpoint without reloading the model
+  trainer.train(resume_from_checkpoint="your-unsupported-model/checkpoint-1000", without_checkpoint_model=True)
+
+  ```
 ## Customize the Trainer
 
 While the [`Trainer`] class is designed to be accessible and easy-to-use, it also offers a lot of customizability for more adventurous users. Many of the [`Trainer`]'s method can be subclassed and overridden to support the functionality you want, without having to rewrite the entire training loop from scratch to accommodate it. These methods include:
