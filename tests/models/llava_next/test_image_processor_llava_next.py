@@ -51,7 +51,6 @@ class LlavaNextImageProcessingTester(unittest.TestCase):
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
-        aspect_ratio_setting="clip",
     ):
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
@@ -69,11 +68,9 @@ class LlavaNextImageProcessingTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
-        self.aspect_ratio_setting = aspect_ratio_setting
 
     def prepare_image_processor_dict(self):
         return {
-            "aspect_ratio_setting": self.aspect_ratio_setting,
             "do_resize": self.do_resize,
             "size": self.size,
             "do_center_crop": self.do_center_crop,
@@ -103,7 +100,7 @@ class LlavaNextImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = LlavaNextImageProcessor if is_vision_available() else None
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
@@ -125,55 +122,6 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-        self.assertTrue(hasattr(image_processing, "aspect_ratio_setting"))
-        self.assertTrue(hasattr(image_processing, "image_grid_pinpoints"))
-
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
-    def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 20})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
-
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
-
-    def test_select_best_resolution(self):
-        possible_resolutions = [[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]
-
-        # Test with a square aspect ratio
-        best_resolution = select_best_resolution((336, 336), possible_resolutions)
-        self.assertEqual(best_resolution, (672, 336))
-
-    @unittest.skip("LlavaNextImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
-    def test_call_numpy_4_channels(self):
-        pass
-
-
-@require_torch
-@require_vision
-class LlavaImageProcessingAnyAspectRatioTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = LlavaNextImageProcessor if is_vision_available() else None
-
-    def setUp(self):
-        self.image_processor_tester = LlavaNextImageProcessingTester(self, aspect_ratio_setting="anyres")
-
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "center_crop"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-        self.assertTrue(hasattr(image_processing, "aspect_ratio_setting"))
         self.assertTrue(hasattr(image_processing, "image_grid_pinpoints"))
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
