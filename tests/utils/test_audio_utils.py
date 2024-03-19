@@ -25,6 +25,7 @@ from transformers.audio_utils import (
     mel_filter_bank,
     mel_to_hertz,
     power_to_db,
+    power_to_db_batch,
     spectrogram,
     spectrogram_batch,
     window_function,
@@ -1161,6 +1162,84 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         with pytest.raises(ValueError):
             power_to_db(spectrogram, db_range=-80)
 
+    def test_power_to_db_batch(self):
+        # Setup a batch of spectrograms with varying values and lengths
+        batch_spectrogram = np.zeros((3, 2, 3))
+        batch_spectrogram[0, 0, 0] = 2.0
+        batch_spectrogram[0, 0, 1] = 0.5
+        batch_spectrogram[0, 0, 2] = 0.707
+        batch_spectrogram[0, 1, 1] = 1.0
+        batch_spectrogram[1, :, :2] = batch_spectrogram[0, :, :2] * 1.5
+        batch_spectrogram[2, :, :1] = batch_spectrogram[0, :, :1] * 0.5
+
+        # Expected values computed by applying `power_to_db` iteratively
+        output = power_to_db_batch(batch_spectrogram, reference=1.0)
+        expected = np.array(
+            [
+                [[3.01029996, -3.01029996, -1.50580586], [-100, 0, -100]],
+                [[4.77121255, -1.24938737, -100], [-100, 1.76091259, -100]],
+                [[0, -100, -100], [-100, -100, -100]],
+            ]
+        )
+        self.assertTrue(np.allclose(output, expected))
+
+        output = power_to_db_batch(batch_spectrogram, reference=2.0)
+        expected = np.array(
+            [
+                [[0, -6.02059991, -4.51610582], [-103.01029996, -3.01029996, -103.01029996]],
+                [[1.76091259, -4.25968732, -103.01029996], [-103.01029996, -1.24938737, -103.01029996]],
+                [[-3.01029996, -103.01029996, -103.01029996], [-103.01029996, -103.01029996, -103.01029996]],
+            ]
+        )
+        self.assertTrue(np.allclose(output, expected))
+
+        output = power_to_db_batch(batch_spectrogram, min_value=1e-6)
+        expected = np.array(
+            [
+                [[3.01029996, -3.01029996, -1.50580586], [-60, 0, -60]],
+                [[4.77121255, -1.24938737, -60], [-60, 1.76091259, -60]],
+                [[0, -60, -60], [-60, -60, -60]],
+            ]
+        )
+        self.assertTrue(np.allclose(output, expected))
+
+        output = power_to_db_batch(batch_spectrogram, db_range=80)
+        expected = np.array(
+            [
+                [[3.01029996, -3.01029996, -1.50580586], [-76.98970004, 0, -76.98970004]],
+                [[4.77121255, -1.24938737, -75.22878745], [-75.22878745, 1.76091259, -75.22878745]],
+                [[0, -80, -80], [-80, -80, -80]],
+            ]
+        )
+        self.assertTrue(np.allclose(output, expected))
+
+        output = power_to_db_batch(batch_spectrogram, reference=2.0, db_range=80)
+        expected = np.array(
+            [
+                [[0, -6.02059991, -4.51610582], [-80, -3.01029996, -80]],
+                [[1.76091259, -4.25968732, -78.23908741], [-78.23908741, -1.24938737, -78.23908741]],
+                [[-3.01029996, -83.01029996, -83.01029996], [-83.01029996, -83.01029996, -83.01029996]],
+            ]
+        )
+        self.assertTrue(np.allclose(output, expected))
+
+        output = power_to_db_batch(batch_spectrogram, reference=2.0, min_value=1e-6, db_range=80)
+        expected = np.array(
+            [
+                [[0, -6.02059991, -4.51610582], [-63.01029996, -3.01029996, -63.01029996]],
+                [[1.76091259, -4.25968732, -63.01029996], [-63.01029996, -1.24938737, -63.01029996]],
+                [[-3.01029996, -63.01029996, -63.01029996], [-63.01029996, -63.01029996, -63.01029996]],
+            ]
+        )
+        self.assertTrue(np.allclose(output, expected))
+
+        with pytest.raises(ValueError):
+            power_to_db_batch(batch_spectrogram, reference=0.0)
+        with pytest.raises(ValueError):
+            power_to_db_batch(batch_spectrogram, min_value=0.0)
+        with pytest.raises(ValueError):
+            power_to_db_batch(batch_spectrogram, db_range=-80)
+
     def test_amplitude_to_db(self):
         spectrogram = np.zeros((2, 3))
         spectrogram[0, 0] = 2.0
@@ -1200,71 +1279,75 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             amplitude_to_db(spectrogram, db_range=-80)
 
     def test_amplitude_to_db_batch(self):
-        # Setup a batch of spectrograms with varying values
+        # Setup a batch of spectrograms with varying values and lengths
         batch_spectrogram = np.zeros((3, 2, 3))
         batch_spectrogram[0, 0, 0] = 2.0
         batch_spectrogram[0, 0, 1] = 0.5
         batch_spectrogram[0, 0, 2] = 0.707
         batch_spectrogram[0, 1, 1] = 1.0
-        batch_spectrogram[1, :, :] = batch_spectrogram[0, :, :] * 1.5
-        batch_spectrogram[2, :, :] = batch_spectrogram[0, :, :] * 0.5
+        batch_spectrogram[1, :, :2] = batch_spectrogram[0, :, :2] * 1.5
+        batch_spectrogram[2, :, :1] = batch_spectrogram[0, :, :1] * 0.5
 
         # Expected values computed by applying `amplitude_to_db` iteratively
+        output = amplitude_to_db_batch(batch_spectrogram, reference=1.0)
         expected = np.array(
             [
                 [[6.02059991, -6.02059991, -3.01161172], [-100, 0, -100]],
-                [[9.54242509, -2.49877473, 0.51021346], [-100, 3.52182518, -100]],
-                [[0, -12.04119983, -9.03221164], [-100, -6.02059991, -100]],
+                [[9.54242509, -2.49877473, -100], [-100, 3.52182518, -100]],
+                [[0, -100, -100], [-100, -100, -100]],
             ]
         )
-        self.assertTrue(np.allclose(amplitude_to_db_batch(batch_spectrogram, reference=1.0), expected))
+        self.assertTrue(np.allclose(output, expected))
 
+        output = amplitude_to_db_batch(batch_spectrogram, reference=2.0)
         expected = np.array(
             [
                 [[0, -12.04119983, -9.03221164], [-106.02059991, -6.02059991, -106.02059991]],
-                [[3.52182518, -8.51937465, -5.51038646], [-106.02059991, -2.49877473, -106.02059991]],
-                [[-6.02059991, -18.06179974, -15.05281155], [-106.02059991, -12.04119983, -106.02059991]],
+                [[3.52182518, -8.51937465, -106.02059991], [-106.02059991, -2.49877473, -106.02059991]],
+                [[-6.02059991, -106.02059991, -106.02059991], [-106.02059991, -106.02059991, -106.02059991]],
             ]
         )
-        self.assertTrue(np.allclose(amplitude_to_db_batch(batch_spectrogram, reference=2.0), expected))
+        self.assertTrue(np.allclose(output, expected))
 
+        output = amplitude_to_db_batch(batch_spectrogram, min_value=1e-3)
         expected = np.array(
             [
                 [[6.02059991, -6.02059991, -3.01161172], [-60, 0, -60]],
-                [[9.54242509, -2.49877473, 0.51021346], [-60, 3.52182518, -60]],
-                [[0, -12.04119983, -9.03221164], [-60, -6.02059991, -60]],
+                [[9.54242509, -2.49877473, -60], [-60, 3.52182518, -60]],
+                [[0, -60, -60], [-60, -60, -60]],
             ]
         )
-        self.assertTrue(np.allclose(amplitude_to_db_batch(batch_spectrogram, min_value=1e-3), expected))
+        self.assertTrue(np.allclose(output, expected))
 
+        output = amplitude_to_db_batch(batch_spectrogram, db_range=80)
         expected = np.array(
             [
                 [[6.02059991, -6.02059991, -3.01161172], [-73.97940009, 0, -73.97940009]],
-                [[9.54242509, -2.49877473, 0.51021346], [-70.45757491, 3.52182518, -70.45757491]],
-                [[0, -12.04119983, -9.03221164], [-80, -6.02059991, -80]],
+                [[9.54242509, -2.49877473, -70.45757491], [-70.45757491, 3.52182518, -70.45757491]],
+                [[0, -80, -80], [-80, -80, -80]],
             ]
         )
-        self.assertTrue(np.allclose(amplitude_to_db_batch(batch_spectrogram, db_range=80), expected))
+        self.assertTrue(np.allclose(output, expected))
 
+        output = amplitude_to_db_batch(batch_spectrogram, reference=2.0, db_range=80)
         expected = np.array(
             [
                 [[0, -12.04119983, -9.03221164], [-80, -6.02059991, -80]],
-                [[3.52182518, -8.51937465, -5.51038646], [-76.47817482, -2.49877473, -76.47817482]],
-                [[-6.02059991, -18.06179974, -15.05281155], [-86.02059991, -12.04119983, -86.02059991]],
+                [[3.52182518, -8.51937465, -76.47817482], [-76.47817482, -2.49877473, -76.47817482]],
+                [[-6.02059991, -86.02059991, -86.02059991], [-86.02059991, -86.02059991, -86.02059991]],
             ]
         )
-        self.assertTrue(np.allclose(amplitude_to_db_batch(batch_spectrogram, reference=2.0, db_range=80), expected))
+        self.assertTrue(np.allclose(output, expected))
 
+        output = amplitude_to_db_batch(batch_spectrogram, reference=2.0, min_value=1e-3, db_range=80)
         expected = np.array(
             [
                 [[0, -12.04119983, -9.03221164], [-66.02059991, -6.02059991, -66.02059991]],
-                [[3.52182518, -8.51937465, -5.51038646], [-66.02059991, -2.49877473, -66.02059991]],
-                [[-6.02059991, -18.06179974, -15.05281155], [-66.02059991, -12.04119983, -66.02059991]],
+                [[3.52182518, -8.51937465, -66.02059991], [-66.02059991, -2.49877473, -66.02059991]],
+                [[-6.02059991, -66.02059991, -66.02059991], [-66.02059991, -66.02059991, -66.02059991]],
             ]
         )
-        self.assertTrue(
-            np.allclose(amplitude_to_db_batch(batch_spectrogram, reference=2.0, min_value=1e-3, db_range=80), expected)
-        )
+        self.assertTrue(np.allclose(output, expected))
 
         with pytest.raises(ValueError):
             amplitude_to_db_batch(batch_spectrogram, reference=0.0)
