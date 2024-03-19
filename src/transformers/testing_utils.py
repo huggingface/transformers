@@ -89,7 +89,9 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quanto_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_safetensors_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -114,7 +116,7 @@ from .utils import (
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
@@ -562,6 +564,13 @@ def require_sentencepiece(test_case):
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
 
 
+def require_sacremoses(test_case):
+    """
+    Decorator marking a test that requires Sacremoses. These tests are skipped when Sacremoses isn't installed.
+    """
+    return unittest.skipUnless(is_sacremoses_available(), "test requires Sacremoses")(test_case)
+
+
 def require_seqio(test_case):
     """
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
@@ -725,11 +734,11 @@ def require_torch_up_to_2_accelerators(test_case):
     (test_case)
 
 
-def require_torch_tpu(test_case):
+def require_torch_xla(test_case):
     """
-    Decorator marking a test that requires a TPU (in PyTorch).
+    Decorator marking a test that requires TorchXLA (in PyTorch).
     """
-    return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
+    return unittest.skipUnless(is_torch_xla_available(), "test requires TorchXLA")(test_case)
 
 
 def require_torch_neuroncore(test_case):
@@ -800,6 +809,19 @@ if is_torch_available():
 
     if "TRANSFORMERS_TEST_DEVICE" in os.environ:
         torch_device = os.environ["TRANSFORMERS_TEST_DEVICE"]
+        if torch_device == "cuda" and not torch.cuda.is_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but CUDA is unavailable. Please double-check your testing environment."
+            )
+        if torch_device == "xpu" and not is_torch_xpu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but XPU is unavailable. Please double-check your testing environment."
+            )
+        if torch_device == "npu" and not is_torch_npu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
+            )
+
         try:
             # try creating device to see if provided device is valid
             _ = torch.device(torch_device)
@@ -1020,6 +1042,13 @@ def require_auto_awq(test_case):
     Decorator for auto_awq dependency
     """
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
+
+
+def require_quanto(test_case):
+    """
+    Decorator for quanto dependency
+    """
+    return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
 
 
 def require_phonemizer(test_case):

@@ -53,6 +53,7 @@ else:
 @require_tokenizers
 @require_pandas
 class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/tapas-large-finetuned-sqa"
     tokenizer_class = TapasTokenizer
     test_rust_tokenizer = False
     space_between_special_tokens = True

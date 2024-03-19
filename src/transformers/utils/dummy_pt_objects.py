@@ -408,10 +408,6 @@ class WhisperTimeStampLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def top_k_top_p_filtering(*args, **kwargs):
-    requires_backends(top_k_top_p_filtering, ["torch"])
-
-
 class PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2054,6 +2050,27 @@ class CodeGenModel(metaclass=DummyObject):
 
 
 class CodeGenPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CohereForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CohereModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CoherePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -5859,6 +5876,37 @@ class MusicgenProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MusicgenMelodyForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MusicgenMelodyForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MusicgenMelodyModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MusicgenMelodyPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MVP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6732,6 +6780,37 @@ class PvtModel(metaclass=DummyObject):
 
 
 class PvtPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PvtV2Backbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PvtV2ForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PvtV2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PvtV2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

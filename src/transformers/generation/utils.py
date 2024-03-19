@@ -34,7 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
+from ..utils import ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -45,7 +45,7 @@ from .candidate_generator import (
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
-from .configuration_utils import GenerationConfig
+from .configuration_utils import GenerationConfig, GenerationMode
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -323,23 +323,6 @@ ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, Contrasti
 GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
 GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
-
-
-class GenerationMode(ExplicitEnum):
-    """
-    Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
-    """
-
-    # Non-beam methods
-    CONTRASTIVE_SEARCH = "contrastive_search"
-    GREEDY_SEARCH = "greedy_search"
-    SAMPLE = "sample"
-    ASSISTED_GENERATION = "assisted_generation"
-    # Beam methods
-    BEAM_SEARCH = "beam_search"
-    BEAM_SAMPLE = "beam_sample"
-    CONSTRAINED_BEAM_SEARCH = "constrained_beam_search"
-    GROUP_BEAM_SEARCH = "group_beam_search"
 
 
 class GenerationMixin:
@@ -650,7 +633,6 @@ class GenerationMixin:
         model_kwargs: Dict[str, Any],
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
-        model_inputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
@@ -680,7 +662,8 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        model_kwargs["cache_position"] = model_inputs.get("cache_position", None)
+        if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
+            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + 1
 
         return model_kwargs
 
@@ -705,6 +688,7 @@ class GenerationMixin:
         if generation_config.prompt_lookup_num_tokens is not None:
             candidate_generator = PromptLookupCandidateGenerator(
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
+                max_matching_ngram_size=generation_config.max_matching_ngram_size,
             )
         else:
             candidate_generator = AssistedCandidateGenerator(
@@ -763,46 +747,6 @@ class GenerationMixin:
         if generation_config.renormalize_logits is True:
             warpers.append(LogitNormalization())
         return warpers
-
-    def _get_generation_mode(
-        self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
-    ) -> GenerationMode:
-        """
-        Returns the generation mode triggered by a [`GenerationConfig`] instance.
-        """
-        if generation_config.constraints is not None or generation_config.force_words_ids is not None:
-            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
-        elif generation_config.num_beams == 1:
-            if generation_config.do_sample is False:
-                if (
-                    generation_config.top_k is not None
-                    and generation_config.top_k > 1
-                    and generation_config.penalty_alpha is not None
-                    and generation_config.penalty_alpha > 0
-                ):
-                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
-                else:
-                    generation_mode = GenerationMode.GREEDY_SEARCH
-            else:
-                generation_mode = GenerationMode.SAMPLE
-        else:
-            if generation_config.num_beam_groups > 1:
-                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
-            elif generation_config.do_sample is True:
-                generation_mode = GenerationMode.BEAM_SAMPLE
-            else:
-                generation_mode = GenerationMode.BEAM_SEARCH
-
-        # Assisted generation may extend some generation modes
-        if assistant_model is not None or generation_config.prompt_lookup_num_tokens is not None:
-            if generation_mode in ("greedy_search", "sample"):
-                generation_mode = GenerationMode.ASSISTED_GENERATION
-            else:
-                raise ValueError(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
-                    "is only supported with Greedy Search and Sample."
-                )
-        return generation_mode
 
     def _get_logits_processor(
         self,
@@ -921,7 +865,12 @@ class GenerationMixin:
                 SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
         if generation_config.forced_decoder_ids is not None:
-            processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+            # TODO(Sanchit): deprecate in v4.40 by removing this logic
+            warnings.warn(
+                "You have explicitly specified `forced_decoder_ids`. This functionality has been deprecated and will throw an error in v4.40. Please remove the `forced_decoder_ids` argument in favour of `input_ids` or `decoder_input_ids` respectively.",
+                FutureWarning,
+            )
+            processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -1219,6 +1168,59 @@ class GenerationMixin:
                     UserWarning,
                 )
 
+    def _prepare_generation_config(
+        self, generation_config: GenerationConfig, **kwargs: Dict
+    ) -> Tuple[GenerationConfig, Dict]:
+        """
+        Prepares the base generation config, then applies any generation configuration options from kwargs.
+        """
+        # TODO joao: when we can detect `fullgraph=True` in `torch.compile` (https://github.com/pytorch/pytorch/pull/120400)
+        # replace `is_torchdynamo_compiling` by the corresponding check. As it is, we are being too restrictive with
+        # the parameterization in `fullgraph=False` so as to enable `fullgraph=True`.
+
+        # priority: `generation_config` argument > `model.generation_config` (the default generation config)
+        if generation_config is None:
+            # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
+            # three conditions must be met
+            # 1) the generation config must have been created from the model config (`_from_model_config` field);
+            # 2) the generation config must have seen no modification since its creation (the hash is the same);
+            # 3) the user must have set generation parameters in the model config.
+            # NOTE: `torch.compile` can't compile `hash`, this legacy support is disabled with compilation.
+            if (
+                not is_torchdynamo_compiling()
+                and self.generation_config._from_model_config
+                and self.generation_config._original_object_hash == hash(self.generation_config)
+                and self.config._has_non_default_generation_parameters()
+            ):
+                new_generation_config = GenerationConfig.from_model_config(self.config)
+                if new_generation_config != self.generation_config:
+                    warnings.warn(
+                        "You have modified the pretrained model configuration to control generation. This is a"
+                        " deprecated strategy to control generation and will be removed soon, in a future version."
+                        " Please use and modify the model generation configuration (see"
+                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )"
+                    )
+                    self.generation_config = new_generation_config
+            generation_config = self.generation_config
+
+        # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
+        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled.
+        if is_torchdynamo_compiling():
+            model_kwargs = kwargs
+            generate_attributes_in_kwargs = [
+                key for key, value in kwargs.items() if getattr(generation_config, key, None) != value
+            ]
+            if len(generate_attributes_in_kwargs) > 0:
+                raise ValueError(
+                    "`torch.compile` exception: all generation configuration attributes must be passed within a "
+                    f"`generation_config` instance passed to `generate` (found: {generate_attributes_in_kwargs})."
+                )
+        else:
+            generation_config = copy.deepcopy(generation_config)
+            model_kwargs = generation_config.update(**kwargs)
+
+        return generation_config, model_kwargs
+
     @torch.no_grad()
     def generate(
         self,
@@ -1317,44 +1319,17 @@ class GenerationMixin:
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
+        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
+        self._validate_model_class()
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        self._validate_model_kwargs(model_kwargs.copy())
 
+        # 2. Set generation parameters if not already defined
         if synced_gpus is None:
             if is_deepspeed_zero3_enabled() and dist.get_world_size() > 1:
                 synced_gpus = True
             else:
                 synced_gpus = False
-
-        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        self._validate_model_class()
-
-        # priority: `generation_config` argument > `model.generation_config` (the default generation config)
-        if generation_config is None:
-            # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
-            # three conditions must be met
-            # 1) the generation config must have been created from the model config (`_from_model_config` field);
-            # 2) the generation config must have seen no modification since its creation (the hash is the same);
-            # 3) the user must have set generation parameters in the model config.
-            if (
-                self.generation_config._from_model_config
-                and self.generation_config._original_object_hash == hash(self.generation_config)
-                and self.config._has_non_default_generation_parameters()
-            ):
-                new_generation_config = GenerationConfig.from_model_config(self.config)
-                if new_generation_config != self.generation_config:
-                    warnings.warn(
-                        "You have modified the pretrained model configuration to control generation. This is a"
-                        " deprecated strategy to control generation and will be removed soon, in a future version."
-                        " Please use and modify the model generation configuration (see"
-                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )"
-                    )
-                    self.generation_config = new_generation_config
-            generation_config = self.generation_config
-
-        generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
-        self._validate_model_kwargs(model_kwargs.copy())
-
-        # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
@@ -1474,7 +1449,7 @@ class GenerationMixin:
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
-        generation_mode = self._get_generation_mode(generation_config, assistant_model)
+        generation_mode = generation_config.get_generation_mode(assistant_model)
 
         if streamer is not None and (generation_config.num_beams > 1):
             raise ValueError(
@@ -1803,6 +1778,24 @@ class GenerationMixin:
 
         return result
 
+    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
+        """
+        Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
+        fed through `this_peer_finished`. ZeRO stage 3-friendly.
+        """
+        if synced_gpus:
+            # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+            # The following logic allows an early break if all peers finished generating their sequence
+            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
+            # send 0.0 if we finished, 1.0 otherwise
+            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+            # did all peers finish? the reduced sum will be 0.0 then
+            if this_peer_finished_flag.item() == 0.0:
+                return False
+        elif this_peer_finished:
+            return False
+        return True
+
     def contrastive_search(self, *args, **kwargs):
         logger.warning_once(
             "Calling `contrastive_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
@@ -1956,22 +1949,15 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
-        batch_size = input_ids.shape[0]
+        this_peer_finished = False
 
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None:
@@ -2000,7 +1986,6 @@ class GenerationMixin:
                     model_kwargs,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     standardize_cache_format=True,
-                    model_inputs=model_inputs,
                 )
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -2195,7 +2180,9 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2206,12 +2193,7 @@ class GenerationMixin:
 
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -2414,20 +2396,14 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        this_peer_finished = False
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2484,7 +2460,6 @@ class GenerationMixin:
                 outputs,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
-                model_inputs=model_inputs,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2494,13 +2469,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -2713,21 +2682,14 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        this_peer_finished = False
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-        this_peer_finished = False  # used by synced_gpus only
-        # auto-regressive generation
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2783,7 +2745,9 @@ class GenerationMixin:
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -2793,13 +2757,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -3028,6 +2986,7 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         if num_beams * batch_size != batch_beam_size:
             raise ValueError(
@@ -3057,20 +3016,11 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
 
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # if sequential is True, split the input to batches of batch_size and run sequentially
@@ -3181,7 +3131,9 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3195,10 +3147,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,
@@ -3422,6 +3371,7 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
@@ -3443,20 +3393,10 @@ class GenerationMixin:
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -3535,7 +3475,9 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3549,10 +3491,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,
@@ -3772,6 +3711,7 @@ class GenerationMixin:
         device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         if return_dict_in_generate and output_scores:
             beam_indices = [tuple(() for _ in range(num_sub_beams * batch_size)) for _ in range(num_beam_groups)]
@@ -3803,20 +3743,10 @@ class GenerationMixin:
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
 
@@ -3941,7 +3871,9 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -3952,10 +3884,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         final_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None
         sequence_outputs = beam_scorer.finalize(
@@ -4180,6 +4109,7 @@ class GenerationMixin:
         num_beams = constrained_beam_scorer.num_beams
 
         batch_beam_size, cur_len = input_ids.shape
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         if num_beams * batch_size != batch_beam_size:
             raise ValueError(
@@ -4209,20 +4139,10 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        this_peer_finished = False  # used by synced_gpus only
+        this_peer_finished = False
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -4300,7 +4220,9 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
@@ -4314,10 +4236,7 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             if constrained_beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-                if not synced_gpus:
-                    break
-                else:
-                    this_peer_finished = True
+                this_peer_finished = True
 
         sequence_outputs = constrained_beam_scorer.finalize(
             input_ids,
@@ -4536,23 +4455,17 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        batch_size, cur_len = input_ids.shape
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         # other auxiliary variables
         max_len = stopping_criteria[0].max_length
 
-        this_peer_finished = False  # used by synced_gpus only
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        this_peer_finished = False
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
@@ -4580,6 +4493,14 @@ class GenerationMixin:
                 candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
             )
             candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
+            if "cache_position" in candidate_kwargs:
+                candidate_kwargs["cache_position"] = torch.cat(
+                    (
+                        candidate_kwargs["cache_position"],
+                        torch.arange(cur_len, cur_len + candidate_length, device=input_ids.device, dtype=torch.long),
+                    ),
+                    dim=0,
+                )
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
 
@@ -4698,7 +4619,9 @@ class GenerationMixin:
                         )
 
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder, model_inputs=model_inputs
+                outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
             )
 
             # if eos_token was found in one sentence, set sentence to finished
@@ -4711,13 +4634,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -4838,47 +4755,6 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
-
-
-def top_k_top_p_filtering(
-    logits: torch.FloatTensor,
-    top_k: int = 0,
-    top_p: float = 1.0,
-    filter_value: float = -float("Inf"),
-    min_tokens_to_keep: int = 1,
-) -> torch.FloatTensor:
-    """
-    Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-
-    Args:
-        logits: logits distribution shape (batch size, vocabulary size)
-        top_k (`int`, *optional*, defaults to 0):
-            If > 0, only keep the top k tokens with highest probability (top-k filtering)
-        top_p (`float`, *optional*, defaults to 1.0):
-            If < 1.0, only keep the top tokens with cumulative probability >= top_p (nucleus filtering). Nucleus
-            filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimumber of tokens we keep per batch example in the output.
-
-    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    """
-    warnings.warn(
-        "`top_k_top_p_filtering` is scheduled for deletion in v4.39. Use `TopKLogitsWarper` and `TopPLogitsWarper` "
-        "instead.",
-        DeprecationWarning,
-    )
-
-    if top_k > 0:
-        logits = TopKLogitsWarper(top_k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
-            None, logits
-        )
-
-    if 0 <= top_p <= 1.0:
-        logits = TopPLogitsWarper(top_p=top_p, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
-            None, logits
-        )
-
-    return logits
 
 
 def _ranking_fast(

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Gemma model."""
+
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -114,7 +115,7 @@ class GemmaRotaryEmbedding(nn.Module):
         # Force float32 since bfloat16 loses precision on long contexts
         # See https://github.com/huggingface/transformers/pull/29285
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) else "cpu"
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -255,7 +256,7 @@ class GemmaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -342,7 +343,7 @@ class GemmaFlashAttention2(GemmaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -409,7 +410,7 @@ class GemmaFlashAttention2(GemmaAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -541,7 +542,7 @@ class GemmaSdpaAttention(GemmaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -790,6 +791,10 @@ GEMMA_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -971,13 +976,19 @@ class GemmaModel(GemmaPreTrainedModel):
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * min_dtype
 
-        causal_mask = causal_mask.to(dtype=dtype, device=device)
-        if attention_mask is not None and attention_mask.dim() == 2:
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+        causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
+        causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            elif attention_mask.dim() == 4:
+                mask_shape = attention_mask.shape
+                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                causal_mask[: mask_shape[0], : mask_shape[1], : mask_shape[2], : mask_shape[3]] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -1121,14 +1132,26 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
     ):
+        # With static cache, the `past_key_values` is None
+        # TODO joao: standardize interface for the different Cache classes and remove of this if
+        has_static_cache = False
+        if past_key_values is None:
+            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            has_static_cache = past_key_values is not None
+
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -1161,22 +1184,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        if self.generation_config.cache_implementation == "static":
-            # generation with static cache
-            cache_position = kwargs.get("cache_position", None)
-            if cache_position is None:
-                past_length = 0
-            else:
-                past_length = cache_position[-1] + 1
-            input_ids = input_ids[:, past_length:]
-            position_ids = position_ids[:, past_length:]
-
-        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
-        # same goes for position ids. Could also help with continued generation.
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        position_ids = position_ids.contiguous() if position_ids is not None else None
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1185,6 +1192,15 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
+
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        else:
+            cache_position = cache_position[-input_length:]
+
+        if has_static_cache:
+            past_key_values = None
 
         model_inputs.update(
             {
