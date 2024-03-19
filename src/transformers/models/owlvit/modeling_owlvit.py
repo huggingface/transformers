@@ -1311,7 +1311,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
-    def compute_box_bias(self, num_patches: int) -> torch.Tensor:
+    def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+        if feature_map is not None:
+            raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
         # The box center is biased to its position on the feature grid
         box_coordinates = self.normalize_grid_corner_coordinates(num_patches)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
