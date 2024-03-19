@@ -247,8 +247,7 @@ def verify_logits(model, processor):
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
         """
-        # Skipping logit verification for now
-
+        # Skipping logit verification for now as we are in a left-padding situation vs right-padding for the original repo, but it should be fine
         if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
             raise ValueError("Logits do not match.")
         else:
@@ -337,7 +336,7 @@ if __name__ == "__main__":
         help="Whether or not to run checks against original implementation.",
     )
     parser.add_argument(
-        "--do_convert_weights", action="store_false", help="Whether or not to reload and convert the weights."
+        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
     )
 
     args = parser.parse_args()

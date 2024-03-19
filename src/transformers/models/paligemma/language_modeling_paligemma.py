@@ -42,7 +42,9 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_fx_available
-from .configuration_paligemma import PaLIGemmaConfig
+
+# TODO: guidelines here? rewrite an identical config class or gemma is fine?
+from ..gemma.configuration_gemma import GemmaConfig
 
 
 if is_flash_attn_2_available():
@@ -579,7 +581,7 @@ GEMMA_ATTENTION_CLASSES = {
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
 class PaLIGemmaLanguageDecoderLayer(nn.Module):
-    def __init__(self, config: PaLIGemmaLanguageConfig, layer_idx: int):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -792,7 +794,6 @@ GEMMA_INPUTS_DOCSTRING = r"""
     "The bare PaLIGemmaLanguage Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
-
 class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PaLIGemmaLanguageDecoderLayer`]
