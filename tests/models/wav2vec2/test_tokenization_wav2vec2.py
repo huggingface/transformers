@@ -367,6 +367,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
 
 class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/wav2vec2-base-960h"
     tokenizer_class = Wav2Vec2CTCTokenizer
     test_rust_tokenizer = False
 

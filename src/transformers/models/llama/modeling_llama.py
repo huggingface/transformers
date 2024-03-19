@@ -361,7 +361,7 @@ class LlamaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -451,7 +451,7 @@ class LlamaFlashAttention2(LlamaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -650,7 +650,7 @@ class LlamaSdpaAttention(LlamaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -903,6 +903,10 @@ LLAMA_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -996,7 +1000,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_seen_tokens)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1064,7 +1068,7 @@ class LlamaModel(LlamaPreTrainedModel):
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor):
+    def _update_causal_mask(self, attention_mask, input_tensor, past_seen_tokens):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -1083,11 +1087,24 @@ class LlamaModel(LlamaPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
         causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
-        if attention_mask is not None and attention_mask.dim() == 2:
+        if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            elif attention_mask.dim() == 4:
+                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
+                # cache. In that case, the 4D attention mask attends to the newest tokens only.
+                if attention_mask.shape[-2] < past_seen_tokens + input_tensor.shape[1]:
+                    offset = past_seen_tokens
+                else:
+                    offset = 0
+                mask_shape = attention_mask.shape
+                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                causal_mask[
+                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                ] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
@@ -1235,14 +1252,26 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
     ):
+        # With static cache, the `past_key_values` is None
+        # TODO joao: standardize interface for the different Cache classes and remove of this if
+        has_static_cache = False
+        if past_key_values is None:
+            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            has_static_cache = past_key_values is not None
+
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -1275,22 +1304,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        if self.generation_config.cache_implementation == "static":
-            # generation with static cache
-            cache_position = kwargs.get("cache_position", None)
-            if cache_position is None:
-                past_length = 0
-            else:
-                past_length = cache_position[-1] + 1
-            input_ids = input_ids[:, past_length:]
-            position_ids = position_ids[:, past_length:]
-
-        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
-        # same goes for position ids. Could also help with continued generation.
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        position_ids = position_ids.contiguous() if position_ids is not None else None
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
@@ -1299,6 +1312,15 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
             # TODO: use `next_tokens` directly instead.
             model_inputs = {"input_ids": input_ids.contiguous()}
+
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        else:
+            cache_position = cache_position[-input_length:]
+
+        if has_static_cache:
+            past_key_values = None
 
         model_inputs.update(
             {

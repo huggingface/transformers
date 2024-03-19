@@ -46,7 +46,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     set_seed,
 )
 from transformers.testing_utils import CaptureLogger
@@ -602,9 +602,9 @@ def main():
         tokenizer=tokenizer,
         # Data collator will default to DataCollatorWithPadding, so we change it.
         data_collator=default_data_collator,
-        compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+        compute_metrics=compute_metrics if training_args.do_eval and not is_torch_xla_available() else None,
         preprocess_logits_for_metrics=preprocess_logits_for_metrics
-        if training_args.do_eval and not is_torch_tpu_available()
+        if training_args.do_eval and not is_torch_xla_available()
         else None,
     )
 
