@@ -39,6 +39,7 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    QUANTO = "quanto"
 
 
 class AWQLinearVersion(str, Enum):
@@ -225,6 +226,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
             This flag is used for nested quantization where the quantization constants from the first quantization are
             quantized again.
+        bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
+            This sets the storage type to pack the quanitzed 4-bit prarams.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -240,6 +243,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_compute_dtype=None,
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
+        bnb_4bit_quant_storage=None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
@@ -264,6 +268,15 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
         else:
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
+
+        if bnb_4bit_quant_storage is None:
+            self.bnb_4bit_quant_storage = torch.uint8
+        elif isinstance(bnb_4bit_quant_storage, str):
+            self.bnb_4bit_quant_storage = getattr(torch, bnb_4bit_quant_storage)
+        elif isinstance(bnb_4bit_quant_storage, torch.dtype):
+            self.bnb_4bit_quant_storage = bnb_4bit_quant_storage
+        else:
+            raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
 
         self.post_init()
 
@@ -345,6 +358,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
+        output["bnb_4bit_quant_storage"] = str(output["bnb_4bit_quant_storage"]).split(".")[1]
         output["load_in_4bit"] = self.load_in_4bit
         output["load_in_8bit"] = self.load_in_8bit
 
@@ -823,3 +837,44 @@ class AqlmConfig(QuantizationConfigMixin):
 
         if self.linear_weights_not_to_quantize is None:
             self.linear_weights_not_to_quantize = []
+
+
+@dataclass
+class QuantoConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `quanto`.
+
+    Args:
+        weights (`str`, *optional*, defaults to `"int8"`):
+            The target dtype for the weights after quantization. Supported values are ("float8","int8","int4","int2")
+        activations (`str`, *optional*):
+            The target dtype for the activations after quantization. Supported values are (None,"int8","float8")
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
+    """
+
+    def __init__(
+        self,
+        weights="int8",
+        activations=None,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.QUANTO
+        self.weights = weights
+        self.activations = activations
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        accepted_weights = ["float8", "int8", "int4", "int2"]
+        accepted_activations = [None, "int8", "float8"]
+        if self.weights not in accepted_weights:
+            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+        if self.activations not in accepted_activations:
+            raise ValueError(f"Only support weights in {accepted_activations} but found {self.activations}")

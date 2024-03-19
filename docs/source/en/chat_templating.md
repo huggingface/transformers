@@ -375,7 +375,7 @@ best performance for inference or fine-tuning when you precisely match the token
 If you're training a model from scratch, or fine-tuning a base language model for chat, on the other hand,
 you have a lot of freedom to choose an appropriate template! LLMs are smart enough to learn to handle lots of different
 input formats. Our default template for models that don't have a class-specific template follows the 
-[ChatML format](https://github.com/openai/openai-python/blob/main/chatml.md), and this is a good, flexible choice for many use-cases. It looks like this:
+`ChatML` format, and this is a good, flexible choice for many use-cases. It looks like this:
 
 ```
 {% for message in messages %}

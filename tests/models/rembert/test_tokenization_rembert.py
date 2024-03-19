@@ -32,6 +32,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/rembert"
     tokenizer_class = RemBertTokenizer
     rust_tokenizer_class = RemBertTokenizerFast
     space_between_special_tokens = True

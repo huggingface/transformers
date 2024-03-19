@@ -20,7 +20,7 @@ from typing import Tuple
 from ..utils import (
     cached_property,
     is_torch_available,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     is_torch_xpu_available,
     logging,
     requires_backends,
@@ -31,7 +31,7 @@ from .benchmark_args_utils import BenchmarkArguments
 if is_torch_available():
     import torch
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -88,7 +88,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
         if not self.cuda:
             device = torch.device("cpu")
             n_gpu = 0
-        elif is_torch_tpu_available():
+        elif is_torch_xla_available():
             device = xm.xla_device()
             n_gpu = 0
         elif is_torch_xpu_available():
@@ -101,7 +101,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
 
     @property
     def is_tpu(self):
-        return is_torch_tpu_available() and self.tpu
+        return is_torch_xla_available() and self.tpu
 
     @property
     def device_idx(self) -> int:

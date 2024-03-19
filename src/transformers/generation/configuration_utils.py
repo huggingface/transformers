@@ -652,7 +652,8 @@ class GenerationConfig(PushToHubMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
 
-        # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance
+        # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance.
+        # This strictness is enforced to prevent bad configurations from being saved and re-used.
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 self.validate()

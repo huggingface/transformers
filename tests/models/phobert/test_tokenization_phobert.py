@@ -22,6 +22,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class PhobertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "vinai/phobert-base"
     tokenizer_class = PhobertTokenizer
     test_rust_tokenizer = False
 

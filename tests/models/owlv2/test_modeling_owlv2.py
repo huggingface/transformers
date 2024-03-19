@@ -385,6 +385,7 @@ class Owlv2ModelTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -591,6 +592,7 @@ class Owlv2ForObjectDetectionTester:
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()

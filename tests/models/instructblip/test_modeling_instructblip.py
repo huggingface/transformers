@@ -397,6 +397,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         self.vision_model_tester = InstructBlipVisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = InstructBlipQFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = InstructBlipTextModelDecoderOnlyTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 

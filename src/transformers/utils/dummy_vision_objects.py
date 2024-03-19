@@ -485,6 +485,13 @@ class SiglipImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class SuperPointImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class Swin2SRImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

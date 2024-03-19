@@ -67,7 +67,7 @@ class BarkSemanticModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=4,
         is_training=False,  # for now training is not supported
         use_input_mask=True,
@@ -203,7 +203,7 @@ class BarkCoarseModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=4,
         is_training=False,  # for now training is not supported
         use_input_mask=True,
@@ -339,7 +339,7 @@ class BarkFineModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=4,
         is_training=False,  # for now training is not supported
         use_input_mask=True,

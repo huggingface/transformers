@@ -34,6 +34,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "weiweishi/roc-bert-base-zh"
     tokenizer_class = RoCBertTokenizer
     rust_tokenizer_class = None
     test_rust_tokenizer = False

@@ -26,6 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "unc-nlp/lxmert-base-uncased"
     tokenizer_class = LxmertTokenizer
     rust_tokenizer_class = LxmertTokenizerFast
     test_rust_tokenizer = True

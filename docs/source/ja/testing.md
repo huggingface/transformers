@@ -424,7 +424,7 @@ CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 - `require_torch_multi_gpu` - `require_torch` に加えて、少なくとも2つのGPUが必要です。
 - `require_torch_non_multi_gpu` - `require_torch` に加えて、0または1つのGPUが必要です。
 - `require_torch_up_to_2_gpus` - `require_torch` に加えて、0、1、または2つのGPUが必要です。
-- `require_torch_tpu` - `require_torch` に加えて、少なくとも1つのTPUが必要です。
+- `require_torch_xla` - `require_torch` に加えて、少なくとも1つのTPUが必要です。
 
 以下の表にGPUの要件を示します：
 

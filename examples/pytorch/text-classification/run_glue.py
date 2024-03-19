@@ -304,7 +304,7 @@ def main():
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            "glue",
+            "nyu-mll/glue",
             data_args.task_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,

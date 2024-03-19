@@ -54,6 +54,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/udop-large"
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
     test_rust_tokenizer = True

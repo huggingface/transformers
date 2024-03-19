@@ -119,12 +119,52 @@ LOCALIZED_READMES = {
             "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
+    "README_ru.md": {
+        "start_prompt": "🤗 В настоящее время Transformers предоставляет следующие архитектуры",
+        "end_prompt": "1. Хотите внести новую модель?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_pt-br.md": {
+        "start_prompt": "🤗 Transformers atualmente fornece as seguintes arquiteturas",
+        "end_prompt": "1. Quer contribuir com um novo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_te.md": {
+        "start_prompt": "🤗 ట్రాన్స్‌ఫార్మర్లు ప్రస్తుతం కింది ఆర్కిటెక్చర్‌లను అందజేస్తున్నాయి",
+        "end_prompt": "1. కొత్త మోడల్‌ను అందించాలనుకుంటున్నారా?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
     "README_fr.md": {
         "start_prompt": "🤗 Transformers fournit actuellement les architectures suivantes",
         "end_prompt": "1. Vous souhaitez contribuer avec un nouveau modèle ?",
         "format_model_list": (
             "**[{title}]({model_link})** (de {paper_affiliations}) publié dans l'article {paper_title_link} par"
             "{paper_authors}.{supplements}"
+        ),
+    },
+    "README_de.md": {
+        "start_prompt": "🤗 Transformers bietet derzeit die folgenden Architekturen an",
+        "end_prompt": "1. Möchten Sie ein neues Modell beitragen?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_vi.md": {
+        "start_prompt": "🤗 Transformers hiện đang cung cấp các kiến trúc sau đây",
+        "end_prompt": "1. Muốn đóng góp một mô hình mới?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (từ {paper_affiliations}) được phát hành với bài báo {paper_title_link} by"
+            " {paper_authors}.{supplements}"
         ),
     },
 }

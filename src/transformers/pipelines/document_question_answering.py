@@ -419,14 +419,14 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                     "is_last": span_idx == num_spans - 1,
                 }
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, **generate_kwargs):
         p_mask = model_inputs.pop("p_mask", None)
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
         is_last = model_inputs.pop("is_last", False)
 
         if self.model_type == ModelType.VisionEncoderDecoder:
-            model_outputs = self.model.generate(**model_inputs)
+            model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)
 

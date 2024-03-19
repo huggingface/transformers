@@ -336,7 +336,7 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 
 如果您从头开始训练模型，或者在微调基础语言模型进行聊天时，您有很大的自由选择适当的模板！
 LLMs足够聪明，可以学会处理许多不同的输入格式。我们为没有特定类别模板的模型提供一个默认模板，该模板遵循
-[ChatML format](https://github.com/openai/openai-python/blob/main/chatml.md)格式要求，对于许多用例来说，
+`ChatML` format格式要求，对于许多用例来说，
 这是一个很好的、灵活的选择。
 
 默认模板看起来像这样：

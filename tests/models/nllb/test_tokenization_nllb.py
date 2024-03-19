@@ -49,6 +49,7 @@ RO_CODE = 256145
 @require_sentencepiece
 @require_tokenizers
 class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/nllb-200-distilled-600M"
     tokenizer_class = NllbTokenizer
     rust_tokenizer_class = NllbTokenizerFast
     test_rust_tokenizer = True

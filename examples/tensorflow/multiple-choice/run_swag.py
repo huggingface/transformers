@@ -482,7 +482,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just write anything because we won't be using it
         # Transformers models compute the right loss for their task by default when labels are passed, and will
         # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, metrics=["accuracy"], jit_compile=training_args.xla)

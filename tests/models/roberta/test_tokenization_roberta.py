@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/roberta-base"
     tokenizer_class = RobertaTokenizer
     rust_tokenizer_class = RobertaTokenizerFast
     test_rust_tokenizer = True

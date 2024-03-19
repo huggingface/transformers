@@ -42,6 +42,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchaudio_available,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -292,6 +293,7 @@ _import_structure = {
         "CodeGenConfig",
         "CodeGenTokenizer",
     ],
+    "models.cohere": ["COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CohereConfig"],
     "models.conditional_detr": [
         "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ConditionalDetrConfig",
@@ -637,6 +639,11 @@ _import_structure = {
         "MusicgenConfig",
         "MusicgenDecoderConfig",
     ],
+    "models.musicgen_melody": [
+        "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MusicgenMelodyConfig",
+        "MusicgenMelodyDecoderConfig",
+    ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
@@ -713,6 +720,7 @@ _import_structure = {
         "ProphetNetTokenizer",
     ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
+    "models.pvt_v2": ["PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtV2Config"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.qwen2": [
         "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -811,6 +819,7 @@ _import_structure = {
     ],
     "models.stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
     "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
+    "models.superpoint": ["SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperPointConfig"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -1078,6 +1087,7 @@ _import_structure = {
         "is_psutil_available",
         "is_py3nvml_available",
         "is_pyctcdecode_available",
+        "is_sacremoses_available",
         "is_safetensors_available",
         "is_scipy_available",
         "is_sentencepiece_available",
@@ -1092,11 +1102,12 @@ _import_structure = {
         "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
+        "is_torch_xla_available",
         "is_torch_xpu_available",
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["AqlmConfig", "AwqConfig", "BitsAndBytesConfig", "GPTQConfig"],
+    "utils.quantization_config": ["AqlmConfig", "AwqConfig", "BitsAndBytesConfig", "GPTQConfig", "QuantoConfig"],
 }
 
 # sentencepiece-backed objects
@@ -1171,6 +1182,7 @@ else:
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
+    _import_structure["models.cohere"].append("CohereTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
     _import_structure["models.deberta"].append("DebertaTokenizerFast")
@@ -1328,6 +1340,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
@@ -1814,6 +1827,7 @@ else:
             "CodeGenPreTrainedModel",
         ]
     )
+    _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
     _import_structure["models.conditional_detr"].extend(
         [
             "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2781,6 +2795,15 @@ else:
             "MusicgenProcessor",
         ]
     )
+    _import_structure["models.musicgen_melody"].extend(
+        [
+            "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MusicgenMelodyForCausalLM",
+            "MusicgenMelodyForConditionalGeneration",
+            "MusicgenMelodyModel",
+            "MusicgenMelodyPreTrainedModel",
+        ]
+    )
     _import_structure["models.mvp"].extend(
         [
             "MVP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3009,6 +3032,15 @@ else:
             "PvtForImageClassification",
             "PvtModel",
             "PvtPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pvt_v2"].extend(
+        [
+            "PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PvtV2Backbone",
+            "PvtV2ForImageClassification",
+            "PvtV2Model",
+            "PvtV2PreTrainedModel",
         ]
     )
     _import_structure["models.qdqbert"].extend(
@@ -3304,6 +3336,13 @@ else:
             "Starcoder2ForSequenceClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.superpoint"].extend(
+        [
+            "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SuperPointModel",
+            "SuperPointPreTrainedModel",
         ]
     )
     _import_structure["models.swiftformer"].extend(
@@ -4537,6 +4576,21 @@ else:
     _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
     _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
 
+try:
+    if not is_torchaudio_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import (
+        dummy_torchaudio_objects,
+    )
+
+    _import_structure["utils.dummy_torchaudio_objects"] = [
+        name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyProcessor")
+
 
 # FLAX-backed objects
 try:
@@ -5107,6 +5161,7 @@ if TYPE_CHECKING:
         CodeGenConfig,
         CodeGenTokenizer,
     )
+    from .models.cohere import COHERE_PRETRAINED_CONFIG_ARCHIVE_MAP, CohereConfig
     from .models.conditional_detr import (
         CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConditionalDetrConfig,
@@ -5443,6 +5498,11 @@ if TYPE_CHECKING:
         MusicgenConfig,
         MusicgenDecoderConfig,
     )
+    from .models.musicgen_melody import (
+        MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MusicgenMelodyConfig,
+        MusicgenMelodyDecoderConfig,
+    )
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
@@ -5524,6 +5584,7 @@ if TYPE_CHECKING:
         ProphetNetTokenizer,
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
+    from .models.pvt_v2 import PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtV2Config
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
@@ -5618,6 +5679,7 @@ if TYPE_CHECKING:
     )
     from .models.stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
     from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
+    from .models.superpoint import SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperPointConfig
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -5882,6 +5944,7 @@ if TYPE_CHECKING:
         is_psutil_available,
         is_py3nvml_available,
         is_pyctcdecode_available,
+        is_sacremoses_available,
         is_safetensors_available,
         is_scipy_available,
         is_sentencepiece_available,
@@ -5895,6 +5958,7 @@ if TYPE_CHECKING:
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
+        is_torch_xla_available,
         is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
@@ -5902,7 +5966,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig
+    from .utils.quantization_config import AqlmConfig, AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantoConfig
 
     try:
         if not is_sentencepiece_available():
@@ -5965,6 +6029,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPTokenizerFast
         from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
+        from .models.cohere import CohereTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast
@@ -6127,6 +6192,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
@@ -6541,6 +6607,11 @@ if TYPE_CHECKING:
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,
+        )
+        from .models.cohere import (
+            CohereForCausalLM,
+            CohereModel,
+            CoherePreTrainedModel,
         )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7335,6 +7406,13 @@ if TYPE_CHECKING:
             MusicgenPreTrainedModel,
             MusicgenProcessor,
         )
+        from .models.musicgen_melody import (
+            MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MusicgenMelodyForCausalLM,
+            MusicgenMelodyForConditionalGeneration,
+            MusicgenMelodyModel,
+            MusicgenMelodyPreTrainedModel,
+        )
         from .models.mvp import (
             MVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             MvpForCausalLM,
@@ -7518,6 +7596,13 @@ if TYPE_CHECKING:
             PvtForImageClassification,
             PvtModel,
             PvtPreTrainedModel,
+        )
+        from .models.pvt_v2 import (
+            PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PvtV2Backbone,
+            PvtV2ForImageClassification,
+            PvtV2Model,
+            PvtV2PreTrainedModel,
         )
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7764,6 +7849,11 @@ if TYPE_CHECKING:
             Starcoder2ForSequenceClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
+        )
+        from .models.superpoint import (
+            SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SuperPointModel,
+            SuperPointPreTrainedModel,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -8780,6 +8870,13 @@ if TYPE_CHECKING:
         )
 
     try:
+        if not is_torchaudio_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_torchaudio_objects import *
+    else:
+        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
+    try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -9082,7 +9179,7 @@ else:
 
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
-    logger.warning(
+    logger.warning_advice(
         "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."

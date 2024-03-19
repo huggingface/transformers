@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/s2t-wav2vec2-large-en-de"
     tokenizer_class = Speech2Text2Tokenizer
     test_rust_tokenizer = False
 

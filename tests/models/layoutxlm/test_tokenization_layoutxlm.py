@@ -54,6 +54,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/xlm-roberta-base"
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
     test_rust_tokenizer = True

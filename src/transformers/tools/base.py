@@ -186,6 +186,14 @@ class Tool:
         """
         Loads a tool defined on the Hub.
 
+        <Tip warning={true}>
+
+        Loading a tool from the Hub means that you'll download the tool and execute it locally.
+        ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+        installing a package using pip/npm/apt.
+
+        </Tip>
+
         Args:
             repo_id (`str`):
                 The name of the repo on the Hub where your tool is defined.
@@ -630,6 +638,14 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
     """
     Main function to quickly load a tool, be it on the Hub or in the Transformers library.
 
+    <Tip warning={true}>
+
+    Loading a tool means that you'll download the tool and execute it locally.
+    ALWAYS inspect the tool you're downloading before loading it within your runtime, as you would do when
+    installing a package using pip/npm/apt.
+
+    </Tip>
+
     Args:
         task_or_repo_id (`str`):
             The task for which to load the tool or a repo ID of a tool on the Hub. Tasks implemented in Transformers
@@ -677,6 +693,12 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
         else:
             return tool_class(model_repo_id, token=token, **kwargs)
     else:
+        logger.warning_once(
+            f"You're loading a tool from the Hub from {model_repo_id}. Please make sure this is a source that you "
+            f"trust as the code within that tool will be executed on your machine. Always verify the code of "
+            f"the tools that you load. We recommend specifying a `revision` to ensure you're loading the "
+            f"code that you have checked."
+        )
         return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, remote=remote, **kwargs)
 
 

@@ -390,6 +390,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelDecoderOnlyTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -616,6 +617,7 @@ class Blip2ModelTester:
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 

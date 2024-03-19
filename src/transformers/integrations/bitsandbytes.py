@@ -1,6 +1,7 @@
 import importlib.metadata
 import warnings
 from copy import deepcopy
+from inspect import signature
 
 from packaging import version
 
@@ -179,6 +180,11 @@ def _replace_with_bnb_linear(
                         ):
                             pass
                         else:
+                            extra_kwargs = (
+                                {"quant_storage": quantization_config.bnb_4bit_quant_storage}
+                                if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
+                                else {}
+                            )
                             model._modules[name] = bnb.nn.Linear4bit(
                                 in_features,
                                 out_features,
@@ -186,6 +192,7 @@ def _replace_with_bnb_linear(
                                 quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type,
+                                **extra_kwargs,
                             )
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later

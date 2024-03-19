@@ -33,6 +33,7 @@ class DPRContextEncoderTokenizationTest(BertTokenizationTest):
     tokenizer_class = DPRContextEncoderTokenizer
     rust_tokenizer_class = DPRContextEncoderTokenizerFast
     test_rust_tokenizer = True
+    from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
 
 @require_tokenizers
@@ -40,6 +41,7 @@ class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
     tokenizer_class = DPRQuestionEncoderTokenizer
     rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
     test_rust_tokenizer = True
+    from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
 
 @require_tokenizers
@@ -47,6 +49,7 @@ class DPRReaderTokenizationTest(BertTokenizationTest):
     tokenizer_class = DPRReaderTokenizer
     rust_tokenizer_class = DPRReaderTokenizerFast
     test_rust_tokenizer = True
+    from_pretrained_id = "facebook/dpr-ctx_encoder-single-nq-base"
 
     @slow
     def test_decode_best_spans(self):

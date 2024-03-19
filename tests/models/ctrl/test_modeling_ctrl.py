@@ -249,10 +249,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = CTRLModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass
-
 
 @require_torch
 class CTRLModelLanguageGenerationTest(unittest.TestCase):

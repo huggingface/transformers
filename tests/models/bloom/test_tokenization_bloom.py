@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "bigscience/tokenizer"
     slow_tokenizer_class = None
     rust_tokenizer_class = BloomTokenizerFast
     tokenizer_class = BloomTokenizerFast

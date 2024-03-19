@@ -27,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/blenderbot_small-90M"
     tokenizer_class = BlenderbotSmallTokenizer
     test_rust_tokenizer = False
 

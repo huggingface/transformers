@@ -311,14 +311,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
-            forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+            forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
                 raise ValueError(
                     "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
                     " only 1 version"
                 )
-            forward_params["generate_kwargs"].update(generate_kwargs)
+            forward_params.update(generate_kwargs)
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -456,10 +456,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
-        if generate_kwargs is None:
-            generate_kwargs = {}
-
+    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         is_last = model_inputs.pop("is_last")

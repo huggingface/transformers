@@ -20,13 +20,15 @@ import unittest
 
 from transformers import HerbertTokenizer, HerbertTokenizerFast
 from transformers.models.herbert.tokenization_herbert import VOCAB_FILES_NAMES
-from transformers.testing_utils import get_tests_dir, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_sacremoses, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
+@require_sacremoses
 @require_tokenizers
 class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "allegro/herbert-base-cased"
     tokenizer_class = HerbertTokenizer
     rust_tokenizer_class = HerbertTokenizerFast
     test_rust_tokenizer = True

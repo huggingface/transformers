@@ -78,6 +78,7 @@ ACT2FN = {
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
     "quick_gelu": quick_gelu,
+    "gelu_pytorch_tanh": partial(nn.gelu, approximate=True),
 }
 
 

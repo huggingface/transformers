@@ -9,3 +9,5 @@ src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/fuyu/modeling_fuyu.py
 src/transformers/models/kosmos2/modeling_kosmos2.py
+src/transformers/models/musicgen_melody/modeling_musicgen_melody.py
+src/transformers/models/musicgen_melody/processing_musicgen_melody.py

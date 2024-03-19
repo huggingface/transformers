@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import FlaubertConfig, is_torch_available
+from transformers import FlaubertConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -386,7 +386,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             "token-classification": FlaubertForTokenClassification,
             "zero-shot": FlaubertForSequenceClassification,
         }
-        if is_torch_available()
+        if is_torch_available() and is_sacremoses_available()
         else {}
     )
 

@@ -19,7 +19,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_tpu_available, logging
+from .utils import is_torch_xla_available, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -282,7 +282,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    if tensor.device.type == "xla" and is_torch_tpu_available():
+    if tensor.device.type == "xla" and is_torch_xla_available():
         # NOTE: xla tensors dont have storage
         # use some other unique id to distinguish.
         # this is a XLA tensor, it must be created using torch_xla's

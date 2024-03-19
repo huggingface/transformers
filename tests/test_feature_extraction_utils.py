@@ -52,12 +52,6 @@ class FeatureExtractorUtilTester(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = Wav2Vec2FeatureExtractor.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-wav2vec2/resolve/main/preprocessor_config.json"
-        )
-
 
 @is_staging_test
 class FeatureExtractorPushToHubTester(unittest.TestCase):

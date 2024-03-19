@@ -584,7 +584,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just write anything because we won't be using it
         # endregion
 
         # region Metric and postprocessing

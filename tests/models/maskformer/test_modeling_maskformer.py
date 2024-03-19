@@ -39,6 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
@@ -206,6 +207,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
 
     def setUp(self):
         self.model_tester = MaskFormerModelTester(self)
@@ -380,6 +382,67 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             self.assertIsNotNone(outputs.auxiliary_logits)
             self.assertEqual(len(outputs.auxiliary_logits), self.model_tester.num_channels - 1)
+
+    def test_batching_equivalence(self):
+        def equivalence(tensor1, tensor2):
+            return 1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=0).max()
+
+        def recursive_check(batched_object, single_row_object, model_name, key):
+            if isinstance(batched_object, (list, tuple)):
+                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            elif batched_object is None:
+                return
+            else:
+                batched_row = batched_object[:1]
+                self.assertFalse(
+                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                )
+                self.assertTrue(
+                    (equivalence(batched_row, single_row_object)) <= 1e-03,
+                    msg=(
+                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
+                        f"Difference={equivalence(batched_row, single_row_object)}."
+                    ),
+                )
+
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+
+            model_name = model_class.__name__
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            model = model_class(config).to(torch_device).eval()
+            batch_size = self.model_tester.batch_size
+
+            single_row_input = {}
+            for key, value in batched_input_prepared.items():
+                single_batch_shape = value.shape[0] // batch_size
+                single_row_input[key] = value[:single_batch_shape]
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
+
+            for key in model_batched_output:
+                # remove the first zero-init queries to decoder, otherwise cos_similarity = `nan`
+                # no need to check all hidden_states, already checked separately each one
+                if key == "transformer_decoder_hidden_states":
+                    model_batched_output[key] = model_batched_output[key][1:]
+                    model_row_output[key] = model_row_output[key][1:]
+                elif key == "hidden_states":
+                    continue
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
 
 TOLERANCE = 1e-4

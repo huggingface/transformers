@@ -65,7 +65,7 @@ CONFIG_MAPPING = {"2B": gemma_2b_config, "7B": gemma_7b_config}
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 
-def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False):
+def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False, dtype=torch.float32):
     num_attn_heads = config.num_attention_heads
     hidden_size = config.hidden_size
     num_kv_heads = config.num_key_value_heads
@@ -106,6 +106,8 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
             state_dict["lm_head.weight"] = v
         else:
             state_dict[k] = v
+
+    torch.set_default_dtype(dtype)
 
     print("Loading the checkpoint in a Gemma model.")
     with init_empty_weights():
@@ -174,6 +176,11 @@ def main():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--dtype",
+        default="float32",
+        help="Target dtype of the converted model",
+    )
     args = parser.parse_args()
 
     if args.convert_tokenizer:
@@ -184,12 +191,14 @@ def main():
         write_tokenizer(spm_path, args.output_dir, args.push_to_hub)
 
     config = CONFIG_MAPPING[args.model_size]
+    dtype = getattr(torch, args.dtype)
     write_model(
         config=config,
         input_base_path=args.input_checkpoint,
         save_path=args.output_dir,
         safe_serialization=not args.pickle_serialization,
         push_to_hub=args.push_to_hub,
+        dtype=dtype,
     )
 
 

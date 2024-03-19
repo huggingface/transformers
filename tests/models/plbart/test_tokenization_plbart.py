@@ -40,6 +40,7 @@ PYTHON_CODE = 50002
 @require_sentencepiece
 @require_tokenizers
 class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "uclanlp/plbart-base"
     tokenizer_class = PLBartTokenizer
     rust_tokenizer_class = None
     test_rust_tokenizer = False

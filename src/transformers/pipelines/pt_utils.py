@@ -73,7 +73,7 @@ class PipelineIterator(IterableDataset):
         """
         if isinstance(self._loader_batch_data, torch.Tensor):
             # Batch data is simple tensor, just fetch the slice
-            result = self._loader_batch_data[self._loader_batch_index]
+            result = self._loader_batch_data[self._loader_batch_index].unsqueeze(0)
         else:
             # Batch data is assumed to be BaseModelOutput (or dict)
             loader_batched = {}

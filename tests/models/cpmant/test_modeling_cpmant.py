@@ -57,7 +57,7 @@ class CpmAntModelTester:
         prompt_length=8,
         prompt_types=8,
         segment_types=8,
-        init_std=1.0,
+        init_std=0.02,
         return_dict=True,
     ):
         self.parent = parent

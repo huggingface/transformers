@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class TestTokenizationLED(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "allenai/led-base-16384"
     tokenizer_class = LEDTokenizer
     rust_tokenizer_class = LEDTokenizerFast
     test_rust_tokenizer = True

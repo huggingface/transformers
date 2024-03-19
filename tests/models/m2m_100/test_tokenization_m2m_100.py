@@ -48,6 +48,7 @@ FR_CODE = 128028
 
 @require_sentencepiece
 class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/m2m100_418M"
     tokenizer_class = M2M100Tokenizer
     test_rust_tokenizer = False
     test_seq2seq = False

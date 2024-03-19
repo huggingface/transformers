@@ -1146,10 +1146,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
         # decoder cannot keep gradients
         return
 
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass
-
 
 @require_torch
 class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):

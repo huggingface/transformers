@@ -27,7 +27,7 @@ The abstract from the paper is the following:
 Tips:
 - One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
 - It's highly advisable to pass `num_labels` (not considering background) during preprocessing and postprocessing with [`SegGptImageProcessor`] for your use case.
-- When doing infenrece with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
+- When doing inference with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
 
 Here's how to use the model for one-shot semantic segmentation:
 

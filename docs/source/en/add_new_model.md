@@ -89,8 +89,8 @@ model.config  # model has access to its config
 Similar to the model, the configuration inherits basic serialization and deserialization functionalities from
 [`PretrainedConfig`]. Note that the configuration and the model are always serialized into two
 different formats - the model to a *pytorch_model.bin* file and the configuration to a *config.json* file. Calling
-[`~PreTrainedModel.save_pretrained`] will automatically call
-[`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
+the model's [`~PreTrainedModel.save_pretrained`] will automatically call
+the config's [`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
 
 
 ### Code style

@@ -56,6 +56,8 @@
     title: Compartir modelos personalizados
   - local: run_scripts
     title: Entrenamiento con scripts
+  - local: chat_templating
+    title: Plantillas para Modelos de Chat
   - local: trainer
     title: Entrenador
   - local: sagemaker
@@ -90,6 +92,8 @@
     title: Lo que 🤗 Transformers puede hacer
   - local: tasks_explained
     title: Como los 🤗 Transformers resuelven tareas
+  - local: attention
+    title: Mecanismos de atención
   - local: pad_truncation
     title: Relleno y truncamiento
   - local: bertology

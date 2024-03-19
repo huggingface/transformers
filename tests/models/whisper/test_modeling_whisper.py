@@ -190,7 +190,7 @@ class WhisperModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=60,
         is_training=True,
         use_labels=False,
@@ -1446,6 +1446,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"].to(torch_device)
+        input_features = input_features[:2]
 
         # len = 250 with num_input_frames = 60
         long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
@@ -2626,7 +2627,7 @@ class WhisperEncoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden layers
         seq_length=60,
         is_training=True,
         use_labels=True,
@@ -2997,7 +2998,7 @@ class WhisperStandaloneDecoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=3,  # need batch_size != num_hidden layers
         is_training=True,
         use_labels=False,
         vocab_size=200,
@@ -3229,8 +3230,4 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
 
     @unittest.skip("The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
         pass

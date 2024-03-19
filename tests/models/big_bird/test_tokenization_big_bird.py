@@ -30,6 +30,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/bigbird-roberta-base"
     tokenizer_class = BigBirdTokenizer
     rust_tokenizer_class = BigBirdTokenizerFast
     test_rust_tokenizer = True

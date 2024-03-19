@@ -216,6 +216,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
+    @unittest.skip("VITS is not deterministic")
+    def test_batching_equivalence(self):
+        pass
+
     @is_flaky(
         max_attempts=3,
         description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range",
