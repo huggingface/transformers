@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,14 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+# rely on isort to merge the imports
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
-    "configuration_superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig", "SuperGlueOnnxConfig"]
+    "configuration_superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig"]
 }
+
 
 try:
     if not is_torch_available():
@@ -32,14 +30,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_superglue"] = [
         "SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SuperGlueForImageClassification",
         "SuperGlueModel",
         "SuperGluePreTrainedModel",
-        "SuperGlueBackbone",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_superglue import SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperGlueConfig, SuperGlueOnnxConfig
+    from .configuration_superglue import SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperGlueConfig
 
     try:
         if not is_torch_available():
@@ -49,8 +45,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_superglue import (
             SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SuperGlueBackbone,
-            SuperGlueForImageClassification,
             SuperGlueModel,
             SuperGluePreTrainedModel,
         )
