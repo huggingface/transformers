@@ -427,7 +427,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+                selected_image_feature = image_outputs.hidden_states[
+                    vision_feature_layer
+                ]
+                
 
                 if vision_feature_select_strategy == "default":
                     selected_image_feature = selected_image_feature[:, 1:]
