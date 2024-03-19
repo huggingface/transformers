@@ -2230,22 +2230,22 @@ class WatermarkLogitsProcessor(LogitsProcessor):
             The model tokenizer's vocab_size. Used to calculate "green" tokens ratio.
         device (`str`):
             The device where model is allocated.
-        greenlist_ratio (`float`, optional):
+        greenlist_ratio (`float`, optional, *optional*, defaults to 0.25):
             The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
-        bias (`float`, optional):
+        bias (`float`, optional, *optional*, defaults to 2.0):
             The bias added to the selected "green" tokens' logits. Consider lowering the
             `bias` if the text generation quality degrades. Recommended values are in the
             range of [0.5, 2.0]. Defaults to 2.0.
-        hashing_key (`int`, optional):
+        hashing_key (`int`, optional, *optional*, defaults to 15485863):
             Key used for hashing. If you deploy this watermark, we advise using another private key.
             Defaults to 15485863 (the millionth prime).
-        seeding_scheme (`str`, optional):
+        seeding_scheme (`str`, optional, *optional*, defaults to `"lefthash"`):
             The seeding scheme used for selecting "green" tokens. Accepts values:
                 - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from paper)
                 - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from paper)
                     The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
-        context_width(`int`):
             The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
+        context_width (`int`, *optional*, defaults to 1): <fill_docstring>
 
     Examples:
 
