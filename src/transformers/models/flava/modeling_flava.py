@@ -1415,8 +1415,18 @@ class FlavaModel(FlavaPreTrainedModel):
         multimodal_embeddings = None
         multimodal_output = None
         if image_mm_projection is not None and text_mm_projection is not None and not skip_multimodal_encoder:
+            if attention_mask is not None:
+                batch_size, seq_len, _ = image_mm_projection.shape
+                if self.multimodal_model.use_cls_token:
+                    seq_len += 1
+                attention_mask_image = torch.ones(batch_size, seq_len, device=image_mm_projection.device)
+                attention_multimodal = torch.cat([attention_mask_image, attention_mask], dim=1)
+            else:
+                attention_multimodal = None
             multimodal_input = torch.cat([image_mm_projection, text_mm_projection], dim=1)
-            multimodal_output = self.multimodal_model(multimodal_input, return_dict=return_dict)
+            multimodal_output = self.multimodal_model(
+                multimodal_input, attention_mask=attention_multimodal, return_dict=return_dict
+            )
             multimodal_embeddings = multimodal_output[0]
 
         if not return_dict:

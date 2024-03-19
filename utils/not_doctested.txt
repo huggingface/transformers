@@ -176,6 +176,7 @@ docs/source/en/model_doc/mpt.md
 docs/source/en/model_doc/mra.md
 docs/source/en/model_doc/mt5.md
 docs/source/en/model_doc/musicgen.md
+docs/source/en/model_doc/musicgen_melody.md
 docs/source/en/model_doc/mvp.md
 docs/source/en/model_doc/nat.md
 docs/source/en/model_doc/nezha.md
@@ -706,6 +707,7 @@ src/transformers/models/mt5/modeling_flax_mt5.py
 src/transformers/models/mt5/modeling_mt5.py
 src/transformers/models/mt5/modeling_tf_mt5.py
 src/transformers/models/musicgen/convert_musicgen_transformers.py
+src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py
 src/transformers/models/mvp/modeling_mvp.py
 src/transformers/models/nezha/modeling_nezha.py
 src/transformers/models/nllb_moe/configuration_nllb_moe.py
@@ -784,7 +786,7 @@ src/transformers/models/rwkv/configuration_rwkv.py
 src/transformers/models/rwkv/convert_rwkv_checkpoint_to_hf.py
 src/transformers/models/rwkv/modeling_rwkv.py
 src/transformers/models/sam/configuration_sam.py
-src/transformers/models/sam/convert_sam_original_to_hf_format.py
+src/transformers/models/sam/convert_sam_to_hf.py
 src/transformers/models/sam/image_processing_sam.py
 src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
