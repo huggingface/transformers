@@ -1397,7 +1397,9 @@ class RTDetrHybridEncoder(nn.Module):
             feat_low = fpn_states[-1]
             feat_high = fpn_feature_maps[idx + 1]
             downsample_feat = self.downsample_convs[idx](feat_low)
-            hidden_states = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
+            hidden_states = self.pan_blocks[idx](
+                torch.concat([downsample_feat, feat_high.to(downsample_feat.device)], dim=1)
+            )
             fpn_states.append(hidden_states)
 
         if not return_dict:
@@ -2226,7 +2228,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = ["bbox_embed", "class_embed"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
-    _no_split_modules = None
 
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
