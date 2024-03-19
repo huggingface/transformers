@@ -493,7 +493,9 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
         )
 
         data = jnp.ones((all_update_indices.shape[0],), dtype=jnp.uint16)
-        data = data * (jnp.arange(data.shape[0]) < batch_size * (cur_len - (self.ngram_size - 1)))  # ignore the n-grams not yet generated
+        data = data * (
+            jnp.arange(data.shape[0]) < batch_size * (cur_len - (self.ngram_size - 1))
+        )  # ignore the n-grams not yet generated
 
         return sparse.BCOO((data, all_update_indices), shape=(batch_size,) + (vocab_size,) * self.ngram_size)
 
