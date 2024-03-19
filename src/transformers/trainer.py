@@ -1241,7 +1241,9 @@ class Trainer:
             galore_params = []
             galore_params_names = []
             for module_name, module in model.named_modules():
-                target_module_exists, is_regex = check_target_module_exists(args.optim_target_modules, module_name)
+                target_module_exists, is_regex = check_target_module_exists(
+                    args.optim_target_modules, module_name, return_is_regex=True
+                )
 
                 if not isinstance(module, nn.Linear):
                     # Warn in case we match but it's not a linear layer

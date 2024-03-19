@@ -787,7 +787,7 @@ class RemoveColumnsCollator:
         return self.data_collator(features)
 
 
-def check_target_module_exists(optim_target_modules, key: str):
+def check_target_module_exists(optim_target_modules, key: str, return_is_regex: bool = False):
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
@@ -795,6 +795,9 @@ def check_target_module_exists(optim_target_modules, key: str):
             A list of strings to try to match. Can be also a full string.
         key (`str`):
             A key to search any matches in optim_target_modules
+        return_is_regex (`bool`):
+            If set to `True`, the method will return whether the passed `optim_target_modules`
+            is a regex or not.
 
     Returns:
         `bool` : True of match object if key matches any target modules from config, False or
@@ -817,4 +820,7 @@ def check_target_module_exists(optim_target_modules, key: str):
         target_module_found = True
         is_regex = True
 
-    return target_module_found, is_regex
+    if return_is_regex:
+        return target_module_found, is_regex
+
+    return target_module_found
