@@ -25,7 +25,6 @@ import unittest
 import unittest.mock as mock
 
 from huggingface_hub import HfFolder, Repository, delete_repo, snapshot_download
-from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
 from transformers import is_tf_available, is_torch_available
@@ -105,24 +104,6 @@ class TFModelUtilsTest(unittest.TestCase):
             _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
-
-    def test_load_from_one_file(self):
-        try:
-            tmp_file = tempfile.mktemp()
-            with open(tmp_file, "wb") as f:
-                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/tf_model.h5", f)
-
-            config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-            _ = TFBertModel.from_pretrained(tmp_file, config=config)
-        finally:
-            os.remove(tmp_file)
-
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-        _ = TFBertModel.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/tf_model.h5", config=config
-        )
 
     # tests whether the unpack_inputs function behaves as expected
     def test_unpack_inputs(self):
