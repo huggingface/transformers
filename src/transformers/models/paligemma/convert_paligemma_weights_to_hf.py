@@ -19,39 +19,40 @@
 import argparse
 import collections
 
-import numpy as np
 import torch
 from numpy import load
 from PIL import Image
 
-from transformers import AutoTokenizer, PaLIGemmaConfig, PaLIGemmaForConditionalGeneration, SiglipImageProcessor, PaLIGemmaProcessor
-from transformers.image_processing_utils import BatchFeature
-from transformers.image_transforms import normalize, rescale, to_channel_dimension_format
-from transformers.image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    infer_channel_dimension_format,
+from transformers import (
+    AutoTokenizer,
+    PaLIGemmaConfig,
+    PaLIGemmaForConditionalGeneration,
+    PaLIGemmaProcessor,
+    SiglipImageProcessor,
 )
 from transformers.utils import logging
 
-device = 'cpu'
+
+device = "cpu"
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-PALIGEMMA_VARIANTS = ['2b']  # TODO add 7b when available
+PALIGEMMA_VARIANTS = ["2b"]  # TODO add 7b when available
 
-def get_paligemma_config(variant:str):
+
+def get_paligemma_config(variant: str):
     config = PaLIGemmaConfig()
 
-    if variant=='2b':
+    if variant == "2b":
         vocab_size = 257152
         image_size = 224
         patch_size = 14
         config.vision_config.image_size = image_size
         config.vision_config.patch_size = patch_size
-        config.vision_config.num_image_tokens = int(config.vision_config.image_size**2 / config.vision_config.patch_size**2)
+        config.vision_config.num_image_tokens = int(
+            config.vision_config.image_size**2 / config.vision_config.patch_size**2
+        )
         config.vision_config.hidden_size = 1152
         config.vision_config.intermediate_size = 4304
         config.vision_config.num_hidden_layers = 27
@@ -192,7 +193,7 @@ def slice_state_dict(state_dict, config):
 
         # output projection.
 
-        # llm_attention_attn_vec_einsum[i].shape = (8, 256, 2048) 
+        # llm_attention_attn_vec_einsum[i].shape = (8, 256, 2048)
         o_proj_weight_reshaped = llm_attention_attn_vec_einsum[i].transpose(2, 0, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
         state_dict[f"language_model.model.layers.{i}.self_attn.o_proj.weight"] = o_proj_weight_reshaped
@@ -237,7 +238,7 @@ def verify_logits(model, processor):
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
     with torch.inference_mode():
         outputs = model(**model_inputs)
-        
+
         manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
         next_token_id = torch.argmax(manual_probs, dim=-1)
         if processor.decode(next_token_id[0]) != "beach":
@@ -245,7 +246,7 @@ def verify_logits(model, processor):
         else:
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
-        '''
+        """
         # Skipping logit verification for now
 
         if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
@@ -253,25 +254,25 @@ def verify_logits(model, processor):
         else:
             print("Full forward pass works. Amazing!")
 
-        '''
-        raw_generation = model.generate(
-            **model_inputs,
-            max_new_tokens=10
-        )
+        """
+        raw_generation = model.generate(**model_inputs, max_new_tokens=10)
 
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
-        
-        if generated_output[0] != 'answer en Where is the cow standing?\nbeach':
+
+        if generated_output[0] != "answer en Where is the cow standing?\nbeach":
             raise ValueError("Generation does not match.")
-        elif generated_output[1] != 'cow on the beach in the morning':
+        elif generated_output[1] != "cow on the beach in the morning":
             # This checks that empty prompt gets an image captioning task (in English).
             # TODO check with original team that this is intended output
             raise ValueError("Image captioning does not match.")
         else:
             print("Generation matches. You're almost done!")
 
+
 @torch.no_grad()
-def convert_paligemma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:str, do_verify_logits=True, do_convert_weights=False):
+def convert_paligemma_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, variant: str, do_verify_logits=True, do_convert_weights=False
+):
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
@@ -280,17 +281,17 @@ def convert_paligemma_checkpoint(checkpoint_path, pytorch_dump_folder_path, vari
     if variant == "2b":
         tokenizer_id = "google/gemma-2b"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-    #tokenizer.padding_side = 'right'
+    # tokenizer.padding_side = 'right'
     # TODO do we keep left-padding here? It seems to work alright.
-    
+
     image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
     if variant == "2b":
-        image_processor.size = {"width":224, "height":224}
+        image_processor.size = {"width": 224, "height": 224}
 
     processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     if do_convert_weights:
-        checkpoint_path = "/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz" 
+        checkpoint_path = "/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz"
         data = load(checkpoint_path)
         state_dict = flatten_nested_dict(data)
         del data
@@ -309,6 +310,7 @@ def convert_paligemma_checkpoint(checkpoint_path, pytorch_dump_folder_path, vari
         verify_logits(model, processor)
         model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
@@ -319,7 +321,10 @@ if __name__ == "__main__":
         help="Path to the .npz checkpoint",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="/home/ubuntu/paligemma_hf", type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default="/home/ubuntu/paligemma_hf",
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     parser.add_argument(
@@ -327,7 +332,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--do_verify_logits", action="store_false", help="Whether or not to run checks against original implementation."
+        "--do_verify_logits",
+        action="store_false",
+        help="Whether or not to run checks against original implementation.",
     )
     parser.add_argument(
         "--do_convert_weights", action="store_false", help="Whether or not to reload and convert the weights."
@@ -340,4 +347,4 @@ if __name__ == "__main__":
         variant=args.variant,
         do_verify_logits=args.do_verify_logits,
         do_convert_weights=args.do_convert_weights,
-        )
+    )

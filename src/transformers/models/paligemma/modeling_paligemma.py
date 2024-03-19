@@ -20,58 +20,29 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
-from ...cache_utils import Cache, DynamicCache, StaticCache
-
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...cache_utils import Cache
+from ...modeling_outputs import (
+    BaseModelOutput,
+)
 from ...modeling_utils import PreTrainedModel
-from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
-from ..gemma.configuration_gemma import GemmaConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from ..auto import AutoModelForCausalLM
-from .configuration_paligemma import PaLIGemmaConfig
-import math
-import warnings
-from typing import List, Optional, Tuple, Union
-
-import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
-from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-    _prepare_4d_causal_attention_mask,
-)
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_torch_fx_available
+from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
+from .configuration_paligemma import PaLIGemmaConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 from .language_modeling_paligemma import PaLIGemmaLanguageForCausalLM
+
 
 logger = logging.get_logger(__name__)
 
@@ -96,7 +67,6 @@ PALIGEMMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
 
 
 class PaLIGemmaSiglipVisionTransformer(nn.Module):
@@ -380,17 +350,16 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         # Here input_embeds is strictly the text embedding, unscaled. They need to be scaled before concatenation.
 
         _, num_image_tokens, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-        #left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
+        # left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # Compute the maximum embed dimension
         # max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        full_sequence_length = num_image_tokens + sequence_length # sequence length includes padding
-        
+        full_sequence_length = num_image_tokens + sequence_length  # sequence length includes padding
+
         # 3. Create the full embedding, already padded
         final_embedding = torch.zeros(
             batch_size, full_sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -400,10 +369,13 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         )
         if labels is not None:
             final_labels = torch.full(
-                (batch_size, full_sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+                (batch_size, full_sequence_length),
+                self.config.ignore_index,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
             )
-        final_embedding[:, 0:num_image_tokens] = image_features # We expect an image for all elements of a batch
-        final_embedding[:, num_image_tokens:full_sequence_length] = (self.config.hidden_size)**0.5 * inputs_embeds
+        final_embedding[:, 0:num_image_tokens] = image_features  # We expect an image for all elements of a batch
+        final_embedding[:, num_image_tokens:full_sequence_length] = (self.config.hidden_size) ** 0.5 * inputs_embeds
 
         final_attention_mask[:, 0:num_image_tokens] = 1
         final_attention_mask[:, num_image_tokens:full_sequence_length] = attention_mask
@@ -413,7 +385,6 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         if labels is None:
             final_labels = None
         return final_embedding, final_attention_mask, final_labels, position_ids
-    
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaLIGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

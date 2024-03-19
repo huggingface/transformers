@@ -31,8 +31,7 @@ else:
         "PaLIGemmaPreTrainedModel",
     ]
     _import_structure["processing_paligemma"] = ["PaLIGemmaProcessor"]
-    _import_structure["language_modeling_paligemma"] = ["PaLIGemmaLanguageModel",
-                                                    "PaLIGemmaLanguageForCausalLM"]
+    _import_structure["language_modeling_paligemma"] = ["PaLIGemmaLanguageModel", "PaLIGemmaLanguageForCausalLM"]
 
 
 if TYPE_CHECKING:
@@ -44,13 +43,13 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .language_modeling_paligemma import PaLIGemmaLanguageForCausalLM, PaLIGemmaLanguageModel
         from .modeling_paligemma import (
             PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
             PaLIGemmaForConditionalGeneration,
             PaLIGemmaPreTrainedModel,
         )
         from .processing_paligemma import PaLIGemmaProcessor
-        from .language_modeling_paligemma import PaLIGemmaLanguageModel, PaLIGemmaLanguageForCausalLM
 
 
 else:

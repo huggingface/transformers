@@ -17,6 +17,7 @@ Processor class for PaLIGemma.
 """
 
 
+import logging
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -24,9 +25,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
-import logging
+
 
 logger = logging.getLogger(__name__)
+
 
 class PaLIGemmaProcessor(ProcessorMixin):
     r"""
@@ -107,12 +109,16 @@ class PaLIGemmaProcessor(ProcessorMixin):
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaLIGemmaProcessor` instance.")
         if text is None:
-            logger.warning_once("You are using PaLIGemmawithout text prefix. It will perform as a picture-captioning model.")
+            logger.warning_once(
+                "You are using PaLIGemmawithout text prefix. It will perform as a picture-captioning model."
+            )
 
         if isinstance(text, List) and isinstance(images, List):
             if len(images) < len(text):
-                raise ValueError(f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image.")
-            
+                raise ValueError(
+                    f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image."
+                )
+
         pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length

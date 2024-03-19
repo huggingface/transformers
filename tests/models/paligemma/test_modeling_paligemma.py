@@ -223,7 +223,9 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
 
-        model = PaLIGemmaForConditionalGeneration.from_pretrained("paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True)
+        model = PaLIGemmaForConditionalGeneration.from_pretrained(
+            "paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
@@ -245,7 +247,9 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
 
-        model = PaLIGemmaForConditionalGeneration.from_pretrained("paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True)
+        model = PaLIGemmaForConditionalGeneration.from_pretrained(
+            "paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [

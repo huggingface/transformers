@@ -46,7 +46,7 @@ from ..gemma.configuration_gemma import GemmaConfig
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
@@ -556,7 +556,7 @@ class PaLIGemmaLanguageSdpaAttention(PaLIGemmaLanguageAttention):
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
-        
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query=query_states,
             key=key_states,
@@ -878,10 +878,10 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        
-        #causal_mask = attention_mask
+
+        # causal_mask = attention_mask
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_key_values)
-        
+
         # embed positions
         hidden_states = inputs_embeds
 
@@ -966,7 +966,6 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
         if seq_length > self.causal_mask.shape[-1]:
             causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-        
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
@@ -979,11 +978,11 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
         if past_key_values is not None:
-            # If we are at first generation, we need to do full block attention for the whole prefix. 
+            # If we are at first generation, we need to do full block attention for the whole prefix.
             # However, if past_key_values is not None, it means
-            # we already generated one pass of tokens. 
+            # we already generated one pass of tokens.
             # Then, don't change attention mask, keep it causal for new tokens.
-            
+
             block_sizes = attention_mask.sum(dim=1)
 
             # block attention on prefix tokens, triangular after.
@@ -996,20 +995,24 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
                 causal_mask[b, :, :, :block_size] = 0
 
                 for i in range(block_size, seq_length):
-                    causal_mask[b, :, i, :block_size] = 0 
-                    causal_mask[b, :, i, block_size:i+1] = 0 
+                    causal_mask[b, :, i, :block_size] = 0
+                    causal_mask[b, :, i, block_size:i+1] = 0
             """
-            causal_mask = torch.full((batch_size, 1, self.causal_mask.shape[-1], self.causal_mask.shape[-1]), fill_value=-3.4028e+38, dtype=torch.float32)
+            causal_mask = torch.full(
+                (batch_size, 1, self.causal_mask.shape[-1], self.causal_mask.shape[-1]),
+                fill_value=-3.4028e38,
+                dtype=torch.float32,
+            )
 
             for b in range(batch_size):
                 non_padding_length = block_sizes[b].item()
                 causal_mask[b, :, :, :non_padding_length] = 0
-                
+
                 for i in range(non_padding_length, self.causal_mask.shape[-1]):
-                    causal_mask[b, :, i, :i+1] = 0  
+                    causal_mask[b, :, i, : i + 1] = 0
 
         if (
-              self.config._attn_implementation == "sdpa"
+            self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
         ):
