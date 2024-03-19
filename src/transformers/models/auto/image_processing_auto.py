@@ -112,6 +112,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("udop", "LayoutLMv3ImageProcessor"),
         ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
+        ("video_llava", "VideoLlavaImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
         ("vipllava", "CLIPImageProcessor"),
