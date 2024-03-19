@@ -752,6 +752,8 @@
         title: OWL-ViT
       - local: model_doc/owlv2
         title: OWLv2
+      - local: model_doc/paligemma
+        title: PaLIGemma
       - local: model_doc/palma
         title: Palma
       - local: model_doc/perceiver

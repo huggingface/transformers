@@ -554,6 +554,10 @@ _import_structure = {
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
     ],
+    "models.paligemma": [
+        "PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PaLIGemmaConfig",
+    ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -2517,6 +2521,14 @@ else:
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
             "LlavaProcessor",
+        ]
+    )
+    _import_structure["models.paligemma"].extend(
+        [
+            "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PaLIGemmaForConditionalGeneration",
+            "PaLIGemmaPreTrainedModel",
+            "PaLIGemmaProcessor",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5349,6 +5361,10 @@ if TYPE_CHECKING:
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
     )
+    from .models.paligemma import (
+        PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PaLIGemmaConfig,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -7110,6 +7126,12 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
             LlavaProcessor,
+        )
+        from .models.paligemma import (
+            PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PaLIGemmaForConditionalGeneration,
+            PaLIGemmaPreTrainedModel,
+            PaLIGemmaProcessor,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
