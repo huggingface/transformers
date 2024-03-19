@@ -989,34 +989,12 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
             # block attention on prefix tokens, triangular after.
             # causal_mask.fill_(-3.4028e38)
 
-            
-            # 
-
             for b in range(batch_size):
                 block_size = block_sizes[b].item()
-
-                # Full block attention for the prefix
                 causal_mask[b, :, :block_size, :block_size] = 0
-                
-                # Causal attention pattern starts right after block_size
                 for i in range(block_size, seq_length):
-                    # This creates a triangular pattern of allowed attention
                     causal_mask[b, :, i, :i+1] = 0
 
-            """
-            for b in range(batch_size):
-                block_size = block_sizes[b]
-
-                causal_mask[b, :, :block_size, :block_size] = 0
-                
-                for i in range(block_size, seq_length):
-                    # Apply causal attention, up to the end of actual sequence length without padding
-                    end_of_attention = min(seq_length, block_sizes[b].item())
-                    causal_mask[b, :, i, :end_of_attention] = 0
-                    # Beyond the actual content, ensure it's blocked
-                    if end_of_attention < seq_length:
-                        causal_mask[b, :, i, end_of_attention:] = float('-inf')
-                    """
             breakpoint()
 
 
