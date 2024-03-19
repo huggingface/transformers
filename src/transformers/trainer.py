@@ -1240,16 +1240,18 @@ class Trainer:
             galore_params = []
             galore_params_names = []
             for module_name, module in model.named_modules():
+                target_module_exists, is_regex = check_target_module_exists(args.optim_target_modules, module_name)
+
                 if not isinstance(module, nn.Linear):
                     # Warn in case we match but it's not a linear layer
-                    if check_target_module_exists(args.optim_target_modules, module_name):
+                    if target_module_exists and not is_regex:
                         logger.warning(
-                            f"{module_name} has been matched but ignored as GaLore only supports linear layers. If you passed a regex `.*.attn.*` this is expected, otherwise please double check your `optim_target_modules`!"
+                            f"{module_name} has been matched but ignored as GaLore only supports linear layers. Please double check your `optim_target_modules`!"
                         )
 
                     continue
 
-                if not check_target_module_exists(args.optim_target_modules, module_name) and not all_linear:
+                if not target_module_exists and not all_linear:
                     continue
 
                 galore_params.append(module.weight)

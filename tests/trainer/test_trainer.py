@@ -1109,8 +1109,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_values = [False, True, False, True]
 
         for expected_value, module_name in zip(expected_values, module_names):
-            is_module_matched = check_target_module_exists(regex_patterns, module_name)
+            is_module_matched, is_regex = check_target_module_exists(regex_patterns, module_name)
             self.assertTrue(is_module_matched == expected_value)
+            if is_module_matched:
+                self.assertTrue(is_regex)
 
         exact_patterns = ["q_proj", "up_proj"]
 
@@ -1123,8 +1125,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_values = [False, True, False, True]
 
         for expected_value, module_name in zip(expected_values, module_names):
-            is_module_matched = check_target_module_exists(exact_patterns, module_name)
+            is_module_matched, is_regex = check_target_module_exists(exact_patterns, module_name)
             self.assertTrue(is_module_matched == expected_value)
+            if is_module_matched:
+                self.assertFalse(is_regex)
 
         simple_regex = r".*.attn.*"
 
@@ -1137,8 +1141,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_values = [False, True, False, False]
 
         for expected_value, module_name in zip(expected_values, module_names):
-            is_module_matched = check_target_module_exists(simple_regex, module_name)
+            is_module_matched, is_regex = check_target_module_exists(simple_regex, module_name)
             self.assertTrue(is_module_matched == expected_value)
+            if is_module_matched:
+                self.assertTrue(is_regex)
 
         simple_regex = "model.transformer.h.0.attn.q_proj"
 
@@ -1151,8 +1157,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_values = [False, True, False, False]
 
         for expected_value, module_name in zip(expected_values, module_names):
-            is_module_matched = check_target_module_exists(simple_regex, module_name)
+            is_module_matched, is_regex = check_target_module_exists(simple_regex, module_name)
             self.assertTrue(is_module_matched == expected_value)
+            if is_module_matched:
+                self.assertFalse(is_regex)
 
         target_modules = ["attn", "mlp"]
 
@@ -1165,8 +1173,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_values = [False, True, False, True]
 
         for expected_value, module_name in zip(expected_values, module_names):
-            is_module_matched = check_target_module_exists(target_modules, module_name)
+            is_module_matched, is_regex = check_target_module_exists(target_modules, module_name)
             self.assertTrue(is_module_matched == expected_value)
+            if is_module_matched:
+                self.assertFalse(is_regex)
 
     @require_galore_torch
     @require_torch_gpu
