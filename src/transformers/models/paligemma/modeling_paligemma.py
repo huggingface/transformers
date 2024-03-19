@@ -556,7 +556,6 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
     ):
-        print("Preparing inputs....")
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()

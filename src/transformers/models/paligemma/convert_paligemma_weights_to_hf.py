@@ -254,14 +254,19 @@ def verify_logits(model, processor):
             print("Full forward pass works. Amazing!")
 
         '''
-        generation = processor.decode(
-            model.generate(
-                **model_inputs,
-                max_new_tokens=10,
-                )[0]
-            )
-        if generation != "beach":
+        raw_generation = model.generate(
+            **model_inputs,
+            max_new_tokens=10
+        )
+
+        generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
+        
+        if generated_output[0] != 'answer en Where is the cow standing?\nbeach':
             raise ValueError("Generation does not match.")
+        elif generated_output[1] != 'cow on the beach in the morning':
+            # This checks that empty prompt gets an image captioning task (in English).
+            # TODO check with original team that this is intended output
+            raise ValueError("Image captioning does not match.")
         else:
             print("Generation matches. You're almost done!")
 
@@ -276,6 +281,7 @@ def convert_paligemma_checkpoint(checkpoint_path, pytorch_dump_folder_path, vari
         tokenizer_id = "google/gemma-2b"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
     #tokenizer.padding_side = 'right'
+    # TODO do we keep left-padding here? It seems to work alright.
     
     image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
     if variant == "2b":

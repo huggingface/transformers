@@ -999,13 +999,13 @@ class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
                     causal_mask[b, :, i, :block_size] = 0 
                     causal_mask[b, :, i, block_size:i+1] = 0 
             """
-            causal_mask = torch.full((batch_size, 1, seq_length, seq_length), fill_value=-3.4028e+38, dtype=torch.float32)
+            causal_mask = torch.full((batch_size, 1, self.causal_mask.shape[-1], self.causal_mask.shape[-1]), fill_value=-3.4028e+38, dtype=torch.float32)
 
             for b in range(batch_size):
                 non_padding_length = block_sizes[b].item()
                 causal_mask[b, :, :, :non_padding_length] = 0
                 
-                for i in range(non_padding_length, seq_length):
+                for i in range(non_padding_length, self.causal_mask.shape[-1]):
                     causal_mask[b, :, i, :i+1] = 0  
 
         if (
