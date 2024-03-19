@@ -675,10 +675,6 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
-    "models.palma": [
-        "PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PalmaConfig",
-    ],
     "models.patchtsmixer": [
         "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "PatchTSMixerConfig",
@@ -2886,14 +2882,6 @@ else:
             "OwlViTPreTrainedModel",
             "OwlViTTextModel",
             "OwlViTVisionModel",
-        ]
-    )
-    _import_structure["models.palma"].extend(
-        [
-            "PALMA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PalmaForConditionalGeneration",
-            "PalmaPreTrainedModel",
-            "PalmaProcessor",
         ]
     )
     _import_structure["models.patchtsmixer"].extend(
@@ -5481,10 +5469,6 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
-    from .models.palma import (
-        PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        PalmaConfig,
-    )
     from .models.patchtsmixer import (
         PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PatchTSMixerConfig,
@@ -7426,12 +7410,6 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
-        )
-        from .models.palma import (
-            PALMA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PalmaForConditionalGeneration,
-            PalmaPreTrainedModel,
-            PalmaProcessor,
         )
         from .models.patchtsmixer import (
             PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,

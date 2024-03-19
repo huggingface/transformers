@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PalmaGemma model."""
+""" PyTorch PaLIGemmaLanguage model."""
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -42,7 +42,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_fx_available
-from ...models.gemma.configuration_gemma import GemmaConfig
+from ..gemma.configuration_gemma import GemmaConfig
 
 
 if is_flash_attn_2_available():
@@ -76,7 +76,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class PalmaGemmaRMSNorm(nn.Module):
+class PaLIGemmaLanguageRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
@@ -90,10 +90,10 @@ class PalmaGemmaRMSNorm(nn.Module):
         return output * (1 + self.weight)
 
 
-ALL_LAYERNORM_LAYERS.append(PalmaGemmaRMSNorm)
+ALL_LAYERNORM_LAYERS.append(PaLIGemmaLanguageRMSNorm)
 
 
-class PalmaGemmaRotaryEmbedding(nn.Module):
+class PaLIGemmaLanguageRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -159,8 +159,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->PalmaGemma
-class PalmaGemmaMLP(nn.Module):
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->PaLIGemmaLanguage
+class PaLIGemmaLanguageMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -188,7 +188,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class PalmaGemmaAttention(nn.Module):
+class PaLIGemmaLanguageAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # Ignore copy
@@ -223,7 +223,7 @@ class PalmaGemmaAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        self.rotary_emb = PalmaGemmaRotaryEmbedding(
+        self.rotary_emb = PaLIGemmaLanguageRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
@@ -292,10 +292,10 @@ class PalmaGemmaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->PalmaGemma
-class PalmaGemmaFlashAttention2(PalmaGemmaAttention):
+# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->PaLIGemmaLanguage
+class PaLIGemmaLanguageFlashAttention2(PaLIGemmaLanguageAttention):
     """
-    PalmaGemma flash attention module. This module inherits from `PalmaGemmaAttention` as the weights of the module stays
+    PaLIGemmaLanguage flash attention module. This module inherits from `PaLIGemmaLanguageAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -357,7 +357,7 @@ class PalmaGemmaFlashAttention2(PalmaGemmaAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (PalmaGemmaRMSNorm handles it correctly)
+        # in fp32. (PaLIGemmaLanguageRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -416,7 +416,7 @@ class PalmaGemmaFlashAttention2(PalmaGemmaAttention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in PalmaGemmaFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in PaLIGemmaLanguageFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -489,11 +489,11 @@ class PalmaGemmaFlashAttention2(PalmaGemmaAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->PalmaGemma
-class PalmaGemmaSdpaAttention(PalmaGemmaAttention):
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->PaLIGemmaLanguage
+class PaLIGemmaLanguageSdpaAttention(PaLIGemmaLanguageAttention):
     """
-    PalmaGemma attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `PalmaGemmaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    PaLIGemmaLanguage attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `PaLIGemmaLanguageAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
@@ -511,7 +511,7 @@ class PalmaGemmaSdpaAttention(PalmaGemmaAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "PalmaGemmaModel is using PalmaGemmaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "PaLIGemmaLanguageModel is using PaLIGemmaLanguageSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -571,23 +571,23 @@ class PalmaGemmaSdpaAttention(PalmaGemmaAttention):
 
 
 GEMMA_ATTENTION_CLASSES = {
-    "eager": PalmaGemmaAttention,
-    "flash_attention_2": PalmaGemmaFlashAttention2,
-    "sdpa": PalmaGemmaSdpaAttention,
+    "eager": PaLIGemmaLanguageAttention,
+    "flash_attention_2": PaLIGemmaLanguageFlashAttention2,
+    "sdpa": PaLIGemmaLanguageSdpaAttention,
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->PalmaGemma
-class PalmaGemmaDecoderLayer(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
+class PaLIGemmaLanguageDecoderLayer(nn.Module):
     def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = GEMMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
-        self.mlp = PalmaGemmaMLP(config)
-        self.input_layernorm = PalmaGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PalmaGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = PaLIGemmaLanguageMLP(config)
+        self.input_layernorm = PaLIGemmaLanguageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = PaLIGemmaLanguageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -671,15 +671,15 @@ GEMMA_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare PalmaGemma Model outputting raw hidden-states without any specific head on top.",
+    "The bare PaLIGemmaLanguage Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
-class PalmaGemmaPreTrainedModel(PreTrainedModel):
+class PaLIGemmaLanguagePreTrainedModel(PreTrainedModel):
     config_class = GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
-    _no_split_modules = ["PalmaGemmaDecoderLayer"]
+    _no_split_modules = ["PaLIGemmaLanguageDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = False
     _supports_sdpa = True
@@ -789,13 +789,13 @@ GEMMA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare PalmaGemma Model outputting raw hidden-states without any specific head on top.",
+    "The bare PaLIGemmaLanguage Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->PalmaGemma
-class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
+class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PalmaGemmaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PaLIGemmaLanguageDecoderLayer`]
 
     Args:
         config: GemmaConfig
@@ -808,9 +808,9 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [PalmaGemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [PaLIGemmaLanguageDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = PalmaGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = PaLIGemmaLanguageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
@@ -886,7 +886,7 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
         hidden_states = inputs_embeds
 
         # normalized
-        # Commented out because image hidden states should not be scaled in palma. Scaling is done in modeling_palma.
+        # Commented out because image hidden states should not be scaled in paligemma. Scaling is done in modeling_paligemma.
         # hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         # decoder layers
@@ -1027,13 +1027,13 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GEMMA,Llama->PalmaGemma,llama->palmagemma
-class PalmaGemmaForCausalLM(PalmaGemmaPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->GEMMA,Llama->PaLIGemmaLanguage,llama->paligemmagemma
+class PaLIGemmaLanguageForCausalLM(PaLIGemmaLanguagePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = PalmaGemmaModel(config)
+        self.model = PaLIGemmaLanguageModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1087,9 +1087,9 @@ class PalmaGemmaForCausalLM(PalmaGemmaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, PalmaGemmaForCausalLM
+        >>> from transformers import AutoTokenizer, PaLIGemmaLanguageForCausalLM
 
-        >>> model = PalmaGemmaForCausalLM.from_pretrained("google/gemma-7b")
+        >>> model = PaLIGemmaLanguageForCausalLM.from_pretrained("google/gemma-7b")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
 
         >>> prompt = "What is your favorite condiment?"
@@ -1237,9 +1237,9 @@ class PalmaGemmaForCausalLM(PalmaGemmaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The PalmaGemma Model transformer with a sequence classification head on top (linear layer).
+    The PaLIGemmaLanguage Model transformer with a sequence classification head on top (linear layer).
 
-    [`PalmaGemmaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`PaLIGemmaLanguageForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1250,12 +1250,12 @@ class PalmaGemmaForCausalLM(PalmaGemmaPreTrainedModel):
     """,
     GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->GEMMA,Llama->PalmaGemma
-class PalmaGemmaForSequenceClassification(PalmaGemmaPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
+class PaLIGemmaLanguageForSequenceClassification(PaLIGemmaLanguagePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = PalmaGemmaModel(config)
+        self.model = PaLIGemmaLanguageModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing

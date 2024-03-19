@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert SigLIP checkpoints from the original repository.
-
-URL: https://github.com/google-research/big_vision/tree/main
+"""Convert PaLIGemma checkpoints from the original repository.
 """
 
 
@@ -26,7 +24,7 @@ import torch
 from numpy import load
 from PIL import Image
 
-from transformers import AutoTokenizer, PalmaConfig, PalmaForConditionalGeneration, SiglipImageProcessor, PalmaProcessor
+from transformers import AutoTokenizer, PaLIGemmaConfig, PaLIGemmaForConditionalGeneration, SiglipImageProcessor, PaLIGemmaProcessor
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import normalize, rescale, to_channel_dimension_format
 from transformers.image_utils import (
@@ -42,10 +40,10 @@ device = 'cpu'
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-PALMA_VARIANTS = ['2b']  # TODO add 7b when available
+PALIGEMMA_VARIANTS = ['2b']  # TODO add 7b when available
 
-def get_palma_config(variant:str):
-    config = PalmaConfig()
+def get_paligemma_config(variant:str):
+    config = PaLIGemmaConfig()
 
     if variant=='2b':
         vocab_size = 257152
@@ -72,7 +70,7 @@ def get_palma_config(variant:str):
         config.eos_token_id = 1
 
     else:
-        raise ValueError(f"Identifier {variant} not supported. Available: {PALMA_VARIANTS}")
+        raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA_VARIANTS}")
     return config
 
 
@@ -268,12 +266,12 @@ def verify_logits(model, processor):
             print("Generation matches. You're almost done!")
 
 @torch.no_grad()
-def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:str, do_verify_logits=True, do_convert_weights=False):
+def convert_paligemma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:str, do_verify_logits=True, do_convert_weights=False):
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
-    # define default Palma configuration
-    config = get_palma_config(variant)
+    # define default PaLIGemmaconfiguration
+    config = get_paligemma_config(variant)
     if variant == "2b":
         tokenizer_id = "google/gemma-2b"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
@@ -283,7 +281,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:
     if variant == "2b":
         image_processor.size = {"width":224, "height":224}
 
-    processor = PalmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     if do_convert_weights:
         checkpoint_path = "/home/ubuntu/gvhf/hf_test_ckpt.bv.params.npz" 
@@ -293,12 +291,12 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
 
-        model = PalmaForConditionalGeneration(config).to(device).eval()
+        model = PaLIGemmaForConditionalGeneration(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
 
     else:
-        model = PalmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
+        model = PaLIGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
 
     if do_verify_logits:
         print("Verifying logits...")
@@ -315,22 +313,22 @@ if __name__ == "__main__":
         help="Path to the .npz checkpoint",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="/home/ubuntu/palma_hf", type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path", default="/home/ubuntu/paligemma_hf", type=str, help="Path to the output PyTorch model directory."
     )
 
     parser.add_argument(
-        "--variant", default="2b", type=str, help="String identifier of the palma variant to convert."
+        "--variant", default="2b", type=str, help="String identifier of the paligemma variant to convert."
     )
 
     parser.add_argument(
         "--do_verify_logits", action="store_false", help="Whether or not to run checks against original implementation."
     )
     parser.add_argument(
-        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
+        "--do_convert_weights", action="store_false", help="Whether or not to reload and convert the weights."
     )
 
     args = parser.parse_args()
-    convert_palma_checkpoint(
+    convert_paligemma_checkpoint(
         checkpoint_path=args.checkpoint_path,
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         variant=args.variant,

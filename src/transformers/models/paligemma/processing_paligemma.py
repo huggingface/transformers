@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for Palma.
+Processor class for PaLIGemma.
 """
 
 
@@ -28,12 +28,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class PalmaProcessor(ProcessorMixin):
+class PaLIGemmaProcessor(ProcessorMixin):
     r"""
-    Constructs a Palma processor which wraps a Palma image processor and a Palma tokenizer into a single processor.
+    Constructs a PaLIGemma processor which wraps a PaLIGemma image processor and a PaLIGemma tokenizer into a single processor.
 
-    [`PalmaProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~PalmaProcessor.__call__`] and [`~PalmaProcessor.decode`] for more information.
+    [`PaLIGemmaProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~PaLIGemmaProcessor.__call__`] and [`~PaLIGemmaProcessor.decode`] for more information.
 
     Args:
         image_processor ([`SiglipImageProcessor`], *optional*):
@@ -105,9 +105,9 @@ class PalmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is None:
-            raise ValueError("`images` are expected as arguments to a `PalmaProcessor` instance.")
+            raise ValueError("`images` are expected as arguments to a `PaLIGemmaProcessor` instance.")
         if text is None:
-            logger.warning_once("You are using Palma without text prefix. It will perform as a picture-captioning model.")
+            logger.warning_once("You are using PaLIGemmawithout text prefix. It will perform as a picture-captioning model.")
 
         if isinstance(text, List) and isinstance(images, List):
             if len(images) < len(text):

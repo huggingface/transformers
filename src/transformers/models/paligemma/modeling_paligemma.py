@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Palma model."""
+""" PyTorch PaLIGemmamodel."""
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -25,9 +25,9 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...models.siglip.configuration_siglip import SiglipVisionConfig
-from ...models.siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
-from ...models.gemma.configuration_gemma import GemmaConfig
+from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
+from ..gemma.configuration_gemma import GemmaConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -36,7 +36,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModelForCausalLM
-from .configuration_palma import PalmaConfig
+from .configuration_paligemma import PaLIGemmaConfig
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -71,18 +71,18 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-from .language_modeling_palma import PalmaGemmaForCausalLM
+from .language_modeling_paligemma import PaLIGemmaLanguageForCausalLM
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PalmaConfig"
+_CONFIG_FOR_DOC = "PaLIGemmaConfig"
 
-PALMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Molbap/model7",
-    # See all Palma models at https://huggingface.co/models?filter=palma
+    # See all PaLIGemmamodels at https://huggingface.co/models?filter=paligemma
 ]
 
-PALMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
+PALIGEMMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
@@ -99,9 +99,9 @@ PALMA_SIGLIP_VISION_INPUTS_DOCSTRING = r"""
 
 
 
-class PalmaSiglipVisionTransformer(nn.Module):
+class PaLIGemmaSiglipVisionTransformer(nn.Module):
     """
-    Modified version of Siglip with a linear head and no pooling, used specifically in Palma.
+    Modified version of Siglip with a linear head and no pooling, used specifically in PaLIGemma.
     """
 
     def __init__(self, config: SiglipVisionConfig):
@@ -113,7 +113,7 @@ class PalmaSiglipVisionTransformer(nn.Module):
         self.encoder = SiglipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(PALMA_SIGLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PALIGEMMA_SIGLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=SiglipVisionConfig)
     def forward(
         self,
@@ -155,10 +155,10 @@ class PalmaSiglipVisionTransformer(nn.Module):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Palma
-class PalmaCausalLMOutputWithPast(ModelOutput):
+# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->PaLIGemma
+class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Palma causal language model (or autoregressive) outputs.
+    Base class for PaLIGemmacausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -197,9 +197,9 @@ class PalmaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->Palma
-class PalmaMultiModalProjector(nn.Module):
-    def __init__(self, config: PalmaConfig):
+# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->PaLIGemma
+class PaLIGemmaMultiModalProjector(nn.Module):
+    def __init__(self, config: PaLIGemmaConfig):
         super().__init__()
         self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
 
@@ -209,7 +209,7 @@ class PalmaMultiModalProjector(nn.Module):
         return hidden_states
 
 
-PALMA_START_DOCSTRING = r"""
+PALIGEMMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -219,7 +219,7 @@ PALMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`PalmaConfig`] or [`PalmaVisionConfig`]):
+        config ([`PaLIGemmaConfig`] or [`PaLIGemmaVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -228,20 +228,20 @@ PALMA_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    PALMA_START_DOCSTRING,
+    PALIGEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->Palma,llava->palma
-class PalmaPreTrainedModel(PreTrainedModel):
-    config_class = PalmaConfig
+# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->PaLIGemma,llava->paligemma
+class PaLIGemmaPreTrainedModel(PreTrainedModel):
+    config_class = PaLIGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PalmaVisionAttention"]
+    _no_split_modules = ["PaLIGemmaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        # important: this ported version of Palma isn't meant for training from scratch - only
+        # important: this ported version of PaLIGemmaisn't meant for training from scratch - only
         # inference and fine-tuning
         std = (
             self.config.initializer_range
@@ -270,7 +270,7 @@ class PalmaPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
 
-PALMA_INPUTS_DOCSTRING = r"""
+PALIGEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -282,7 +282,7 @@ PALMA_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PalmaProcessor`] uses
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaLIGemmaProcessor`] uses
             [`SiglipImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -337,17 +337,17 @@ PALMA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The PALMA model which consists of a vision backbone and a language model.""",
-    PALMA_START_DOCSTRING,
+    """The PALIGEMMA model which consists of a vision backbone and a language model.""",
+    PALIGEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->PALMA,Llava->Palma,llava->palma
-class PalmaForConditionalGeneration(PalmaPreTrainedModel):
-    def __init__(self, config: PalmaConfig):
+# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->PALIGEMMA,Llava->PaLIGemma,llava->paligemma
+class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
+    def __init__(self, config: PaLIGemmaConfig):
         super().__init__(config)
-        self.vision_model = PalmaSiglipVisionTransformer(config=config.vision_config)
-        self.multi_modal_projector = PalmaMultiModalProjector(config)
+        self.vision_model = PaLIGemmaSiglipVisionTransformer(config=config.vision_config)
+        self.multi_modal_projector = PaLIGemmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        self.language_model = PalmaGemmaForCausalLM(config=config.text_config)
+        self.language_model = PaLIGemmaLanguageForCausalLM(config=config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -415,8 +415,8 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         return final_embedding, final_attention_mask, final_labels, position_ids
     
 
-    @add_start_docstrings_to_model_forward(PALMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PalmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PaLIGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -430,7 +430,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PalmaCausalLMOutputWithPast]:
+    ) -> Union[Tuple, PaLIGemmaCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -445,10 +445,10 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, PalmaForConditionalGeneration
+        >>> from transformers import AutoProcessor, PaLIGemmaForConditionalGeneration
 
-        >>> model = PalmaForConditionalGeneration.from_pretrained("palma-hf/palma-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("palma-hf/palma-1.5-7b-hf")
+        >>> model = PaLIGemmaForConditionalGeneration.from_pretrained("paligemma-hf/paligemma-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("paligemma-hf/paligemma-1.5-7b-hf")
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -503,7 +503,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
                     )
 
                     # Filter out only the tokens that can be un-attended, this can happen
-                    # if one uses Palma + Fused modules where the cache on the
+                    # if one uses PaLIGemma+ Fused modules where the cache on the
                     # first iteration is already big enough, or if one passes custom cache
                     valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
                     new_batch_index = batch_index[valid_indices]
@@ -545,7 +545,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return PalmaCausalLMOutputWithPast(
+        return PaLIGemmaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -592,13 +592,9 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
-            print("First pass")
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            print("Next pass")
-
             model_inputs = {"input_ids": input_ids}
-                           # "position_ids": position_ids}
 
         model_inputs.update(
             {

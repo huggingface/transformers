@@ -2413,7 +2413,6 @@ class GenerationMixin:
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            breakpoint()
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -2426,7 +2425,6 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-            breakpoint()
             # pre-process distribution
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
@@ -2451,7 +2449,6 @@ class GenerationMixin:
                     )
 
             # argmax
-            breakpoint()
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
             # finished sentences should have their next token be a padding token

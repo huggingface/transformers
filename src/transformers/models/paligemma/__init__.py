@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_palma": ["PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "PalmaConfig"]}
+_import_structure = {"configuration_paligemma": ["PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "PaLIGemmaConfig"]}
 
 
 try:
@@ -25,18 +25,18 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_palma"] = [
-        "PALMA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PalmaForConditionalGeneration",
-        "PalmaPreTrainedModel",
+    _import_structure["modeling_paligemma"] = [
+        "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PaLIGemmaForConditionalGeneration",
+        "PaLIGemmaPreTrainedModel",
     ]
-    _import_structure["processing_palma"] = ["PalmaProcessor"]
-    _import_structure["language_modeling_palma"] = ["PalmaGemmaModel",
-                                                    "PalmaGemmaForCausalLM"]
+    _import_structure["processing_paligemma"] = ["PaLIGemmaProcessor"]
+    _import_structure["language_modeling_paligemma"] = ["PaLIGemmaLanguageModel",
+                                                    "PaLIGemmaLanguageForCausalLM"]
 
 
 if TYPE_CHECKING:
-    from .configuration_palma import PALMA_PRETRAINED_CONFIG_ARCHIVE_MAP, PalmaConfig
+    from .configuration_paligemma import PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, PaLIGemmaConfig
 
     try:
         if not is_torch_available():
@@ -44,13 +44,13 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_palma import (
-            PALMA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PalmaForConditionalGeneration,
-            PalmaPreTrainedModel,
+        from .modeling_paligemma import (
+            PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PaLIGemmaForConditionalGeneration,
+            PaLIGemmaPreTrainedModel,
         )
-        from .processing_palma import PalmaProcessor
-        from .language_modeling_palma import PalmaGemmaModel, PalmaGemmaForCausalLM
+        from .processing_paligemma import PaLIGemmaProcessor
+        from .language_modeling_paligemma import PaLIGemmaLanguageModel, PaLIGemmaLanguageForCausalLM
 
 
 else:
