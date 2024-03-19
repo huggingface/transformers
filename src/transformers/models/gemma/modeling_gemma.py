@@ -163,7 +163,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Edited from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Gemma
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -173,25 +172,20 @@ class GemmaMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        hidden_act = config.hidden_act
-        use_old_gelu = getattr(config, "force_use_exact_gelu", False)
-        if not use_old_gelu:
+        legacy_hidden_act = config.hidden_act
+
+        if hidden_activation is None:
             logger.warning_once(
                 "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
-                "Please edit your model config to use `gelu_pytorch_tanh` and not `gelu`.\n"
-                "You set `force_use_exact_gelu` to True, so we'll use the old exact gelu.\n"
-                "See https://github.com/huggingface/transformers/pull/29402 for more details."
+                "Changing the activation function to `gelu_pytorch_tanh`."
+                f"if you want to use the legacy `{legacy_hidden_act}`, "
+                f"Please edit the `model.config` to set `hidden_activation={legacy_hidden_act}` "
+                "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
             )
-            hidden_act = "gelu"
-        elif hidden_act != "gelu_pytorch_tanh":
-            logger.warning_once(
-                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
-                "We shall use approx gelu. To forcibly use the old exact gelu, please add a new\n"
-                "field in the `config.json` file, and set `force_use_exact_gelu` to True.\n"
-                "See https://github.com/huggingface/transformers/pull/29402 for more details."
-            )
-            hidden_act = "gelu_pytorch_tanh"
-        self.act_fn = ACT2FN[hidden_act]
+            hidden_activation = "gelu_pytorch_tanh"
+        else:
+            hidden_activation = legacy_hidden_act
+        self.act_fn = ACT2FN[hidden_activation]
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
