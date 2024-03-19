@@ -55,7 +55,6 @@ if is_torch_available():
     )
     from transformers.generation import (
         GenerateDecoderOnlyOutput,
-        LogitsProcessorList,
     )
 
 if is_torchaudio_available():
@@ -247,19 +246,17 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
-    def _get_logits_processor_and_kwargs(
+    def _get_logits_processor_and_warper_kwargs(
         input_length,
-        eos_token_id,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
         max_length=None,
-        diversity_penalty=None,
     ):
         process_kwargs = {
             "min_length": input_length + 1 if max_length is None else max_length - 1,
         }
-        logits_processor = LogitsProcessorList()
-        return process_kwargs, logits_processor
+        warper_kwargs = {}
+        return process_kwargs, warper_kwargs
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
