@@ -10,6 +10,10 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
+_LegacyLayerCache = Tuple[torch.Tensor, torch.Tensor]
+_LegacyCache = Tuple[_LegacyLayerCache, ...]
+
+
 @dataclass
 class Cache:
     """
@@ -22,7 +26,7 @@ class Cache:
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> _LegacyLayerCache:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -86,7 +90,7 @@ class DynamicCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
-    def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
+    def __getitem__(self, layer_idx: int) -> _LegacyLayerCache:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
         sequence length.
@@ -117,7 +121,7 @@ class DynamicCache(Cache):
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> _LegacyLayerCache:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -148,7 +152,7 @@ class DynamicCache(Cache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         if len(self.key_cache) <= layer_idx:
             return 0
@@ -166,7 +170,7 @@ class DynamicCache(Cache):
             device = self.value_cache[layer_idx].device
             self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+    def to_legacy_cache(self) -> _LegacyCache:
         """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format."""
         legacy_cache = ()
         for layer_idx in range(len(self)):
@@ -174,7 +178,7 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[_LegacyCache] = None) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
         cache = cls()
         if past_key_values is not None:
@@ -222,7 +226,7 @@ class SinkCache(Cache):
 
     def _get_rerotation_cos_sin(
         self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> _LegacyLayerCache:
         if key_states.shape[-2] not in self.cos_sin_cache:
             # Upcast to float32 temporarily for better accuracy
             cos = cos.to(torch.float32)
@@ -242,7 +246,7 @@ class SinkCache(Cache):
             )
         return self.cos_sin_cache[key_states.shape[-2]]
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         if len(self.key_cache) <= layer_idx:
@@ -259,7 +263,7 @@ class SinkCache(Cache):
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> _LegacyLayerCache:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
 
@@ -280,6 +284,8 @@ class SinkCache(Cache):
         """
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
+        if cache_kwargs is None:
+            cache_kwargs = {}
         sin = cache_kwargs.get("sin")
         cos = cache_kwargs.get("cos")
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
@@ -309,7 +315,7 @@ class SinkCache(Cache):
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
                 rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
-                    key_states, cos[: self.window_length], sin[: self.window_length]
+                    key_states, cos[: self.window_length], sin[: self.window_length]  # type: ignore
                 )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
@@ -318,7 +324,7 @@ class SinkCache(Cache):
                     )
                 keys_to_keep = self._apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
                 if partial_rotation_size is not None:
-                    keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
+                    keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)  # type: ignore
 
             # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
             sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
@@ -383,7 +389,7 @@ class StaticCache(Cache):
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> _LegacyLayerCache:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
         It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
@@ -402,6 +408,8 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
+        if cache_kwargs is None:
+            cache_kwargs = {}
         new_cache_positions = cache_kwargs.get("cache_position")
         k_out = self.key_cache
         v_out = self.value_cache
