@@ -386,7 +386,6 @@ class TokenizerTesterMixin:
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
-
     # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""
@@ -1554,7 +1553,7 @@ class TokenizerTesterMixin:
         if self.rust_tokenizer_class is not None:
             pretrained_name = self.from_pretrained_id
 
-            slow_tokenizer = slow_tokenizer.from_pretrained(pretrained_name, legacy=False)
+            slow_tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, legacy=False)
             with self.subTest(f"{pretrained_name}"):
                 rust_tokenizer = self.rust_tokenizer_class.from_pretrained(
                     pretrained_name, from_slow=True, legacy=False
