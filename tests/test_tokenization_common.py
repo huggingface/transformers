@@ -181,7 +181,6 @@ def check_subword_sampling(
 
 class TokenizerTesterMixin:
     tokenizer_class = None
-    pretrained_tokenizer_to_test = None
     rust_tokenizer_class = None
     test_slow_tokenizer = True
     test_rust_tokenizer = True
