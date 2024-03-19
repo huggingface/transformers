@@ -420,8 +420,6 @@ class SuperPointModel(SuperPointPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImagePointDescriptionOutput]:
         """
-        Returns:
-
         Examples:
 
         ```python
