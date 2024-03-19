@@ -579,7 +579,6 @@ GEMMA_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
 class PaLIGemmaLanguageDecoderLayer(nn.Module):
     def __init__(self, config: GemmaConfig, layer_idx: int):
         super().__init__()

@@ -45,18 +45,13 @@ class PaLIGemmaConfig(PretrainedConfig):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 257152):
             The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the CLIP backbone.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
         vocab_size (`int`, *optional*, defaults to 257152):
             Vocabulary size of the PaLIGemmamodel. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~PaLIGemmaForConditionalGeneration`]
-        projection_dim (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        hidden_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        intermediate_size (`<fill_type>`, *optional*, defaults to 16384): <fill_docstring>
+        projection_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the multimodal projection space.
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Dimension of the hidden layer of the Language model.
 
     Example:
 
@@ -88,13 +83,9 @@ class PaLIGemmaConfig(PretrainedConfig):
         text_config=None,
         ignore_index=-100,
         image_token_index=257152,  # put dummy token index at end of vocabulary
-        projector_hidden_act="gelu",
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-2,
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
-        intermediate_size=16384,
         # FIXME how do we pass vision/text specific config keys here?
         # Why is this setup in init, attributes derived are not used, and configs
         # are then called with other hardcoded arguments?
@@ -102,14 +93,9 @@ class PaLIGemmaConfig(PretrainedConfig):
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
