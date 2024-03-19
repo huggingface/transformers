@@ -206,6 +206,9 @@ generation.
 [[autodoc]] WhisperTimeStampLogitsProcessor
     - __call__
 
+[[autodoc]] WatermarkLogitsProcessor
+    - __call__
+
 ### TensorFlow
 
 [[autodoc]] TFForcedBOSTokenLogitsProcessor
