@@ -125,7 +125,6 @@ class PaLIGemmaSiglipVisionTransformer(nn.Module):
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->PaLIGemma
 class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
     """
     Base class for PaLIGemmacausal language model (or autoregressive) outputs.
@@ -200,7 +199,6 @@ PALIGEMMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     PALIGEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->PaLIGemma,llava->paligemma
 class PaLIGemmaPreTrainedModel(PreTrainedModel):
     config_class = PaLIGemmaConfig
     base_model_prefix = "model"

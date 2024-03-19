@@ -42,7 +42,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_fx_available
-from ..gemma.configuration_gemma import GemmaConfig
+from .configuration_paligemma import PaLIGemmaConfig
 
 
 if is_flash_attn_2_available():
@@ -579,7 +579,7 @@ GEMMA_ATTENTION_CLASSES = {
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
 class PaLIGemmaLanguageDecoderLayer(nn.Module):
-    def __init__(self, config: GemmaConfig, layer_idx: int):
+    def __init__(self, config: PaLIGemmaLanguageConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -622,9 +622,8 @@ class PaLIGemmaLanguageDecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-        # so far so good layer 1 at least
-        # Self Attention
 
+        # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -642,6 +641,7 @@ class PaLIGemmaLanguageDecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
+
         outputs = (hidden_states,)
 
         if output_attentions:
