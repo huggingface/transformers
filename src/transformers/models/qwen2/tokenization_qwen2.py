@@ -34,11 +34,11 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/vocab.json"},
-    "merges_file": {"qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/merges.txt"},
+    "vocab_file": {"Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/vocab.json"},
+    "merges_file": {"Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/merges.txt"},
 }
 
-MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
+MAX_MODEL_INPUT_SIZES = {"Qwen/Qwen1.5-7B": 32768}
 
 PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
 
@@ -94,7 +94,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import Qwen2Tokenizer
 
-    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen-tokenizer")
+    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen1.5-7B")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 

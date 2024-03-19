@@ -31,14 +31,14 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/vocab.json"},
-    "merges_file": {"qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/merges.txt"},
+    "vocab_file": {"Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/vocab.json"},
+    "merges_file": {"Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/merges.txt"},
     "tokenizer_file": {
-        "qwen/qwen-tokenizer": "https://huggingface.co/qwen/qwen-tokenizer/resolve/main/tokenizer.json"
+        "Qwen/Qwen1.5-7B": "https://huggingface.co/Qwen/Qwen1.5-7B/resolve/main/tokenizer.json"
     },
 }
 
-MAX_MODEL_INPUT_SIZES = {"qwen/qwen-tokenizer": 32768}
+MAX_MODEL_INPUT_SIZES = {"Qwen/Qwen1.5-7B": 32768}
 
 
 class Qwen2TokenizerFast(PreTrainedTokenizerFast):
@@ -52,7 +52,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import Qwen2TokenizerFast
 
-    >>> tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen-tokenizer")
+    >>> tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen1.5-7B")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
