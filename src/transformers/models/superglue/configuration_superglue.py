@@ -1,9 +1,32 @@
+# Copyright 2024 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from typing import List
 
-from transformers import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
+logger = logging.get_logger(__name__)
+
+SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "sbucaille/superglue": "https://huggingface.co/sbucaille/superpoint/blob/main/config.json"
+}
 
 
 class SuperGlueConfig(PretrainedConfig):
+    #TODO add documentation
+
+    model_type = "superglue"
 
     def __init__(
             self,
@@ -22,6 +45,9 @@ class SuperGlueConfig(PretrainedConfig):
 
         if model_version != "indoor" and model_version != "outdoor":
             raise ValueError("model_version must be either 'indoor' or 'outdoor'")
+
+        if descriptor_dim % num_heads != 0:
+            raise ValueError("descriptor_dim % num_heads is different from zero")
 
         self.descriptor_dim = descriptor_dim
         self.keypoint_encoder_sizes = keypoint_encoder_sizes
