@@ -202,7 +202,9 @@ class TokenizerTesterMixin:
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
         # information available in Tokenizer (name, rust class, python class, vocab key name)
-        self.from_pretrained_id = [self.from_pretrained_id] if isinstance(self.from_pretrained_id, str) else self.from_pretrained_id
+        self.from_pretrained_id = (
+            [self.from_pretrained_id] if isinstance(self.from_pretrained_id, str) else self.from_pretrained_id
+        )
 
         self.tokenizers_list = []
         if self.test_rust_tokenizer:
