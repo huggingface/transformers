@@ -180,9 +180,9 @@ class GemmaMLP(nn.Module):
                 f"Please edit the `model.config` to set `hidden_activation={legacy_hidden_act}` "
                 "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
             )
-            hidden_activation = config.hidden_activation
+            hidden_activation = "gelu_pytorch_tanh"
         else:
-            hidden_activation = config.hidden_act
+            hidden_activation = config.hidden_activation
         self.act_fn = ACT2FN[hidden_activation]
 
     def forward(self, x):
