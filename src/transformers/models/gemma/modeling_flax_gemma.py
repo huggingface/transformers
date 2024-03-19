@@ -359,7 +359,7 @@ class FlaxGemmaMLP(nn.Module):
             hidden_activation = "gelu_pytorch_tanh"
         else:
             hidden_activation = self.config.hidden_activation
-        self.act_fn = ACT2FN[hidden_activation]
+        self.act = ACT2FN[hidden_activation]
 
         self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
         self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
