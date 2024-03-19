@@ -530,7 +530,7 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
             )
 
             # compute the banned tokens, ie all the tokens that when added to the latest tokens lead to a n-gram that was previously generated
-            banned_tokens_indices_mask = jnp.invert(jnp.isclose(self.get_banned_tokens_mask(latest_tokens, previous_ngrams), 0))
+            banned_tokens_indices_mask = self.get_banned_tokens_mask(latest_tokens, previous_ngrams).astype("bool")
             return jnp.where(banned_tokens_indices_mask, -float("inf"), scores)
 
         output = jax.lax.cond((cur_len >= self.ngram_size - 1), true_fn, lambda: scores)
