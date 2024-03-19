@@ -2342,7 +2342,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
             if self.seeding_scheme == "selfhash":
                 greenlist_ids = self._score_rejection_sampling(input_seq, scores[b_idx])
             else:
-                greenlist_ids = self._get_greenlist_ids(input_ids=input_seq)
+                greenlist_ids = self._get_greenlist_ids(input_seq)
             scores_processed[b_idx, greenlist_ids] = scores_processed[b_idx, greenlist_ids] + self.bias
 
         return scores_processed

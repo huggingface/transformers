@@ -70,13 +70,14 @@ class WatermarkDetector:
     See [the paper](https://arxiv.org/abs/2306.04634) for more information.
 
     Args:
-        vocab_size (`int`):
-            The model tokenizer's vocab_size.
+        bos_token_id (`int`): <fill_docstring>
         device (`str`):
             The device which was used during watermarked text generation.
-        watermarking_args (`Dict`, *optional*):
+        vocab_size (`int`):
+            The model tokenizer's vocab_size.
+        watermarking_args (`Dict`):
             The exact same arguments used when generating watermarked text.
-        ignore_repeated_ngrams (`bool`):
+        ignore_repeated_ngrams (`bool`, *optional*, defaults to `False`):
             Whether to count every unique ngram only once or not.
 
     Return:
