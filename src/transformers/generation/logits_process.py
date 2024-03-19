@@ -2298,23 +2298,23 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         self.table_size = 1_000_003
         self.fixed_table = torch.randperm(self.table_size, generator=self.rng, device=device)
 
-    def set_seed(self, input_ids: torch.LongTensor):
-        input_ids = input_ids[-self.context_width :]
+    def set_seed(self, input_seq: torch.LongTensor):
+        input_seq = input_seq[-self.context_width :]
         if self.seeding_scheme == "selfhash":
-            a = self.fixed_table[input_ids % self.table_size] + 1
-            b = self.fixed_table[input_ids[-1] % self.table_size] + 1
+            a = self.fixed_table[input_seq % self.table_size] + 1
+            b = self.fixed_table[input_seq[-1] % self.table_size] + 1
             seed = (self.hash_key * a * b).min().item()
         else:
-            seed = self.hash_key * input_ids[-1].item()
+            seed = self.hash_key * input_seq[-1].item()
         self.rng.manual_seed(seed % (2**64 - 1))
 
-    def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
-        self.set_seed(input_ids)
-        vocab_permutation = torch.randperm(self.vocab_size, device=input_ids.device, generator=self.rng)
+    def _get_greenlist_ids(self, input_seq: torch.LongTensor) -> torch.LongTensor:
+        self.set_seed(input_seq)
+        vocab_permutation = torch.randperm(self.vocab_size, device=input_seq.device, generator=self.rng)
         greenlist_ids = vocab_permutation[: self.greenlist_size]
         return greenlist_ids
 
-    def _score_rejection_sampling(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.LongTensor:
+    def _score_rejection_sampling(self, input_seq: torch.LongTensor, scores: torch.FloatTensor) -> torch.LongTensor:
         """
         Generate greenlist based on current candidate next token. Reject and move on if necessary.
         Runs for a fixed number of steps only for efficiency, since the methods is not batched.
@@ -2324,10 +2324,10 @@ class WatermarkLogitsProcessor(LogitsProcessor):
 
         # 40 is an arbitrary number chosen to save compute and not run for long (taken from orig repo)
         for i in range(40):
-            greenlist_ids = self._get_greenlist_ids(torch.cat([input_ids, greedy_predictions[i, None]], dim=-1))
+            greenlist_ids = self._get_greenlist_ids(torch.cat([input_seq, greedy_predictions[i, None]], dim=-1))
             if greedy_predictions[i] in greenlist_ids:
                 final_greenlist.append(greedy_predictions[i])
-        return torch.tensor(final_greenlist, device=input_ids.device)
+        return torch.tensor(final_greenlist, device=input_seq.device)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[-1] < self.context_width:
