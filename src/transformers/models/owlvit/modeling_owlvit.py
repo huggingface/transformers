@@ -17,8 +17,8 @@
 import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
+from functools import lru_cache
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
@@ -1311,6 +1311,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
+    @lru_cache(maxsize=2)
     def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
         if feature_map is not None:
             raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
