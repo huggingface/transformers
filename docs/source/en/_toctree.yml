@@ -310,6 +310,8 @@
         title: CodeGen
       - local: model_doc/code_llama
         title: CodeLlama
+      - local: model_doc/cohere
+        title: Cohere
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -640,6 +642,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/musicgen_melody
+        title: MusicGen Melody
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
