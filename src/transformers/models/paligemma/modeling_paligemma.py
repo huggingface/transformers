@@ -166,7 +166,6 @@ class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->PaLIGemma
 class PaLIGemmaMultiModalProjector(nn.Module):
     def __init__(self, config: PaLIGemmaConfig):
         super().__init__()
