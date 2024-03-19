@@ -174,8 +174,8 @@ class IdeficsProcessor(ProcessorMixin):
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'`: No padding. This will raise an error if the input sequences are of different
                   lengths.
-                Note: `IdeficsProcessor`'s default padding strategy is "longest", which is unlike that of most other
-                  processors. This is due to issues stemming from https://github.com/huggingface/transformers/issues/28591#issuecomment-1977962886
+                Note: Unlike most processors, which set padding=`False` by default, `IdeficsProcessor` sets `padding="longest"`
+                  by default. See https://github.com/huggingface/transformers/pull/29449#pullrequestreview-1925576061 for why.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*):
