@@ -1366,7 +1366,7 @@ class TrainingArguments:
         },
     )
 
-    optim_target_modules: Optional[List[str]] = field(
+    optim_target_modules: Optional[Union[str, List[str]]] = field(
         default=None,
         metadata={
             "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment."
