@@ -58,7 +58,7 @@ class TFMistralRMSNorm(tf.keras.layers.Layer):
         TFMistralRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__(**kwargs)
-        self.weight = self.add_weight(shape=hidden_size, initializer="ones")
+        self.weight = self.add_weight(shape=hidden_size, initializer="ones", name="weight")
         self.variance_epsilon = eps
 
     def call(self, hidden_states):
@@ -84,7 +84,7 @@ class TFMistralRotaryEmbedding(tf.keras.layers.Layer):
         self.max_seq_len_cached = seq_len
         t = tf.cast(tf.range(self.max_seq_len_cached, dtype=tf.int64), self.inv_freq.dtype)
 
-        freqs = tf.tensordot(t, self.inv_freq)
+        freqs = tf.tensordot(t, self.inv_freq, axes=0)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = tf.concat((freqs, freqs), axis=-1)
         self.cos_cached = tf.cast(tf.cos(emb), dtype)
@@ -142,9 +142,9 @@ class TFMistralMLP(tf.keras.layers.Layer):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = tf.keras.layers.Dense(self.intermediate_size, use_bias=False)
-        self.up_proj = tf.keras.layers.Dense(self.intermediate_size, use_bias=False)
-        self.down_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False)
+        self.gate_proj = tf.keras.layers.Dense(self.intermediate_size, use_bias=False, name="gate_proj")
+        self.up_proj = tf.keras.layers.Dense(self.intermediate_size, use_bias=False, name="up_proj")
+        self.down_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="down_proj")
         self.act_fn = get_tf_activation(config.hidden_act)
 
     def call(self, x):
@@ -196,15 +196,16 @@ class TFMistralAttention(tf.keras.layers.Layer):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, bias=False)
-        self.k_proj = tf.keras.layers.Dense(self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = tf.keras.layers.Dense(self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = tf.keras.layers.Dense(self.hidden_size, bias=False)
+        self.q_proj = tf.keras.layers.Dense(self.num_heads * self.head_dim, use_bias=False, name="q_proj")
+        self.k_proj = tf.keras.layers.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, name="k_proj")
+        self.v_proj = tf.keras.layers.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, name="v_proj")
+        self.o_proj = tf.keras.layers.Dense(self.hidden_size, use_bias=False, name="o_proj")
 
         self.rotary_emb = TFMistralRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
+            name="rotary_emb",
         )
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
@@ -217,7 +218,7 @@ class TFMistralAttention(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value=None,
         output_attentions: bool = False,
         use_cache: bool = False,
         **kwargs,
@@ -312,9 +313,11 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
 
         self.self_attn = TF_MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.mlp = TFMistralMLP(config)
-        self.input_layernorm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = TFMistralMLP(config, name="mlp")
+        self.input_layernorm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
+        self.post_attention_layernorm = TFMistralRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm"
+        )
 
     def call(
         self,
@@ -385,17 +388,22 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
         config: MistralConfig
     """
 
+    config_class = MistralConfig
+
     def __init__(self, config: MistralConfig, **kwargs):
         super().__init__(**kwargs)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = tf.keras.layers.Embedding(
-            input_dim=config.vocab_size, output_dim=config.hidden_size, mask_zero=True
+            input_dim=config.vocab_size, output_dim=config.hidden_size, mask_zero=True, name="embed_tokens"
         )
-        self.layers = [TFMistralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        self.layers = [
+            TFMistralDecoderLayer(config, layer_idx, name=f"layer.{layer_idx}")
+            for layer_idx in range(config.num_hidden_layers)
+        ]
         self._attn_implementation = config._attn_implementation
-        self.norm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
     def get_input_embeddings(self):
         return self.embed_tokens
