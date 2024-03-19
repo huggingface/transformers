@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "nielsr/canine-s"
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 

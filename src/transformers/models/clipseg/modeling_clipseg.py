@@ -1292,7 +1292,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         batch_size = conditional_embeddings.shape[0]
         output = output.view(batch_size, output.shape[1], size, size)
 
-        logits = self.transposed_convolution(output).squeeze()
+        logits = self.transposed_convolution(output).squeeze(1)
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_attentions] if v is not None)
