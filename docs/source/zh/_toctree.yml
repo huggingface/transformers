@@ -44,6 +44,8 @@
     title: 共享自定义模型
   - local: chat_templating
     title: 聊天模型的模板
+  - local: trainer
+    title: 训练器
   - local: serialization
     title: 导出为 ONNX
   - local: tflite
