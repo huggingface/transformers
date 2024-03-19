@@ -60,9 +60,6 @@ class GemmaConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the decoder. "gelu_pytorch_tanh" uses an
             approximation to the more exact "gelu" activation function.
-        force_use_exact_gelu (`bool`, *optional*, defaults to False):
-            Forcibly use the old exact GELU activation function. Gemma was found to use the approximate tanh
-            version to GELU. Please see https://github.com/huggingface/transformers/pull/29402 for more details.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):

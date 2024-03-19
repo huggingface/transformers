@@ -177,17 +177,17 @@ class GemmaMLP(nn.Module):
         use_old_gelu = getattr(config, "force_use_exact_gelu", False)
         if not use_old_gelu:
             logger.warning_once(
-                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"\
-                "Please edit your model config to use `gelu_pytorch_tanh` and not `gelu`.\n"\
-                "You set `force_use_exact_gelu` to True, so we'll use the old exact gelu.\n"\
+                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
+                "Please edit your model config to use `gelu_pytorch_tanh` and not `gelu`.\n"
+                "You set `force_use_exact_gelu` to True, so we'll use the old exact gelu.\n"
                 "See https://github.com/huggingface/transformers/pull/29402 for more details."
             )
             hidden_act = "gelu"
         elif hidden_act != "gelu_pytorch_tanh":
             logger.warning_once(
-                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"\
-                "We shall use approx gelu. To forcibly use the old exact gelu, please add a new\n"\
-                "field in the `config.json` file, and set `force_use_exact_gelu` to True.\n"\
+                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
+                "We shall use approx gelu. To forcibly use the old exact gelu, please add a new\n"
+                "field in the `config.json` file, and set `force_use_exact_gelu` to True.\n"
                 "See https://github.com/huggingface/transformers/pull/29402 for more details."
             )
             hidden_act = "gelu_pytorch_tanh"
@@ -917,7 +917,7 @@ class GemmaModel(GemmaPreTrainedModel):
         # normalized
         # Gemma downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype = hidden_states.dtype)
+        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
         # decoder layers
