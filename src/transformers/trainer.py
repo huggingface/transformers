@@ -1263,9 +1263,9 @@ class Trainer:
             non_galore_params = [p for n, p in model.named_parameters() if n not in galore_params_names]
 
             galore_optim_kwargs = {
-                "rank": optim_args.pop("rank", 128),
-                "update_proj_gap": optim_args.pop("update_proj_gap", 200),
-                "scale": optim_args.pop("scale", 0.25),
+                "rank": int(optim_args.pop("rank", 128)),
+                "update_proj_gap": int(optim_args.pop("update_proj_gap", 200)),
+                "scale": float(optim_args.pop("scale", 0.25)),
                 "proj_type": optim_args.pop("proj_type", "std"),
             }
 
