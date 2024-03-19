@@ -163,7 +163,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Edited from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Gemma
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
