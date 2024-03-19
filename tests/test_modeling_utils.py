@@ -2115,7 +2115,7 @@ class Mask4DTestHard(unittest.TestCase):
                     ]
                 ]
             ],
-            device="cuda:0",
+            device=torch_device,
             dtype=torch.int64,
         )
 
@@ -2130,10 +2130,7 @@ class Mask4DTestHard(unittest.TestCase):
         input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
         # regular batch
-        logits_0 = self.model.forward(
-            input_0,
-            position_ids=position_ids_0,
-        ).logits
+        logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
         logits_0_last = logits_0[:, -1, :]  # last tokens in each batch line
         decoded_0 = [self.tokenizer.decode(t) for t in logits_0_last.argmax(dim=-1)]
 
@@ -2152,10 +2149,7 @@ class Mask4DTestHard(unittest.TestCase):
         input_0, position_ids_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
         # regular batch
-        logits_0 = self.model.forward(
-            input_0,
-            position_ids=position_ids_0,
-        ).logits
+        logits_0 = self.model.forward(input_0, position_ids=position_ids_0).logits
         logits_0_last = logits_0[:, -1, :]  # last tokens in each batch line
         decoded_0 = [self.tokenizer.decode(t) for t in logits_0_last.argmax(dim=-1)]
 
