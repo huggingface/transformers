@@ -19,7 +19,6 @@ from functools import lru_cache
 from typing import Dict, Optional, Union
 
 import numpy as np
-import scipy
 import torch
 
 from ..utils import ModelOutput, logging
@@ -172,6 +171,10 @@ class WatermarkDetector:
         z = numer / denom
         return z
 
+    def _compute_pval(self, x, loc=0, scale=1):
+        z = (x - loc) / scale
+        return 1 - (0.5 * (1 + np.sign(z) * (1 - np.exp(-2 * z**2 / np.pi))))
+
     def __call__(
         self,
         input_ids: torch.LongTensor,
@@ -210,7 +213,7 @@ class WatermarkDetector:
         z_score = self._compute_z_score(green_token_count, num_tokens_scored)
 
         if return_dict:
-            p_value = scipy.stats.norm.sf(z_score)
+            p_value = self._compute_pval(z_score)
             prediction = z_score > z_threshold
             confidence = 1 - p_value
 
