@@ -978,29 +978,38 @@ class PalmaGemmaModel(PalmaGemmaPreTrainedModel):
             mask_length = attention_mask.shape[-1]
             padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
             causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-
         if past_key_values is not None:
             # If we are at first generation, we need to do full block attention for the whole prefix. 
             # However, if past_key_values is not None, it means
             # we already generated one pass of tokens. 
             # Then, don't change attention mask, keep it causal for new tokens.
+            
             block_sizes = attention_mask.sum(dim=1)
 
             # block attention on prefix tokens, triangular after.
-            # causal_mask.fill_(-3.4028e38)
+            """
+            causal_mask.fill_(-3.4028e38)
 
             for b in range(batch_size):
                 block_size = block_sizes[b].item()
-                causal_mask[b, :, :block_size, :block_size] = 0
+
+                causal_mask[b, :, :, :block_size] = 0
+
                 for i in range(block_size, seq_length):
-                    causal_mask[b, :, i, :i+1] = 0
+                    causal_mask[b, :, i, :block_size] = 0 
+                    causal_mask[b, :, i, block_size:i+1] = 0 
+            """
+            causal_mask = torch.full((batch_size, 1, seq_length, seq_length), fill_value=-3.4028e+38, dtype=torch.float32)
 
-            breakpoint()
-
-
+            for b in range(batch_size):
+                non_padding_length = block_sizes[b].item()
+                causal_mask[b, :, :, :non_padding_length] = 0
+                
+                for i in range(non_padding_length, seq_length):
+                    causal_mask[b, :, i, :i+1] = 0  
 
         if (
-            self.config._attn_implementation == "sdpa"
+              self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
         ):

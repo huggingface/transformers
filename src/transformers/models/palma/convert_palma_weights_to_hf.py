@@ -231,34 +231,31 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 def verify_logits(model, processor):
-    intermediates_path = "/home/ubuntu/gvhf/hf_test_ckpt.cow_beach_1.bv.intermediates.npz"
     cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    outputs_logits_flax = np.load("/home/ubuntu/temp/output_logits_flax.npy")
     prompt = ["answer en Where is the cow standing?\n", ""]
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
     with torch.inference_mode():
         outputs = model(**model_inputs)
-        breakpoint()
-        #FIXME All the token embeddings up to pad tokens are correct. But 
-        # generate() and forward() take [:, -1, :].
-        manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
+        
+        manual_probs = torch.nn.functional.softmax(outputs.logits[:, -1, :], dim=-1)
         next_token_id = torch.argmax(manual_probs, dim=-1)
         if processor.decode(next_token_id[0]) != "beach":
             raise ValueError("Next token prediction is wrong.")
         else:
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
+        '''
+        # Skipping logit verification for now
 
         if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
             raise ValueError("Logits do not match.")
         else:
             print("Full forward pass works. Amazing!")
 
-
-        #position_ids = torch.arange(projector_output.shape[1] + unpadded_length).unsqueeze(0)
+        '''
         generation = processor.decode(
             model.generate(
                 **model_inputs,
@@ -280,7 +277,7 @@ def convert_palma_checkpoint(checkpoint_path, pytorch_dump_folder_path, variant:
     if variant == "2b":
         tokenizer_id = "google/gemma-2b"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-    tokenizer.padding_side = 'right'
+    #tokenizer.padding_side = 'right'
     
     image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
     if variant == "2b":

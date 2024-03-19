@@ -238,12 +238,11 @@ class PalmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PalmaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
-    _supports_sdpa = True # TODO Palma should support sdpa
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Palma isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/palma should serve for that purpose
+        # inference and fine-tuning
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -387,7 +386,7 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
 
         _, num_image_tokens, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-        # left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
+        #left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # Compute the maximum embed dimension
         # max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
         full_sequence_length = num_image_tokens + sequence_length # sequence length includes padding
@@ -553,19 +552,6 @@ class PalmaForConditionalGeneration(PalmaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def generate(
-        self,
-        *args,
-        **kwargs,
-    ):
-
-        output = self.language_model.generate(
-            *args,
-            **kwargs,
-        )
-
-        return output
 
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
