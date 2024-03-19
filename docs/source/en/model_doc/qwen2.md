@@ -22,14 +22,14 @@ Qwen2 is the new model series of large language models from the Qwen team. Previ
 
 ### Model Details
 
-Qwen2 is a language model series including decoder language models of different model sizes. For each size, we release the base language model and the aligned chat model. It is based on the Transformer architecture with SwiGLU activation, attention QKV bias, group query attention, mixture of sliding window attention and full attention, etc. Additionally, we have an improved tokenizer adaptive to multiple natural languages and codes.
+Qwen2 is a language model series including decoder language models of different model sizes. For each size, we release the base language model and the aligned chat model. It is based on the Transformer architecture with SwiGLU activation, attention QKV bias, group query attention, mixture of sliding window attention and full attention, etc. Additionally, we have an improved tokenizer adaptive to multiple natural languages and codes. Now we have released the Qwen1.5 series that can be used by the Qwen2 codes.
 
 
 ## Usage tips
 
-`Qwen2-7B-beta` and `Qwen2-7B-Chat-beta` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+`Qwen1.5-7B` and `Qwen1.5-7B-Chat` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen1.5-7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer

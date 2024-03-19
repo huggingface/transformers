@@ -478,7 +478,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_450m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen1.5-0.5B", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.cpu()
@@ -498,8 +498,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
     def test_model_450m_generation(self):
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-450m-beta", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen1.5-0.5B", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -519,7 +519,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta",
+            "Qwen/Qwen1.5-0.5B",
             device_map="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
@@ -547,7 +547,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta",
+            "Qwen/Qwen1.5-0.5B",
             device_map="auto",
             attn_implementation="sdpa",
         )
@@ -569,7 +569,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-450m-beta", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
 
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -584,10 +584,10 @@ class Qwen2IntegrationTest(unittest.TestCase):
             "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
         )
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-beta", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-450m-beta", device_map="auto", torch_dtype=torch.float16)
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen1.5-0.5B", device_map="auto", torch_dtype=torch.float16)
         assistant_model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-450m-beta", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen1.5-0.5B", device_map="auto", torch_dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
