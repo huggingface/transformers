@@ -95,15 +95,13 @@ class VipLlavaConfig(PretrainedConfig):
         self.projector_layernorm_eps = projector_layernorm_eps
         self.vision_feature_layers = vision_feature_layers
 
-        if "vocab_size" in kwargs and text_config is not None:
+        if "vocab_size" in kwargs and not isinstance(text_config, dict):
             warnings.warn(
-                "The `vocab_size` argument is deprecated and will be removed in v4.40, since it can be inferred from the `text_config`.",
+                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
                 FutureWarning,
             )
-            if isinstance(text_config, dict):
-                text_config["vocab_size"] = kwargs.pop("vocab_size")
-            else:
-                text_config.vocab_size = kwargs.pop("vocab_size")
+            # set the vocab_size
+            text_config["vocab_size"] = kwargs["vocab_size"]
 
         self.vision_config = vision_config
 

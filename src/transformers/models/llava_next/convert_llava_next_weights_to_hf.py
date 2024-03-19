@@ -279,7 +279,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     cats_image = Image.open(requests.get(url, stream=True).raw)
 
-    inputs = processor(images=[image, cats_image], text=[prompt, prompt], padding=True, return_tensors="pt").to(device)
+    inputs = processor(
+        images=[image, cats_image],
+        text=[prompt, "[INST] <image>\nHow many cats are there? [/INST]"],
+        padding=True,
+        return_tensors="pt",
+    ).to(device)
 
     for k, v in inputs.items():
         print(k, v.shape)
