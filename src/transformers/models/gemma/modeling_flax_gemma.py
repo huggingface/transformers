@@ -339,7 +339,6 @@ class FlaxGemmaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->Gemma
 class FlaxGemmaMLP(nn.Module):
     config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
