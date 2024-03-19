@@ -488,13 +488,17 @@ to model based assisted decoding. You can read more about it [here](https://twit
 
 **D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
 hallucinations of LLMs, as described in this paper of ICLR 2024 [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models](https://arxiv.org/abs/2309.03883).
+
 DoLa is achieved by contrasting the differences in logits obtained from final
 layers versus earlier layers, thus amplify the factual knowledge localized to particular part of transformer layers.
-To activate DoLa decoding, set the `dola_layers` argument when calling the `model.generate` function.
-`dola_layers` can be set to a string or a list of integers. If set to a string, it can be one of `low`, `high`.
-If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model.
-Set `repetition_penalty = 1.2` is recommended to reduce repetition in DoLa decoding.
-See the following example for DoLa decoding with the 32-layer LLaMA-7B model.
+
+Do the following two steps to activate DoLa decoding when calling the `model.generate` function:
+1. Set the `dola_layers` argument, which can be either a string or a list of integers.
+    - If set to a string, it can be one of `low`, `high`.
+    - If set to a list of integers, it should be a list of layer indices between 0 and the total number of layers in the model. The 0-th layer is word embedding, and the 1st layer is the first transformer layer, and so on.
+2. Set `repetition_penalty = 1.2` is required to reduce repetition in DoLa decoding.
+
+See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
@@ -530,9 +534,14 @@ See the following example for DoLa decoding with the 32-layer LLaMA-7B model.
 ['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
 ```
 
-Setting `dola_layers` to `'low'` or `'high'` will contrast the lower or higher part of the layers, respectively.
+#### Understanding the `dola_layers` argument
+
+`dola_layers` stands for the candidate layers in premature layer selection, as described in the DoLa paper. The selected premature layer will be contrasted with the final layer.
+
+Setting `dola_layers` to `'low'` or `'high'` will select the lower or higher part of the layers to contrast, respectively.
 - For `N`-layer models with `N <= 40` layers, the layers of `range(0, N // 2, 2)` and `range(N // 2, N, 2)` are used for `'low'` and `'high'` layers, respectively.
 - For models with `N > 40` layers, the layers of `range(0, 20, 2)` and `range(N - 20, N, 2)` are used for `'low'` and `'high'` layers, respectively.
-- if the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function.
+- If the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function.
+- Set the `dola_layers` to a list of integers for layer indices to contrast manually specified layers. For example, setting `dola_layers=[28,30]` will contrast the final layer (32-th layer) with the 28-th and 30-th layers.
 
-The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, and VicunaQA. Applying DoLa to smaller models like GPT-2 is not recommended, as shown in the Appendix N of the paper.
+The paper suggested that contrasting `'high'` layers to improve short-answer tasks like TruthfulQA, and contrasting `'low'` layers to improve all the other long-answer reasoning tasks, such as GSM8K, StrategyQA, FACTOR, and VicunaQA. Applying DoLa to smaller models like GPT-2 is not recommended, as the results shown in the Appendix N of the paper.

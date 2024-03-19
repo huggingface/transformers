@@ -1965,9 +1965,9 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
-            if generation_config.repetition_penalty != 1.2:
+            if generation_config.repetition_penalty < 1.2:
                 warnings.warn(
-                    f"Calling DoLa decoding but the `repetition_penalty` is set to a value of {generation_config.repetition_penalty}, which could induce unwanted behavior. "
+                    f"Calling DoLa decoding but the `repetition_penalty` is set to a value of {generation_config.repetition_penalty}, which could induce unwanted repetition. "
                     "The recommended value for DoLa decoding is `repetition_penalty=1.2` to prevent repetition."
                 )
             result = self._dola_decoding(
@@ -2414,6 +2414,7 @@ class GenerationMixin:
         >>> outputs = model._dola_decoding(
         ...     input_ids,
         ...     dola_layers='low',
+        ...     repetition_penalty=1.2,
         ...     logits_processor=logits_processor,
         ...     logits_warper=logits_warper,
         ...     stopping_criteria=stopping_criteria,
@@ -2477,6 +2478,8 @@ class GenerationMixin:
         else:
             start_layer = 0
 
+        # For `N`-layer models with `N <= 40` layers, the layers of `range(0, N // 2, 2)` and `range(N // 2, N, 2)` are used for `'low'` and `'high'` layers, respectively.
+        # For models with `N > 40` layers, the layers of `range(0, 20, 2)` and `range(N - 20, N, 2)` are used for `'low'` and `'high'` layers, respectively.
         if isinstance(dola_layers, str) and dola_layers == "low":
             if start_layer == mature_layer // 2:
                 candidate_premature_layers = [start_layer]
@@ -2486,22 +2489,13 @@ class GenerationMixin:
                     if mature_layer <= 40
                     else list(range(start_layer, 20, 2))
                 )
-            if len(candidate_premature_layers) == 0:
-                raise ValueError(
-                    f"The model {self.__class__.__name__} only has {mature_layer} layers, which is not enough to use DoLa decoding with `dola_layers='low'`. "
-                    f"The start layer is {start_layer} and the end layer is {mature_layer // 2}."
-                )
         elif isinstance(dola_layers, str) and dola_layers == "high":
             candidate_premature_layers = (
                 list(range(mature_layer // 2, mature_layer, 2))
                 if mature_layer <= 40
                 else list(range(mature_layer - 20, mature_layer, 2))
             )
-            if len(candidate_premature_layers) == 0:
-                raise ValueError(
-                    f"The model {self.__class__.__name__} only has {mature_layer} layers, which is not enough to use DoLa decoding with `dola_layers='high'`. "
-                    f"The start layer is {mature_layer // 2} and the end layer is {mature_layer}."
-                )
+        # Set the `dola_layers` to a list of integers for layer indices to contrast manually specified layers.
         elif isinstance(dola_layers, list):
             candidate_premature_layers = [i for i in dola_layers if i < mature_layer]
         else:
@@ -2510,7 +2504,7 @@ class GenerationMixin:
         # of the model doesnot have self.lm_head, raise an error
         if not hasattr(self, "lm_head"):
             raise ValueError(
-                f"The model {self.__class__.__name__} does not have an lm_head attribute to use DoLa decoding."
+                f"The model {self.__class__.__name__} does not have an lm_head attribute that is required for DoLa decoding."
             )
 
         while True:

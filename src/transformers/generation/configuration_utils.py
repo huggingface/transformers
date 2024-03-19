@@ -312,9 +312,9 @@ class GenerationConfig(PushToHubMixin):
             The layers to use for DoLa decoding. If `None`, DoLa decoding is not used. If a string, it must
             be one of "low" or "high", which means using the lower part or higher part of the model layers, respectively,
             If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
-            The 0-th layer is the word embedding layer of the model. For most of the cases, `dola_layers='low'` is recommended,
-            as described in [DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language
-            Models](https://arxiv.org/abs/2309.03883).
+            The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
+            `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
+            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
 
         > Parameters specific to the caching mechanism:
 
