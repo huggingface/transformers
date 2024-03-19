@@ -43,7 +43,7 @@ class PaLIGemmaConfig(PretrainedConfig):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_index (`int`, *optional*, defaults to 257152):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
@@ -51,9 +51,12 @@ class PaLIGemmaConfig(PretrainedConfig):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 257152):
             Vocabulary size of the PaLIGemmamodel. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~PaLIGemmaForConditionalGeneration`]
+        projection_dim (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        hidden_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        intermediate_size (`<fill_type>`, *optional*, defaults to 16384): <fill_docstring>
 
     Example:
 

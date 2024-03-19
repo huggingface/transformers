@@ -310,7 +310,6 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     """The PALIGEMMA model which consists of a vision backbone and a language model.""",
     PALIGEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->PALIGEMMA,Llava->PaLIGemma,llava->paligemma
 class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
     def __init__(self, config: PaLIGemmaConfig):
         super().__init__(config)

@@ -792,7 +792,7 @@ GEMMA_INPUTS_DOCSTRING = r"""
     "The bare PaLIGemmaLanguage Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->PaLIGemmaLanguage
+
 class PaLIGemmaLanguageModel(PaLIGemmaLanguagePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PaLIGemmaLanguageDecoderLayer`]
