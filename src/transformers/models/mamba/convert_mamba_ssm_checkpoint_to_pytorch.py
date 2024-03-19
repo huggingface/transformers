@@ -45,7 +45,8 @@ if is_mamba_ssm_available():
             vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
         hf_config.vocab_size = vocab_size
         return hf_config
-    
+
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -73,42 +74,52 @@ def convert_mamba_ssm_checkpoint_to_huggingface_model(
     hf_model.load_state_dict(converted_state_dict)
     return (hf_model, tokenizer)
 
-def validate_converted_model(original_state_dict: dict, original_ssm_config_dict: dict, hf_model: MambaForCausalLM, tokenizer: AutoTokenizer) -> None:
-        """Validate the converted model returns the same output as the original model."""
-        if not torch.cuda.is_available():
-            raise ValueError("This script is to be run with a CUDA device, as the original mamba_ssm model does not support cpu.")
-        torch_device = "cuda"
 
-        original_config = MambaConfig_ssm(**original_ssm_config_dict)
-        original_model = MambaLMHeadModel(original_config).to(torch_device)
-        original_model.load_state_dict(original_state_dict)
+def validate_converted_model(
+    original_state_dict: dict, original_ssm_config_dict: dict, hf_model: MambaForCausalLM, tokenizer: AutoTokenizer
+) -> None:
+    """Validate the converted model returns the same output as the original model."""
+    if not is_mamba_ssm_available():
+        raise ImportError(
+            "Calling validate_converted_model requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."
+        )
+    if not torch.cuda.is_available():
+        raise ValueError(
+            "This script is to be run with a CUDA device, as the original mamba_ssm model does not support cpu."
+        )
+    torch_device = "cuda"
 
-        # Assert model output sentences are close
-        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
-        original_model_out = original_model.generate(input_ids, max_length=len(input_ids[0]) + 10)
-        original_model_output_sentence = tokenizer.decode(original_model_out[0, :])
+    original_config = MambaConfig_ssm(**original_ssm_config_dict)
+    original_model = MambaLMHeadModel(original_config).to(torch_device)
+    original_model.load_state_dict(original_state_dict)
 
-        hf_model = hf_model.to(torch_device)
-        converted_model_out = hf_model.generate(input_ids, do_sample=False, max_new_tokens=10)
-        converted_model_output_sentence = tokenizer.decode(converted_model_out[0, :])
-        logger.info(
+    # Assert model output sentences are close
+    input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
+    original_model_out = original_model.generate(input_ids, max_length=len(input_ids[0]) + 10)
+    original_model_output_sentence = tokenizer.decode(original_model_out[0, :])
+
+    hf_model = hf_model.to(torch_device)
+    converted_model_out = hf_model.generate(input_ids, do_sample=False, max_new_tokens=10)
+    converted_model_output_sentence = tokenizer.decode(converted_model_out[0, :])
+    logger.info(
+        f"Original model output:\n{original_model_output_sentence}\n"
+        f"Converted model output:\n{converted_model_output_sentence}"
+    )
+    if not original_model_output_sentence == converted_model_output_sentence:
+        raise ValueError(
+            f"The converted model did not return the same output as the original model.\n"
             f"Original model output:\n{original_model_output_sentence}\n"
             f"Converted model output:\n{converted_model_output_sentence}"
         )
-        if not original_model_output_sentence == converted_model_output_sentence:
-            raise ValueError(
-                f"The converted model did not return the same output as the original model.\n"
-                f"Original model output:\n{original_model_output_sentence}\n"
-                f"Converted model output:\n{converted_model_output_sentence}"
-            )
-        # Assert model logits are close
-        with torch.no_grad():
-            original_model_logits = original_model(input_ids).logits
-            hf_model_logits = hf_model(input_ids).logits
-        if not torch.allclose(original_model_logits, hf_model_logits, atol=1e-4):
-            raise ValueError("The converted model did not return the same logits as the original model.")
+    # Assert model logits are close
+    with torch.no_grad():
+        original_model_logits = original_model(input_ids).logits
+        hf_model_logits = hf_model(input_ids).logits
+    if not torch.allclose(original_model_logits, hf_model_logits, atol=1e-4):
+        raise ValueError("The converted model did not return the same logits as the original model.")
 
-        logger.info("Model conversion validated successfully.")
+    logger.info("Model conversion validated successfully.")
+
 
 def convert_mamba_checkpoint_file_to_huggingface_model_file(
     mamba_checkpoint_path: str, config_json_file: str, output_dir: str
