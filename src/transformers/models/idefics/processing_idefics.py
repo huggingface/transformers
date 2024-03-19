@@ -149,7 +149,7 @@ class IdeficsProcessor(ProcessorMixin):
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: Union[bool, str, PaddingStrategy] = "longest",
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         transform: Callable = None,
@@ -165,15 +165,17 @@ class IdeficsProcessor(ProcessorMixin):
             prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `"longest"`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
                   sequence if provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
+                - `False` or `'do_not_pad'`: No padding. This will raise an error if the input sequences are of different
+                  lengths.
+                Note: `IdeficsProcessor`'s default padding strategy is "longest", which is unlike that of most other
+                  processors. This is due to issues stemming from https://github.com/huggingface/transformers/issues/28591#issuecomment-1977962886
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*):
