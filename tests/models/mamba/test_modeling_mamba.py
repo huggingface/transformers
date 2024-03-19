@@ -534,7 +534,7 @@ class MambaIntegrationTests(unittest.TestCase):
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
 
         # Assert model output sentences are close
-        original_model_out = converted_model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        original_model_out = original_model.generate(input_ids, max_length=len(input_ids[0]) + 10)
         original_model_output_sentence = tokenizer.decode(original_model_out[0, :])
         converted_model_out = converted_model.generate(input_ids, do_sample=False, max_new_tokens=10)
         converted_model_output_sentence = tokenizer.decode(converted_model_out[0, :])
