@@ -241,6 +241,7 @@ def verify_logits(model, processor):
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
     with torch.inference_mode():
         outputs = model(**model_inputs)
+        breakpoint()
         #FIXME All the token embeddings up to pad tokens are correct. But 
         # generate() and forward() take [:, -1, :].
         manual_probs = torch.nn.functional.softmax(outputs.logits[:, 266-1, :], dim=-1)
