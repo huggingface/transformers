@@ -595,6 +595,8 @@
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superpoint
+        title: SuperPoint
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin
