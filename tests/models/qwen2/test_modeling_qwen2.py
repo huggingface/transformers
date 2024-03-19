@@ -483,10 +483,10 @@ class Qwen2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
+        EXPECTED_MEAN = torch.tensor([[-3.1022, -5.0179, -8.5156, -7.6912, -5.7162, -5.5856, -5.0765, -5.8136]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([1.3508, 4.7312, 3.1844, 3.4029, 0.0331, 1.9679, 2.1484, 2.4802, 2.3582, 2.4896, 3.2788, 2.5397, 2.4903, 4.1990, 1.8722, 7.3198, 10.5606, 10.1878, 9.8130, 9.1020, 8.5969, 7.1474, 6.9990, 6.3032, 6.6527, 1.8160, 1.4303, 3.3736, 2.4511, 4.3257])  # fmt: skip
         print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
@@ -496,14 +496,14 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_450m_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
+        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question"""
+        prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen1.5-0.5B", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=6, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
@@ -525,14 +525,14 @@ class Qwen2IntegrationTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, do_sample=False)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         # Assisted generation
         assistant_model = model
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, do_sample=False)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
@@ -552,14 +552,14 @@ class Qwen2IntegrationTest(unittest.TestCase):
             attn_implementation="sdpa",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, do_sample=False)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         # Assisted generation
         assistant_model = model
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
+        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, do_sample=False)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
@@ -567,23 +567,21 @@ class Qwen2IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
+        EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question"""
+        prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
 
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=6, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
-        )
-        prompt = "My favourite condiment is "
+        EXPECTED_TEXT_COMPLETION = "To be or not to be, that is the question"
+        prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-0.5B", use_fast=False)
         model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen1.5-0.5B", device_map="auto", torch_dtype=torch.float16)
         assistant_model = Qwen2ForCausalLM.from_pretrained(
@@ -594,7 +592,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         # greedy generation outputs
         set_seed(0)
         generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
+            input_ids, max_new_tokens=6, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

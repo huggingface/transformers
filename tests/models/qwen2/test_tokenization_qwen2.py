@@ -27,7 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "Qwen/Qwen1.5-7B"
+    from_pretrained_id = "Qwen/Qwen1.5-0.5B"
     tokenizer_class = Qwen2Tokenizer
     rust_tokenizer_class = Qwen2TokenizerFast
     test_slow_tokenizer = True
@@ -199,7 +199,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="Qwen/Qwen1.5-7B",
+            model_name="Qwen/Qwen1.5-0.5B",
             revision="5909c8222473b2c73b0b73fb054552cd4ef6a8eb",
             sequences=sequences,
         )
