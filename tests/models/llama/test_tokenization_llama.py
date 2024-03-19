@@ -52,10 +52,9 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "hf-internal-testing/llama-tokenizer"
+    from_pretrained_id = ["hf-internal-testing/llama-tokenizer", "meta-llama/Llama-2-7b-hf"]
     tokenizer_class = LlamaTokenizer
     rust_tokenizer_class = LlamaTokenizerFast
-    pretrained_tokenizers_to_test = [(LlamaTokenizer, "meta-llama/Llama-2-7b-hf", None)]
 
     test_rust_tokenizer = False
     test_sentencepiece = True
