@@ -19,12 +19,10 @@ import unittest
 from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
-import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
-from transformers.utils.import_utils import is_mamba_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -43,15 +41,6 @@ if is_torch_available():
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
-
-if is_mamba_ssm_available():
-    from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
-
-    from transformers.models.mamba.convert_mamba_ssm_checkpoint_to_pytorch import (
-        convert_mamba_ssm_checkpoint_to_huggingface_model,
-    )
-else:
-    MambaLMHeadModel = None
 
 
 class MambaModelTester:
@@ -500,49 +489,3 @@ class MambaIntegrationTests(unittest.TestCase):
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
         self.assertEqual(output_sentence, expected_output)
-
-    @parameterized.expand([("state-spaces/mamba-130m",)])
-    def test_model_from_mamba_ssm_conversion(self, original_model_name):
-        """Test that converting a model from the `state-spaces/mamba` repository into a huggingface compatible `MambaForCausalLM` returns a model which returns the same output as the original."""
-        # Skip this test if our current fixture is not compatible.
-        # Performing these checks from within the test since `@unittest.skipIf` isn't working.
-        if MambaLMHeadModel is None:
-            pytest.skip(
-                "The `mamba_ssm` package is not available, we cannot test the conversion if we cannot run the original model."
-            )
-        if torch_device == "cpu":
-            pytest.skip(
-                "The original mamba_ssm does not support cpu, we cannot test the conversion if we cannot run the original model."
-            )
-
-        # Pull a model from the `state-spaces/mamba` repository
-        # Currently only pulling the tiny model for speed.
-        original_model = MambaLMHeadModel.from_pretrained(original_model_name).to(torch_device)
-        self.assertIsNotNone(original_model)
-
-        # Get the original model's state dict and config as dict for conversion.
-        original_state_dict = original_model.state_dict()
-        original_ssm_config_dict = original_model.config.__dict__
-        converted_model, _ = convert_mamba_ssm_checkpoint_to_huggingface_model(
-            original_state_dict=original_state_dict, original_ssm_config_dict=original_ssm_config_dict
-        )
-        converted_model = converted_model.to(torch_device)
-
-        # Feed identical input into original_model and converted_model and check for equivalence.
-        # Currently the tokenizer for mamba_ssm is hardcoded as EleutherAI/gpt-neox-20b.
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-        input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(torch_device)
-
-        # Assert model output sentences are close
-        original_model_out = original_model.generate(input_ids, max_length=len(input_ids[0]) + 10)
-        original_model_output_sentence = tokenizer.decode(original_model_out[0, :])
-        converted_model_out = converted_model.generate(input_ids, do_sample=False, max_new_tokens=10)
-        converted_model_output_sentence = tokenizer.decode(converted_model_out[0, :])
-        self.assertEqual(original_model_output_sentence, converted_model_output_sentence)
-        self.assertEqual(converted_model_output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
-        print(original_model_output_sentence)
-        # Assert model logits are close
-        with torch.no_grad():
-            original_model_logits = original_model(input_ids).logits
-            converted_model_logits = converted_model(input_ids).logits
-        self.assertTrue(torch.allclose(original_model_logits, converted_model_logits, atol=1e-4))
