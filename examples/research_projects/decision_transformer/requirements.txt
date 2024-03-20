@@ -15,7 +15,7 @@ backcall==0.2.0
 backoff==1.11.1
 backports.zoneinfo==0.2.1
 binaryornot==0.4.4
-black==22.1.0
+black==24.3.0
 boto3==1.16.34
 botocore==1.19.63
 Brotli==1.0.9
