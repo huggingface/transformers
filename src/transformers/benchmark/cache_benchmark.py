@@ -198,8 +198,6 @@ if __name__ == "__main__":
                             if cache_type == "dynamic" and compile:
                                 continue
 
-                            print(f"{batch_size}, {seq_length}, {max_cache_length}")
-
                             run_kwargs = {
                                 "measure_kwargs": {"number": 2, "repeat": 3},
                                 "target_kwargs": {
