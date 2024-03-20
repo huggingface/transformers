@@ -83,7 +83,6 @@ jobs:
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
           status: ${{ steps.run_fa2_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-
       - name: Run integration tests
         id: run_integration_tests
         if: always()
@@ -97,7 +96,7 @@ jobs:
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
           status: ${{ steps.run_integration_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-        - name: Wait for SSH
-          run : |
-            sleep 30s
-            while [ "$(last | grep '^runner.*still logged in$')" ]; do sleep 1m; done
+      - name: Wait for SSH
+        run : |
+          sleep 30s
+          while [ "$(last | grep '^runner.*still logged in$')" ]; do sleep 1m; done

@@ -15,7 +15,6 @@
 # limitations under the License.
 """ PyTorch Gemma model."""
 
-
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
