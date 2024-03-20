@@ -27,19 +27,23 @@ class BenchMark:
     def __init__(self, *arg, **kwargs):
         self._buffer = {"init_kwargs": {}, "runs": []}
         self._run_buffer = {
-            "inputs_kwargs": {},
-            "target_kwargs": {},
-            "measure_kwargs": {},
-            "report_kwargs": {},
+            "config": {
+                "inputs_kwargs": {},
+                "target_kwargs": {},
+                "measure_kwargs": {},
+                "report_kwargs": {},
+            },
             "result": None,
         }
 
     def _reset_run_buffer(self):
         self._run_buffer = {
-            "inputs_kwargs": {},
-            "target_kwargs": {},
-            "measure_kwargs": {},
-            "report_kwargs": {},
+            "config": {
+                "inputs_kwargs": {},
+                "target_kwargs": {},
+                "measure_kwargs": {},
+                "report_kwargs": {},
+            },
             "result": None,
         }
 
@@ -119,8 +123,8 @@ class SpeedBenchMark(BenchMark):
     """A simple class used to benchmark the running time of a callable."""
 
     def _measure(self, func, number=3, repeat=1):
-        self._run_buffer["measure_kwargs"]["number"] = number
-        self._run_buffer["measure_kwargs"]["repeat"] = repeat
+        self._run_buffer["config"]["measure_kwargs"]["number"] = number
+        self._run_buffer["config"]["measure_kwargs"]["repeat"] = repeat
 
         def wrapper(*args, **kwargs):
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average

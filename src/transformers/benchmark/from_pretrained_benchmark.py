@@ -14,6 +14,7 @@
 """
 Benchmark for models' `from_pretrained` method
 """
+import argparse
 import json
 
 from benchmark_utils_generic import BenchMark, SpeedBenchMark
@@ -21,8 +22,8 @@ from benchmark_utils_generic import BenchMark, SpeedBenchMark
 
 class FromPretrainedBenchMark(BenchMark):
     def _target(self, model_class, repo_id):
-        self._run_buffer["target_kwargs"]["model_class"] = model_class
-        self._run_buffer["target_kwargs"]["repo_id"] = repo_id
+        self._run_buffer["config"]["target_kwargs"]["model_class"] = model_class
+        self._run_buffer["config"]["target_kwargs"]["repo_id"] = repo_id
 
         def target():
             _ = model_class.from_pretrained(repo_id)
@@ -37,15 +38,30 @@ class FromPretrainedSpeedBenchMark(SpeedBenchMark, FromPretrainedBenchMark):
 if __name__ == "__main__":
     from transformers import AutoModel
 
-    repo_id = "bert-base-uncased"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+    )
+    args = parser.parse_args()
 
-    benchmark = FromPretrainedSpeedBenchMark()
+    if args.config_path is None:
+        init_kwargs = {}
 
-    run_kwargs = {
-        "measure_kwargs": {"number": 2, "repeat": 3},
-        "target_kwargs": {"model_class": AutoModel, "repo_id": repo_id},
-        "inputs_kwargs": [{}],
-        "report_kwargs": {"output_path": "benchmark_report.json"},
-    }
-    result = benchmark.run(**run_kwargs)
-    print(json.dumps(result, indent=4))
+        repo_id = "bert-base-uncased"
+        run_kwargs = {
+            "measure_kwargs": {"number": 2, "repeat": 3},
+            "target_kwargs": {"model_class": AutoModel, "repo_id": repo_id},
+            "inputs_kwargs": [{}],
+            "report_kwargs": {"output_path": "benchmark_report.json"},
+        }
+        run_configs = [run_kwargs]
+    else:
+        with open(args.coonfig_path) as fp:
+            config = json.load(fp)
+            init_kwargs = config["init_kwargs"]
+            run_configs = [run["config"] for run in config["runs"]]
+
+    benchmark = FromPretrainedSpeedBenchMark(**init_kwargs)
+
+    for run_config in run_configs:
+        result = benchmark.run(**run_config)
