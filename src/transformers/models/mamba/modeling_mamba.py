@@ -648,13 +648,14 @@ class MambaForCausalLM(MambaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        use_cache = kwargs.get("use_cache", None)
         mamba_outputs = self.backbone(
             input_ids,
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            **kwargs,
+            use_cache=use_cache,
         )
         hidden_states = mamba_outputs[0]
 
