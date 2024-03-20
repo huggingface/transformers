@@ -50,15 +50,15 @@ if is_vision_available():
     import PIL
 
 
-def make_batched(videos) -> List[List[ImageInput]]:
+def make_batched_videos(videos) -> List[List[ImageInput]]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         return videos
 
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        return [videos]
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]) and len(videos[0].shape) == 4:
+        return [list(video) for video in videos]
 
-    elif is_valid_image(videos):
-        return [[videos]]
+    elif is_valid_image(videos) and len(videos.shape) == 4:
+        return [list(videos)]
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -234,6 +234,9 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            videos (`ImageInput`):
+                Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
+                to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -298,7 +301,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         if images is not None:
             inputs = [make_list_of_images(images)]
         elif videos is not None:
-            inputs = make_batched(videos)
+            inputs = make_batched_videos(videos)
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 

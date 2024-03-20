@@ -73,6 +73,10 @@ class VideoLlavaProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                Video frames to preprocess. Expects a single or batch of video frames in NumPy array or PyTorch
+                tensor. Each video should be of shape (T, C, H, W), where T is number of frames, C is
+                number of channels, H and W are image height and width.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -104,7 +108,9 @@ class VideoLlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None or videos is not None:
-            pixel_values = self.image_processor(images, videos=videos, return_tensors=return_tensors)["pixel_values"]
+            pixel_values = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)[
+                "pixel_values"
+            ]
         else:
             pixel_values = None
         text_inputs = self.tokenizer(

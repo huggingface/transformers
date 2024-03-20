@@ -72,11 +72,6 @@ class VideoLlavaCausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-
-            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -84,7 +79,6 @@ class VideoLlavaCausalLMOutputWithPast(ModelOutput):
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->VideoLlava
@@ -156,7 +150,7 @@ class VideoLlavaVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.ClipVisionEmbeddings with Clip->VideoLlava
+# Copied from transformers.models.clip.modeling_clip.ClipVisionAttention with Clip->VideoLlava
 class VideLlavaVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -261,7 +255,7 @@ class VideLlavaVisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.ClipMLP with Clip->VideoLlava
+# Copied from transformers.models.clip.modeling_clip.ClipMLP with Clip -> VideoLlavaVision
 class VideoLlavaVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -277,7 +271,7 @@ class VideoLlavaVisionMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.ClipEncoderLayer with Clip->VideoLlava
+# Copied from transformers.models.clip.modeling_clip.ClipEncoderLayer with Clip->VideoLlavaVision
 class VideoLlavaVisionEncoderLayer(nn.Module):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__()
@@ -328,14 +322,14 @@ class VideoLlavaVisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.ClipEncoder with Clip->VideoLlava
+# Copied from transformers.models.clip.modeling_clip.ClipEncoder with Clip->VideoLlavaVision
 class VideoLlavaVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLIPEncoderLayer`].
+    [`VideoLlavaVisionEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config: VideoLlavaConfig
     """
 
     def __init__(self, config: VideoLlavaConfig):
@@ -426,7 +420,7 @@ class VideoLlavaVisionEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.ClipVisionTransformer with Clip->VideoLlava
+# Copied from transformers.models.clip.modeling_clip.ClipVisionTransformer with Clip -> VideoLlava
 class VideoLlavaVisionTransformer(nn.Module):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__()
@@ -499,7 +493,6 @@ class VideoLlavaVisionTransformer(nn.Module):
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     VIDEO_LLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->VideoLlava,llava->video_llava
@@ -554,8 +547,8 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`VideoLlavaImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -684,10 +677,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         final_attention_mask = torch.zeros(
             batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
-        if labels is not None:
-            final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
-            )
         # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
         # set the corresponding tensors into their correct target device.
         target_device = inputs_embeds.device
@@ -703,7 +692,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
         if labels is not None:
+            final_labels = torch.full(
+                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+            )
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
+        else:
+            final_labels = None
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
@@ -718,9 +712,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        if labels is None:
-            final_labels = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
@@ -756,21 +747,38 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
+        >>> from decord import VideoReader
+        >>> from huggingface_hub import hf_hub_download
         >>> from transformers import AutoProcessor, VideoLlavaForConditionalGeneration
 
         >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B")
         >>> processor = AutoProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B")
 
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> prompt = "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
+        >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
+        >>> vr = VideoReader(uri=video_path, height=224, width=224)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> # sample uniformly 8 frames from the video
+        >>> indices = np.arange(0, len(vr), len(vr) / 8).astype(int)
+        >>> frames = vr.get_batch(indices).asnumpy()
+
+        >>> inputs = processor(text=prompt, videos=list(clip), return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_length=80)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        'USER:   Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing sight.Ъ'
+
+        >>> # to generate from image
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> prompt = "USER: <image> How many cats are there in the image? ASSISTANT:"
+        >>> inputs = processor(text=prompt, videos=list(clip), return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+        'USER:   How many cats are there in the image? ASSISTANT: There are two cats in the image'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
