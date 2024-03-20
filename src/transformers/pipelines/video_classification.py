@@ -3,7 +3,7 @@ from typing import List, Union
 
 import requests
 
-from ..utils import add_end_docstrings, is_decord_available, is_torch_available, logging, requires_backends
+from ..utils import add_end_docstrings, is_av_available, is_torch_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -33,7 +33,7 @@ class VideoClassificationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        requires_backends(self, "decord")
+        requires_backends(self, "av")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None):
