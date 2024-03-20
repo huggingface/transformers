@@ -1265,33 +1265,19 @@ class GenerationTesterMixin:
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_dola_decoding_sample(self):
-        # This test ensures that the DoLa generation does not introduce output changes over greedy search.
-        # NOTE (1): The sentence above is true most of the time, there is a tiny difference in the logits due to matmul
-        # shape differences -- and it may result in a different output. The input shape difference happens in the
-        # main model, that runs the forward pass with several candidates at once (as opposed to generating one token at
-        # a time). See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535 for more info.
-        # NOTE (2): It breaks the pattern in the tests above, for multiple reasons:
-        # - dola_decoding does not support `batch_size > 1`
-        # - dola_decoding does not support encoder-decoder models
-
+        # TODO (joao): investigate skips, try to reduce incompatibilities
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
-                self.skipTest("Won't fix: old model with different cache format")
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
+                self.skipTest("Skip Reformer as the lm_head input size is 2 * hidden size, adopted from Rev Nets.")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
-                    "speech2text",
-                    "git",
-                    "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
                     "wav2vec",
+                    "clvp",
+                    "bark",
                 ]
             ):
-                self.skipTest("May fix in the future: need model-specific fixes")
+                self.skipTest("Skip speech models")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -1302,35 +1288,33 @@ class GenerationTesterMixin:
             ):
                 self.skipTest("DoLa is not supported for the models without returning layerwise hidden states")
 
-            # enable cache if the model is not openai-gpt
+            # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
             config.use_cache = True
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
                     "openaigpt",
+                    "xlnet",
+                    "cpm",
+                    "xlm",
                 ]
             ):
                 config.use_cache = False
 
-            # Encoder Decoder models are not supported
+            # Encoder-decoder models are not supported
             if config.is_encoder_decoder:
                 self.skipTest("DoLa is not supported for encoder-decoder models")
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
 
-            # if the model does not support dola_decoding due to the absent of model.lm_head, skip the test
-            if not hasattr(model, "lm_head"):
-                self.skipTest("DoLa is not supported for the models without `model.lm_head`")
-            # Sets assisted generation arguments such that:
+            # Sets dola generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
-            # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of
-            #    the assistant model is correct
-            # c) there are at least two forward passes in the main model, to ensure the input preparation of
+            # b) there are at least two forward passes in the main model, to ensure the input preparation of
             #    the main model is correct
             generation_kwargs = {
                 "eos_token_id": -1,  # see a)
-                "max_new_tokens": 4,  # see c)
+                "max_new_tokens": 4,  # see b)
                 "num_beams": 1,
                 "do_sample": True,
                 "output_scores": True,
@@ -1339,11 +1323,8 @@ class GenerationTesterMixin:
                 "output_attentions": True,
                 "return_dict_in_generate": True,
             }
-            print("Input size", input_ids.size())
-            print("Attneion mask size", attention_mask.size())
             generation_kwargs.update({"dola_layers": "low"})
             output_dola = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
-            print("Output size", output_dola[0].size())
             self._check_outputs(output_dola, input_ids, model.config, use_cache=config.use_cache)
 
     def test_assisted_decoding_sample(self):

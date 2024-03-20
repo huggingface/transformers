@@ -557,6 +557,7 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_7b_dola_generation(self):
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
         EXPECTED_TEXT_COMPLETION = (
             """My favourite condiment is 100% ketchup. I love it on everything, and I’m not ash"""
         )

@@ -705,6 +705,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_7b_dola_generation(self):
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our understanding of space and time."""
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")

@@ -899,6 +899,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     def test_model_2b_bf16_dola(self):
         model_id = "google/gemma-2b"
+        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
         EXPECTED_TEXTS = [
             "Hello I am doing an experiment and need to get the mass of a block. The problem is, it has no scale",
             "Hi today we have the review for a <strong>2016/2017</strong> season of",

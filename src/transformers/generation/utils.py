@@ -1966,7 +1966,7 @@ class GenerationMixin:
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
             if generation_config.repetition_penalty < 1.2:
-                warnings.warn(
+                logger.warning_once(
                     f"Calling DoLa decoding but the `repetition_penalty` is set to a value of {generation_config.repetition_penalty}, which could induce unwanted repetition. "
                     "The recommended value for DoLa decoding is `repetition_penalty=1.2` to prevent repetition."
                 )
@@ -2461,10 +2461,16 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
+        batch_size, cur_len = input_ids.shape
 
-        this_peer_finished = False  # used by synced_gpus only
-        # auto-regressive generation
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        this_peer_finished = False
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
+
+
+        # prepare layers for DoLa decoding
         # using final layer as the mature layer
         mature_layer = self.config.num_hidden_layers
         # if the model has tied word embeddings, we skip the word embeddings (0-th) layer and start from the 2nd layer, as the early exit from word embeddings will become identity function
@@ -2501,23 +2507,9 @@ class GenerationMixin:
         else:
             raise ValueError("dola_layers must be either 'low', 'high' or a list of integers.")
 
-        # of the model doesnot have self.lm_head, raise an error
-        if not hasattr(self, "lm_head"):
-            raise ValueError(
-                f"The model {self.__class__.__name__} does not have an lm_head attribute that is required for DoLa decoding."
-            )
+        lm_head = self.get_output_embeddings()
 
-        while True:
-            if synced_gpus:
-                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-                # The following logic allows an early break if all peers finished generating their sequence
-                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
-                # send 0.0 if we finished, 1.0 otherwise
-                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                # did all peers finish? the reduced sum will be 0.0 then
-                if this_peer_finished_flag.item() == 0.0:
-                    break
-
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2533,7 +2525,7 @@ class GenerationMixin:
             final_logits = outputs.logits[:, -1, :]
             candidate_premature_logits = {}
             for candidate_premature_layer in candidate_premature_layers:
-                candidate_premature_logits[candidate_premature_layer] = self.lm_head(
+                candidate_premature_logits[candidate_premature_layer] = lm_head(
                     outputs.hidden_states[candidate_premature_layer][:, -1, :]
                 )
 
@@ -2637,13 +2629,7 @@ class GenerationMixin:
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-
-            # stop when each sentence is finished
-            if unfinished_sequences.max() == 0:
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
-                break
+            this_peer_finished = unfinished_sequences.max() == 0
 
         if streamer is not None:
             streamer.end()
@@ -4688,7 +4674,7 @@ def _relative_top_filter(
     baseline_scores: torch.FloatTensor,
     relative_top: float = 0.1,
     filter_value: float = -float("Inf"),
-    base_filter_value=-1e-3,
+    base_filter_value = -1e-3,
     min_tokens_to_keep: int = 1,
 ) -> torch.FloatTensor:
     """Reference: https://github.com/XiangLi1999/ContrastiveDecoding/blob/170e9142e92159c1237d731e240f5eb14aabf428/transformers/src/transformers/generation_logits_process.py#L235"""
