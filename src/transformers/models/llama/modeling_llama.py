@@ -1055,20 +1055,11 @@ class LlamaModel(LlamaPreTrainedModel):
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, cache_positions):
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
-
-        if self.config._attn_implementation == "sdpa":
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
-            if attention_mask is None or (not is_tracing and input_tensor.shape[1] == 0):
-                return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
@@ -1076,12 +1067,12 @@ class LlamaModel(LlamaPreTrainedModel):
         if hasattr(self.layers[0].self_attn, "past_key_value"):
             target_length = self.config.max_position_embeddings  # static cache
         else:
-            target_length = cache_positions[-1] + 1  # dynamic cache
+            target_length = cache_position[-1] + 1  # dynamic cache
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_positions[0]
+        causal_mask *= torch.arange(target_length, device=device) > cache_position[0]
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1092,8 +1083,8 @@ class LlamaModel(LlamaPreTrainedModel):
             elif attention_mask.dim() == 4:
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_positions[0] + sequence_length:
-                    offset = cache_positions[0]
+                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    offset = cache_position[0]
                 else:
                     offset = 0
                 mask_shape = attention_mask.shape
@@ -1108,6 +1099,11 @@ class LlamaModel(LlamaPreTrainedModel):
             and attention_mask.device.type == "cuda"
         ):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+            )
             if not is_tracing and torch.any(attention_mask != 1):
                 # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
