@@ -1080,7 +1080,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 or isinstance(input_tensor, torch.fx.Proxy)
                 or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
-            if attention_mask is None or ( not is_tracing and input_tensor.shape[1] == 1) or 0.0 not in attention_mask:
+            if (not is_tracing and input_tensor.shape[1] == 1):
                 return None
             
         batch_size, seq_length = input_tensor.shape[:2]
