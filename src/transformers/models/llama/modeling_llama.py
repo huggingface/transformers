@@ -371,9 +371,7 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask
-            if cache_position is not None:
-                causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -658,8 +656,8 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         causal_mask = attention_mask
-        if attention_mask is not None and cache_position is not None:
-            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
+        # if attention_mask is not None and cache_position is not None:
+        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -815,11 +813,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
 
-        if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
-            causal_mask = torch.full(
-                (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool
-            )
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
             device = layer.input_layernorm.weight.device
@@ -934,12 +927,6 @@ class LlamaModel(LlamaPreTrainedModel):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        # Register a causal mask to separate causal and padding mask creation. Merging happens in the attention class.
-        # NOTE: This is not friendly with TorchScript, ONNX, ExportedProgram serialization for very large `max_position_embeddings`.
-        causal_mask = torch.full(
-            (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
-        )
-        self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1000,7 +987,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_seen_tokens)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1068,35 +1055,27 @@ class LlamaModel(LlamaPreTrainedModel):
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, past_seen_tokens):
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_positions):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
-        if (self.config._attn_implementation == "sdpa"):
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
-            if (not is_tracing and input_tensor.shape[1] == 1):
-                return None
-
-        dtype = input_tensor.dtype
-        device = input_tensor.device
-
+        dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        if hasattr(self.layers[0].self_attn, "past_key_value"):
+            target_length = self.config.max_position_embeddings # static cache
+        else:
+            target_length = cache_positions[-1] + 1             # dynamic cache
+
         causal_mask = torch.full(
-            (attention_mask.shape[1], self.config.max_position_embeddings), fill_value=min_dtype, dtype=dtype, device=device
+            (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
         )
-        causal_mask = torch.triu(causal_mask, diagonal=1)
-        batch_size, seq_length = input_tensor.shape[:2]
-
-        # We use the current dtype to avoid any overflows
-        min_dtype = torch.finfo(dtype).min
-        # causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
-        causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_positions[0] 
+        causal_mask = causal_mask[None, None, :,:].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
@@ -1106,8 +1085,8 @@ class LlamaModel(LlamaPreTrainedModel):
             elif attention_mask.dim() == 4:
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < past_seen_tokens + input_tensor.shape[1]:
-                    offset = past_seen_tokens
+                if attention_mask.shape[-2] < cache_positions[0] + sequence_length:
+                    offset = cache_positions[0] 
                 else:
                     offset = 0
                 mask_shape = attention_mask.shape
