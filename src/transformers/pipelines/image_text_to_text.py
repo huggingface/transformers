@@ -47,7 +47,7 @@ class ImageTextToTextPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> pipe = pipeline(model="Salesforce/blip-image-captioning-base")
+    >>> pipe = pipeline(task="image-text-to-text", model="Salesforce/blip-image-captioning-base")
     >>> pipe("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", text="A photo of")
     [{'generated_text': 'two birds standing next to each other'}]
     ```
@@ -89,7 +89,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         return preprocess_params, forward_kwargs, {}
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
         Generate a text given text and the image(s) passed as inputs.
 
@@ -122,16 +122,21 @@ class ImageTextToTextPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, image, text=None, timeout=None):
-        image = load_image(image, timeout=timeout)
+    def preprocess(self, image=None, text=None, timeout=None):
+        if image is not None:
+            image = load_image(image, timeout=timeout)
 
         model_type = self.model.config.model_type
 
         kwargs = {}
+
         if model_type == "pix2struct":
             kwargs = {"add_special_tokens": False}
 
-        model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
+        if model_type == "idefics":
+            model_inputs = self.processor(text, return_tensors=self.framework, **kwargs)
+        else:
+            model_inputs = self.processor(images=image, text=text, return_tensors=self.framework, **kwargs)
 
         if model_type == "git":
             # remove EOS token from input_ids and attention_mask
