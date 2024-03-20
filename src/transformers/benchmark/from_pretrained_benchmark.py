@@ -56,7 +56,7 @@ if __name__ == "__main__":
         }
         run_configs = [run_kwargs]
     else:
-        with open(args.coonfig_path) as fp:
+        with open(args.config_path) as fp:
             config = json.load(fp)
             init_kwargs = config["init_kwargs"]
             run_configs = [run["config"] for run in config["runs"]]
