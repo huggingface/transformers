@@ -791,7 +791,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
@@ -1074,7 +1074,7 @@ class LlamaModel(LlamaPreTrainedModel):
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position[0]
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
