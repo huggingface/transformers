@@ -61,6 +61,13 @@ jobs:
           pip uninstall transformers && pip install -e ".[testing]" 
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
+      - name: Tailscale
+        uses: huggingface/tailscale-action@main
+        with:
+          authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
+          debugEnabled: ${{ secrets.ACTIONS_STEP_DEBUG }}
+          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
+          slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -90,3 +97,7 @@ jobs:
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
           status: ${{ steps.run_integration_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+        - name: Wait for SSH
+          run : |
+            sleep 30s
+            while [ "$(last | grep '^runner.*still logged in$')" ]; do sleep 1m; done
