@@ -72,9 +72,9 @@ from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
-from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
+from .text2text_generation import Text2TextGenerationPipeline
 from .text_classification import TextClassificationPipeline
-from .text_generation import TextGenerationPipeline
+from .text_generation import SummarizationPipeline, TextGenerationPipeline, TranslationPipeline
 from .text_to_audio import TextToAudioPipeline
 from .token_classification import (
     AggregationStrategy,
@@ -267,7 +267,7 @@ SUPPORTED_TASKS = {
         "type": "text",
     },
     "summarization": {
-        "impl": SummarizationPipeline,
+        "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
@@ -288,7 +288,7 @@ SUPPORTED_TASKS = {
         "type": "text",
     },
     "text2text-generation": {
-        "impl": Text2TextGenerationPipeline,
+        "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
