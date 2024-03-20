@@ -186,10 +186,7 @@ class RTDetrConfig(PretrainedConfig):
         backbone_config=None,
         backbone="resnet50d",
         use_pretrained_backbone=True,
-        backbone_kwargs={
-            "features_only": True,
-            "out_indices": [2, 3, 4],
-        },
+        backbone_kwargs=None,
         # encoder HybridEncoder
         d_model=256,
         encoder_in_channels=[512, 1024, 2048],
