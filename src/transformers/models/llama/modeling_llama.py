@@ -1074,6 +1074,15 @@ class LlamaModel(LlamaPreTrainedModel):
                 return attention_mask
             return None
 
+        if (self.config._attn_implementation == "sdpa"):
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+            )
+            if attention_mask is None or ( not is_tracing and input_tensor.shape[1] == 1) or 0.0 not in attention_mask:
+                return None
+            
         batch_size, seq_length = input_tensor.shape[:2]
         dtype = input_tensor.dtype
         device = input_tensor.device
