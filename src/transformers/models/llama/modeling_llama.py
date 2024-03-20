@@ -657,7 +657,8 @@ class LlamaSdpaAttention(LlamaAttention):
 
         causal_mask = attention_mask
         # if attention_mask is not None and cache_position is not None:
-        causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+        if causal_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -672,6 +673,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=causal_mask is not None
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -1061,6 +1063,15 @@ class LlamaModel(LlamaPreTrainedModel):
                 return attention_mask
             return None
 
+        if self.config._attn_implementation == "sdpa":
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+            )
+            if attention_mask is None or (not is_tracing and input_tensor.shape[1]==0):
+                return None
+
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
@@ -1101,11 +1112,6 @@ class LlamaModel(LlamaPreTrainedModel):
             and attention_mask.device.type == "cuda"
         ):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
             if not is_tracing and torch.any(attention_mask != 1):
                 # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
