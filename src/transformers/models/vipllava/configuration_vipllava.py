@@ -95,13 +95,11 @@ class VipLlavaConfig(PretrainedConfig):
         self.projector_layernorm_eps = projector_layernorm_eps
         self.vision_feature_layers = vision_feature_layers
 
-        if "vocab_size" in kwargs and not isinstance(text_config, dict):
+        if "vocab_size" in kwargs:
             warnings.warn(
-                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
+                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`. Passing this argument has no effect",
                 FutureWarning,
             )
-            # set the vocab_size
-            text_config["vocab_size"] = kwargs["vocab_size"]
 
         self.vision_config = vision_config
 
@@ -127,14 +125,21 @@ class VipLlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
-            if "vocab_size" in kwargs:
-                warnings.warn(
-                    "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
-                    FutureWarning,
-                )
-                # set the vocab_size
-                text_config.vocab_size = kwargs["vocab_size"]
 
         self.text_config = text_config
+        self._vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
+
+        @property
+        def vocab_size(self):
+            warnings.warn(
+                "The `vocab_size` attribute is deprecated and will be removed in v4.42, Please use `text_config.vocab_size` instead.",
+                FutureWarning,
+            )
+            return self._vocab_size
+
+        def to_dict(self):
+            output = super().to_dict()
+            output.pop("_vocab_size", None)
+            return output
