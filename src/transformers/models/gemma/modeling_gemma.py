@@ -978,7 +978,9 @@ class GemmaModel(GemmaPreTrainedModel):
         if hasattr(self.layers[0].self_attn, "past_key_value"):
             target_length = self.config.max_position_embeddings  # static cache
         else:
-            target_length = max(cache_position[-1] + 1, attention_mask.shape[-1])  # dynamic cache
+            target_length = max(
+                cache_position[-1] + 1, attention_mask.shape[-1] if attention_mask is not None else 0
+            )  # dynamic cache
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
