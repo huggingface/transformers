@@ -18,7 +18,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SuperPointConfig, SuperPointImageProcessor, SuperPointModel
+from transformers import SuperPointConfig, SuperPointForKeypointDetection, SuperPointImageProcessor
 
 
 def get_superpoint_config():
@@ -106,7 +106,7 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
         rename_key(new_state_dict, src, dest)
 
     # Load HuggingFace model
-    model = SuperPointModel(config)
+    model = SuperPointForKeypointDetection(config)
     model.load_state_dict(new_state_dict)
     model.eval()
     print("Successfully loaded weights in the model")
