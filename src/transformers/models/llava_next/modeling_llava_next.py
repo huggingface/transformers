@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Llava model."""
+""" PyTorch Llava-NeXT model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -31,26 +32,81 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_llava import LlavaConfig
+from .configuration_llava_next import LlavaNextConfig
+from .image_processing_llava_next import select_best_resolution
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "LlavaConfig"
+_CONFIG_FOR_DOC = "LlavaNextConfig"
 
-LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.5-7b-hf",
-    "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf",
-    # See all Llava models at https://huggingface.co/models?filter=llava
+LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "llava-hf/llava-v1.6-mistral-7b-hf",
+    # See all LLaVA-NeXT models at https://huggingface.co/models?filter=llava_next
 ]
 
 
-@dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
-class LlavaCausalLMOutputWithPast(ModelOutput):
+def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     """
-    Base class for Llava causal language model (or autoregressive) outputs.
+    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
+
+    Args:
+        image_size (`tuple`):
+            The size of the input image in the format (width, height).
+        grid_pinpoints (`List`):
+            A list containing possible resolutions. Each item in the list should be a tuple or list
+            of the form `(height, width)`.
+        patch_size (`int`):
+            The size of each image patch.
+
+    Returns:
+        tuple: The shape of the image patch grid in the format (width, height).
+    """
+    if not isinstance(grid_pinpoints, list):
+        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+
+    height, width = select_best_resolution(image_size, grid_pinpoints)
+    return height // patch_size, width // patch_size
+
+
+def unpad_image(tensor, original_size):
+    """
+    Unpads a PyTorch tensor of a padded and resized image.
+
+    Args:
+        tensor (`torch.Tensor`):
+            The image tensor, assumed to be of shape (num_channels, height, width).
+        original_size (`tuple`):
+            The original size of the image (height, width).
+
+    Returns:
+        `torch.Tensor`: The unpadded image tensor.
+    """
+    original_height, original_width = original_size
+    current_height, current_width = tensor.shape[1:]
+
+    original_aspect_ratio = original_width / original_height
+    current_aspect_ratio = current_width / current_height
+
+    if original_aspect_ratio > current_aspect_ratio:
+        scale_factor = current_width / original_width
+        new_height = int(original_height * scale_factor)
+        padding = (current_height - new_height) // 2
+        unpadded_tensor = tensor[:, padding : current_height - padding, :]
+    else:
+        scale_factor = current_height / original_height
+        new_width = int(original_width * scale_factor)
+        padding = (current_width - new_width) // 2
+        unpadded_tensor = tensor[:, :, padding : current_width - padding]
+
+    return unpadded_tensor
+
+
+@dataclass
+# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->LlavaNext
+class LlavaNextCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for LlavaNext causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -89,8 +145,9 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class LlavaMultiModalProjector(nn.Module):
-    def __init__(self, config: LlavaConfig):
+# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaNext
+class LlavaNextMultiModalProjector(nn.Module):
+    def __init__(self, config: LlavaNextConfig):
         super().__init__()
 
         self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
@@ -104,7 +161,7 @@ class LlavaMultiModalProjector(nn.Module):
         return hidden_states
 
 
-LLAVA_START_DOCSTRING = r"""
+LLAVA_NEXT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -114,7 +171,7 @@ LLAVA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlavaConfig`] or [`LlavaVisionConfig`]):
+        config ([`LlavaNextConfig`] or [`LlavaNextVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -123,20 +180,21 @@ LLAVA_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAVA_START_DOCSTRING,
+    LLAVA_NEXT_START_DOCSTRING,
 )
-class LlavaPreTrainedModel(PreTrainedModel):
-    config_class = LlavaConfig
+# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->LlavaNext,llava->llava_next
+class LlavaNextPreTrainedModel(PreTrainedModel):
+    config_class = LlavaNextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlavaVisionAttention"]
+    _no_split_modules = ["LlavaNextVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
-        # important: this ported version of Llava isn't meant for training from scratch - only
+        # important: this ported version of LlavaNext isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
+        # https://github.com/haotian-liu/LLaVA/tree/main/llava_next should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -164,7 +222,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
         return self.language_model._supports_sdpa
 
 
-LLAVA_INPUTS_DOCSTRING = r"""
+LLAVA_NEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -176,8 +234,10 @@ LLAVA_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
+            [`AutoImageProcessor`]. See [`LlavaNextImageProcessor.__call__`] for details. [`LlavaProcessor`] uses
+            [`LlavaNextImageProcessor`] for processing images.
+        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
+            The sizes of the images in the batch, being (height, width) for each image.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -220,7 +280,8 @@ LLAVA_INPUTS_DOCSTRING = r"""
             The index of the layer to select the vision feature.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -236,15 +297,18 @@ LLAVA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The LLAVA model which consists of a vision backbone and a language model.""",
-    LLAVA_START_DOCSTRING,
+    """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
+    LLAVA_NEXT_START_DOCSTRING,
 )
-class LlavaForConditionalGeneration(LlavaPreTrainedModel):
-    def __init__(self, config: LlavaConfig):
+class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
+    def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
-        self.multi_modal_projector = LlavaMultiModalProjector(config)
+        self.multi_modal_projector = LlavaNextMultiModalProjector(config)
+
+        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
+
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
@@ -252,27 +316,35 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.resize_token_embeddings
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
@@ -280,9 +352,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._merge_input_ids_with_image_features
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
+
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
@@ -349,12 +423,13 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         return final_embedding, final_attention_mask, final_labels, position_ids
 
-    @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(LLAVA_NEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=LlavaNextCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -366,7 +441,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
+    ) -> Union[Tuple, LlavaNextCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -381,12 +456,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
+        >>> from transformers import AutoProcessor, LlavaNextForConditionalGeneration
 
-        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>> model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
+        >>> prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -395,7 +470,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
+        "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -413,25 +488,65 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         )
 
         if inputs_embeds is None:
-            # 1. Extra the input embeddings
+            # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+                batch_size, num_patches, num_channels, height, width = pixel_values.shape
+                reshaped_pixel_values = pixel_values.view(batch_size * num_patches, num_channels, height, width)
+                image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
+
+                selected_image_feature = image_features.hidden_states[vision_feature_layer]
 
                 if vision_feature_select_strategy == "default":
                     selected_image_feature = selected_image_feature[:, 1:]
                 elif vision_feature_select_strategy == "full":
                     selected_image_feature = selected_image_feature
-                else:
-                    raise ValueError(
-                        f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                    )
 
                 image_features = self.multi_modal_projector(selected_image_feature)
+
+                # split up image_features for each of the individual images
+                # hence we get a list of image_features, each of shape (5, num_patches, hidden_size)
+                # if we assume each image has 5 image features (base image + 4 patches)
+                split_sizes = [image.shape[0] for image in pixel_values]
+                image_features = torch.split(image_features, split_sizes, dim=0)
+
+                # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
+                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+
+                new_image_features = []
+                for image_idx, image_feature in enumerate(image_features):
+                    if image_feature.shape[0] > 1:
+                        base_image_feature = image_feature[0]
+                        image_feature = image_feature[1:]
+
+                        if height * width != base_image_feature.shape[0]:
+                            raise ValueError("The number of patches is not consistent with the image size.")
+                        num_patch_height, num_patch_width = get_anyres_image_grid_shape(
+                            image_sizes[image_idx],
+                            self.config.image_grid_pinpoints,
+                            self.config.vision_config.image_size,
+                        )
+                        image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                        image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                        image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                        image_feature = unpad_image(image_feature, image_sizes[image_idx])
+                        image_feature = torch.cat(
+                            (
+                                image_feature,
+                                self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+                            ),
+                            dim=-1,
+                        )
+                        image_feature = image_feature.flatten(1, 2).transpose(0, 1)
+                        image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+                    else:
+                        image_feature = image_feature[0]
+                        image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
+                    new_image_features.append(image_feature)
+                image_features = torch.stack(new_image_features, dim=0)
+
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
@@ -503,7 +618,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return LlavaCausalLMOutputWithPast(
+        return LlavaNextCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -512,7 +627,14 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        image_sizes=None,
+        attention_mask=None,
+        **kwargs,
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -560,9 +682,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "image_sizes": image_sizes,
             }
         )
         return model_inputs
 
+    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)

@@ -134,7 +134,7 @@
   - local: custom_tools
     title: Custom Tools and Prompts
   - local: troubleshooting
-    title: Troubleshoot  
+    title: Troubleshoot
   - local: hf_quantizer
     title: Contribute new quantization method
   title: Developer guides
@@ -695,7 +695,7 @@
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
-      title: Video models 
+      title: Video models
     - isExpanded: false
       sections:
       - local: model_doc/align
@@ -748,6 +748,8 @@
         title: LiLT
       - local: model_doc/llava
         title: Llava
+      - local: model_doc/llava_next
+        title: LLaVA-NeXT
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
