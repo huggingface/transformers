@@ -26,7 +26,7 @@ SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SuperPointConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SuperPointModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`SuperPointForKeypointDetection`]. It is used to instantiate a
     SuperPoint model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperPoint
     [magic-leap-community/superpoint](https://huggingface.co/magic-leap-community/superpoint) architecture.
@@ -53,12 +53,12 @@ class SuperPointConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import SuperPointConfig, SuperPointModel
+    >>> from transformers import SuperPointConfig, SuperPointForKeypointDetection
 
     >>> # Initializing a SuperPoint superpoint style configuration
     >>> configuration = SuperPointConfig()
     >>> # Initializing a model from the superpoint style configuration
-    >>> model = SuperPointModel(configuration)
+    >>> model = SuperPointForKeypointDetection(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
