@@ -561,7 +561,7 @@ class GemmaSdpaAttention(GemmaAttention):
 
         causal_mask = attention_mask
         if attention_mask is not None and cache_position is not None:
-            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
