@@ -1080,21 +1080,22 @@ class LlamaModel(LlamaPreTrainedModel):
                 or isinstance(input_tensor, torch.fx.Proxy)
                 or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
-            if attention_mask is None or ( not is_tracing and input_tensor.shape[1] == 1) or 0.0 not in attention_mask:
+            if (not is_tracing and input_tensor.shape[1] == 1):
                 return None
-            
-        batch_size, seq_length = input_tensor.shape[:2]
+
         dtype = input_tensor.dtype
         device = input_tensor.device
 
-        # support going beyond cached `max_position_embedding`
-        if seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+        min_dtype = torch.finfo(dtype).min
+        causal_mask = torch.full(
+            (attention_mask.shape[1], self.config.max_position_embeddings), fill_value=min_dtype, dtype=dtype, device=device
+        )
+        causal_mask = torch.triu(causal_mask, diagonal=1)
+        batch_size, seq_length = input_tensor.shape[:2]
 
         # We use the current dtype to avoid any overflows
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
+        # causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
         causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
