@@ -673,7 +673,6 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=causal_mask is not None
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -814,7 +813,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-
 
         for layer in self.model.layers:
             device = layer.input_layernorm.weight.device
@@ -1069,24 +1067,22 @@ class LlamaModel(LlamaPreTrainedModel):
                 or isinstance(input_tensor, torch.fx.Proxy)
                 or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
             )
-            if attention_mask is None or (not is_tracing and input_tensor.shape[1]==0):
+            if attention_mask is None or (not is_tracing and input_tensor.shape[1] == 0):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if hasattr(self.layers[0].self_attn, "past_key_value"):
-            target_length = self.config.max_position_embeddings # static cache
+            target_length = self.config.max_position_embeddings  # static cache
         else:
-            target_length = cache_positions[-1] + 1             # dynamic cache
+            target_length = cache_positions[-1] + 1  # dynamic cache
 
-        causal_mask = torch.full(
-            (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-        )
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_positions[0] 
-        causal_mask = causal_mask[None, None, :,:].expand(input_tensor.shape[0], 1, -1, -1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_positions[0]
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
@@ -1097,7 +1093,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
                 if attention_mask.shape[-2] < cache_positions[0] + sequence_length:
-                    offset = cache_positions[0] 
+                    offset = cache_positions[0]
                 else:
                     offset = 0
                 mask_shape = attention_mask.shape
