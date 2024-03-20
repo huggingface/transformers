@@ -57,11 +57,11 @@ from .utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_cv2_available,
     is_cython_available,
-    is_decord_available,
     is_detectron2_available,
     is_essentia_available,
     is_faiss_available,
@@ -662,13 +662,6 @@ def require_spacy(test_case):
     return unittest.skipUnless(is_spacy_available(), "test requires spacy")(test_case)
 
 
-def require_decord(test_case):
-    """
-    Decorator marking a test that requires decord. These tests are skipped when decord isn't installed.
-    """
-    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
-
-
 def require_torch_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
@@ -1008,6 +1001,13 @@ def require_aqlm(test_case):
     Decorator marking a test that requires aqlm
     """
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
+def require_av(test_case):
+    """
+    Decorator marking a test that requires PyAV
+    """
+    return unittest.skipUnless(is_av_available(), "test requires PyAV")(test_case)
 
 
 def require_bitsandbytes(test_case):

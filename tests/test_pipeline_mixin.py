@@ -22,7 +22,7 @@ from pathlib import Path
 
 from transformers.testing_utils import (
     is_pipeline_test,
-    require_decord,
+    require_av,
     require_pytesseract,
     require_timm,
     require_torch,
@@ -438,7 +438,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch_or_tf
     @require_vision
-    @require_decord
+    @require_av
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 

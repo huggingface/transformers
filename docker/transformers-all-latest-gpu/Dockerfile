@@ -54,7 +54,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
-RUN python3 -m pip install --no-cache-dir decord av==9.2.0
+RUN python3 -m pip install --no-cache-dir av==9.2.0
 
 # For `dinat` model
 RUN python3 -m pip install --no-cache-dir 'natten<0.15.0' -f https://shi-labs.com/natten/wheels/$CUDA/

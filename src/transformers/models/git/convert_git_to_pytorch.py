@@ -194,10 +194,30 @@ def prepare_img(model_name):
 
 
 def prepare_video():
-    from decord import VideoReader, cpu
+    import av
 
     # set seed for reproducability
     np.random.seed(0)
+
+    def read_video_pyav(container, indices):
+        """
+        Decode the video with PyAV decoder.
+        Args:
+            container (`av.container.input.InputContainer`): PyAV container.
+            indices (`List[int]`): List of frame indices to decode.
+        Returns:
+            result (np.ndarray): np array of decoded frames of shape(num_frames, height, width, 3).
+        """
+        frames = []
+        container.seek(0)
+        start_idx = indices[0]
+        end_idx = indices[-1]
+        for i, frame in enumerate(container.decode(video=0)):
+            if i > end_idx:
+                break
+            if i >= start_idx and i in indices:
+                frames.append(frame)
+        return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         """
@@ -220,12 +240,11 @@ def prepare_video():
 
     # video clip consists of 300 frames (10 seconds at 30 FPS)
     file_path = hf_hub_download(repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset")
-    videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
 
     # sample 6 frames
-    videoreader.seek(0)
-    indices = sample_frame_indices(clip_len=6, frame_sample_rate=4, seg_len=len(videoreader))
-    video = videoreader.get_batch(indices).asnumpy()
+    container = av.open(file_path)
+    indices = sample_frame_indices(clip_len=6, frame_sample_rate=4, seg_len=container.streams.video[0].frames)
+    video = read_video_pyav(container, indices)
 
     return video
 

@@ -94,6 +94,7 @@ FSDP_MIN_VERSION = "1.12.0"
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
+_av_available = _is_package_available("av")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _galore_torch_available = _is_package_available("galore_torch")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
@@ -102,7 +103,6 @@ _coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
 _cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
-_decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
@@ -656,6 +656,10 @@ def is_aqlm_available():
     return _aqlm_available
 
 
+def is_av_available():
+    return _av_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -971,10 +975,6 @@ def is_ccl_available():
     return _is_ccl_available
 
 
-def is_decord_available():
-    return _decord_available
-
-
 def is_sudachi_available():
     return _sudachipy_available
 
@@ -1010,6 +1010,13 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+# docstyle-ignore
+AV_IMPORT_ERROR = """
+{0} requires the PyAV library but it was not found in your environment. You can install it with pip: `pip install
+av==9.2.0`. Please note that you may need to restart your runtime after installation.
+"""
 
 
 # docstyle-ignore
@@ -1309,10 +1316,6 @@ PRETTY_MIDI_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
-DECORD_IMPORT_ERROR = """
-{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
-decord`. Please note that you may need to restart your runtime after installation.
-"""
 
 CYTHON_IMPORT_ERROR = """
 {0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
@@ -1336,6 +1339,7 @@ jinja2`. Please note that you may need to restart your runtime after installatio
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
@@ -1371,7 +1375,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
-        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),

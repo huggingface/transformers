@@ -103,7 +103,6 @@ _deps = [
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
-    "decord==0.6.0",
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
@@ -295,7 +294,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord", "av")
+extras["video"] = deps_list("av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
