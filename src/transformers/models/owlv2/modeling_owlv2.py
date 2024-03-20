@@ -1314,8 +1314,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
         self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
 
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates
     @staticmethod
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates
     def normalize_grid_corner_coordinates(num_patches: int) -> torch.Tensor:
         # Create grid coordinates using torch
         x_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
@@ -1345,8 +1345,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         objectness_logits = objectness_logits[..., 0]
         return objectness_logits
 
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.compute_box_bias
     @lru_cache(maxsize=2)
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.compute_box_bias
     def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
         if feature_map is not None:
             raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
@@ -1385,7 +1385,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        pred_boxes += self.box_bias.to(feature_map.device)
+        box_bias = self.box_bias.to(feature_map.device)
+        pred_boxes += box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
