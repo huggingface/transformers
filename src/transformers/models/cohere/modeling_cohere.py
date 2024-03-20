@@ -969,12 +969,12 @@ class CohereModel(CoherePreTrainedModel):
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(self.layers[0].self_attn, "past_key_value"):
-            target_length = self.config.max_position_embeddings  # static cache
-        else:
-            target_length = max(
-                cache_position[-1] + 1, attention_mask.shape[-1] if attention_mask is not None else 0
-            )  # dynamic cache
+        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+            target_length = self.config.max_position_embeddings
+        else:  # dynamic cache
+            target_length = (
+                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+            )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
