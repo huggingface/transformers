@@ -303,7 +303,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     @load_in_8bit.setter
     def load_in_8bit(self, value: bool):
         if not isinstance(value, bool):
-            raise ValueError("load_in_4bit must be a boolean")
+            raise ValueError("load_in_8bit must be a boolean")
 
         if self.load_in_4bit and value:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
