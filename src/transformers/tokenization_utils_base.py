@@ -1819,7 +1819,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
-        if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
+        if version.parse(jinja2.__version__) < version.parse("3.0.0"):
             raise ImportError(
                 "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
             )
