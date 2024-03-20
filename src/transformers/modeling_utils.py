@@ -802,7 +802,11 @@ def _load_state_dict_into_meta_model(
         elif (
             not is_quantized
             or (not hf_quantizer.requires_parameters_quantization)
-            or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
+            or (
+                not hf_quantizer.check_quantized_param(
+                    model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                )
+            )
         ):
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
@@ -3728,6 +3732,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
+        if hf_quantizer is not None:
+            missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
         if low_cpu_mem_usage:
@@ -3762,7 +3769,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
