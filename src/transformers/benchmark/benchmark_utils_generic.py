@@ -25,19 +25,23 @@ class BenchMark:
     """
 
     def __init__(self, *arg, **kwargs):
-        self._buffer = {
-            "init_kwargs": {},
+        self._buffer = {"init_kwargs": {}, "runs": []}
+        self._run_buffer = {
             "inputs_kwargs": {},
             "target_kwargs": {},
             "measure_kwargs": {},
             "report_kwargs": {},
+            "result": None,
         }
 
-    def _reset_buffer(self):
-        self._buffer["inputs_kwargs"] = {}
-        self._buffer["target_kwargs"] = {}
-        self._buffer["measure_kwargs"] = {}
-        self._buffer["report_kwargs"] = {}
+    def _reset_run_buffer(self):
+        self._run_buffer = {
+            "inputs_kwargs": {},
+            "target_kwargs": {},
+            "measure_kwargs": {},
+            "report_kwargs": {},
+            "result": None,
+        }
 
     def _measure(self, func, **measure_kwargs):
         """Return a callable that, when called, will return some measurement results for the argument `func`.
@@ -66,19 +70,24 @@ class BenchMark:
         return report
 
     def _report(self, result, only_result=False, output_path=None):
+        self._run_buffer["result"] = result
+        self._buffer["runs"].append(self._run_buffer)
+
         report = {"result": result}
         if not only_result:
-            report["configuration"] = self._buffer
+            report = self._buffer["runs"][-1]
 
-        report = self._convert_to_json(report)
+        complete_report = self._convert_to_json(self._buffer)
         if output_path is not None:
             with open(output_path, "w", encoding="UTF-8") as fp:
-                json.dump(report, fp, ensure_ascii=False, indent=4)
+                json.dump(complete_report, fp, ensure_ascii=False, indent=4)
+
+        report = self._convert_to_json(report)
 
         return report
 
     def run(self, measure_kwargs=None, target_kwargs=None, inputs_kwargs=None, report_kwargs=None):
-        self._reset_buffer()
+        self._reset_run_buffer()
 
         if measure_kwargs is None:
             measure_kwargs = {}
@@ -110,8 +119,8 @@ class SpeedBenchMark(BenchMark):
     """A simple class used to benchmark the running time of a callable."""
 
     def _measure(self, func, number=3, repeat=1):
-        self._buffer["measure_kwargs"]["number"] = number
-        self._buffer["measure_kwargs"]["repeat"] = repeat
+        self._run_buffer["measure_kwargs"]["number"] = number
+        self._run_buffer["measure_kwargs"]["repeat"] = repeat
 
         def wrapper(*args, **kwargs):
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average

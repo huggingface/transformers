@@ -21,8 +21,8 @@ from benchmark_utils_generic import BenchMark, SpeedBenchMark
 
 class FromPretrainedBenchMark(BenchMark):
     def _target(self, model_class, repo_id):
-        self._buffer["target_kwargs"]["model_class"] = model_class
-        self._buffer["target_kwargs"]["repo_id"] = repo_id
+        self._run_buffer["target_kwargs"]["model_class"] = model_class
+        self._run_buffer["target_kwargs"]["repo_id"] = repo_id
 
         def target():
             _ = model_class.from_pretrained(repo_id)
