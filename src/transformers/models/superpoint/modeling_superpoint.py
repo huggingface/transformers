@@ -390,7 +390,7 @@ Args:
     "SuperPoint model outputting keypoints and descriptors.",
     SUPERPOINT_START_DOCSTRING,
 )
-class SuperPointModel(SuperPointPreTrainedModel):
+class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
     SuperPoint model. It consists of a SuperPointEncoder, a SuperPointInterestPointDecoder and a
     SuperPointDescriptorDecoder. SuperPoint was proposed in `SuperPoint: Self-Supervised Interest Point Detection and
