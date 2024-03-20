@@ -14,6 +14,7 @@
 """
 Benchmark for different cache types used in model generation
 """
+import argparse
 import json
 import os
 from typing import Optional
@@ -162,48 +163,63 @@ class CacheSpeedBenchMark(SpeedBenchMark, CacheBenchMark):
 
 
 if __name__ == "__main__":
-    repo_id = "meta-llama/Llama-2-7b-hf"
-    prefill_num_iter = 3
-    num_iter = 16
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config_path", default=None, type=str, required=False, help="Path to the output PyTorch model."
+    )
+    args = parser.parse_args()
 
-    benchmark = CacheSpeedBenchMark(repo_id=repo_id, prefill_num_iter=prefill_num_iter, num_iter=num_iter)
+    if args.config_path is None:
 
-    # all_batch_size = [1, 2, 4]
-    # all_max_cache_length = [4096, 2048, 1024, 512]
-    # all_seq_length = [512, 1, 1024, 2048]
+        repo_id = "meta-llama/Llama-2-7b-hf"
+        prefill_num_iter = 3
+        num_iter = 16
 
-    all_batch_size = [1, 2]
-    all_max_cache_length = [16]
-    all_seq_length = [4]
+        init_kwargs = {"repo_id": repo_id, "prefill_num_iter": prefill_num_iter, "num_iter": num_iter}
 
-    results = []
-    for batch_size in all_batch_size:
-        for max_cache_length in all_max_cache_length:
-            for seq_length in all_seq_length:
-                if seq_length >= max_cache_length:
-                    break
+        # all_batch_size = [1, 2, 4]
+        # all_max_cache_length = [4096, 2048, 1024, 512]
+        # all_seq_length = [512, 1, 1024, 2048]
 
-                for cache_type in ["dynamic", "static"]:
-                    for compile in ["eager", "compiled"]:
-                        if cache_type == "dynamic" and compile:
-                            continue
+        all_batch_size = [1, 2]
+        all_max_cache_length = [16]
+        all_seq_length = [4]
 
-                        print(f"{batch_size}, {seq_length}, {max_cache_length}")
+        run_configs = []
 
-                        run_kwargs = {
-                            "measure_kwargs": {"number": 2, "repeat": 3},
-                            "target_kwargs": {
-                                "batch_size": batch_size,
-                                "max_cache_length": max_cache_length,
-                                "seq_length": seq_length,
-                                "cache_type": cache_type,
-                                "mode": compile,
-                            },
-                            "inputs_kwargs": {},
-                            "report_kwargs": {"output_path": "benchmark_report.json"},
-                        }
+        for batch_size in all_batch_size:
+            for max_cache_length in all_max_cache_length:
+                for seq_length in all_seq_length:
+                    if seq_length >= max_cache_length:
+                        break
 
-                        result = benchmark.run(**run_kwargs)
-                        results.append(result)
+                    for cache_type in ["dynamic", "static"]:
+                        for compile in ["eager", "compiled"]:
+                            if cache_type == "dynamic" and compile:
+                                continue
 
-    print(json.dumps(results, indent=4))
+                            print(f"{batch_size}, {seq_length}, {max_cache_length}")
+
+                            run_kwargs = {
+                                "measure_kwargs": {"number": 2, "repeat": 3},
+                                "target_kwargs": {
+                                    "batch_size": batch_size,
+                                    "max_cache_length": max_cache_length,
+                                    "seq_length": seq_length,
+                                    "cache_type": cache_type,
+                                    "mode": compile,
+                                },
+                                "inputs_kwargs": {},
+                                "report_kwargs": {"output_path": "benchmark_report.json"},
+                            }
+                            run_configs.append(run_kwargs)
+    else:
+        with open(args.coonfig_path) as fp:
+            config = json.load(fp)
+            init_kwargs = config["init_kwargs"]
+            run_configs = [run["config"] for run in config["runs"]]
+
+    benchmark = CacheSpeedBenchMark(**init_kwargs)
+
+    for run_config in run_configs:
+        result = benchmark.run(**run_config)
