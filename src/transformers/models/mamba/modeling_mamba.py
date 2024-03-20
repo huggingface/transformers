@@ -650,7 +650,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        use_cache = kwargs.get("use_cache", None)
+use_cache = use_cache if use_cache is not None else config.use_cache
         mamba_outputs = self.backbone(
             input_ids,
             cache_params=cache_params,
