@@ -35,7 +35,6 @@ from ...utils import (
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
-
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
@@ -639,7 +638,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        use_cache: bool = None,
+        use_cache: Optional[bool] = None,
         **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, MambaCausalLMOutput]:
         r"""
@@ -650,7 +649,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-use_cache = use_cache if use_cache is not None else config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         mamba_outputs = self.backbone(
             input_ids,
             cache_params=cache_params,
