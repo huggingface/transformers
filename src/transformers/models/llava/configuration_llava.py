@@ -132,8 +132,8 @@ class LlavaConfig(PretrainedConfig):
                     "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
                     FutureWarning,
                 )
-            # set the vocab_size
-            text_config.vocab_size = kwargs["vocab_size"]
+                # set the vocab_size
+                text_config.vocab_size = kwargs["vocab_size"]
 
         self.text_config = text_config
 
