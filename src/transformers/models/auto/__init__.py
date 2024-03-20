@@ -121,7 +121,6 @@ else:
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
         "AutoModelForImageTextToText",
-        "AutoModelForKeypointDetection",
     ]
 
 try:
