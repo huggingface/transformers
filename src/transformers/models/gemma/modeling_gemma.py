@@ -560,7 +560,7 @@ class GemmaSdpaAttention(GemmaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         causal_mask = attention_mask
-        if attention_mask is not None and cache_position is not None:
+        if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
