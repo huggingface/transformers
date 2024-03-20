@@ -35,6 +35,7 @@ from ...utils import (
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
+
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
