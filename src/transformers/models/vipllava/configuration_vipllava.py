@@ -127,6 +127,13 @@ class VipLlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
+            if "vocab_size" in kwargs:
+                warnings.warn(
+                    "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
+                    FutureWarning,
+                )
+            # set the vocab_size
+            text_config.vocab_size = kwargs["vocab_size"]
 
         self.text_config = text_config
 

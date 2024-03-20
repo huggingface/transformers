@@ -415,10 +415,11 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf", load_in_4bit=True
+            "llava-hf/llava-v1.6-mistral-7b-hf",
+            load_in_4bit=True,
         )
 
-        inputs = self.processor(self.prompt, self.raw_image, return_tensors="pt")
+        inputs = self.processor(self.prompt, self.image, return_tensors="pt")
 
         # verify inputs against original implementation
         filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")

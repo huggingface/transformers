@@ -94,14 +94,6 @@ class LlavaConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
 
-        if "vocab_size" in kwargs and not isinstance(text_config, dict):
-            warnings.warn(
-                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
-                FutureWarning,
-            )
-            # set the vocab_size
-            text_config["vocab_size"] = kwargs["vocab_size"]
-
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
                 "vision_feature_select_strategy should be one of 'default', 'full'."
@@ -135,6 +127,13 @@ class LlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()
+            if "vocab_size" in kwargs:
+                warnings.warn(
+                    "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`.",
+                    FutureWarning,
+                )
+            # set the vocab_size
+            text_config.vocab_size = kwargs["vocab_size"]
 
         self.text_config = text_config
 

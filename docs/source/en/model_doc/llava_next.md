@@ -42,6 +42,91 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main).
 
+## Usage tips
+
+- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
+
+- Note that each checkpoint has been trained with a specific prompt format, depending on which large language model (LLM) was used. Below, we list the correct prompt formats to use for the text prompt "What is shown in this image?":
+
+[llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf) requires the following format:
+
+```bash
+"[INST] <image>\nWhat is shown in this image? [/INST]"
+```
+
+[llava-v1.6-vicuna-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-vicuna-7b-hf) and [llava-v1.6-vicuna-13b-hf](https://huggingface.co/llava-hf/llava-v1.6-vicuna-13b-hf) require the following format:
+
+```bash
+"A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions. USER: <image>\nWhat is shown in this image? ASSISTANT:"
+```
+
+[llava-v1.6-34b-hf](https://huggingface.co/llava-hf/llava-v1.6-34b-hf) requires the following format:
+
+```bash
+"<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+```
+
+## Usage example
+
+Here's how to load the model and perform inference in half-precision (`torch.float16`):
+
+```python
+from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+import torch
+from PIL import Image
+import requests
+
+processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True) 
+model.to("cuda:0")
+
+# prepare image and text prompt, using the appropriate prompt template
+url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
+image = Image.open(requests.get(url, stream=True).raw)
+prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+
+inputs = processor(prompt, image, return_tensors="pt").to("cuda:0")
+
+# autoregressively complete prompt
+output = model.generate(**inputs, max_new_tokens=100)
+
+print(processor.decode(output[0], skip_special_tokens=True))
+```
+
+## Model optimization
+
+### Quantization using Bitsandbytes
+
+The model can be loaded in 8 or 4 bits, greatly reducing the memory requirements while maintaining the performance of the original model. First make sure to install bitsandbytes, `pip install bitsandbytes`` and make sure to have access to a CUDA compatible GPU device. Simply change the snippet above with:
+
+```python
+from transformers import LlavaNextForConditionalGeneration, BitsandBytesConfig
+
+# specify how to quantize the model
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype="torch.float16",
+)
+
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quantization_config, device_map="auto")
+```
+
+### Use Flash-Attention 2 to further speed-up generation
+
+First make sure to install flash-attn. Refer to the [original repository of Flash Attention](https://github.com/Dao-AILab/flash-attention) regarding that package installation. Simply change the snippet above with:
+
+```python
+from transformers import LlavaNextForConditionalGeneration
+
+model = LlavaNextForConditionalGeneration.from_pretrained(
+    model_id, 
+    torch_dtype=torch.float16, 
+    low_cpu_mem_usage=True,
+    use_flash_attention_2=True
+).to(0)
+```
 
 ## LlavaNextConfig
 
