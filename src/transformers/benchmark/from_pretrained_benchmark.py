@@ -21,6 +21,7 @@ from benchmark_utils_generic import BenchMark, SpeedBenchMark
 
 import transformers
 
+
 class FromPretrainedBenchMark(BenchMark):
     def _target(self, model_class, repo_id):
         self._run_buffer["config"]["target_kwargs"]["model_class"] = model_class

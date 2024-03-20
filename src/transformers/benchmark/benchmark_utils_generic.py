@@ -73,7 +73,10 @@ class BenchMark:
             return report.__name__
         return report
 
-    def _report(self, result, only_result=False, output_path=None):
+    def _report(self, result, output_path=None, only_result=False):
+        self._run_buffer["config"]["report_kwargs"]["output_path"] = output_path
+        self._run_buffer["config"]["report_kwargs"]["only_result"] = only_result
+
         self._run_buffer["result"] = result
         self._buffer["runs"].append(self._run_buffer)
 
