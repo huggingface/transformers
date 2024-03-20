@@ -1414,7 +1414,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RTDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
-        self.query_pos_head = RTDetrMLPPredictionHead(4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.query_pos_head = RTDetrMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1609,7 +1609,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -2238,7 +2238,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         # Detection heads on top
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.bbox_embed = RTDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+        self.bbox_embed = RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = config.decoder_layers
@@ -2444,10 +2444,10 @@ class RTDetrMLPPredictionHead(nn.Module):
 
     """
 
-    def __init__(self, input_dim, d_model, output_dim, num_layers):
+    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
+        h = [config.d_model] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
