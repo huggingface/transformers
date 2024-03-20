@@ -120,7 +120,7 @@ trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 * [`~Trainer.evaluate`] 评估模型并返回评估指标
 * [`~Trainer.predict`] 在测试集上进行预测（如果提供了标签，则会输出指标）
 
-例如，如果您想自定义[' ~Trainer.compute_loss ']方法来使用加权损失。
+例如，如果您想自定义[`~Trainer.compute_loss`]方法来使用加权损失。
 
 ```py
 from torch import nn
