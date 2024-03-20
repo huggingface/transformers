@@ -19,6 +19,7 @@ import json
 
 from benchmark_utils_generic import BenchMark, SpeedBenchMark
 
+import transformers
 
 class FromPretrainedBenchMark(BenchMark):
     def _target(self, model_class, repo_id):
@@ -26,7 +27,7 @@ class FromPretrainedBenchMark(BenchMark):
         self._run_buffer["config"]["target_kwargs"]["repo_id"] = repo_id
 
         def target():
-            _ = model_class.from_pretrained(repo_id)
+            _ = getattr(transformers, model_class).from_pretrained(repo_id)
 
         return target
 
@@ -50,7 +51,7 @@ if __name__ == "__main__":
         repo_id = "bert-base-uncased"
         run_kwargs = {
             "measure_kwargs": {"number": 2, "repeat": 3},
-            "target_kwargs": {"model_class": AutoModel, "repo_id": repo_id},
+            "target_kwargs": {"model_class": "AutoModel", "repo_id": repo_id},
             "inputs_kwargs": [{}],
             "report_kwargs": {"output_path": "benchmark_report.json"},
         }
