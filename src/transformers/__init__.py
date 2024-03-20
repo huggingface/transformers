@@ -1487,6 +1487,7 @@ else:
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
             "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_KEYPOINT_DETECTION_MAPPING",
             "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MASK_GENERATION_MAPPING",
@@ -1527,6 +1528,7 @@ else:
             "AutoModelForImageSegmentation",
             "AutoModelForImageToImage",
             "AutoModelForInstanceSegmentation",
+            "AutoModelForKeypointDetection",
             "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
             "AutoModelForMaskGeneration",
@@ -3341,7 +3343,7 @@ else:
     _import_structure["models.superpoint"].extend(
         [
             "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SuperPointModel",
+            "SuperPointForKeypointDetection",
             "SuperPointPreTrainedModel",
         ]
     )
@@ -6319,6 +6321,7 @@ if TYPE_CHECKING:
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_KEYPOINT_DETECTION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -6359,6 +6362,7 @@ if TYPE_CHECKING:
             AutoModelForImageSegmentation,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
+            AutoModelForKeypointDetection,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,
@@ -7852,7 +7856,7 @@ if TYPE_CHECKING:
         )
         from .models.superpoint import (
             SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SuperPointModel,
+            SuperPointForKeypointDetection,
             SuperPointPreTrainedModel,
         )
         from .models.swiftformer import (
