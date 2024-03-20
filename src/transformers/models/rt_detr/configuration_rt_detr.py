@@ -238,6 +238,9 @@ class RTDetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
+        backbone_kwargs = (
+            {"features_only": True, "out_indices": [2, 3, 4]} if backbone_kwargs is None else backbone_kwargs
+        )
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
