@@ -35,7 +35,6 @@ from ...utils import (
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
-
 logger = logging.get_logger(__name__)
 
 if is_mamba_ssm_available():
@@ -50,13 +49,7 @@ else:
     causal_conv1d_update, causal_conv1d_fn = None, None
 
 is_fast_path_available = all(
-    (
-        selective_state_update,
-        selective_scan_fn,
-        causal_conv1d_fn,
-        causal_conv1d_update,
-        mamba_inner_fn,
-    )
+    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
 
 _CHECKPOINT_FOR_DOC = "state-spaces/mamba-130m-hf"
@@ -74,23 +67,11 @@ class MambaCache:
         conv_kernel_size = config.conv_kernel
 
         self.conv_states = {
-            i: torch.zeros(
-                batch_size,
-                intermediate_size,
-                conv_kernel_size,
-                device=device,
-                dtype=dtype,
-            )
+            i: torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
         self.ssm_states = {
-            i: torch.zeros(
-                batch_size,
-                intermediate_size,
-                ssm_state_size,
-                device=device,
-                dtype=dtype,
-            )
+            i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
             for i in range(config.num_hidden_layers)
         }
 
@@ -127,11 +108,7 @@ class MambaMixer(nn.Module):
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependant
-        self.x_proj = nn.Linear(
-            self.intermediate_size,
-            self.time_step_rank + self.ssm_state_size * 2,
-            bias=False,
-        )
+        self.x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
 
@@ -190,24 +167,18 @@ class MambaMixer(nn.Module):
             else:
                 if cache_params is not None:
                     conv_states = nn.functional.pad(
-                        hidden_states,
-                        (self.conv_kernel_size - hidden_states.shape[-1], 0),
+                        hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                     )
                     cache_params.conv_states[self.layer_idx].copy_(conv_states)
                 hidden_states = causal_conv1d_fn(
-                    hidden_states,
-                    conv_weights,
-                    self.conv1d.bias,
-                    activation=self.activation,
+                    hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
 
             # 3. State Space Model sequence transformation
             # 3.a. input varying initialization of time_step, B and C
             ssm_parameters = self.x_proj(hidden_states.transpose(1, 2))
             time_step, B, C = torch.split(
-                ssm_parameters,
-                [self.time_step_rank, self.ssm_state_size, self.ssm_state_size],
-                dim=-1,
+                ssm_parameters, [self.time_step_rank, self.ssm_state_size, self.ssm_state_size], dim=-1
             )
             discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
 
@@ -571,10 +542,7 @@ class MambaModel(MambaPreTrainedModel):
 
         if cache_params is None and use_cache:
             cache_params = MambaCache(
-                self.config,
-                inputs_embeds.size(0),
-                device=inputs_embeds.device,
-                dtype=inputs_embeds.dtype,
+                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
 
         hidden_states = inputs_embeds
@@ -642,12 +610,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        cache_params: Optional[MambaCache] = None,
-        inputs_embeds=None,
-        attention_mask=None,
-        **kwargs,
+        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, attention_mask=None, **kwargs
     ):
         # only last token for inputs_ids if the state is passed along.
         if cache_params is not None:
