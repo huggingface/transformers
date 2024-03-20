@@ -453,14 +453,6 @@ class VideoLlavaVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # if video input, merge batch with frames dim and later reshape back
-        if pixel_values.dim() == 5:
-            batch_size, num_frames, channels, height, width = pixel_values.shape
-            pixel_values = pixel_values.reshape(batch_size * num_frames, channels, height, width)
-        else:
-            batch_size, _, _, _ = pixel_values.shape
-            num_frames = 1
-
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
 
@@ -474,12 +466,6 @@ class VideoLlavaVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
-
-        pooled_output = pooled_output.reshape(batch_size, num_frames, -1).mean(1)
-        encoder_outputs.hidden_states = [
-            hidden_state.reshape(batch_size, num_frames, -1, self.config.hidden_size)
-            for hidden_state in encoder_outputs.hidden_states
-        ]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -609,7 +595,8 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
 class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
-        self.vision_tower = VideoLlavaVisionTransformer(config.vision_config)
+        self.video_tower = VideoLlavaVisionTransformer(config.vision_config)
+        self.image_tower = VideoLlavaVisionTransformer(config.vision_config)
 
         self.multi_modal_projector = VideoLlavaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
@@ -648,8 +635,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        batch_size, num_images, num_image_patches, embed_dim = image_features.shape
+    def _merge_input_ids_with_image_features(self, visual_features, inputs_embeds, input_ids, attention_mask, labels):
+        num_images, num_image_patches, embed_dim = visual_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
@@ -703,24 +690,95 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
+        if image_to_overwrite.sum() != visual_features.shape[:-1].numel():
             raise ValueError(
                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
                 f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
             )
 
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
+        final_embedding[image_to_overwrite] = visual_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
         return final_embedding, final_attention_mask, final_labels, position_ids
+
+    def _get_vision_features(
+        self,
+        pixel_values_images: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        visual_positions: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        if pixel_values_images is None and pixel_values_videos is None:
+            raise ValueError("You have to specify `pixel_values_images` or `pixel_values_videos`")
+
+        if pixel_values_videos is not None:
+            batch_size, num_frames, channels, height, width = pixel_values_videos.shape
+            pixel_values = pixel_values_videos.reshape(batch_size * num_frames, channels, height, width)
+            video_outputs = self.video_tower(
+                pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        if pixel_values_images is not None:
+            batch_size = pixel_values_images.shape[0]
+            image_outputs = self.image_tower(
+                pixel_values_images,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        # return immediately if either one is None, otherwise have to merge them
+        if pixel_values_images is None:
+            return video_outputs
+
+        if pixel_values_videos is None:
+            return image_outputs
+
+        if visual_positions is None:
+            visual_positions = torch.arange(
+                pixel_values_images.shape[0] + pixel_values_videos.shape[0],
+                dtype=torch.int32,
+                device=pixel_values_images.device,
+            )
+
+        outputs = ()
+        for idx in range(len(image_outputs)):
+            if idx == 1:
+                ordered_out = torch.cat([image_outputs[idx], video_outputs[idx]], dim=0)
+            elif isinstance(image_outputs[idx], torch.Tensor):
+                merged_out = torch.cat([image_outputs[idx], video_outputs[idx]], dim=0)
+                ordered_out = merged_out[visual_positions]
+            else:
+                ordered_out = [
+                    torch.cat([vid, img], dim=0)[visual_positions, ...]
+                    for img, vid in zip(image_outputs[idx], video_outputs[idx])
+                ]
+            outputs += (ordered_out,)
+
+        if isinstance(image_outputs, tuple):
+            return outputs
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=outputs[0],
+            pooler_output=outputs[1],
+            hidden_states=outputs[2] if output_hidden_states else None,
+            attentions=outputs[3] if output_attentions else None,
+        )
 
     @add_start_docstrings_to_model_forward(VIDEO_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VideoLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values_images: torch.FloatTensor = None,
+        pixel_values_videos: torch.FloatTensor = None,
+        visual_positions: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -747,12 +805,13 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
+        >>> import numpy as np
         >>> from decord import VideoReader
         >>> from huggingface_hub import hf_hub_download
-        >>> from transformers import AutoProcessor, VideoLlavaForConditionalGeneration
+        >>> from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration
 
         >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B")
-        >>> processor = AutoProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B")
+        >>> processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B")
 
         >>> prompt = "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
         >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
@@ -762,23 +821,26 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> indices = np.arange(0, len(vr), len(vr) / 8).astype(int)
         >>> frames = vr.get_batch(indices).asnumpy()
 
-        >>> inputs = processor(text=prompt, videos=list(clip), return_tensors="pt")
+        >>> inputs = processor(text=prompt, visual_inputs=clip, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=80)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'USER:   Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing sight.Ъ'
+        'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing sight.Ъ'
 
-        >>> # to generate from image
+        >>> # to generate from image and video mix
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> prompt = "USER: <image> How many cats are there in the image? ASSISTANT:"
-        >>> inputs = processor(text=prompt, videos=list(clip), return_tensors="pt")
+        >>> prompt = [
+                "USER: <image> How many cats are there in the image? ASSISTANT:",
+                "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
+            ]
+        >>> inputs = processor(text=prompt, visual_inputs=[image, clip], padding=True, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-        'USER:   How many cats are there in the image? ASSISTANT: There are two cats in the image'
+        >>> generate_ids = model.generate(**inputs, max_length=50)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        ['USER:   How many cats are there in the image? ASSISTANT: There are two cats in the image.\nHow many cats are sleeping on the couch?\nThere are', 'USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is sitting on the bed and reading a book, which is an unusual and amusing']
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -800,30 +862,35 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # 2. Merge text and images
-            if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+            if (pixel_values_images is not None or pixel_values_videos is not None) and input_ids.shape[1] != 1:
+                vision_outputs = self._get_vision_features(
+                    pixel_values_images=pixel_values_images,
+                    pixel_values_videos=pixel_values_videos,
+                    visual_positions=visual_positions,
+                    output_hidden_states=True,
+                )
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+                selected_visual_feature = vision_outputs.hidden_states[vision_feature_layer].squeeze(1)
 
                 if vision_feature_select_strategy == "default":
-                    selected_image_feature = selected_image_feature[:, :, 1:]
+                    selected_visual_feature = selected_visual_feature[:, 1:]
                 elif vision_feature_select_strategy == "full":
-                    selected_image_feature = selected_image_feature
+                    selected_visual_feature = selected_visual_feature
                 else:
                     raise ValueError(
                         f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
                     )
 
-                image_features = self.multi_modal_projector(selected_image_feature)
+                visual_features = self.multi_modal_projector(selected_visual_feature)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                    visual_features, inputs_embeds, input_ids, attention_mask, labels
                 )
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
             else:
-                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
+                # In case input_ids.shape[1] == 1 & past_key_values != None, we are in the case of
                 # generation with cache
-                if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                if past_key_values is not None and input_ids.shape[1] == 1:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
                     first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
@@ -895,7 +962,14 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values_images=None,
+        pixel_values_videos=None,
+        attention_mask=None,
+        **kwargs,
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -942,7 +1016,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
+                "pixel_values_videos": pixel_values_videos,
+                "pixel_values_images": pixel_values_images,
+                "visual_positions": kwargs.get("visual_positions"),
             }
         )
         return model_inputs

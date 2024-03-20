@@ -40,7 +40,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +48,9 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 
 def make_batched_videos(videos) -> List[List[ImageInput]]:
@@ -209,8 +212,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: ImageInput,
-        videos: ImageInput,
+        images,
+        visual_inputs: List[ImageInput],
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -231,12 +234,9 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+            visual_inputs (`ImageInput`):
+                List of images and/or videos to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            videos (`ImageInput`):
-                Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
-                to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -295,26 +295,67 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if (images is None) ^ (videos is not None):
-            raise ValueError("VideoLlava currently does not support both images and videos as input")
+        if not isinstance(visual_inputs, list):
+            visual_inputs = [visual_inputs]
 
-        if images is not None:
-            inputs = [make_list_of_images(images)]
-        elif videos is not None:
-            inputs = make_batched_videos(videos)
+        visual_positions = [-1]
+        img_count = 0
+        images, videos = [], []
+        for visual in visual_inputs:
+            if not isinstance(visual, PIL.Image.Image) and len(visual.shape) == 4:
+                visual_positions.extend(np.arange(1, 9) + max(visual_positions))
+                videos.append(visual)
+            else:
+                visual_positions.append(-1)
+                img_count += 1
+                images.append(visual)
+        img_positions = torch.arange(
+            max(visual_positions) + 1, max(visual_positions) + img_count + 1, dtype=torch.int32
+        )
+        visual_positions = torch.tensor(visual_positions[1:], dtype=torch.int32)
+        visual_positions[torch.where(visual_positions == -1)[0]] = img_positions
+
+        if len(images) > 0:
+            images = make_list_of_images(images)
+        elif len(videos) > 0:
+            videos = make_batched_videos(videos)
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        if not valid_images(inputs):
+        if not valid_images(videos) or not valid_images(images):
             raise ValueError(
                 "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        pixel_values = [
-            [
+        if len(videos) > 0:
+            pixel_values_videos = [
+                [
+                    self._preprocess_image(
+                        image=frame,
+                        do_resize=do_resize,
+                        size=size,
+                        resample=resample,
+                        do_rescale=do_rescale,
+                        rescale_factor=rescale_factor,
+                        do_normalize=do_normalize,
+                        image_mean=image_mean,
+                        image_std=image_std,
+                        do_center_crop=do_center_crop,
+                        crop_size=crop_size,
+                        do_convert_rgb=do_convert_rgb,
+                        data_format=data_format,
+                        input_data_format=input_data_format,
+                    )
+                    for frame in video
+                ]
+                for video in videos
+            ]
+
+        if len(images) > 0:
+            pixel_values_images = [
                 self._preprocess_image(
-                    image=frame,
+                    image=image,
                     do_resize=do_resize,
                     size=size,
                     resample=resample,
@@ -329,12 +370,28 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
-                for frame in video
+                for image in images
             ]
-            for video in inputs
-        ]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+        if len(images) > 0 and len(videos) > 0:
+            encoded_outputs = BatchFeature(
+                data={
+                    "pixel_values_videos": pixel_values_videos,
+                    "pixel_values_images": pixel_values_images,
+                    "visual_positions": visual_positions,
+                },
+                tensor_type=return_tensors,
+            )
+        elif len(images) > 0:
+            encoded_outputs = BatchFeature(
+                data={"pixel_values_images": pixel_values_images, "visual_positions": visual_positions},
+                tensor_type=return_tensors,
+            )
+        elif len(videos) > 0:
+            encoded_outputs = BatchFeature(
+                data={"pixel_values_videos": pixel_values_videos, "visual_positions": visual_positions},
+                tensor_type=return_tensors,
+            )
 
         return encoded_outputs
 

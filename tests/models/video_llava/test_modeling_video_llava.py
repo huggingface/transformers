@@ -149,7 +149,7 @@ class VideoLlavaVisionText2TextModelTester:
         # we are giving 3 videos, each has 2 frames let's make sure we pass in 3 * 2 image tokens
         input_ids[:, :2] = config.image_token_index
         inputs_dict = {
-            "pixel_values": pixel_values,
+            "pixel_values_videos": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -244,7 +244,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = self.processor(prompt, visual_inputs=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "USER:  Describe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
@@ -281,7 +281,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
         )
 
-        inputs = processor(prompts, videos=[video_1, video_2], return_tensors="pt", padding=True)
+        inputs = processor(prompts, visual_inputs=[video_1, video_2], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -316,7 +316,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
         )
 
-        inputs = processor(prompts, videos=[video_1, video_2, video_1], return_tensors="pt", padding=True)
+        inputs = processor(prompts, visual_inputs=[video_1, video_2, video_1], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -343,7 +343,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = self.processor(prompt, visual_inputs=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
@@ -358,7 +358,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # Simulate some user inputs
-        pixel_values = torch.randn(
+        pixel_values_videos = torch.randn(
             (2, 8, 3, 224, 224),
             dtype=torch.float,
             device=torch_device,
@@ -413,7 +413,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Make sure that the loss is properly computed
         loss = model(
-            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=input_ids,

@@ -20,10 +20,10 @@ from transformers import (
     AddedToken,
     AutoConfig,
     AutoTokenizer,
-    CLIPImageProcessor,
-    LlavaProcessor,
     VideoLlavaConfig,
     VideoLlavaForConditionalGeneration,
+    VideoLlavaImageProcessor,
+    VideoLlavaProcessor,
 )
 
 
@@ -47,7 +47,8 @@ Example for creating the old state dict file with Python:
 """
 
 KEYS_TO_MODIFY_MAPPING = {
-    "model.video_tower.video_tower": "vision_tower",
+    "model.video_tower.video_tower": "video_tower",
+    "model.image_tower.image_tower": "image_tower",
     "model.mm_projector": "multi_modal_projector",
     "model": "language_model.model",
     "lm_head": "language_model.lm_head",
@@ -55,7 +56,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "multi_modal_projector.2": "multi_modal_projector.linear_2",
 }
 
-KEYS_TO_IGNORE = ["model.image_tower.image_tower."]
+KEYS_TO_IGNORE = []
 
 
 def convert_state_dict_to_hf(state_dict):
@@ -78,10 +79,11 @@ def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
+    tokenizer.padding_side = "left"
 
-    image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
+    image_processor = VideoLlavaImageProcessor.from_pretrained(vision_model_id)
 
-    processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
+    processor = VideoLlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     config = VideoLlavaConfig(text_config=text_config)
     config.pad_token_id = 32001
