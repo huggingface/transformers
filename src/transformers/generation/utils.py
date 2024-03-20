@@ -2469,7 +2469,6 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
-
         # prepare layers for DoLa decoding
         # using final layer as the mature layer
         mature_layer = self.config.num_hidden_layers
@@ -4674,7 +4673,7 @@ def _relative_top_filter(
     baseline_scores: torch.FloatTensor,
     relative_top: float = 0.1,
     filter_value: float = -float("Inf"),
-    base_filter_value = -1e-3,
+    base_filter_value=-1e-3,
     min_tokens_to_keep: int = 1,
 ) -> torch.FloatTensor:
     """Reference: https://github.com/XiangLi1999/ContrastiveDecoding/blob/170e9142e92159c1237d731e240f5eb14aabf428/transformers/src/transformers/generation_logits_process.py#L235"""
