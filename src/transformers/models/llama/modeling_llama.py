@@ -819,6 +819,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
             causal_mask = torch.full(
                 (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool
             )
+            logger.warning_once(f"Pre-allocating a triangular causal mask using `max_position_embedding` of `{max_cache_len}`. If this induces OOM for you, make sur you appropriately set it up")
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
@@ -939,6 +940,7 @@ class LlamaModel(LlamaPreTrainedModel):
         causal_mask = torch.full(
             (config.max_position_embeddings, config.max_position_embeddings), fill_value=True, dtype=torch.bool
         )
+        logger.warning_once(f"Pre-allocating a triangular causal mask using `max_position_embedding` of `{self.config.max_position_embedding}`. If this induces OOM for you, make sur you appropriately set it up")
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
@@ -1081,6 +1083,7 @@ class LlamaModel(LlamaPreTrainedModel):
         # support going beyond cached `max_position_embedding`
         if seq_length > self.causal_mask.shape[-1]:
             causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
+            logger.warning_once(f"Pre-allocating a triangular causal mask using `max_position_embedding` of `{2 * self.causal_mask.shape[-1]}`. If this induces OOM for you, make sur you appropriately set it up")
             self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # We use the current dtype to avoid any overflows
