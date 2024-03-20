@@ -555,6 +555,12 @@ _import_structure = {
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
+        "LlavaProcessor",
+    ],
+    "models.llava_next": [
+        "LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LlavaNextConfig",
+        "LlavaNextProcessor",
     ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1323,6 +1329,7 @@ else:
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
+    _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.mask2former"].append("Mask2FormerImageProcessor")
     _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
@@ -2535,7 +2542,13 @@ else:
             "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
-            "LlavaProcessor",
+        ]
+    )
+    _import_structure["models.llava_next"].extend(
+        [
+            "LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LlavaNextForConditionalGeneration",
+            "LlavaNextPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5416,6 +5429,12 @@ if TYPE_CHECKING:
     from .models.llava import (
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
+        LlavaProcessor,
+    )
+    from .models.llava_next import (
+        LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LlavaNextConfig,
+        LlavaNextProcessor,
     )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6165,6 +6184,7 @@ if TYPE_CHECKING:
             LayoutLMv3ImageProcessor,
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
+        from .models.llava_next import LlavaNextImageProcessor
         from .models.mask2former import Mask2FormerImageProcessor
         from .models.maskformer import (
             MaskFormerFeatureExtractor,
@@ -7194,7 +7214,11 @@ if TYPE_CHECKING:
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
-            LlavaProcessor,
+        )
+        from .models.llava_next import (
+            LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlavaNextForConditionalGeneration,
+            LlavaNextPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
