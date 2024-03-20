@@ -165,7 +165,11 @@ class CacheSpeedBenchMark(SpeedBenchMark, CacheBenchMark):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config_path", default=None, type=str, required=False, help="Path to a prepared run file or a previously run output file."
+        "--config_path",
+        default=None,
+        type=str,
+        required=False,
+        help="Path to a prepared run file or a previously run output file.",
     )
     parser.add_argument(
         "--output_path", type=str, required=True, help="Path to the output file where the run's info. will be saved."
@@ -173,7 +177,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.config_path is None:
-
         repo_id = "meta-llama/Llama-2-7b-hf"
         prefill_num_iter = 3
         num_iter = 16
