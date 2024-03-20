@@ -559,8 +559,9 @@ class CohereSdpaAttention(CohereAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         causal_mask = attention_mask
-        if attention_mask is not None and cache_position is not None:
-            causal_mask = causal_mask[:, :, cache_position, : key_states.shape[-2]]
+        # if attention_mask is not None and cache_position is not None:
+        if causal_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -714,12 +715,6 @@ class CoherePreTrainedModel(PreTrainedModel):
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
-
-        if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
-            causal_mask = torch.full(
-                (max_cache_len, max_cache_len), fill_value=True, device=self.device, dtype=torch.bool
-            )
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
             device = layer.input_layernorm.weight.device
@@ -899,7 +894,7 @@ class CohereModel(CoherePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, past_seen_tokens)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_positions)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -967,25 +962,34 @@ class CohereModel(CoherePreTrainedModel):
     # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
     # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
     # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
-    def _update_causal_mask(self, attention_mask, input_tensor, past_seen_tokens):
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_positions):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
 
-        batch_size, seq_length = input_tensor.shape[:2]
-        dtype = input_tensor.dtype
-        device = input_tensor.device
+        if self.config._attn_implementation == "sdpa":
+            is_tracing = (
+                torch.jit.is_tracing()
+                or isinstance(input_tensor, torch.fx.Proxy)
+                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+            )
+            if attention_mask is None or (not is_tracing and input_tensor.shape[1] == 0):
+                return None
 
-        # support going beyond cached `max_position_embedding`
-        if seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-
-        # We use the current dtype to avoid any overflows
+        dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
-        causal_mask = self.causal_mask[None, None, :, :].to(dtype=dtype, device=device) * min_dtype
-        causal_mask = causal_mask.expand(batch_size, 1, -1, -1)
+        sequence_length = input_tensor.shape[1]
+        if hasattr(self.layers[0].self_attn, "past_key_value"):
+            target_length = self.config.max_position_embeddings  # static cache
+        else:
+            target_length = cache_positions[-1] + 1  # dynamic cache
+
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_positions[0]
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
@@ -995,8 +999,8 @@ class CohereModel(CoherePreTrainedModel):
             elif attention_mask.dim() == 4:
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < past_seen_tokens + input_tensor.shape[1]:
-                    offset = past_seen_tokens
+                if attention_mask.shape[-2] < cache_positions[0] + sequence_length:
+                    offset = cache_positions[0]
                 else:
                     offset = 0
                 mask_shape = attention_mask.shape
@@ -1011,11 +1015,6 @@ class CohereModel(CoherePreTrainedModel):
             and attention_mask.device.type == "cuda"
         ):
             # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
-            )
             if not is_tracing and torch.any(attention_mask != 1):
                 # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
                 # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
