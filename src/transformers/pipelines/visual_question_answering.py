@@ -116,9 +116,18 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
         image = load_image(inputs["image"], timeout=timeout)
-        model_inputs = self.tokenizer(
-            inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
-        )
+        model_type = self.model.config.model_type
+
+        print(type(self.tokenizer))
+        if model_type == "git":
+            model_inputs = self.tokenizer(
+                text=inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
+            )
+
+        else:
+            model_inputs = self.tokenizer(
+                inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
+            )
         image_features = self.image_processor(images=image, return_tensors=self.framework)
         model_inputs.update(image_features)
         return model_inputs

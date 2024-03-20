@@ -463,6 +463,7 @@ _import_structure = {
         "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GitConfig",
         "GitProcessor",
+        "GitTokenizer",
         "GitVisionConfig",
     ],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
@@ -1200,6 +1201,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gemma"].append("GemmaTokenizerFast")
+    _import_structure["models.git"].append("GitTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
@@ -5323,6 +5325,7 @@ if TYPE_CHECKING:
         GIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GitConfig,
         GitProcessor,
+        GitTokenizer,
         GitVisionConfig,
     )
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
@@ -6045,6 +6048,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gemma import GemmaTokenizerFast
+        from .models.git.tokenization_git_fast import GitTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer

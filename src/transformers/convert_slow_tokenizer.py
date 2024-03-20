@@ -1457,6 +1457,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "ElectraTokenizer": BertConverter,
     "FNetTokenizer": AlbertConverter,
     "FunnelTokenizer": FunnelConverter,
+    "GitTokenizer": BertConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
