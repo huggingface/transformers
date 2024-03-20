@@ -167,6 +167,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path", default=None, type=str, required=False, help="Path to the output PyTorch model."
     )
+    parser.add_argument(
+        "--output_path", default=None, type=str, required=True, help="Path to the output file where the run's info. will be saved."
+    )
     args = parser.parse_args()
 
     if args.config_path is None:
