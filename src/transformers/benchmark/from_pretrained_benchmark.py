@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--config_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--config_path", default=None, type=str, required=False, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
 
