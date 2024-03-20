@@ -17,17 +17,19 @@
 import gc
 import unittest
 
-import requests
+import numpy as np
+from huggingface_hub import hf_hub_download
 
 from transformers import (
-    AutoProcessor,
     VideoLlavaConfig,
     VideoLlavaForConditionalGeneration,
+    VideoLlavaProcessor,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -38,7 +40,7 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class VideoLlavaVisionText2TextModelTester:
@@ -49,6 +51,7 @@ class VideoLlavaVisionText2TextModelTester:
         image_token_index=0,
         projector_hidden_act="gelu",
         seq_length=7,
+        num_frames=2,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         text_config={
@@ -100,6 +103,7 @@ class VideoLlavaVisionText2TextModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
+        self.num_frames = num_frames
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -110,7 +114,7 @@ class VideoLlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 231
+        self.encoder_seq_length = 455
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -127,6 +131,7 @@ class VideoLlavaVisionText2TextModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
+                self.num_frames,
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
@@ -141,8 +146,8 @@ class VideoLlavaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens
-        input_ids[:, 1] = config.image_token_index
+        # we are giving 3 videos, each has 2 frames let's make sure we pass in 3 * 2 image tokens
+        input_ids[:, :2] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -152,7 +157,7 @@ class VideoLlavaVisionText2TextModelTester:
 
 
 @require_torch
-class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `VideoLlavaForConditionalGeneration`.
     """
@@ -189,7 +194,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 @require_torch
 class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("video_llava-hf/bakVideoLlava-v1-hf")
+        self.processor = VideoLlavaProcessor.from_pretrained("RaushanTurganbay/video-llava-7b-hf")
 
     def tearDown(self):
         gc.collect()
@@ -200,19 +205,21 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "video_llava-hf/bakVideoLlava-v1-hf", load_in_4bit=True
+            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
         )
 
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://video_llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+        prompt = "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
+        video_file = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+        )
+        video_file = np.load(video_file)
+        inputs = self.processor(prompt, videos=video_file, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[1,  3148, 1001, 29901, 29871, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 3750, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        EXPECTED_DECODED_TEXT = "USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on a bed"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -223,18 +230,28 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "LanguageBind/Video-LLaVA-7B"
+        model_id = "RaushanTurganbay/video-llava-7b-hf"
 
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+        model = VideoLlavaForConditionalGeneration.from_pretrained(
+            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
+        )
+        processor = VideoLlavaProcessor.from_pretrained(model_id)
 
-        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://video_llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        prompt = (
+            "USER: <image><image><image><image><image><image><image><image>Describe the video in details. ASSISTANT:"
+        )
+        video_file = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+        )
+        video_file = np.load(video_file)
+        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
+        EXPECTED_DECODED_TEXT = "USER:  Describe the video in details. ASSISTANT: The video features a young child sitting on a bed, holding a book and reading it. " \
+            "The child appears to be enjoying the book, as they are fully engaged in the reading process. The bed is located in a bedroom, and there is a chair nearby. " \
+            "The child is wearing a light blue shirt and pink pants, and they have glasses on. The room is well-lit, and there is a clock on the wall. The child seems " \
+            "to be in a comfortable and relaxed environment, which is conducive to reading and learning. Overall, the video captures a heartwarming moment of a child " \
+            "engaging in a simple yet essential activity, which is reading."  # fmt: skip
 
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
@@ -245,72 +262,68 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "LanguageBind/Video-LLaVA-7B"
+        model_id = "RaushanTurganbay/video-llava-7b-hf"
 
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+        model = VideoLlavaForConditionalGeneration.from_pretrained(
+            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
+        )
+        processor = VideoLlavaProcessor.from_pretrained(model_id)
+        processor.tokenizer.padding_side = "left"
 
         prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
+            "USER: <image><image><image><image><image><image><image><image>What is the baby doing? ASSISTANT:",
+            "USER: <image><image><image><image><image><image><image><image>Who is sitting next to the woman? ASSISTANT:",
         ]
-        image1 = Image.open(requests.get("https://video_llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        video_1 = np.load(
+            hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset")
+        )
+        video_2 = np.load(
+            hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
+        )
 
-        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = processor(prompts, videos=[video_1, video_2], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'USER:  What is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.Ъ',
+            'USER:  Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman.Ъ'
+            ]  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
-    def test_small_model_integration_test_batch(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "video_llava-hf/bakVideoLlava-v1-hf", load_in_4bit=True
-        )
-        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://video_llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along', 'USER:  \nWhat is this?\nASSISTANT: Cats']  # fmt: skip
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "LanguageBind/Video-LLaVA-7B"
+        model_id = "RaushanTurganbay/video-llava-7b-hf"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "LanguageBind/Video-LLaVA-7B", load_in_4bit=True, attn_implementation="eager"
+            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True, attn_implementation="eager"
         )
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+        processor = VideoLlavaProcessor.from_pretrained(model_id, pad_token="<pad>")
+        processor.tokenizer.padding_side = "left"
 
         prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+            "USER: <image><image><image><image><image><image><image><image>What is the baby doing? ASSISTANT:",
+            "USER: <image><image><image><image><image><image><image><image>Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER: <image><image><image><image><image><image><image><image>What about this video? ASSITANT:",
         ]
-        image1 = Image.open(requests.get("https://video_llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        video_1 = np.load(
+            hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset")
+        )
+        video_2 = np.load(
+            hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
+        )
 
-        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+        inputs = processor(prompts, videos=[video_1, video_2, video_1], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this serene location, one should be cautious about the weather conditions and potential', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'USER:  What is the baby doing? ASSISTANT: The baby is sitting on a bed and reading a book.Ћ',
+            'USER:  Who is sitting next to the woman? ASSISTANT: A small dog is sitting next to the woman. USER:  What about this video? ASSITANT: The video shows a baby sitting on a bed, reading a book. The baby is wearing glass'
+            ]  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
@@ -320,18 +333,17 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
-        model_id = "LanguageBind/Video-LLaVA-7B"
+        model_id = "RaushanTurganbay/video-llava-7b-hf"
         model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 
-        processor = AutoProcessor.from_pretrained(model_id)
-
         # Simulate a super long prompt
-        user_prompt = "Describe the image:?\n" * 200
-        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+        user_prompt = "Describe the video:?\n" * 200
+        prompt = f"USER: <image><image><image><image><image><image><image><image>{user_prompt}ASSISTANT:"
+        video_file = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+        )
+        video_file = np.load(video_file)
+        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
@@ -340,27 +352,61 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_video_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "LanguageBind/Video-LLaVA-7B"
+        model_id = "RaushanTurganbay/video-llava-7b-hf"
         model = VideoLlavaForConditionalGeneration.from_pretrained(
             model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(torch_device)
 
         # Simulate some user inputs
         pixel_values = torch.randn(
-            (2, 3, 336, 336),
+            (2, 8, 3, 224, 224),
             dtype=torch.float,
             device=torch_device,
         )
         input_ids = torch.tensor(
             [
-                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
+                [
+                    32001,
+                    32001,
+                    1,
+                    15043,
+                    7084,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    29871,
+                    13,
+                    7900,
+                ],
+                [
+                    1,
+                    15043,
+                    7084,
+                    29901,
+                    29871,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    32000,
+                    29871,
+                    13,
+                    7900,
+                ],
             ],
             dtype=torch.long,
             device=torch_device,
         )
         attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             dtype=torch.long,
             device=torch_device,
         )
