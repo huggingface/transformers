@@ -223,5 +223,5 @@ if __name__ == "__main__":
     benchmark = CacheSpeedBenchMark(**init_kwargs)
 
     for run_config in run_configs:
-        run_config["config"]["report_kwargs"]["output_path"] = args.output_path
+        run_config["report_kwargs"]["output_path"] = args.output_path
         result = benchmark.run(**run_config)
