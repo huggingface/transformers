@@ -211,6 +211,7 @@ from . import (
     squeezebert,
     stablelm,
     starcoder2,
+    superpoint,
     swiftformer,
     swin,
     swin2sr,
