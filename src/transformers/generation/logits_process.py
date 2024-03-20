@@ -1218,10 +1218,10 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     ...     In this case, `batch_id` is not used, but you can set rules for each batch member.
     ...     '''
     ...     if input_ids[-1] == entity[0]:
-    ...         return entity[0:1].tolist()
+    ...         return entity[1]
     ...     elif input_ids[-2] == entity[0] and input_ids[-1] == entity[1]:
-    ...         return entity[1:2].tolist()
-    ...     return list(range(tokenizer.vocab_size))   # If no match, allow all tokens
+    ...         return entity[2]
+    ...     return list(range(tokenizer.vocab_size))  # If no match, allow all tokens
 
     >>> outputs = model.generate(**inputs, max_new_tokens=5, prefix_allowed_tokens_fn=prefix_allowed_tokens_fn)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
