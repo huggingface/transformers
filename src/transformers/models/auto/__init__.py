@@ -117,6 +117,7 @@ else:
         "AutoModelWithLMHead",
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
+        "AutoModelForKeypointDetection",
     ]
 
 try:
@@ -278,6 +279,7 @@ if TYPE_CHECKING:
             AutoModelForImageSegmentation,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
+            AutoModelForKeypointDetection,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,

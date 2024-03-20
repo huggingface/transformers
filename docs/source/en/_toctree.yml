@@ -310,6 +310,8 @@
         title: CodeGen
       - local: model_doc/code_llama
         title: CodeLlama
+      - local: model_doc/cohere
+        title: Cohere
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -398,6 +400,8 @@
         title: M2M100
       - local: model_doc/madlad-400
         title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -581,6 +585,8 @@
         title: PoolFormer
       - local: model_doc/pvt
         title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
@@ -589,6 +595,8 @@
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superpoint
+        title: SuperPoint
       - local: model_doc/swiftformer
         title: SwiftFormer
       - local: model_doc/swin
@@ -636,6 +644,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/musicgen_melody
+        title: MusicGen Melody
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
