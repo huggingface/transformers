@@ -38,6 +38,7 @@ else:
 @require_sentencepiece
 @require_tokenizers
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/siglip-base-patch16-224"
     tokenizer_class = SiglipTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

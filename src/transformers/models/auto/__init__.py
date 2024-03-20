@@ -119,6 +119,7 @@ else:
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
         "AutoModelForImageTextToText",
+        "AutoModelForKeypointDetection",
     ]
 
 try:
@@ -282,6 +283,7 @@ if TYPE_CHECKING:
             AutoModelForImageTextToText,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
+            AutoModelForKeypointDetection,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,

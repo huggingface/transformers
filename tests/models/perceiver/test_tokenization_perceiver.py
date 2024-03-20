@@ -36,6 +36,7 @@ else:
 
 
 class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "deepmind/language-perceiver"
     tokenizer_class = PerceiverTokenizer
     test_rust_tokenizer = False
 

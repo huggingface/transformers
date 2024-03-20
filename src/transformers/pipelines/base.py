@@ -897,6 +897,16 @@ class Pipeline(_ScikitCompat):
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
+        # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
+        # forward params so that `generate` is aware of the pad token.
+        if (
+            self.tokenizer is not None
+            and self.model.can_generate()
+            and self.tokenizer.pad_token_id is not None
+            and self.model.generation_config.pad_token_id is None
+        ):
+            self._forward_params["pad_token_id"] = self.tokenizer.pad_token_id
+
         if self.image_processor is None and self.feature_extractor is not None:
             if isinstance(self.feature_extractor, BaseImageProcessor):
                 # Backward compatible change, if users called
@@ -1169,7 +1179,7 @@ class Pipeline(_ScikitCompat):
 
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
-            warnings.warn(
+            logger.warning_once(
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
                 " dataset",
                 UserWarning,
