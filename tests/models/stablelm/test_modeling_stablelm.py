@@ -416,6 +416,25 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = """My favorite food has always been pizza, but lately I’ve been craving something different. I’ve been trying to eat healthier and I’ve"""
         self.assertEqual(text, EXPECTED_TEXT_COMPLETION)
 
+    @slow
+    def test_model_tiny_random_stablelm_2_logits(self):
+        # Check parallel residual and qk layernorm forward pass
+
+        input_ids = {"input_ids": torch.tensor([[510, 8588, 310, 1900, 9386]], dtype=torch.long, device=torch_device)}
+
+        model = StableLmForCausalLM.from_pretrained("stabilityai/tiny-random-stablelm-2").to(torch_device)
+        model.eval()
+
+        output = model(**input_ids).logits
+
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[2.5458e-03, 9.5978e-04, 9.0021e-04, 4.8214e-04, -7.3715e-05]]).to(torch_device)
+        self.assertTrue(torch.allclose(output.mean(dim=-1), EXPECTED_MEAN, atol=1e-4, rtol=1e-4))
+
+        # Expected logits sliced from [0, 0, 0:30]
+        EXPECTED_SLICE = torch.tensor([0.6883, 0.0916, -0.2363, 0.2961, -0.0896, 0.2419, 0.3811, 0.7667, -0.7029, -0.9250, -0.2455, 0.2252, -0.6335, 0.1841, 0.3521, 0.0812, -0.3504, 0.6080, 0.3894, 0.9459, -0.6386, -0.2383, -0.9865, -0.6121, -0.0341, -0.5566, 0.2534, -0.2483, 0.0149, -0.3899]).to(torch_device)  # fmt: skip
+        self.assertTrue(torch.allclose(output[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4))
+
     @require_bitsandbytes
     @slow
     @require_flash_attn
