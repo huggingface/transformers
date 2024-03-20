@@ -69,6 +69,7 @@ jobs:
           debugEnabled: ${{ secrets.ACTIONS_STEP_DEBUG }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+          containerMode: false
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
