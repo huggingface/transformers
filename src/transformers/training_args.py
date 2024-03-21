@@ -1638,6 +1638,30 @@ class TrainingArguments:
             if version.parse(version.parse(torch.__version__).base_version) == version.parse("2.0.0") and self.fp16:
                 raise ValueError("--optim adamw_torch_fused with --fp16 requires PyTorch>2.0")
 
+        # We need to convert the `AcceleratorConfig` before device state has been initialized
+        if self.framework == "pt" and is_torch_available() and is_accelerate_available():
+            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
+                if self.accelerator_config is None:
+                    self.accelerator_config = AcceleratorConfig()
+                elif isinstance(self.accelerator_config, dict):
+                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
+                else:
+                    self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
+            if self.dispatch_batches is not None:
+                warnings.warn(
+                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
+                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
+                    FutureWarning,
+                )
+                self.accelerator_config.dispatch_batches = self.dispatch_batches
+
+            if self.split_batches is not None:
+                warnings.warn(
+                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
+                    " `--accelerator_config {'split_batches':VALUE} instead",
+                    FutureWarning,
+                )
+                self.accelerator_config.split_batches = self.split_batches
         if (
             self.framework == "pt"
             and is_torch_available()
@@ -1869,37 +1893,6 @@ class TrainingArguments:
 
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
 
-        if is_accelerate_available():
-            if not isinstance(self.accelerator_config, (AcceleratorConfig)):
-                if self.accelerator_config is None:
-                    self.accelerator_config = AcceleratorConfig()
-                elif isinstance(self.accelerator_config, dict):
-                    self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
-                # Check that a user didn't pass in the class instantiator
-                # such as `accelerator_config = AcceleratorConfig`
-                elif isinstance(self.accelerator_config, type):
-                    raise NotImplementedError(
-                        "Tried passing in a callable to `accelerator_config`, but this is not supported. "
-                        "Please pass in a fully constructed `AcceleratorConfig` object instead."
-                    )
-                else:
-                    self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
-            if self.dispatch_batches is not None:
-                warnings.warn(
-                    "Using `--dispatch_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'dispatch_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.dispatch_batches = self.dispatch_batches
-
-            if self.split_batches is not None:
-                warnings.warn(
-                    "Using `--split_batches` is deprecated and will be removed in version 4.41 of 🤗 Transformers. Use"
-                    " `--accelerator_config {'split_batches':VALUE} instead",
-                    FutureWarning,
-                )
-                self.accelerator_config.split_batches = self.split_batches
-
         if self.tpu_metrics_debug:
             warnings.warn(
                 "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -2052,11 +2045,11 @@ class TrainingArguments:
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
                     "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
                 )
-            use_configured_state = getattr(self.accelerator_config, "use_configured_state", False)
+            use_configured_state = self.accelerator_config.pop("use_configured_state", False)
             if use_configured_state:
                 if AcceleratorState._shared_state == {}:
                     raise ValueError(
-                        "Passing `use_configured_state=True` to the AcceleratorConfig requires a pre-configured "
+                        "Passing `'use_configured_state':True` to the AcceleratorConfig requires a pre-configured "
                         "`AcceleratorState` or `PartialState` to be defined before calling `TrainingArguments`. "
                         "Please define this beforehand."
                     )

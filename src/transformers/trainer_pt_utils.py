@@ -1338,6 +1338,9 @@ class AcceleratorConfig:
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
 
+    def pop(self, key, default=None):
+        return self.__dict__.pop(key, default)
+
 
 class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     """
