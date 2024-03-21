@@ -348,14 +348,6 @@ jobs:
           name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu
 
-      - name: "Slack report"
-        uses: ./.github/slack-report.yml
-        with:
-          job: run_tests_quantization_torch_gpu
-          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.slack_report_channel }}
-          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-
 #
 #  run_extract_warnings:
 #    name: Extract warnings in CI artifacts
@@ -455,3 +447,13 @@ jobs:
 #        with:
 #          name: prev_ci_results
 #          path: prev_ci_results
+
+  send_results:
+    name: Slack Report
+    uses: ./.github/workflows/slack-report.yml
+    with:
+      job: ${{ inputs.job }}
+    secrets:
+      CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+      CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_REPORT_CHANNEL_ID }}
+      ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
