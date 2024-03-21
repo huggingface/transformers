@@ -19,10 +19,14 @@ Processor class for IDEFICS2.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import is_valid_image, ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType
+
+
+def _is_str_or_image(elem):
+    return isinstance(elem, (str)) or is_valid_image(elem)
 
 
 def build_string_from_input(prompt, image_seq_len, bos_token, image_token, fake_image_token):
@@ -119,12 +123,12 @@ class Idefics2Processor(ProcessorMixin):
         """ """
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
 
-        if not isinstance(prompts, list) and isinstance(prompts, (TextInput, ImageInput)):
+        if _is_str_or_image(prompts):
             prompts = [[prompts]]
-
-        elif isinstance(prompts, list) and not isinstance(prompts[0], list):
+        elif isinstance(prompts, list) and _is_str_or_image(prompts[0]):
             prompts = [prompts]
-
+        elif isinstance(prompts, list) and isinstance(prompts[0], list) and _is_str_or_image(prompts[0][0]):
+            pass
         else:
             raise ValueError(
                 "Invalid input prompts. Please provide a string or image, a list of strings and images or "
