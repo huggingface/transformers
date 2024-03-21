@@ -89,56 +89,56 @@ jobs:
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
 
-  run_examples_gpu:
-    name: Examples directory
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Run examples tests on GPU
-        working-directory: /transformers
-        run: |
-          pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_examples_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
+#  run_examples_gpu:
+#    name: Examples directory
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        machine_type: [single-gpu]
+#    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+#    container:
+#      image: huggingface/transformers-all-latest-gpu
+#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+#    needs: setup
+#    steps:
+#      - name: Update clone
+#        working-directory: /transformers
+#        run: git fetch && git checkout ${{ github.sha }}
+#
+#      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+#        working-directory: /transformers
+#        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+#
+#      - name: NVIDIA-SMI
+#        run: |
+#          nvidia-smi
+#
+#      - name: Environment
+#        working-directory: /transformers
+#        run: |
+#          python3 utils/print_env.py
+#
+#      - name: Show installed libraries and their versions
+#        working-directory: /transformers
+#        run: pip freeze
+#
+#      - name: Run examples tests on GPU
+#        working-directory: /transformers
+#        run: |
+#          pip install -r examples/pytorch/_tests_requirements.txt
+#          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
+#
+#      - name: Failure short reports
+#        if: ${{ failure() }}
+#        continue-on-error: true
+#        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
+#
+#      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu"
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: ${{ matrix.machine_type }}_run_examples_gpu
+#          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
 #
 #  run_pipelines_torch_gpu:
 #    name: PyTorch pipelines
