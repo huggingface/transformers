@@ -82,14 +82,14 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         tf.config.experimental.enable_op_determinism()
 
 
-def set_seed(seed: int, determinsitic: bool = False):
+def set_seed(seed: int, deterministic: bool = False):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
     Args:
         seed (`int`):
             The seed to set.
-        determinsitic (`bool`, *optional*, defaults to `False`):
+        deterministic (`bool`, *optional*, defaults to `False`):
             Whether to use deterministic algorithms where available. Can slow down training.
     """
     random.seed(seed)
@@ -98,7 +98,7 @@ def set_seed(seed: int, determinsitic: bool = False):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
-        if determinsitic:
+        if deterministic:
             torch.use_deterministic_algorithms(True)
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
@@ -108,7 +108,7 @@ def set_seed(seed: int, determinsitic: bool = False):
         import tensorflow as tf
 
         tf.random.set_seed(seed)
-        if determinsitic:
+        if deterministic:
             tf.config.experimental.enable_op_determinism()
 
 
