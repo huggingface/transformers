@@ -235,14 +235,6 @@ class Idefics2Config(PretrainedConfig):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
-        freeze_text_layers (`bool`, *optional*, defaults to `False`):
-            Whether to freeze text layers
-        freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
-            Exceptions to freezing text layers when `freeze_text_layers` is `True`
-        freeze_vision_layers (`bool`, *optional*, defaults to `False`):
-            Whether to freeze vision layers
-        freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
-            Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         vision_config (`IdeficsVisionConfig` or `dict`, *optional*):
@@ -285,10 +277,6 @@ class Idefics2Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         sliding_window=4096,
-        freeze_text_layers=False,
-        freeze_text_module_exceptions=[],
-        freeze_vision_layers=False,
-        freeze_vision_module_exceptions=[],
         attention_dropout=0.0,
         vision_config=None,
         perceiver_config=None,
@@ -314,13 +302,6 @@ class Idefics2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-
-        self.freeze_vision_layers = freeze_vision_layers
-
-        self.freeze_text_layers = freeze_text_layers
-        self.freeze_text_module_exceptions = freeze_text_module_exceptions
-        self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
-
         self.attention_dropout = attention_dropout
 
         if perceiver_config is None:
