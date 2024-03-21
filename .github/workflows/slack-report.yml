@@ -31,7 +31,7 @@ jobs:
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.slack_report_channel }}
+          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_REPORT_CHANNEL_ID }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
