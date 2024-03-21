@@ -453,7 +453,4 @@ jobs:
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
-    secrets:
-      CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-      CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_REPORT_CHANNEL_ID }}
-      ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+    secrets: inherit
