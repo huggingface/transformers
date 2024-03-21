@@ -47,7 +47,7 @@ jobs:
     runs-on: [single-gpu, nvidia-gpu, a10, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' }}
     strategy:
       fail-fast: false
