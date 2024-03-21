@@ -34,10 +34,6 @@ if is_torch_available():
         StopStringCriteria,
         validate_stopping_criteria,
     )
-    from transformers.generation.stopping_criteria import (
-        _stop_string_create_embedding_vec,
-        _stop_string_get_matching_positions,
-    )
 
 
 @require_torch
@@ -182,9 +178,10 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         stop_strings = ["aaaaaaa", "assdfiugsdf", "stop"]
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
+        token_list, token_indices = criteria.clean_tokenizer_vocab(tokenizer)
         idx_to_token = {v: k for k, v in tokenizer.get_vocab().items()}
-        all_token_valid_positions, all_token_end_overlaps = _stop_string_get_matching_positions(
-            token_list=criteria.token_list, token_indices=criteria.token_indices, stop_strings=criteria.stop_strings
+        all_token_valid_positions, all_token_end_overlaps = criteria._stop_string_get_matching_positions(
+            token_list=token_list, token_indices=token_indices, stop_strings=criteria.stop_strings
         )
         for stop_string in stop_strings:
             token_valid_positions = all_token_valid_positions[stop_string]
@@ -214,8 +211,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         stop_strings = ["aaaaaaa", "assdfiugsdf", "stop"]
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
-        embedding_vec, max_valid_positions, max_valid_end_lens = _stop_string_create_embedding_vec(
-            token_list=criteria.token_list, token_indices=criteria.token_indices, stop_strings=criteria.stop_strings
+        token_list, token_indices = criteria.clean_tokenizer_vocab(tokenizer)
+        embedding_vec, max_valid_positions, max_valid_end_lens = criteria._stop_string_create_embedding_vec(
+            token_list=token_list, token_indices=token_indices, stop_strings=criteria.stop_strings
         )
         valid_positions_vec = embedding_vec[:, : max_valid_positions * len(stop_strings)].unflatten(
             -1, (len(stop_strings), -1)
@@ -226,7 +224,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         token_lengths = embedding_vec[:, -1]
 
         for i, stop_string in enumerate(stop_strings):
-            for token, token_idx in zip(criteria.token_list, criteria.token_indices):
+            for token, token_idx in zip(token_list, token_indices):
                 # The embedding contains packed valid positions, end overlap lengths, and the total token length
                 token = token.replace("▁", " ").replace("Ġ", " ")
 
