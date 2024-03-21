@@ -457,7 +457,7 @@ jobs:
 
   send_results:
     name: Slack Report
-    needs: ${{ inputs.job }}
+    needs: "${{ inputs.job }}"
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
