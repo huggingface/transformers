@@ -1797,23 +1797,28 @@ class GenerationMixin:
 
         return result
 
-    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
+    def _has_unfinished_sequences(self, this_peer_finished: bool, cur_len, max_length, synced_gpus: bool, device: torch.device) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
         """
-        if synced_gpus:
-            # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
-            # The following logic allows an early break if all peers finished generating their sequence
-            this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
-            # send 0.0 if we finished, 1.0 otherwise
-            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-            # did all peers finish? the reduced sum will be 0.0 then
-            if this_peer_finished_flag.item() == 0.0:
+        # torch.compile does not support data-dependent control flow. This is a workaround to allow torch.compile,
+        # although we lose the ability to stop when all sequences return an EOS token (and other stopping criteria)
+        if is_torchdynamo_compiling():
+            return cur_len < max_length
+        else:
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    return False
+            elif this_peer_finished:
                 return False
-        elif this_peer_finished:
-            return False
-        return True
+            return True
 
     def contrastive_search(self, *args, **kwargs):
         logger.warning_once(
@@ -2427,8 +2432,8 @@ class GenerationMixin:
             if isinstance(criteria, MaxLengthCriteria):
                 max_length = criteria.max_length
                 break
-                
-        while self.has_unfinished_sequences(this_peer_finished, cur_len, synced_gpus, device=input_ids.device):
+
+        while self._has_unfinished_sequences(this_peer_finished, cur_len, max_length, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
