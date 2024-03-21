@@ -4261,14 +4261,13 @@ class Trainer:
                 use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
             )
         args = {
-            "deepspeed_plugin":self.args.deepspeed_plugin, 
-            "gradient_accumulation_plugin":gradient_accumulation_plugin
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+            "gradient_accumulation_plugin": gradient_accumulation_plugin,
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
             args.update(accelerator_config)
-
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
