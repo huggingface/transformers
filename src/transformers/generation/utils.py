@@ -1965,11 +1965,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
-            if generation_config.repetition_penalty < 1.2:
-                logger.warning_once(
-                    f"Calling DoLa decoding but the `repetition_penalty` is set to a value of {generation_config.repetition_penalty}, which could induce unwanted repetition. "
-                    "The recommended value for DoLa decoding is `repetition_penalty=1.2` to prevent repetition."
-                )
             result = self._dola_decoding(
                 input_ids,
                 dola_layers=generation_config.dola_layers,

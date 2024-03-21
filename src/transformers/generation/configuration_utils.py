@@ -724,6 +724,17 @@ class GenerationConfig(PushToHubMixin):
                     "`generate()` (or a pipeline) directly."
                 )
 
+        # 6. if dola_layers is set, check if repetition_penalty is set to >= 1.2
+        if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
+            dola_decoding_wrong_parameter_msg = (
+                "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of {repetition_penalty}, "
+                "which could induce unwanted repetition. The recommended value for DoLa decoding is `repetition_penalty=1.2` to prevent repetition."
+            )
+            warnings.warn(
+                dola_decoding_wrong_parameter_msg.format(repetition_penalty=self.repetition_penalty),
+                UserWarning,
+            )
+
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
