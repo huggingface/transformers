@@ -1316,7 +1316,7 @@ class AcceleratorConfig:
         default=False,
         metadata={
             "help": "Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`."
-            "If `True`, an `Accelerator` or `PartialState` must be initialized."
+            "If `True`, an `Accelerator` or `PartialState` must be initialized. May lead to issues using sweeps or hyperparameter tuning."
         },
     )
 
