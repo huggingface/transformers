@@ -291,7 +291,7 @@ class StopStringCriteria(StoppingCriteria):
                 max_valid_end_lens,
             )
             if len(STOP_STRING_EMBEDDING_CACHE) > 8:
-                STOP_STRING_EMBEDDING_CACHE.popitem(last=False)
+                STOP_STRING_EMBEDDING_CACHE.popitem(last=False)  # Pop from the start, the least recently used item
         return embedding_vec, max_valid_positions, max_valid_end_lens
 
     @staticmethod
