@@ -90,7 +90,7 @@ class BenchMark:
 
             if not os.path.isdir(output_path):
                 os.makedirs(output_path)
-            output_path = os.path.join("benchmark_report.json")
+            output_path = os.path.join(output_path, "benchmark_report.json")
 
             with open(output_path, "w", encoding="UTF-8") as fp:
                 json.dump(complete_report, fp, ensure_ascii=False, indent=4)
