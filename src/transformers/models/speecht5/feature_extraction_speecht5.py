@@ -124,17 +124,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-        if frame_signal_scale != 1.0:
-            warnings.warn(
-                "The argument `frame_signal_scale` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
-        if reduction_factor != 2.0:
-            warnings.warn(
-                "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
-
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(

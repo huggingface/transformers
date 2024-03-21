@@ -393,17 +393,6 @@ def is_torch_bf16_cpu_available():
     return True
 
 
-def is_torch_bf16_available():
-    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
-    # has become ambiguous and therefore deprecated
-    warnings.warn(
-        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
-        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
-        FutureWarning,
-    )
-    return is_torch_bf16_gpu_available()
-
-
 @lru_cache()
 def is_torch_fp16_available_on_device(device):
     if not is_torch_available():

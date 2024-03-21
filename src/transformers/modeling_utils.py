@@ -926,13 +926,8 @@ class ModuleUtilsMixin:
         return encoder_extended_attention_mask
 
     @staticmethod
-    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
-        if device is not None:
-            warnings.warn(
-                "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
-            )
-        else:
-            device = attention_mask.device
+    def create_extended_attention_mask_for_decoder(input_shape, attention_mask):
+        device = attention_mask.device
         batch_size, seq_length = input_shape
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -954,7 +949,7 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: Tuple[int], device: torch.device = None, dtype: torch.float = None
+        self, attention_mask: Tensor, input_shape: Tuple[int], dtype: torch.float = None
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -970,13 +965,6 @@ class ModuleUtilsMixin:
         """
         if dtype is None:
             dtype = self.dtype
-
-        if not (attention_mask.dim() == 2 and self.config.is_decoder):
-            # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
-            if device is not None:
-                warnings.warn(
-                    "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
-                )
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
@@ -4219,19 +4207,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             logger.warning_once(warn_string)
-
-    @property
-    def _is_quantized_training_enabled(self):
-        warnings.warn(
-            "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
-            FutureWarning,
-        )
-
-        if not hasattr(self, "hf_quantizer"):
-            return False
-
-        return self.hf_quantizer.is_trainable
-
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:

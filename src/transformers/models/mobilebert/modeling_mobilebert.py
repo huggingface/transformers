@@ -1185,15 +1185,6 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-
-        if "next_sentence_label" in kwargs:
-            warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
-                " `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("next_sentence_label")
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mobilebert(

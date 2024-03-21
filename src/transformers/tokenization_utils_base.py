@@ -341,30 +341,6 @@ class BatchEncoding(UserDict):
             )
         return self._encodings[batch_index].sequence_ids
 
-    def words(self, batch_index: int = 0) -> List[Optional[int]]:
-        """
-        Return a list mapping the tokens to their actual word in the initial sentence for a fast tokenizer.
-
-        Args:
-            batch_index (`int`, *optional*, defaults to 0): The index to access in the batch.
-
-        Returns:
-            `List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by the
-            tokenizer are mapped to `None` and other tokens are mapped to the index of their corresponding word
-            (several tokens will be mapped to the same word index if they are parts of that word).
-        """
-        if not self._encodings:
-            raise ValueError(
-                "words() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
-        warnings.warn(
-            "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
-            "but more self-explanatory `BatchEncoding.word_ids()` property.",
-            FutureWarning,
-        )
-        return self.word_ids(batch_index)
-
     def word_ids(self, batch_index: int = 0) -> List[Optional[int]]:
         """
         Return a list mapping the tokens to their actual word in the initial sentence for a fast tokenizer.
@@ -2676,35 +2652,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
         and pad_to_max_length) and behaviors.
         """
-        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
-        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
-
-        # Backward compatibility for previous behavior, maybe we should deprecate it:
         # If you only set max_length, it activates truncation for max_length
         if max_length is not None and padding is False and truncation is None:
-            if verbose:
-                if not self.deprecation_warnings.get("Truncation-not-explicitly-activated", False):
-                    logger.warning(
-                        "Truncation was not explicitly activated but `max_length` is provided a specific value, please"
-                        " use `truncation=True` to explicitly truncate examples to max length. Defaulting to"
-                        " 'longest_first' truncation strategy. If you encode pairs of sequences (GLUE-style) with the"
-                        " tokenizer you can select this strategy more precisely by providing a specific strategy to"
-                        " `truncation`."
-                    )
-                self.deprecation_warnings["Truncation-not-explicitly-activated"] = True
             truncation = "longest_first"
 
         # Get padding strategy
-        if padding is False and old_pad_to_max_length:
-            if verbose:
-                warnings.warn(
-                    "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
-                    "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
-                    "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
-                    "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
-                    "maximal input size of the model (e.g. 512 for Bert).",
-                    FutureWarning,
-                )
+        if padding is False:
             if max_length is None:
                 padding_strategy = PaddingStrategy.LONGEST
             else:
@@ -2719,8 +2672,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
                             "To pad to max length, use `padding='max_length'`."
                         )
-                    if old_pad_to_max_length is not False:
-                        warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
@@ -2728,23 +2679,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 padding_strategy = padding
         else:
             padding_strategy = PaddingStrategy.DO_NOT_PAD
-
-        # Get truncation strategy
-        if truncation is None and old_truncation_strategy != "do_not_truncate":
-            if verbose:
-                warnings.warn(
-                    "The `truncation_strategy` argument is deprecated and will be removed in a future version, use"
-                    " `truncation=True` to truncate examples to a max length. You can give a specific length with"
-                    " `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the maximal input"
-                    " size of the model (e.g. 512 for Bert).  If you have pairs of inputs, you can give a specific"
-                    " truncation strategy selected among `truncation='only_first'` (will only truncate the first"
-                    " sentence in the pairs) `truncation='only_second'` (will only truncate the second sentence in the"
-                    " pairs) or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence"
-                    " in the pairs).",
-                    FutureWarning,
-                )
-            truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False and truncation is not None:
+    
+        if truncation is not False and truncation is not None:
             if truncation is True:
                 truncation_strategy = (
                     TruncationStrategy.LONGEST_FIRST
@@ -3980,128 +3916,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
-
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: str = None,
-        truncation: bool = True,
-        **kwargs,
-    ) -> BatchEncoding:
-        """
-        Prepare model inputs for translation. For best performance, translate one sentence at a time.
-
-        Arguments:
-            src_texts (`List[str]`):
-                List of documents to summarize or source language texts.
-            tgt_texts (`list`, *optional*):
-                List of summaries or target language texts.
-            max_length (`int`, *optional*):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts) If
-                left unset or set to `None`, this will use the predefined model maximum length if a maximum length is
-                required by one of the truncation/padding parameters. If the model has no specific maximum input length
-                (like XLNet) truncation/padding to a maximum length will be deactivated.
-            max_target_length (`int`, *optional*):
-                Controls the maximum length of decoder inputs (target language texts or summaries) If left unset or set
-                to `None`, this will use the max_length value.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Activates and controls padding. Accepts the following values:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
-            truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `True`):
-                Activates and controls truncation. Accepts the following values:
-
-                - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will
-                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
-                  sequences (or a batch of pairs) is provided.
-                - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided. This will only
-                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided. This will only
-                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
-                  greater than the model maximum admissible input size).
-            **kwargs:
-                Additional keyword arguments passed along to `self.__call__`.
-
-        Return:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to the encoder.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **labels** -- List of token ids for tgt_texts.
-
-            The full set of keys `[input_ids, attention_mask, labels]`, will only be returned if tgt_texts is passed.
-            Otherwise, input_ids, attention_mask will be the only keys.
-        """
-        # docstyle-ignore
-        formatted_warning = """
-`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of HuggingFace Transformers. Use the regular
-`__call__` method to prepare your inputs and targets.
-
-Here is a short example:
-
-model_inputs = tokenizer(src_texts, text_target=tgt_texts, ...)
-
-If you either need to use different keyword arguments for the source and target texts, you should do two calls like
-this:
-
-model_inputs = tokenizer(src_texts, ...)
-labels = tokenizer(text_target=tgt_texts, ...)
-model_inputs["labels"] = labels["input_ids"]
-
-See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice.
-For a more complete example, see the implementation of `prepare_seq2seq_batch`.
-"""
-        warnings.warn(formatted_warning, FutureWarning)
-        # mBART-specific kwargs that should be ignored by other models.
-        kwargs.pop("src_lang", None)
-        kwargs.pop("tgt_lang", None)
-        if max_length is None:
-            max_length = self.model_max_length
-        model_inputs = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        with self.as_target_tokenizer():
-            labels = self(
-                tgt_texts,
-                add_special_tokens=True,
-                return_tensors=return_tensors,
-                padding=padding,
-                max_length=max_target_length,
-                truncation=truncation,
-                **kwargs,
-            )
-        model_inputs["labels"] = labels["input_ids"]
-        return model_inputs
 
 
 def get_fast_tokenizer_file(tokenization_files: List[str]) -> str:

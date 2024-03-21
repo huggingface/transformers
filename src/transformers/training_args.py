@@ -1103,15 +1103,6 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp_min_num_params: int = field(
-        default=0,
-        metadata={
-            "help": (
-                "This parameter is deprecated. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
-                " only when `fsdp` field is passed)."
-            )
-        },
-    )
     # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
@@ -1119,15 +1110,6 @@ class TrainingArguments:
             "help": (
                 "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
-            )
-        },
-    )
-    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "This parameter is deprecated. Transformer layer class name (case-sensitive) to wrap, e.g,"
-                " `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -1680,22 +1662,9 @@ class TrainingArguments:
                         v = self.fsdp_config.pop(k)
                         self.fsdp_config[k[5:]] = v
 
-        if self.fsdp_min_num_params > 0:
-            warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
-
-        self.fsdp_config["min_num_params"] = max(self.fsdp_config.get("min_num_params", 0), self.fsdp_min_num_params)
-
         # if fsdp_config["transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
         if isinstance(self.fsdp_config.get("transformer_layer_cls_to_wrap", None), str):
             self.fsdp_config["transformer_layer_cls_to_wrap"] = [self.fsdp_config["transformer_layer_cls_to_wrap"]]
-
-        if self.fsdp_transformer_layer_cls_to_wrap is not None:
-            warnings.warn(
-                "using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning
-            )
-            self.fsdp_config["transformer_layer_cls_to_wrap"] = self.fsdp_config.get(
-                "transformer_layer_cls_to_wrap", []
-            ) + [self.fsdp_transformer_layer_cls_to_wrap]
 
         if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
             warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")

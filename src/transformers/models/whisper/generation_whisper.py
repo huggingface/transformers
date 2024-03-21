@@ -467,13 +467,6 @@ class WhisperGenerationMixin:
         ```
 
         """
-        # 0. deprecate old inputs
-        if "inputs" in kwargs:
-            input_features = kwargs.pop("inputs")
-            warnings.warn(
-                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
-                FutureWarning,
-            )
         # 1. copy generation config
         if generation_config is None:
             generation_config = copy.deepcopy(self.generation_config)

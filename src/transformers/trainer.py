@@ -391,12 +391,7 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
         else:
             if model_init is not None:
-                warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
-                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
-                    " release.",
-                    FutureWarning,
-                )
+                raise ValueError("`Trainer` requires either a `model` or `model_init` argument, but not both.")
             self.model_init = model_init
 
         if model.__class__.__name__ in MODEL_MAPPING_NAMES:
@@ -1718,13 +1713,6 @@ class Trainer:
         if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train:
             self._move_model_to_device(self.model, args.device)
 
-        if "model_path" in kwargs:
-            resume_from_checkpoint = kwargs.pop("model_path")
-            warnings.warn(
-                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                "instead.",
-                FutureWarning,
-            )
         if len(kwargs) > 0:
             raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.

@@ -126,14 +126,6 @@ class SegformerConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
-            warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
-                " removed, as the behaviour will default to that of reshape_last_stage = True.",
-                FutureWarning,
-            )
-
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths

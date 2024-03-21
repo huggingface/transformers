@@ -333,15 +333,6 @@ class XLMProphetNetSeq2SeqLMOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
-    @property
-    def decoder_cross_attentions(self):
-        warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.cross_attentions
-
 
 @dataclass
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetSeq2SeqModelOutput with ProphetNet->XLMProphetNet all-casing
@@ -419,15 +410,6 @@ class XLMProphetNetSeq2SeqModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-    @property
-    def decoder_cross_attentions(self):
-        warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.cross_attentions
 
 
 @dataclass

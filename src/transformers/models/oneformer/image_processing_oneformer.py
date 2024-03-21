@@ -442,14 +442,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
 
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in v4.27. "
-                "Please use `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
-
         if class_info_file is None:
             raise ValueError("You must provide a `class_info_file`")
 
@@ -501,15 +493,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
         int, smaller edge of the image will be matched to this number.
         """
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.27. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
+        max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size, max_size = size["shortest_edge"], size["longest_edge"]
@@ -695,24 +679,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
-                FutureWarning,
-            )
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in a v4.27. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            if do_reduce_labels is not None:
-                raise ValueError(
-                    "You cannot use both `reduce_labels` and `do_reduce_labels` arguments. Please use"
-                    " `do_reduce_labels` instead."
-                )
-            do_reduce_labels = kwargs.pop("reduce_labels")
-
         if task_inputs is None:
             # Default value
             task_inputs = ["panoptic"]

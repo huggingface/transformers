@@ -430,19 +430,10 @@ def center_crop(
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             If unset, will use the inferred format of the input image.
-        return_numpy (`bool`, *optional*):
-            Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
-            previous ImageFeatureExtractionMixin method.
-                - Unset: will return the same type as the input image.
-                - `True`: will return a numpy array.
-                - `False`: will return a `PIL.Image.Image` object.
     Returns:
         `np.ndarray`: The cropped image.
     """
     requires_backends(center_crop, ["vision"])
-
-    if return_numpy is not None:
-        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
 
     return_numpy = True if return_numpy is None else return_numpy
 
@@ -496,10 +487,6 @@ def center_crop(
 
     new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
     new_image = to_channel_dimension_format(new_image, output_data_format, ChannelDimension.FIRST)
-
-    if not return_numpy:
-        new_image = to_pil_image(new_image)
-
     return new_image
 
 

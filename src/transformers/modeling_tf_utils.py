@@ -470,30 +470,7 @@ def input_processing(func, config, **kwargs):
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
 
-    if "inputs" in kwargs["kwargs_call"]:
-        warnings.warn(
-            "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-            FutureWarning,
-        )
-
-        output["input_ids"] = kwargs["kwargs_call"].pop("inputs")
-
-    if "decoder_cached_states" in kwargs["kwargs_call"]:
-        warnings.warn(
-            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
-            " `past_key_values` instead.",
-            FutureWarning,
-        )
-        output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
-
-    if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
-        warnings.warn(
-            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values`"
-            " instead.",
-            FutureWarning,
-        )
-        kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
-    elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
+    if "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if has_kwargs:
@@ -532,23 +509,6 @@ def input_processing(func, config, **kwargs):
                     f" {parameter_names[i]}."
                 )
     elif isinstance(main_input, Mapping):
-        if "inputs" in main_input:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            output["input_ids"] = main_input.pop("inputs")
-
-        if "decoder_cached_states" in main_input:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
-                " `past_key_values` instead.",
-                FutureWarning,
-            )
-            output["past_key_values"] = main_input.pop("decoder_cached_states")
-
         for k, v in dict(main_input).items():
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
@@ -1939,29 +1899,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 logger.info("Building the model")
                 self.build_in_name_scope()
                 lm_head.set_output_embeddings(value)
-
-    def get_output_layer_with_bias(self) -> Union[None, keras.layers.Layer]:
-        """
-        Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
-        embeddings
-
-        Return:
-            `keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
-        """
-        warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
-        )
-        return self.get_lm_head()
-
-    def get_prefix_bias_name(self) -> Union[None, str]:
-        """
-        Get the concatenated _prefix name of the bias from the model name to the parent layer
-
-        Return:
-            `str`: The _prefix name of the bias.
-        """
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
-        return None
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
         """

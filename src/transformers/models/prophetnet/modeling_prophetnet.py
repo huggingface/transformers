@@ -324,15 +324,6 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
-    @property
-    def decoder_cross_attentions(self):
-        warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.cross_attentions
-
 
 @dataclass
 class ProphetNetSeq2SeqModelOutput(ModelOutput):
@@ -409,15 +400,6 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-    @property
-    def decoder_cross_attentions(self):
-        warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.cross_attentions
 
 
 @dataclass
