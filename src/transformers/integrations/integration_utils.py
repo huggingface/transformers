@@ -579,6 +579,22 @@ def rewrite_logs(d):
     return new_d
 
 
+def save_model_architecture_to_file(
+    model: Union[PreTrainedModel, TFPreTrainedModel, PushToHubMixin, torch.nn.Module], output_dir: str
+):
+    with open(f"{output_dir}/model_architecture.txt", "w+") as f:
+        if isinstance(model, PreTrainedModel):
+            print(model, file=f)
+        elif isinstance(model, TFPreTrainedModel):
+
+            def print_to_file(s):
+                print(s, file=f)
+
+            model.summary(print_fn=print_to_file)
+        elif isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model"):
+            print(model, file=f)
+
+
 class TensorBoardCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
@@ -780,29 +796,19 @@ class WandbCallback(TrainerCallback):
                     type="model",
                     metadata={
                         "model_config": model.config.to_dict() if hasattr(model, "config") else None,
-                        "num_parameters": model.num_parameters(),
+                        "num_parameters": self._wandb.config.get("model/num_parameters"),
                         "initial_model": True,
                     },
                 )
                 model.save_pretrained(temp_dir)
                 # add the architecture to a separate text file
-                with open(f"{temp_dir}/model_architecture.txt", "w+") as f:
-                    if isinstance(model, PreTrainedModel):
-                        print(model, file=f)
-                    elif isinstance(model, TFPreTrainedModel):
-
-                        def print_to_file(s):
-                            print(s, file=f)
-
-                        model.summary(print_fn=print_to_file)
-                    elif isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model"):
-                        print(model, file=f)
+                save_model_architecture_to_file(model, temp_dir)
 
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with model_artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
-                self._wandb.run.log_artifact(model_artifact, aliases=["base-model"])
+                self._wandb.run.log_artifact(model_artifact, aliases=["base_model"])
 
                 badge_markdown = (
                     f'[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge'
@@ -842,7 +848,7 @@ class WandbCallback(TrainerCallback):
                     else {
                         f"eval/{args.metric_for_best_model}": state.best_metric,
                         "train/total_floss": state.total_flos,
-                        "model/num_parameters": self._wandb.config["model/num_parameters"],
+                        "model/num_parameters": self._wandb.config.get("model/num_parameters"),
                     }
                 )
                 metadata["final_model"] = True
@@ -853,24 +859,14 @@ class WandbCallback(TrainerCallback):
                     else f"model-{self._wandb.run.name}"
                 )
                 # add the model architecture to a separate text file
-                with open(f"{temp_dir}/model_architecture.txt", "w+") as f:
-                    if isinstance(model, PreTrainedModel):
-                        print(model, file=f)
-                    elif isinstance(model, TFPreTrainedModel):
-
-                        def print_to_file(s):
-                            print(s, file=f)
-
-                        model.summary(print_fn=print_to_file)
-                    elif isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model"):
-                        print(model, file=f)
+                save_model_architecture_to_file(model, temp_dir)
 
                 artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
-                self._wandb.run.log_artifact(artifact, aliases=["final-model"])
+                self._wandb.run.log_artifact(artifact, aliases=["final_model"])
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if self._wandb is None:
@@ -888,7 +884,7 @@ class WandbCallback(TrainerCallback):
                 for k, v in dict(self._wandb.summary).items()
                 if isinstance(v, numbers.Number) and not k.startswith("_")
             }
-            checkpoint_metadata["model/num_parameters"] = self._wandb.config["model/num_parameters"]
+            checkpoint_metadata["model/num_parameters"] = self._wandb.config.get("model/num_parameters")
 
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
@@ -901,7 +897,7 @@ class WandbCallback(TrainerCallback):
             artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
             artifact.add_dir(artifact_path)
             self._wandb.log_artifact(
-                artifact, aliases=["checkpoint", f"epoch_{round(state.epoch, 2)}", f"global_step_{state.global_step}"]
+                artifact, aliases=[f"epoch_{round(state.epoch, 2)}", f"checkpoint_global_step_{state.global_step}"]
             )
 
     def on_predict(self, args, state, control, metrics, **kwargs):
