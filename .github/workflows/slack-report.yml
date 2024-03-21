@@ -6,6 +6,16 @@ on:
       job:
         required: true
         type: string
+    secrets:
+      CI_SLACK_BOT_TOKEN:
+        required: true
+        type: string
+      CI_SLACK_REPORT_CHANNEL_ID:
+        required: true
+        type: string
+      ACCESS_REPO_INFO_TOKEN:
+        required: true
+        type: string
 
 jobs:
   send_results:

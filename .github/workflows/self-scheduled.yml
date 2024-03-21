@@ -352,7 +352,10 @@ jobs:
         uses: ./.github/slack-report.yml
         with:
           job: run_tests_quantization_torch_gpu
-        secrets: inherit
+        secrets:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.slack_report_channel }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
 
 #
 #  run_extract_warnings:
