@@ -100,5 +100,5 @@ jobs:
       - name: Wait for SSH
         if: always()
         run : |
-          sleep 30s
-          while [ "$(last | grep '^runner.*still logged in$')" ]; do sleep 1m; done
+          sleep 180s
+          while [ "$(last | grep '^root.*still logged in$')" ]; do sleep 1m; done
