@@ -20,7 +20,7 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-VideoLlava_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+VIDEO_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "LanguageBind/Video-LLaVA-7B": "https://huggingface.co/LanguageBind/Video-LLaVA-7B/resolve/main/config.json",
 }
 
@@ -29,7 +29,9 @@ class VideoLlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoLlavaForConditionalGeneration`]. It is used to instantiate an
     VideoLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the `LanguageBind/Video-LLaVA-7B`.
+    with the defaults will yield a similar configuration to that of the like LanguageBind/Video-LLaVA-7B.
+
+    e.g. [LanguageBind/Video-LLaVA-7B](https://huggingface.co/LanguageBind/Video-LLaVA-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -43,6 +45,8 @@ class VideoLlavaConfig(PretrainedConfig):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
+        video_token_index (`int`, *optional*, defaults to 32001):
+            The video token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -83,6 +87,7 @@ class VideoLlavaConfig(PretrainedConfig):
         text_config=None,
         ignore_index=-100,
         image_token_index=32000,
+        video_token_index=32001,
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
@@ -91,6 +96,7 @@ class VideoLlavaConfig(PretrainedConfig):
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer

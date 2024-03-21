@@ -21,9 +21,16 @@ _import_structure = {
         "VIDEO_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VideoLlavaConfig",
     ],
-    "image_processing_video_llava": ["VideoLlavaImageProcessor"],
     "processing_video_llava": ["VideoLlavaProcessor"],
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_video_llava"] = ["VideoLlavaImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -33,7 +40,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_video_llava"] = [
         "VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VideoLlavaVisionTransformer",
         "VideoLlavaPreTrainedModel",
         "VideoLlavaForConditionalGeneration",
     ]
@@ -63,7 +69,6 @@ if TYPE_CHECKING:
             VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoLlavaForConditionalGeneration,
             VideoLlavaPreTrainedModel,
-            VideoLlavaVisionTransformer,
         )
 
 else:

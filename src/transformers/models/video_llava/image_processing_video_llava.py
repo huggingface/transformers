@@ -50,7 +50,7 @@ if is_vision_available():
     import PIL
 
 if is_torch_available():
-    import torch
+    pass
 
 
 def make_batched_videos(videos) -> List[List[ImageInput]]:
@@ -298,22 +298,12 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         if not isinstance(visual_inputs, list):
             visual_inputs = [visual_inputs]
 
-        visual_positions = [-1]
-        img_count = 0
         images, videos = [], []
         for visual in visual_inputs:
             if not isinstance(visual, PIL.Image.Image) and len(visual.shape) == 4:
-                visual_positions.extend(np.arange(1, 9) + max(visual_positions))
                 videos.append(visual)
             else:
-                visual_positions.append(-1)
-                img_count += 1
                 images.append(visual)
-        img_positions = torch.arange(
-            max(visual_positions) + 1, max(visual_positions) + img_count + 1, dtype=torch.int32
-        )
-        visual_positions = torch.tensor(visual_positions[1:], dtype=torch.int32)
-        visual_positions[torch.where(visual_positions == -1)[0]] = img_positions
 
         if len(images) > 0:
             images = make_list_of_images(images)
@@ -378,18 +368,17 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 data={
                     "pixel_values_videos": pixel_values_videos,
                     "pixel_values_images": pixel_values_images,
-                    "visual_positions": visual_positions,
                 },
                 tensor_type=return_tensors,
             )
         elif len(images) > 0:
             encoded_outputs = BatchFeature(
-                data={"pixel_values_images": pixel_values_images, "visual_positions": visual_positions},
+                data={"pixel_values_images": pixel_values_images},
                 tensor_type=return_tensors,
             )
         elif len(videos) > 0:
             encoded_outputs = BatchFeature(
-                data={"pixel_values_videos": pixel_values_videos, "visual_positions": visual_positions},
+                data={"pixel_values_videos": pixel_values_videos},
                 tensor_type=return_tensors,
             )
 

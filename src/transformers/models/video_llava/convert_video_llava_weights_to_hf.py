@@ -52,17 +52,17 @@ KEYS_TO_MODIFY_MAPPING = {
     "model.mm_projector": "multi_modal_projector",
     "model": "language_model.model",
     "lm_head": "language_model.lm_head",
+    "video_tower": "video_tower.vision_model",
+    "image_tower": "image_tower.vision_model",
     "multi_modal_projector.0": "multi_modal_projector.linear_1",
     "multi_modal_projector.2": "multi_modal_projector.linear_2",
 }
-
-KEYS_TO_IGNORE = []
 
 
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key, value in state_dict.items():
-        if key.endswith(".inv_freq") or key in KEYS_TO_IGNORE:
+        if key.endswith(".inv_freq"):
             continue
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
@@ -78,6 +78,7 @@ def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_p
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_tokens(AddedToken("<video>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
     tokenizer.padding_side = "left"
 
@@ -86,7 +87,7 @@ def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     processor = VideoLlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     config = VideoLlavaConfig(text_config=text_config)
-    config.pad_token_id = 32001
+    config.pad_token_id = 32002
 
     with torch.device("meta"):
         model = VideoLlavaForConditionalGeneration(config)
@@ -112,8 +113,8 @@ def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
     dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
 
-    # We add an image token so we resize the model
-    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
+    # We add an image and video token so we resize the model
+    model.resize_token_embeddings(config.text_config.vocab_size + 3, pad_shape)
     model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
         tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
         dim=0,

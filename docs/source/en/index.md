@@ -291,6 +291,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [UnivNet](model_doc/univnet)                       |       ✅        |         ❌         |      ❌      |
 |                       [UPerNet](model_doc/upernet)                       |       ✅        |         ❌         |      ❌      |
 |                           [VAN](model_doc/van)                           |       ✅        |         ❌         |      ❌      |
+|                   [VideoLlava](model_doc/video_llava)                    |       ✅        |         ❌         |      ❌      |
 |                      [VideoMAE](model_doc/videomae)                      |       ✅        |         ❌         |      ❌      |
 |                          [ViLT](model_doc/vilt)                          |       ✅        |         ❌         |      ❌      |
 |                      [VipLlava](model_doc/vipllava)                      |       ✅        |         ❌         |      ❌      |

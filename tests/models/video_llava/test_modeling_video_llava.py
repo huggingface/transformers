@@ -49,14 +49,15 @@ class VideoLlavaVisionText2TextModelTester:
         parent,
         ignore_index=-100,
         image_token_index=0,
+        video_token_index=1,
         projector_hidden_act="gelu",
-        seq_length=7,
-        num_frames=2,
+        seq_length=13,
+        num_frames=8,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         text_config={
             "model_type": "llama",
-            "seq_length": 7,
+            "seq_length": 13,
             "is_training": True,
             "use_input_mask": True,
             "use_token_type_ids": False,
@@ -69,7 +70,7 @@ class VideoLlavaVisionText2TextModelTester:
             "hidden_act": "gelu",
             "hidden_dropout_prob": 0.1,
             "attention_probs_dropout_prob": 0.1,
-            "max_position_embeddings": 512,
+            "max_position_embeddings": 2048,  # we need it high because videos are 8 frames
             "type_vocab_size": 16,
             "type_sequence_label_size": 2,
             "initializer_range": 0.02,
@@ -97,6 +98,7 @@ class VideoLlavaVisionText2TextModelTester:
         self.parent = parent
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
@@ -113,8 +115,8 @@ class VideoLlavaVisionText2TextModelTester:
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 336
-        self.encoder_seq_length = 455
+        self.image_size = 224
+        self.encoder_seq_length = 2044
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -122,13 +124,14 @@ class VideoLlavaVisionText2TextModelTester:
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
+            video_token_index=self.video_token_index,
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
         )
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
+        pixel_values_videos = floats_tensor(
             [
                 self.batch_size,
                 self.num_frames,
@@ -137,19 +140,49 @@ class VideoLlavaVisionText2TextModelTester:
                 self.vision_config["image_size"],
             ]
         )
+
+        pixel_values_images = floats_tensor(
+            [
+                self.batch_size,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
+            ]
+        )
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values_images, pixel_values_videos
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
+        config, pixel_values_images, pixel_values_videos = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        # we are giving 3 videos, each has 2 frames let's make sure we pass in 3 * 2 image tokens
-        input_ids[:, :2] = config.image_token_index
+
+        # we are giving 3 videos and 3 images. Need to pass in image and video tokens, both
+        # also need to make sure no other special tokens are set
+        input_ids[(input_ids == 0) | (input_ids == 1)] = 3
+        input_ids[:, 0] = config.video_token_index
+        input_ids[:, 1:2] = config.image_token_index
         inputs_dict = {
-            "pixel_values_videos": pixel_values,
+            "pixel_values_videos": pixel_values_videos,
+            "pixel_values_images": pixel_values_images,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_batched_test(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, _, pixel_values_videos = config_and_inputs
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        attention_mask = input_ids.ne(1).to(torch_device)
+
+        # make sure no other special tokens are set
+        input_ids[(input_ids == 0) | (input_ids == 1)] = 3
+        input_ids[:, 0] = config.video_token_index
+        inputs_dict = {
+            "pixel_values_videos": pixel_values_videos,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -190,6 +223,96 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    def test_mixed_input(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            # test that the forward does not fail
+            with torch.no_grad():
+                _ = model(**inputs)
+
+            # if we remove images from inputs, but the image tokens are in ids
+            # image number mismatch error should raise
+            inputs["pixel_values_images"] = None
+            with self.assertRaises(ValueError):
+                _ = model(**inputs)
+
+    def test_video_only_input(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            inputs["input_ids"][:, 1:2] = 2
+            with self.assertRaises(ValueError):
+                _ = model(**inputs)
+
+            # set dummy id, which is not video token id
+            inputs["pixel_values_images"] = None
+            _ = model(**inputs)
+
+    def test_image_only_input(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            # set dummy id, which is not image token id
+            inputs["input_ids"][:, :1] = 2
+            with self.assertRaises(ValueError):
+                _ = model(**inputs)
+
+            inputs["pixel_values_videos"] = None
+            _ = model(**inputs)
+
+    def test_batching_equivalence(self):
+        def recursive_check(batched_object, single_row_object, model_name, key):
+            if isinstance(batched_object, (list, tuple)):
+                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
+            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
+                return
+            elif batched_object.dim() == 0:
+                return
+            else:
+                batched_row = batched_object[:1]
+                self.assertFalse(
+                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                )
+                self.assertTrue(
+                    (torch.max(torch.abs(batched_row - single_row_object))) <= 1e-03,
+                    msg=(
+                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
+                        f"Difference={torch.max(torch.abs(batched_row - single_row_object))}."
+                    ),
+                )
+
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_batched_test()
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+
+            model_name = model_class.__name__
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            model = model_class(config).to(torch_device).eval()
+
+            single_row_input = {}
+            for key, value in batched_input_prepared.items():
+                single_row_input[key] = value[:1]
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
+
+            for key in model_batched_output:
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
 
 @require_torch
 class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -213,7 +336,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt")
+        inputs = self.processor(prompt, visual_inputs=video_file, return_tensors="pt")
 
         EXPECTED_INPUT_IDS = torch.tensor([[1,  3148, 1001, 29901, 29871, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 32000, 3750, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901]])  # fmt: skip
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
