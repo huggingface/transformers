@@ -78,7 +78,7 @@ class Qwen2MoeConfig(PretrainedConfig):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        expert_interval (`int`, *optional*, defaults to 1):
+        decoder_sparse_step (`int`, *optional*, defaults to 1):
             The frequency of the MoE layer.
         moe_intermediate_size (`int`, *optional*, defaults to 1408):
             Intermediate size of the routed expert.
@@ -131,7 +131,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=28,
         attention_dropout=0.0,
-        expert_interval=1,
+        decoder_sparse_step=1,
         moe_intermediate_size=1408,
         shared_expert_intermediate_size=5632,
         num_experts_per_tok=4,
@@ -164,7 +164,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         # MoE arguments
-        self.expert_interval = expert_interval
+        self.decoder_sparse_step = decoder_sparse_step
         self.moe_intermediate_size = moe_intermediate_size
         self.shared_expert_intermediate_size = shared_expert_intermediate_size
         self.num_experts_per_tok = num_experts_per_tok
