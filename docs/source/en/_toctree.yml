@@ -141,6 +141,8 @@
 - sections:
   - local: performance
     title: Overview
+  - local: llm_optims
+    title: LLM inference optimization
   - local: quantization
     title: Quantization
   - sections:
