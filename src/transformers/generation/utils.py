@@ -1797,7 +1797,9 @@ class GenerationMixin:
 
         return result
 
-    def _has_unfinished_sequences(self, this_peer_finished: bool, cur_len, max_length, synced_gpus: bool, device: torch.device) -> bool:
+    def _has_unfinished_sequences(
+        self, this_peer_finished: bool, cur_len, max_length, synced_gpus: bool, device: torch.device
+    ) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
@@ -2433,7 +2435,9 @@ class GenerationMixin:
                 max_length = criteria.max_length
                 break
 
-        while self._has_unfinished_sequences(this_peer_finished, cur_len, max_length, synced_gpus, device=input_ids.device):
+        while self._has_unfinished_sequences(
+            this_peer_finished, cur_len, max_length, synced_gpus, device=input_ids.device
+        ):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
