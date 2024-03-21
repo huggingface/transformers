@@ -1006,22 +1006,10 @@ class GemmaModel(GemmaPreTrainedModel):
                     : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
                 ] = mask_slice
 
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type == "cuda"
-        ):
-            # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
-            is_tracing = (
-                torch.jit.is_tracing()
-                or isinstance(input_tensor, torch.fx.Proxy)
-                or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+        if self.config._attn_implementation == "sdpa":
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, attention_mask, input_tensor, min_dtype
             )
-            if not is_tracing and torch.any(attention_mask != 1):
-                # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-                # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-                # Details: https://github.com/pytorch/pytorch/issues/110213
-                causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
 
