@@ -260,11 +260,11 @@ class StopStringCriteria(StoppingCriteria):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
 
-        self.token_list, self.tok_indices = self.clean_tokenizer_vocab(tokenizer)
+        self.token_list, self.token_indices = self.clean_tokenizer_vocab(tokenizer)
         self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
 
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = _stop_string_create_embedding_vec(
-            self.token_list, self.tok_indices, self.stop_strings
+            self.token_list, self.token_indices, self.stop_strings
         )
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
@@ -272,6 +272,13 @@ class StopStringCriteria(StoppingCriteria):
 
     @staticmethod
     def clean_tokenizer_vocab(tokenizer, static_prefix="abcdef"):
+        """
+        This method turns a tokenizer vocab into a "clean" vocab where each token represents the actual string
+        it will yield, without any special prefixes like "##" or "Ġ". This is trickier than it looks - the method
+        tokenizer.convert_tokens_to_string() does not always return the correct string because of issues with prefix
+        space addition/removal. To work around this, we add a static prefix to the start of the token, then remove
+        it (and any prefix that may have been introduced with it) after calling convert_tokens_to_string().
+        """
         # TODO Matt this work is done every time the criterion is initialized - can we cache it?
         vocab = tokenizer.get_vocab()
         clean_token_list = []
@@ -283,7 +290,7 @@ class StopStringCriteria(StoppingCriteria):
             token_string = token_string[token_string.index(static_prefix) + len(static_prefix) :]
             clean_token_list.append(token_string)
             clean_token_indices.append(token_idx)
-        return clean_token_list, clean_token_indices
+        return tuple(clean_token_list), tuple(clean_token_indices)
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.Tensor:
@@ -394,7 +401,7 @@ def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_leng
 
 
 def _stop_string_get_matching_positions(
-    token_list, tok_indices, stop_strings
+    token_list, token_indices, stop_strings
 ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
     """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
     validly appear in the stop strings. For each token, it computes a list of positions in the stop string where the
@@ -410,7 +417,7 @@ def _stop_string_get_matching_positions(
         reversed_stop_string = stop_string[::-1]
         token_valid_positions[stop_string] = {}
         token_end_overlaps[stop_string] = {}
-        for token, tok_idx in zip(token_list, tok_indices):
+        for token, tok_idx in zip(token_list, token_indices):
             reversed_token = token[::-1]
             matching_positions = []
             possible_end_lengths = []
@@ -435,12 +442,12 @@ def _stop_string_get_matching_positions(
 
 
 @lru_cache(8)
-def _stop_string_create_embedding_vec(token_list, tok_indices, stop_strings) -> Dict[str, torch.tensor]:
+def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> Dict[str, torch.tensor]:
     """This function precomputes everything needed for the run-time checks in StopStringCriteria, and packs
     them into an embedding tensor that can be accessed with pure tensor operations. For the specifics of the values
     that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!"""
     token_valid_positions, token_end_overlaps = _stop_string_get_matching_positions(
-        token_list, tok_indices, stop_strings
+        token_list, token_indices, stop_strings
     )
 
     max_valid_positions = max(len(val) for positions in token_valid_positions.values() for val in positions.values())
@@ -466,7 +473,7 @@ def _stop_string_create_embedding_vec(token_list, tok_indices, stop_strings) -> 
                 + max_valid_end_lens * i
                 + len(possible_end_lens),
             ] = possible_end_lens
-        for token, token_idx in zip(token_list, tok_indices):
+        for token, token_idx in zip(token_list, token_indices):
             gather_vec[token_idx, -1] = len(token)
 
     gather_vec = torch.tensor(gather_vec, dtype=torch.int32)
