@@ -4112,7 +4112,6 @@ class Trainer:
             # take the gradient_accumulation_steps setting from TrainingArguments.
             grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
 
-        # this is legacy code. Are we sure is a good idea to overwrite without any warning?
         grad_acc_kwargs["sync_with_dataloader"] = False
 
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
