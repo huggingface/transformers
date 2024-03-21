@@ -61,9 +61,8 @@ jobs:
           pip uninstall transformers && pip install -e ".[testing]" 
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
-          apt install -y curl sudo
       - name: Tailscale
-        uses: huggingface/tailscale-action@main
+        uses: huggingface/tailscale-action@improvments
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           debugEnabled: ${{ secrets.ACTIONS_STEP_DEBUG }}
