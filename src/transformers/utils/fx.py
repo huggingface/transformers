@@ -135,6 +135,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "hubert",
     "layoutlm",
     "llama",
+    "cohere",
     "lxmert",
     "m2m_100",
     "marian",
