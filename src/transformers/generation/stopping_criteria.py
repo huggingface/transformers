@@ -303,7 +303,6 @@ class StopStringCriteria(StoppingCriteria):
         space addition/removal. To work around this, we add a static prefix to the start of the token, then remove
         it (and any prefix that may have been introduced with it) after calling convert_tokens_to_string().
         """
-        # TODO Matt this work is done every time the criterion is initialized - can we cache it?
         vocab = tokenizer.get_vocab()
         clean_token_list = []
         clean_token_indices = []
