@@ -3174,7 +3174,7 @@ class Trainer:
                 unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
-                    state_dict=model.state_dict(),
+                    state_dict=unwrap_model(model).state_dict(),
                     save_function=xm.save,
                     safe_serialization=self.args.save_safetensors,
                 )

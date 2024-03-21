@@ -4661,17 +4661,32 @@ class SequenceSummary(nn.Module):
 
 def unwrap_model(model: nn.Module) -> nn.Module:
     """
-    Recursively unwraps a model from potential containers (as used in distributed training).
+    Recursively unwraps a module and its child sublayers.
 
     Args:
-        model (`torch.nn.Module`): The model to unwrap.
-    """
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return unwrap_model(model.module)
-    else:
-        return model
+        model (nn.Module): The model to unwrap.
 
+    Returns:
+        nn.Module: The unwrapped module.
+    """
+
+    def recursive_unwrap(module):
+        if hasattr(module, "module"):
+            try:
+                unwrapped_module = recursive_unwrap(getattr(module, "module"))
+            except AttributeError:
+                unwrapped_module = module  # Handle cases where wrapped module is inaccessible
+            return unwrapped_module
+
+        # Unwrap child sublayers recursively
+        for name, child in module.named_children():
+            setattr(module, name, recursive_unwrap(child))
+
+        return module
+
+    # Start with top-level unwrapping
+    unwrapped_model = recursive_unwrap(model)
+    return unwrapped_model
 
 def expand_device_map(device_map, param_names, start_prefix):
     """
