@@ -214,7 +214,6 @@ if __name__ == "__main__":
                                     "mode": compile,
                                 },
                                 "inputs_kwargs": {},
-                                "report_kwargs": {"output_path": "benchmark_report.json"},
                             }
                             run_configs.append(run_kwargs)
     else:

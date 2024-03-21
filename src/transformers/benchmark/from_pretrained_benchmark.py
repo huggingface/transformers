@@ -59,7 +59,6 @@ if __name__ == "__main__":
             "measure_kwargs": {"number": 2, "repeat": 3},
             "target_kwargs": {"model_class": "AutoModel", "repo_id": repo_id},
             "inputs_kwargs": [{}],
-            "report_kwargs": {"output_path": "benchmark_report.json"},
         }
         run_configs = [run_kwargs]
     else:

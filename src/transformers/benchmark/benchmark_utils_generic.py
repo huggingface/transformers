@@ -15,6 +15,7 @@
 Benchmark utilities - module containing base classes for benchmarking
 """
 import json
+import os.path
 import timeit
 
 
@@ -73,7 +74,7 @@ class BenchMark:
             return report.__name__
         return report
 
-    def _report(self, result, output_path=None, only_result=False):
+    def _report(self, result, output_path=None, only_result=False, overwrite=False):
         self._run_buffer["config"]["report_kwargs"]["output_path"] = output_path
         self._run_buffer["config"]["report_kwargs"]["only_result"] = only_result
 
@@ -86,6 +87,13 @@ class BenchMark:
 
         complete_report = self._convert_to_json(self._buffer)
         if output_path is not None:
+
+            if not os.path.isdir(output_path):
+                os.makedirs(output_path)
+            output_path = os.path.join("benchmark_report.json")
+            if os.path.isfile(output_path) and not overwrite:
+                raise ValueError(f"TODO: add error")
+
             with open(output_path, "w", encoding="UTF-8") as fp:
                 json.dump(complete_report, fp, ensure_ascii=False, indent=4)
 
