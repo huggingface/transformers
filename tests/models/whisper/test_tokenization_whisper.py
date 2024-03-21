@@ -31,6 +31,7 @@ NOTIMESTAMPS = 50363
 
 
 class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openai/whisper-tiny"
     tokenizer_class = WhisperTokenizer
     rust_tokenizer_class = WhisperTokenizerFast
     test_rust_tokenizer = True

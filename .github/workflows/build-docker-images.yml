@@ -59,7 +59,7 @@ jobs:
 
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -96,7 +96,7 @@ jobs:
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
   latest-torch-deepspeed-docker-for-push-ci-daily-build:
     name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -138,7 +138,7 @@ jobs:
     name: "Doc builder"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       -
         name: Set up Docker Buildx
@@ -164,7 +164,7 @@ jobs:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -238,7 +238,7 @@ jobs:
     name: "Latest TensorFlow [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-22.04
+    runs-on: [intel-cpu, 8-cpu, ci]
     steps:
       -
         name: Set up Docker Buildx
