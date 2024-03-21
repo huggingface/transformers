@@ -2245,7 +2245,8 @@ class WatermarkLogitsProcessor(LogitsProcessor):
                 - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from paper)
                     The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
             The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
-        context_width (`int`, *optional*, defaults to 1): <fill_docstring>
+        context_width (`int`, *optional*, defaults to 1):
+            The number of previous tokens to use when setting the seed.
 
     Examples:
 

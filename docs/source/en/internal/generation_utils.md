@@ -209,6 +209,7 @@ generation.
 [[autodoc]] WatermarkLogitsProcessor
     - __call__
 
+
 ### TensorFlow
 
 [[autodoc]] TFForcedBOSTokenLogitsProcessor
@@ -365,3 +366,9 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] StaticCache
     - update
     - get_seq_length
+
+
+## Watermark Utils
+
+[[autodoc]] WatermarkDetector
+    - __call__

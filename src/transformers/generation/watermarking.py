@@ -70,7 +70,8 @@ class WatermarkDetector:
     See [the paper](https://arxiv.org/abs/2306.04634) for more information.
 
     Args:
-        bos_token_id (`int`): <fill_docstring>
+        bos_token_id (`int`):
+            The token id used for begginning of the sequence (`BOS`) by the model's tokenizer.
         device (`str`):
             The device which was used during watermarked text generation.
         vocab_size (`int`):
