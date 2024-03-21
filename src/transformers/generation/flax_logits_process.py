@@ -495,7 +495,7 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
 
         shape = (batch_size * (seq_len - (self.ngram_size - 1)), self.ngram_size + 1)
         all_update_indices = jax.lax.fori_loop(
-            0, batch_size * (seq_len - (self.ngram_size - 1)), body_fun, jnp.zeros(shape, dtype=input_ids.dtype)
+            0, batch_size * (cur_len - (self.ngram_size - 1)), body_fun, jnp.zeros(shape, dtype=input_ids.dtype)
         )
 
         # ignore the n-grams not yet generated
