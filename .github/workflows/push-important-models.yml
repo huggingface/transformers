@@ -98,6 +98,7 @@ jobs:
           status: ${{ steps.run_integration_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
       - name: Wait for SSH
+        if: always()
         run : |
           sleep 30s
           while [ "$(last | grep '^runner.*still logged in$')" ]; do sleep 1m; done
