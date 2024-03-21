@@ -701,9 +701,8 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         processed_scores = logits_processor(input_ids, scores)
         self.assertTrue(torch.isneginf(processed_scores[:, bos_token_id + 1 :]).all())
-        self.assertListEqual(
-            processed_scores[:, bos_token_id].tolist(), 4 * [0]
-        )  # score for bos_token_id shold be zero
+        # score for bos_token_id shold be zero
+        self.assertListEqual(processed_scores[:, bos_token_id].tolist(), 4 * [0])
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
