@@ -19,7 +19,6 @@ import inspect
 import unittest
 
 from transformers import SwiftFormerConfig
-from transformers.modeling_tf_utils import keras
 from transformers.testing_utils import (
     require_tf,
     require_vision,
@@ -36,6 +35,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFSwiftFormerForImageClassification, TFSwiftFormerModel
+    from transformers.modeling_tf_utils import keras
     from transformers.models.swiftformer.modeling_tf_swiftformer import TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
