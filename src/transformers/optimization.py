@@ -385,7 +385,8 @@ def get_scheduler(
                 scheduler_dict[param].step()
 
         for param in optimizer_dict.keys():
-            param.register_post_accumulate_grad_hook(scheduler_hook)
+            if param.requires_grad:
+                param.register_post_accumulate_grad_hook(scheduler_hook)
 
         return LayerWiseDummyScheduler()
 
