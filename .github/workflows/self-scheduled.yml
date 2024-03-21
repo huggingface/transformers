@@ -312,7 +312,6 @@ jobs:
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Update clone
         working-directory: /transformers
