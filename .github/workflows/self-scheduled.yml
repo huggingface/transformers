@@ -457,7 +457,7 @@ jobs:
 
   send_results:
     name: Slack Report
-    if: always()
+    if: ${{ inputs.job == 'run_tests_quantization_torch_gpu' }}
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
