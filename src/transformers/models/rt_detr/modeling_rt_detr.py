@@ -2233,7 +2233,7 @@ class RTDetrMLPPredictionHead(nn.Module):
     def __init__(self, config, input_dim, d_model, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [config.d_model] * (num_layers - 1)
+        h = [d_model] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):

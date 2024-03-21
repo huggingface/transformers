@@ -35,6 +35,18 @@ The abstract from the paper is the following:
 
 The model version was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [sangbumchoi](https://github.com/SangbumChoi). The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
+```
+image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+    target = json.loads(f.read())
+
+target = {"image_id": 39769, "annotations": target}
+
+image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
+encoding = image_processing(images=image, annotations=target, return_tensors="pt")
+model = RTDetrForObjectDetection.from_pretrained("sbchoi/rtdetr_r50vd")
+outputs = model(**encoding)
+```
 
 ## RTDetrConfig
 
