@@ -20,10 +20,10 @@ Example: python utils/benchmark.py --benchmark_path src/transformers/benchmark/f
 
 import argparse
 import os
-
 from contextlib import contextmanager
-from git import Repo
 from pathlib import Path
+
+from git import Repo
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -62,7 +62,10 @@ if __name__ == "__main__":
         help="Path to the benchmark script to run.",
     )
     parser.add_argument(
-        "--base_output_path", type=str, required=True, help="Base path to the output file where the run's info. will be saved."
+        "--base_output_path",
+        type=str,
+        required=True,
+        help="Base path to the output file where the run's info. will be saved.",
     )
     parser.add_argument(
         "--config_path",

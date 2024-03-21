@@ -87,7 +87,6 @@ class BenchMark:
 
         complete_report = self._convert_to_json(self._buffer)
         if output_path is not None:
-
             if not os.path.isdir(output_path):
                 os.makedirs(output_path)
             output_path = os.path.join(output_path, "benchmark_report.json")
