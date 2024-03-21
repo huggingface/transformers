@@ -133,6 +133,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
         ("llava", "LlavaConfig"),
+        ("llava_next", "LlavaNextConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
@@ -219,6 +220,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertConfig"),
         ("stablelm", "StableLmConfig"),
         ("starcoder2", "Starcoder2Config"),
+        ("superpoint", "SuperPointConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
@@ -373,6 +375,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("lilt", "LILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llama", "LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llava", "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("llava_next", "LLAVA_NEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longt5", "LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("luke", "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -450,6 +453,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("stablelm", "STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("starcoder2", "STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("superpoint", "SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swiftformer", "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin2sr", "SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -617,6 +621,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
         ("llava", "LLaVa"),
+        ("llava_next", "LLaVA-NeXT"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
@@ -711,6 +716,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("squeezebert", "SqueezeBERT"),
         ("stablelm", "StableLm"),
         ("starcoder2", "Starcoder2"),
+        ("superpoint", "SuperPoint"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),
@@ -984,6 +990,9 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
 def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True):
     def docstring_decorator(fn):
         docstrings = fn.__doc__
+        if docstrings is None:
+            # Example: -OO
+            return fn
         lines = docstrings.split("\n")
         i = 0
         while i < len(lines) and re.search(r"^(\s*)List options\s*$", lines[i]) is None:
