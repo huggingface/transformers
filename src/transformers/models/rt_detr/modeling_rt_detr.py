@@ -1657,7 +1657,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
-    @lru_cache(max_size=32)
+    @lru_cache(maxsize=32)
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
         if spatial_shapes is None:
             spatial_shapes = [
