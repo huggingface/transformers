@@ -115,7 +115,6 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torch_bf16_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,

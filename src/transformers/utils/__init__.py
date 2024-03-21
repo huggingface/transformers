@@ -175,7 +175,6 @@ from .import_utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torch_bf16_available,
     is_torch_bf16_available_on_device,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
