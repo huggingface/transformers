@@ -24,6 +24,7 @@ from torch import nn
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -33,7 +34,6 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next import LlavaNextConfig
-from .image_processing_llava_next import select_best_resolution
 
 
 logger = logging.get_logger(__name__)
