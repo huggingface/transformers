@@ -33,7 +33,7 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next import LlavaNextConfig
-from .image_processing_llava_next import select_best_resolution
+from ...image_processing_utils import select_best_resolution
 
 
 logger = logging.get_logger(__name__)
