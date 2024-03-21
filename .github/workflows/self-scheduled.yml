@@ -12,9 +12,6 @@ on:
       job:
         required: true
         type: string
-      slack_report_channel:
-        required: true
-        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -32,62 +29,62 @@ env:
   NUM_SLICES: 2
 
 jobs:
-  setup:
-    if: ${{ inputs.job == 'run_tests_gpu' }}
-    name: Setup
-    strategy:
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    outputs:
-      folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
-      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: |
-          git fetch && git checkout ${{ github.sha }}
-
-      - name: Cleanup
-        working-directory: /transformers
-        run: |
-          rm -rf tests/__pycache__
-          rm -rf tests/models/__pycache__
-          rm -rf reports
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - id: set-matrix
-        name: Identify models to test
-        working-directory: /transformers/tests
-        run: |
-          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-  run_tests_gpu:
-    if: ${{ inputs.job == 'run_tests_gpu' }}
-    name: " "
-    needs: setup
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-    uses: ./.github/workflows/model_jobs.yml
-    with:
-      folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      machine_type: ${{ matrix.machine_type }}
-      slice_id: ${{ matrix.slice_id }}
-    secrets: inherit
+#  setup:
+#    if: ${{ inputs.job == 'run_tests_gpu' }}
+#    name: Setup
+#    strategy:
+#      matrix:
+#        machine_type: [single-gpu, multi-gpu]
+#    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+#    container:
+#      image: huggingface/transformers-all-latest-gpu
+#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+#    outputs:
+#      folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
+#      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
+#    steps:
+#      - name: Update clone
+#        working-directory: /transformers
+#        run: |
+#          git fetch && git checkout ${{ github.sha }}
+#
+#      - name: Cleanup
+#        working-directory: /transformers
+#        run: |
+#          rm -rf tests/__pycache__
+#          rm -rf tests/models/__pycache__
+#          rm -rf reports
+#
+#      - name: Show installed libraries and their versions
+#        working-directory: /transformers
+#        run: pip freeze
+#
+#      - id: set-matrix
+#        name: Identify models to test
+#        working-directory: /transformers/tests
+#        run: |
+#          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+#          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+#
+#      - name: NVIDIA-SMI
+#        run: |
+#          nvidia-smi
+#
+#  run_tests_gpu:
+#    if: ${{ inputs.job == 'run_tests_gpu' }}
+#    name: " "
+#    needs: setup
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        machine_type: [single-gpu, multi-gpu]
+#        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+#    uses: ./.github/workflows/model_jobs.yml
+#    with:
+#      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+#      machine_type: ${{ matrix.machine_type }}
+#      slice_id: ${{ matrix.slice_id }}
+#    secrets: inherit
 
 #  run_examples_gpu:
 #    name: Examples directory
@@ -350,6 +347,13 @@ jobs:
         with:
           name: ${{ matrix.machine_type }}_run_tests_quantization_torch_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_tests_quantization_torch_gpu
+
+      - name: "Slack report"
+        uses: ./.github/slack-report.yml
+        with:
+          job: run_tests_quantization_torch_gpu
+        secrets: inherit
+
 #
 #  run_extract_warnings:
 #    name: Extract warnings in CI artifacts

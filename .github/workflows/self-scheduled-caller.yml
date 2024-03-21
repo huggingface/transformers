@@ -21,7 +21,6 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_tests_gpu
-      slack_report_channel: 3
     secrets: inherit
 
   quantization-ci:
@@ -29,5 +28,4 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_tests_quantization_torch_gpu
-      slack_report_channel: 3
     secrets: inherit
