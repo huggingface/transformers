@@ -88,6 +88,7 @@ from .stopping_criteria import (
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from .streamers import BaseStreamer
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 
@@ -882,7 +883,7 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList], **kwargs
+        self, generation_config: GenerationConfig, stopping_criteria: Optional[StoppingCriteriaList], tokenizer: Optional["PreTrainedTokenizerBase"] = None, **kwargs
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
@@ -1396,6 +1397,7 @@ class GenerationMixin:
                 synced_gpus = True
             else:
                 synced_gpus = False
+        tokenizer = kwargs.pop("tokenizer", None)
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
@@ -1538,7 +1540,7 @@ class GenerationMixin:
 
         # 9. prepare stopping criteria
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria, **kwargs
+            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
         )
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
