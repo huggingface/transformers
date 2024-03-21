@@ -21,7 +21,10 @@ jobs:
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_tests_gpu
-    secrets: inherit
+    secrets:
+      CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+      CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+      ACCESS_REPO_INFO_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
   quantization-ci:
     name: Quantization CI
