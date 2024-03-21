@@ -218,7 +218,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
             have to be converted back and forth for the backward pass.
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
-            This sets the computational type which might be different than the input time. For example, inputs might be
+            This sets the computational type which might be different than the input type. For example, inputs might be
             fp32, but computation can be set to bf16 for speedups.
         bnb_4bit_quant_type (`str`,  *optional*, defaults to `"fp4"`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
