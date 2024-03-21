@@ -572,6 +572,9 @@ class TrainingArguments:
                     training results are fully reproducable using a different sampling technique. While seed-to-seed results
                     may differ, on average the differences are neglible when using multiple different seeds to compare. Should
                     also be ran with [`~utils.set_seed`] for the best results.
+                - use_configured_state (`bool`, *optional*, defaults to `False`):
+                    Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
+                    If `True`, an `Accelerator` or `PartialState` must be initialized.
 
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
@@ -2049,7 +2052,16 @@ class TrainingArguments:
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
                     "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
                 )
-            AcceleratorState._reset_state(reset_partial_state=True)
+            use_configured_state = getattr(self.accelerator_config, "use_configured_state", False)
+            if use_configured_state:
+                if AcceleratorState._shared_state == {}:
+                    raise ValueError(
+                        "Passing `use_configured_state=True` to the AcceleratorConfig requires a pre-configured "
+                        "`AcceleratorState` or `PartialState` to be defined before calling `TrainingArguments`. "
+                        "Please define this beforehand."
+                    )
+            else:
+                AcceleratorState._reset_state(reset_partial_state=True)
         self.distributed_state = None
         if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
