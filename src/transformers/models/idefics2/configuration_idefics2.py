@@ -146,8 +146,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
             Dimensionality of each head projection in the Transformer block.
         num_key_value_heads (`int`, *optional*, defaults to 4):
             Number of key-value heads in the perceiver attention block.
-        qk_layer_norms_perceiver (`bool`, *optional*, defaults to `True`):
-            Whether or not to use qk layer norms in perceiver
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
     """
@@ -162,7 +160,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         resampler_n_heads=16,
         resampler_head_dim=96,
         num_key_value_heads=4,
-        qk_layer_norms_perceiver=True,
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -172,7 +169,6 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         self.resampler_n_heads = resampler_n_heads
         self.num_key_value_heads = num_key_value_heads
         self.resampler_head_dim = resampler_head_dim
-        self.qk_layer_norms_perceiver = qk_layer_norms_perceiver
         self.attention_dropout = attention_dropout
         if self.num_key_value_heads > self.resampler_n_heads:
             raise ValueError(
@@ -239,8 +235,6 @@ class Idefics2Config(PretrainedConfig):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
-        qk_layer_norms (`bool`, *optional*, defaults to `True`):
-            Whether to add layer norm after q and k
         freeze_text_layers (`bool`, *optional*, defaults to `False`):
             Whether to freeze text layers
         freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
@@ -291,7 +285,6 @@ class Idefics2Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         sliding_window=4096,
-        qk_layer_norms=True,
         freeze_text_layers=False,
         freeze_text_module_exceptions=[],
         freeze_vision_layers=False,
@@ -322,7 +315,6 @@ class Idefics2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
 
-        self.qk_layer_norms = qk_layer_norms
         self.freeze_vision_layers = freeze_vision_layers
 
         self.freeze_text_layers = freeze_text_layers

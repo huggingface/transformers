@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from einops import repeat
+import einops
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -135,21 +135,6 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-def freeze_model(model, module_exceptions=[]):
-    mapping = {
-        "LayerNorm": nn.LayerNorm,
-        "Linear": nn.Linear,
-        "Embedding": nn.Embedding,
-    }
-    module_exceptions_mapped = [mapping[m] for m in module_exceptions]
-    for module in model.modules():
-        if module_exceptions and any(isinstance(module, t) for t in module_exceptions_mapped):
-            module.requires_grad_(True)  # Explicitly setting it to true to avoid any mistakes
-        else:
-            module.requires_grad_(False)
-    return model
 
 
 class Idefics2VisionEmbeddings(nn.Module):
@@ -743,7 +728,6 @@ class Idefics2MLP(nn.Module):
 
 
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Idefics2
-# TODO @Arthur no longer copied from LLama after static cache
 class Idefics2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -854,12 +838,10 @@ class Idefics2PerceiverAttention(nn.Module):
         self.head_dim = config.perceiver_config.resampler_head_dim
         self.num_key_value_heads = config.perceiver_config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.qk_layer_norms = config.perceiver_config.qk_layer_norms_perceiver
         self.attention_dropout = config.perceiver_config.attention_dropout
 
-        if self.qk_layer_norms:
-            self.q_layer_norm = Idefics2RMSNorm(self.head_dim)
-            self.k_layer_norm = Idefics2RMSNorm(self.head_dim)
+        self.q_layer_norm = Idefics2RMSNorm(self.head_dim)
+        self.k_layer_norm = Idefics2RMSNorm(self.head_dim)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -916,9 +898,8 @@ class Idefics2PerceiverAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        if self.qk_layer_norms:
-            query_states = self.q_layer_norm(query_states)
-            key_states = self.k_layer_norm(key_states)
+        query_states = self.q_layer_norm(query_states)
+        key_states = self.k_layer_norm(key_states)
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -1365,7 +1346,7 @@ class Idefics2PerceiverResampler(nn.Module):
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        latents = repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
+        latents = einops.repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
 
         for perceiver_layer in self.layers:
             layer_outputs = perceiver_layer(
@@ -2108,20 +2089,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self._vision_require_grads_hook = get_lowest_module(self.vision_model).register_forward_hook(
             make_inputs_require_grads
         )
-
-    def freeze_relevant_params(self, config=None):
-        if config is None:
-            config = self.config
-
-        if config.freeze_text_layers:
-            self.freeze_text_layers(config.freeze_text_module_exceptions)
-
-        if config.freeze_vision_layers:
-            freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
-
-    def freeze_text_layers(self, module_exceptions):
-        for module in [self.layers, self.norm]:
-            freeze_model(module, module_exceptions=module_exceptions)
 
     def get_input_embeddings(self):
         return self.embed_tokens
