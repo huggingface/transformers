@@ -128,9 +128,16 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+<<<<<<< HEAD
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
+=======
+    if is_accelerate_available():
+        from accelerate import Accelerator
+        from accelerate.state import AcceleratorState
+
+>>>>>>> 94e24e213 (Include tests)
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
@@ -3240,6 +3247,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
                 self.assertEqual(trainer.accelerator.split_batches, True)
 
+<<<<<<< HEAD
     @require_accelerate_version_min_0_28
     def test_accelerator_config_from_dict_grad_accum_num_steps(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3306,6 +3314,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     output_dir=tmp_dir,
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
+=======
+    def test_accelerator_custom_state(self):
+        AcceleratorState._reset_state(reset_partial_state=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError) as cm:
+                _ = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config={"use_configured_state": True})
+                self.assertIn("Please define this beforehand", str(cm.warnings[0].message))
+            _ = Accelerator()
+            _ = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config={"use_configured_state": True})
+        AcceleratorState._reset_state(reset_partial_state=True)
+>>>>>>> 94e24e213 (Include tests)
 
 
 @require_torch
