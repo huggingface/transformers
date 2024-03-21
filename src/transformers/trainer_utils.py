@@ -90,7 +90,7 @@ def set_seed(seed: int, determinsitic: bool = False):
         seed (`int`):
             The seed to set.
         determinsitic (`bool`, *optional*, defaults to `False`):
-            Whether to use deterministic algorithms where available.
+            Whether to use deterministic algorithms where available. Can slow down training.
     """
     random.seed(seed)
     np.random.seed(seed)
