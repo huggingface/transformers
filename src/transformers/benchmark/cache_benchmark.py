@@ -214,6 +214,7 @@ if __name__ == "__main__":
                                     "mode": compile,
                                 },
                                 "inputs_kwargs": {},
+                                "report_kwargs": None,
                             }
                             run_configs.append(run_kwargs)
     else:
