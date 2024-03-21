@@ -137,6 +137,7 @@ class LlavaConfig(PretrainedConfig):
         self.text_config = text_config
         self._vocab_size = self.text_config.vocab_size
 
+        kwargs.pop("vocab_size", None)
         super().__init__(**kwargs)
 
     @property
