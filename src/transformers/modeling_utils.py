@@ -4688,6 +4688,7 @@ def unwrap_model(model: nn.Module) -> nn.Module:
     unwrapped_model = recursive_unwrap(model)
     return unwrapped_model
 
+
 def expand_device_map(device_map, param_names, start_prefix):
     """
     Expand a device map to return the correspondance parameter name to device.
