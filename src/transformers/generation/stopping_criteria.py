@@ -260,8 +260,7 @@ class StopStringCriteria(StoppingCriteria):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
 
-        self.vocab = tokenizer.get_vocab()
-        self.token_list, self.tok_indices = tuple(self.vocab.keys()), tuple(self.vocab.values())
+        self.token_list, self.tok_indices = self.clean_tokenizer_vocab(tokenizer)
         self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
 
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = _stop_string_create_embedding_vec(
@@ -270,6 +269,21 @@ class StopStringCriteria(StoppingCriteria):
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
+
+    @staticmethod
+    def clean_tokenizer_vocab(tokenizer, static_prefix="abcdef"):
+        # TODO Matt this work is done every time the criterion is initialized - can we cache it?
+        vocab = tokenizer.get_vocab()
+        clean_token_list = []
+        clean_token_indices = []
+        sentence_base = tokenizer(static_prefix, add_special_tokens=False)["input_ids"]
+        tokens_base = [tokenizer._convert_id_to_token(tok) for tok in sentence_base]
+        for token, token_idx in vocab.items():
+            token_string = tokenizer.convert_tokens_to_string(tokens_base + [token])
+            token_string = token_string[token_string.index(static_prefix) + len(static_prefix) :]
+            clean_token_list.append(token_string)
+            clean_token_indices.append(token_idx)
+        return clean_token_list, clean_token_indices
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.Tensor:
@@ -390,29 +404,22 @@ def _stop_string_get_matching_positions(
     The reason for computing these may seem a bit cryptic - please see the docstring for StopStringCriteria for a full
     explanation of what these values are for!"""
 
-    def _cleanup_token(token: str) -> str:
-        if token[0] in ["▁", "Ġ"]:
-            token = " " + token[1:]
-        elif token[0] == "##":
-            token = token[2:]
-        return token
-
-    reversed_filtered_token_list = [_cleanup_token(token)[::-1] for token in token_list]
     token_valid_positions = {}
     token_end_overlaps = {}
     for stop_string in stop_strings:
         reversed_stop_string = stop_string[::-1]
         token_valid_positions[stop_string] = {}
         token_end_overlaps[stop_string] = {}
-        for token, reversed_filtered_token, tok_idx in zip(token_list, reversed_filtered_token_list, tok_indices):
+        for token, tok_idx in zip(token_list, tok_indices):
+            reversed_token = token[::-1]
             matching_positions = []
             possible_end_lengths = []
             for i in range(1 - len(token), len(stop_string)):
                 if i < 0:
-                    tok = reversed_filtered_token[-i:]
+                    tok = reversed_token[-i:]
                     i = 0
                 else:
-                    tok = reversed_filtered_token
+                    tok = reversed_token
                 stop = reversed_stop_string[i : i + len(tok)]
                 if tok.startswith(stop):
                     if i == 0:
