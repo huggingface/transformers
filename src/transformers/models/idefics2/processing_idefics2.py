@@ -19,7 +19,7 @@ Processor class for IDEFICS2.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import is_valid_image, ImageInput
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType
