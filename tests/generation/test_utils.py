@@ -74,9 +74,6 @@ if is_torch_available():
         SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
-        TemperatureLogitsWarper,
-        TopKLogitsWarper,
-        TopPLogitsWarper,
         WatermarkDetector,
     )
     from transformers.generation.utils import _speculative_sampling
