@@ -867,22 +867,6 @@ class BartPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-class PretrainedBartModel(BartPreTrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
-            FutureWarning,
-        )
-
-
-class BartPretrainedModel(BartPreTrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
-            FutureWarning,
-        )
-
-
 BART_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads

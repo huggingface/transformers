@@ -408,34 +408,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ):
-        if "size_divisibility" in kwargs:
-            warnings.warn(
-                "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisor` instead.",
-                FutureWarning,
-            )
-            size_divisor = kwargs.pop("size_divisibility")
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-                " instead.",
-                FutureWarning,
-            )
-            # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-            # `size` can still be pass in as an int
-            self._max_size = kwargs.pop("max_size")
-        else:
-            self._max_size = 1333
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
-                "`do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
-
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
-        size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
+        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        size = get_size_dict(size, max_size=size['longest_edge'], default_to_square=False)
 
         super().__init__(**kwargs)
         self.do_resize = do_resize
@@ -716,22 +690,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
-                FutureWarning,
-            )
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            if do_reduce_labels is not None:
-                raise ValueError(
-                    "Cannot use both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels` instead."
-                )
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)

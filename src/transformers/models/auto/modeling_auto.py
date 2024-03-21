@@ -1665,24 +1665,3 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
-
-class AutoModelWithLMHead(_AutoModelWithLMHead):
-    @classmethod
-    def from_config(cls, config):
-        warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
-            "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
-            FutureWarning,
-        )
-        return super().from_config(config)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
-            "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
-            "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
-            FutureWarning,
-        )
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

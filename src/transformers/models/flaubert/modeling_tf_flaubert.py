@@ -835,10 +835,6 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     def get_lm_head(self):
         return self.pred_layer
 
-    def get_prefix_bias_name(self):
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
-        return self.name + "/" + self.pred_layer.name
-
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id

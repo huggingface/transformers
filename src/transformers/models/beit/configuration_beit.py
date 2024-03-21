@@ -201,14 +201,6 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
-        # handle backwards compatibility
-        if "segmentation_indices" in kwargs:
-            logger.warning(
-                "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
-                FutureWarning,
-            )
-            out_indices = kwargs.pop("segmentation_indices")
-
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(

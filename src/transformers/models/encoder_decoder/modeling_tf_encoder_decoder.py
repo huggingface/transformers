@@ -52,13 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
-DEPRECATION_WARNING = (
-    "Version v4.17.0 introduces a better way to train encoder-decoder models by computing the loss inside the"
-    " encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if"
-    " fine-tuning a model trained with versions anterior to 4.17.0. The decoder_input_ids are now created based on the"
-    " labels, no need to pass them yourself anymore."
-)
-
 ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
@@ -586,7 +579,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            warnings.warn(DEPRECATION_WARNING, FutureWarning)
             loss = self.hf_compute_loss(labels, logits)
 
         if not return_dict:

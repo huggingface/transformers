@@ -1165,7 +1165,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[LxmertForPreTrainingOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1187,15 +1186,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         Returns:
         """
-
-        if "masked_lm_labels" in kwargs:
-            warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels`"
-                " instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("masked_lm_labels")
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device

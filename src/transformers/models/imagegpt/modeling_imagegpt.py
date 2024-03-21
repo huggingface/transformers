@@ -659,7 +659,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Any,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -686,21 +685,6 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -955,7 +939,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Any,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1000,21 +983,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         ...     ax.axis("off")
         ...     ax.imshow(img)
         ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -1106,7 +1074,6 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs: Any,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1133,21 +1100,6 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         ```"""
-
-        if "pixel_values" in kwargs:
-            warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
-                FutureWarning,
-            )
-
-            if input_ids is not None:
-                raise ValueError(
-                    "You cannot pass both `pixel_values` and `input_ids`. Please make sure to only pass `input_ids`."
-                )
-
-            input_ids = kwargs.pop("pixel_values")
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(

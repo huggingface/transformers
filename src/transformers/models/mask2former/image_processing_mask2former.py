@@ -406,26 +406,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         reduce_labels: bool = False,
         **kwargs,
     ):
-        if "size_divisibility" in kwargs:
-            warnings.warn(
-                "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisor` instead.",
-                FutureWarning,
-            )
-            size_divisor = kwargs.pop("size_divisibility")
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-                " instead.",
-                FutureWarning,
-            )
-            # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-            # `size` can still be pass in as an int
-            self._max_size = kwargs.pop("max_size")
-        else:
-            self._max_size = 1333
-
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
+        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
 
         super().__init__(**kwargs)
@@ -503,15 +484,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.27. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
+        max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size, max_size = size["shortest_edge"], size["longest_edge"]
@@ -709,12 +682,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version",
-                FutureWarning,
-            )
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)

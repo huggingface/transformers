@@ -1493,10 +1493,6 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     def get_lm_head(self):
         return self.cls.predictions
 
-    def get_prefix_bias_name(self):
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
-        return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
