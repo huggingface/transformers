@@ -871,14 +871,9 @@ class Qwen2MoeDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
         self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        if config.num_experts > 0 and (layer_idx + 1) % config.expert_interval == 0:
+        if config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0:
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
@@ -938,10 +933,10 @@ class Qwen2MoeDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        if isinstance(self.mlp, Qwen2MoeSparseMoeBlock):
-            hidden_states, router_logits = self.mlp(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        if isinstance(hidden_states, tuple):
+            hidden_states, router_logits = hidden_states
         else:
-            hidden_states = self.mlp(hidden_states)
             router_logits = None
 
         hidden_states = residual + hidden_states
