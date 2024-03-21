@@ -785,6 +785,7 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
 
     return best_fit
 
+
 ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)
 if ImageProcessingMixin.push_to_hub.__doc__ is not None:
     ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
