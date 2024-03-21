@@ -481,21 +481,27 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
         """
         batch_size, seq_len = input_ids.shape
 
-        all_update_indices = jnp.array(
-            [
-                [
-                    b,
-                ]
-                + [input_ids[b, i + j] for j in range(self.ngram_size)]
-                for i in range(seq_len - (self.ngram_size - 1))
-                for b in range(batch_size)
-            ]
+        def body_fun(i, val):
+            b = i % batch_size
+            pos = i // batch_size
+            return val.at[i].set(
+                jnp.array(
+                    [
+                        b,
+                    ]
+                    + [jnp.array(input_ids)[b, pos + j] for j in range(self.ngram_size)]
+                )
+            )
+
+        shape = (batch_size * (seq_len - (self.ngram_size - 1)), self.ngram_size + 1)
+        all_update_indices = jax.lax.fori_loop(
+            0, batch_size * (seq_len - (self.ngram_size - 1)), body_fun, jnp.zeros(shape, dtype=input_ids.dtype)
         )
 
-        data = jnp.ones((all_update_indices.shape[0],), dtype=jnp.uint16)
-        data = data * (
-            jnp.arange(data.shape[0]) < batch_size * (cur_len - (self.ngram_size - 1))
-        )  # ignore the n-grams not yet generated
+        # ignore the n-grams not yet generated
+        data = (
+            jnp.arange(batch_size * (seq_len - (self.ngram_size - 1))) < batch_size * (cur_len - (self.ngram_size - 1))
+        ).astype("float32")
 
         return sparse.BCOO((data, all_update_indices), shape=(batch_size,) + (vocab_size,) * self.ngram_size)
 
@@ -508,10 +514,7 @@ class FlaxNoRepeatNGramLogitsProcessor(FlaxLogitsProcessor):
         @sparse.sparsify
         @jax.vmap
         def inner_fn(latest_tokens, previous_ngrams):
-            vocab_size = previous_ngrams.shape[-1]
-            mask = jnp.ones((vocab_size,))
-            mask *= previous_ngrams[tuple(latest_tokens)]
-            return mask
+            return previous_ngrams[tuple(latest_tokens)]
 
         return sparse.bcoo_todense(inner_fn(latest_tokens, previous_ngrams))
 
