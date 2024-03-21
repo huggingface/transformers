@@ -458,7 +458,6 @@ jobs:
   send_results:
     name: Slack Report
     if: always()
-    needs: ${{ inputs.job }}
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
