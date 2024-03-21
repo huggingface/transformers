@@ -39,7 +39,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_preprocess_arguments
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 
@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
 
 
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
