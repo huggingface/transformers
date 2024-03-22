@@ -1918,28 +1918,14 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        if eos_token_id is not None:
-            logger.warning_once(
-                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
-                " `stopping_criteria=StoppingCriteriaList([EosTokenCriteria(eos_token_id=eos_token_id)])` instead."
-                " Otherwise make sure to set `model.generation_config.eos_token_id`",
-                FutureWarning,
-            )
-            stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
-        else:
-            # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
-            eos_token_id = [
-                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            eos_token_id = eos_token_id[0] if eos_token_id else None
-            if eos_token_id is None and self.generation_config.eos_token_id is not None:
-                eos_token_id = self.generation_config.eos_token_id
-                stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
-
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         sequential = sequential if sequential is not None else self.generation_config.low_memory
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
+        else:
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -2378,27 +2364,13 @@ class GenerationMixin:
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        if eos_token_id is not None:
-            logger.warning_once(
-                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
-                " `stopping_criteria=StoppingCriteriaList([EosTokenCriteria(eos_token_id=eos_token_id)])` instead."
-                " Otherwise make sure to set `model.generation_config.eos_token_id`",
-                FutureWarning,
-            )
-            stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
+        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
         else:
-            # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
-            eos_token_id = [
-                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            eos_token_id = eos_token_id[0] if eos_token_id else None
-            if eos_token_id is None and self.generation_config.eos_token_id is not None:
-                eos_token_id = self.generation_config.eos_token_id
-                stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
-
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2674,27 +2646,13 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        if eos_token_id is not None:
-            logger.warning_once(
-                "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
-                " `stopping_criteria=StoppingCriteriaList([EosTokenCriteria(eos_token_id=eos_token_id)])` instead."
-                " Otherwise make sure to set `model.generation_config.eos_token_id`",
-                FutureWarning,
-            )
-            stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
+        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
         else:
-            # TODO remove when the method is totally private
-            # need to get `eos_token_id` and add stopping criteria, so that generation does not go forever
-            eos_token_id = [
-                criteria.eos_token_id.tolist() for criteria in stopping_criteria if hasattr(criteria, "eos_token_id")
-            ]
-            eos_token_id = eos_token_id[0] if eos_token_id else None
-            if eos_token_id is None and self.generation_config.eos_token_id is not None:
-                eos_token_id = self.generation_config.eos_token_id
-                stopping_criteria.append(EosTokenCriteria(eos_token_id=eos_token_id))
-
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -4528,6 +4486,7 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+<<<<<<< HEAD
         if eos_token_id is not None:
             logger.warning_once(
                 "`eos_token_id` is deprecated in this function and will be removed in v4.41, use"
@@ -4549,6 +4508,17 @@ class GenerationMixin:
 
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
+=======
+        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if eos_token_id is not None and pad_token_id is None:
+            raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
+        else:
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+>>>>>>> efb9b02be (clone tensor)
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
