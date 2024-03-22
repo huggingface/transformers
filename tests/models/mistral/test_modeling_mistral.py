@@ -582,26 +582,26 @@ class MistralIntegrationTest(unittest.TestCase):
         cuda_major_version = torch.cuda.get_device_capability()[0]
         print(cuda_major_version)
 
-        # EXPECTED_TEXT_COMPLETION = {
-        #     7: """My favourite condiment is 100% ketchup. I love it on everything. I'm not a big""",
-        #     8: "My favourite condiment is 100% peanut butter. I eat it on toast, in a sandwich, on",
-        # }
+        EXPECTED_TEXT_COMPLETION = {
+            7: """My favourite condiment is 100% ketchup. I love it on everything. I'm not a big""",
+            8: "My favourite condiment is 100% peanut butter. I eat it on toast, in a sandwich, on",
+        }
 
-        # prompt = "My favourite condiment is "
-        # tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        # model = MistralForCausalLM.from_pretrained(
-        #     "mistralai/Mistral-7B-v0.1", device_map={"": torch_device}, load_in_4bit=True
-        # )
-        # input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map={"": torch_device}, load_in_4bit=True
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
-        # # greedy generation outputs
-        # generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        # text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION[cuda_major_version], text)
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[cuda_major_version], text)
 
-        # del model
-        # backend_empty_cache(torch_device)
-        # gc.collect()
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
 
     @require_bitsandbytes
     @slow
