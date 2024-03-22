@@ -71,7 +71,7 @@ jobs:
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
       - name: Tailscale
-        uses: huggingface/tailscale-action@improvments
+        uses: huggingface/tailscale-action@main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           debugEnabled: ${{ secrets.ACTIONS_STEP_DEBUG }}
