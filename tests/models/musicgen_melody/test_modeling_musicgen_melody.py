@@ -731,7 +731,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             **model_kwargs,
         )
 
-
         return output_generate
 
     # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are

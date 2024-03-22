@@ -513,7 +513,7 @@ MUSICGEN_MELODY_INPUTS_DOCSTRING = r"""
 
             If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
             of `inputs_embeds`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
@@ -905,7 +905,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MusicgenMelodyOutputWithPast]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
@@ -913,10 +913,12 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         if (labels is not None) and (input_ids is None and inputs_embeds is None):
             input_ids = shift_tokens_right(
-                labels, self.config.pad_token_id, self.config.bos_token_id # TODO: how to make it work?
+                labels.transpose(1, 2),
+                self.config.pad_token_id,
+                self.config.bos_token_id,  # TODO: how to make it work?
             )
 
         outputs = self.model(
@@ -940,18 +942,29 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         loss = None
         if labels is not None:
             # since encoder hidden states have concatenated to hidden states, take the last hidden states corresponding to labels
-            logits = lm_logits[:,:,-labels.shape[-1]:]
-            
+            logits = lm_logits[:, :, -labels.shape[1] :]
+
             loss_fct = CrossEntropyLoss()
             loss = torch.zeros([], device=self.device)
-            
+
             # per codebook cross-entropy
             # -100 labels are ignored
             # (bsz, vocab_size, seq_len, num_codebooks), (bsz, seq_len, num_codebooks)
-            labels = labels.squeeze(1).transpose(1,2)
             labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
-            loss = loss_fct(logits.transpose(1,3), labels)
-            
+            # loss = loss_fct(logits.transpose(1,3), labels)
+
+            mask = labels != -100
+
+            # per codebook cross-entropy
+            for codebook in range(self.config.num_codebooks):
+                codebook_logits = logits[:, codebook].contiguous().view(-1, logits.shape[-1])
+                codebook_mask = mask[..., codebook].contiguous().view(-1)
+                codebook_labels = labels[..., codebook].contiguous().view(-1)
+
+                loss += loss_fct(codebook_logits[codebook_mask], codebook_labels[codebook_mask])
+
+            loss = loss / self.config.num_codebooks
+
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
         lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
 
@@ -1798,8 +1811,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                     encoder_hidden_states = audio_hidden_states
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            # transpose to get (bsz, num_codebooks, seq_len)
             decoder_input_ids = shift_tokens_right(
-                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                labels.transpose(1, 2), self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
         # Decode
@@ -1813,23 +1827,15 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
+            labels=labels,
             **kwargs_decoder,
         )
 
-        loss = None
-        if labels is not None:
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
-
         if not return_dict:
-            if loss is not None:
-                return (loss,) + decoder_outputs + (encoder_hidden_states,)
-            else:
-                return decoder_outputs + (encoder_hidden_states,)
+            return decoder_outputs + (encoder_hidden_states,)
 
         return MusicgenMelodyOutputWithPast(
-            loss=loss,
+            loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             hidden_states=decoder_outputs.hidden_states,
@@ -2040,7 +2046,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+        return shift_tokens_right(labels.transpose(1, 2), self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
@@ -2071,11 +2077,12 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 break
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
-    def freeze_encoders(self):
-        for param in self.text_encoder.parameters():
-            param.requires_grad = False
-        self.text_encoder._requires_grad = False
-        
+    def freeze_encoders(self, freeze_text_encoder=True):
+        if freeze_text_encoder:
+            for param in self.text_encoder.parameters():
+                param.requires_grad = False
+            self.text_encoder._requires_grad = False
+
         for param in self.audio_encoder.parameters():
             param.requires_grad = False
         self.audio_encoder._requires_grad = False
