@@ -496,6 +496,9 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
+    # 8 is for A100 / A10 and 7 for T4
+    cuda_major_version = torch.cuda.get_device_capability()[0]
+
     @slow
     @require_torch_gpu
     def test_small_model_logits(self):
@@ -515,15 +518,11 @@ class MixtralIntegrationTest(unittest.TestCase):
                 torch_device
             ),
         }
-
-        # 8 is for A100 / A10 and 7 for T4
-        cuda_major_version = torch.cuda.get_device_capability()[0]
-
         with torch.no_grad():
             logits = model(dummy_input).logits
 
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS[cuda_major_version], atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS[cuda_major_version], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_major_version], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS[self.cuda_major_version], atol=1e-3, rtol=1e-3)
 
     @slow
     @require_torch_gpu
@@ -546,8 +545,6 @@ class MixtralIntegrationTest(unittest.TestCase):
             ),
         }
 
-        cuda_major_version = torch.cuda.get_device_capability()[0]
-
         EXPECTED_LOGITS_LEFT_UNPADDED = {
             7: torch.Tensor(
                 [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
@@ -569,10 +566,12 @@ class MixtralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
 
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS_LEFT[cuda_major_version], atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(
-            logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED[cuda_major_version], atol=1e-3, rtol=1e-3
+            logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_major_version], atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED[cuda_major_version], atol=1e-3, rtol=1e-3
+            logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_major_version], atol=1e-3, rtol=1e-3
+        )
+        torch.testing.assert_close(
+            logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_major_version], atol=1e-3, rtol=1e-3
         )

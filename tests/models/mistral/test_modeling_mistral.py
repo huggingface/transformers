@@ -464,13 +464,16 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
+    # 8 is for A100 / A10 and 7 for T4
+    cuda_major_version = torch.cuda.get_device_capability()[0]
+
     def tearDown(self):
         torch.cuda.empty_cache()
         gc.collect()
 
     @slow
     def test_model_7b_logits(self):
-        cuda_major_version = torch.cuda.get_device_capability()[0]
+        
 
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = MistralForCausalLM.from_pretrained(
@@ -555,7 +558,7 @@ class MistralIntegrationTest(unittest.TestCase):
         }
 
         print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE[cuda_major_version], atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE[self.cuda_major_version], atol=1e-4, rtol=1e-4)
 
         del model
         backend_empty_cache(torch_device)
@@ -564,8 +567,6 @@ class MistralIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_generation(self):
-        cuda_major_version = torch.cuda.get_device_capability()[0]
-
         EXPECTED_TEXT_COMPLETION = {
             7: "My favourite condiment is 100% ketchup. I love it on everything. I'm not a big",
             8: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
@@ -581,7 +582,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[cuda_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_major_version], text)
 
         del model
         backend_empty_cache(torch_device)
@@ -654,8 +655,6 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        cuda_major_version = torch.cuda.get_device_capability()[0]
-
         EXPECTED_TEXT_COMPLETION = {
             7: "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs",
             8: "My favourite condiment is 100% Sriracha. I love the heat, the sweetness, the tang",
@@ -673,7 +672,7 @@ class MistralIntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[cuda_major_version], text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_major_version], text)
 
         del model
         backend_empty_cache(torch_device)
