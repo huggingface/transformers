@@ -79,7 +79,7 @@ def prepare_musicgen_melody_decoder_inputs_dict(
     head_mask=None,
     encoder_hidden_states=None,
     encoder_attention_mask=None,
-    labels=None
+    labels=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])[:, 0, :]
@@ -150,7 +150,10 @@ class MusicgenMelodyDecoderTester:
 
         config = self.get_config()
         inputs_dict = prepare_musicgen_melody_decoder_inputs_dict(
-            config, input_ids, encoder_hidden_states=encoder_hidden_states, labels=labels,
+            config,
+            input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            labels=labels,
         )
         return config, inputs_dict
 
@@ -191,17 +194,21 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         self.config_tester.run_common_tests()
 
     # special case for labels
+    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest._prepare_for_class
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
             inputs_dict["labels"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks), dtype=torch.long, device=torch_device
+                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+                dtype=torch.long,
+                device=torch_device,
             )
         else:
             inputs_dict.pop("labels", None)
         return inputs_dict
 
+    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.check_training_gradient_checkpointing with Musicgen->MusicgenMelody
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             return
@@ -217,7 +224,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
         # Contrarily to the initial method, we don't unfreeze freezed parameters.
         # Otherwise, it'll mess with the freezed sinusoidal embeddings
-        
+
         optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
         inputs = self._prepare_for_class(inputs_dict, MusicgenMelodyForCausalLM, return_labels=True)
@@ -408,13 +415,15 @@ class MusicgenMelodyTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.conditional_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
-        
+
         labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size, self.seq_length, self.num_codebooks], self.vocab_size)
 
         config = self.get_config()
-        inputs_dict = prepare_musicgen_melody_inputs_dict(config, input_ids, decoder_input_ids=decoder_input_ids, labels=labels)
+        inputs_dict = prepare_musicgen_melody_inputs_dict(
+            config, input_ids, decoder_input_ids=decoder_input_ids, labels=labels
+        )
         return config, inputs_dict
 
     def get_config(self):
@@ -469,19 +478,23 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = MusicgenMelodyTester(self)
-        
+
     # special case for labels
+    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest._prepare_for_class
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
             inputs_dict["labels"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks), dtype=torch.long, device=torch_device
+                (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_codebooks),
+                dtype=torch.long,
+                device=torch_device,
             )
         else:
             inputs_dict.pop("labels", None)
         return inputs_dict
-    
+
+    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest.check_training_gradient_checkpointing
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             return
@@ -496,10 +509,10 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
 
-            # Contrarily to the initial method, we don't unfreeze freezed parameters. 
+            # Contrarily to the initial method, we don't unfreeze freezed parameters.
             # We actually freeze the ones we don't want to train
             model.freeze_encoders(freeze_text_encoder=False)
-            
+
             optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
@@ -1014,9 +1027,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             self.assertNotIn(config.pad_token_id, output_generate)
 
-    @unittest.skip("MusicgenMelodyModel is actually not the base of MusicgenMelodyForCausalLM as the latter is a composit model")
+    @unittest.skip(
+        "MusicgenMelodyModel is actually not the base of MusicgenMelodyForCausalLM as the latter is a composit model"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
+
 
 # Copied from tests.models.musicgen.test_modeling_musicgen.get_bip_bip
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):

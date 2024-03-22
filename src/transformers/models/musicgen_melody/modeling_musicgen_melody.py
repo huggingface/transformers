@@ -99,6 +99,7 @@ class MusicgenMelodyOutputWithPast(ModelOutput):
     encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
+# Copied from transformers.models.musicgen.modeling_musicgen.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
