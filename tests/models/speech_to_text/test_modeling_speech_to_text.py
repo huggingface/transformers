@@ -645,7 +645,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             num_interleave, dim=0
         )
         input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + model._get_decoder_start_token_id()
+        _, _, _, decoder_start_token_id = model._prepare_special_tokens(model.generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
