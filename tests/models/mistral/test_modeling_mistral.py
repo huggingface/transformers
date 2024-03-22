@@ -470,10 +470,16 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.skipTest("Mistral flash attention does not support right padding")
 
 
-@require_torch
+@require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        torch.cuda.empty_cache()
+        gc.collect()
+
     @slow
     def test_model_7b_logits(self):
+        cuda_major_version = torch.cuda.get_device_capability()[0]
+
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
@@ -484,10 +490,80 @@ class MistralIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
+
+        EXPECTED_SLICE = {
+            7: torch.tensor(
+                [
+                    -5.8781,
+                    -5.8616,
+                    -0.1052,
+                    -4.7200,
+                    -5.8781,
+                    -5.8774,
+                    -5.8773,
+                    -5.8777,
+                    -5.8781,
+                    -5.8780,
+                    -5.8781,
+                    -5.8779,
+                    -1.0787,
+                    1.7583,
+                    -5.8779,
+                    -5.8780,
+                    -5.8783,
+                    -5.8778,
+                    -5.8776,
+                    -5.8781,
+                    -5.8784,
+                    -5.8778,
+                    -5.8778,
+                    -5.8777,
+                    -5.8779,
+                    -5.8778,
+                    -5.8776,
+                    -5.8780,
+                    -5.8779,
+                    -5.8781,
+                ]
+            ),  # fmt: skip
+            8: torch.tensor(
+                [
+                    -5.8750,
+                    -5.8594,
+                    -0.1049,
+                    -4.7188,
+                    -5.8750,
+                    -5.8711,
+                    -5.8711,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -1.0781,
+                    1.7578,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                    -5.8750,
+                ]
+            ),
+        }
+
         print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE[cuda_major_version], atol=1e-4, rtol=1e-4)
 
         del model
         backend_empty_cache(torch_device)
@@ -495,7 +571,13 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I'm not a big"""
+        cuda_major_version = torch.cuda.get_device_capability()[0]
+
+        EXPECTED_TEXT_COMPLETION = {
+            7: """My favourite condiment is 100% ketchup. I love it on everything. I'm not a big""",
+            8: "My favourite condiment is 100% peanut butter. I eat it on toast, in a sandwich, on",
+        }
+
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = MistralForCausalLM.from_pretrained(
@@ -506,7 +588,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[cuda_major_version], text)
 
         del model
         backend_empty_cache(torch_device)
@@ -521,7 +603,7 @@ class MistralIntegrationTest(unittest.TestCase):
         input_ids = [1] + [306, 338] * 2048
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1",
-            device_map="auto",
+            device_map={"": torch_device},
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
         )
