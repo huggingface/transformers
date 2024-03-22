@@ -573,4 +573,6 @@ class MixtralIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED[cuda_major_version], atol=1e-3, rtol=1e-3
         )
-        torch.testing.assert_close(logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED[cuda_major_version], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(
+            logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED[cuda_major_version], atol=1e-3, rtol=1e-3
+        )
