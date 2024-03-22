@@ -541,11 +541,11 @@ class GenerationMixin:
                 raise ValueError(
                     f"`decoder_start_token_id` expcted to have length {batch_size} but got {decoder_start_token_id.shape[0]}"
                 )
-        decoder_input_ids_start = decoder_input_ids_start.view(-1, 1)
+            decoder_start_token_id = decoder_start_token_id.view(-1, 1)
 
         # no user input -> use decoder_start_token_id as decoder_input_ids
         if decoder_input_ids is None:
-            decoder_input_ids = decoder_input_ids_start
+            decoder_input_ids = decoder_start_token_id
         # exception: Donut checkpoints have task-specific decoder starts and don't expect a BOS token
         elif self.config.model_type == "vision-encoder-decoder" and "donut" in self.name_or_path.lower():
             pass
@@ -560,7 +560,7 @@ class GenerationMixin:
             isinstance(decoder_start_token_id, torch.Tensor)
             and (decoder_input_ids[:, 0] != decoder_start_token_id[:, 0]).all().item()
         ):
-            decoder_input_ids = torch.cat([decoder_input_ids_start, decoder_input_ids], dim=-1)
+            decoder_input_ids = torch.cat([decoder_start_token_id, decoder_input_ids], dim=-1)
             if "decoder_attention_mask" in model_kwargs:
                 decoder_attention_mask = model_kwargs["decoder_attention_mask"]
                 decoder_attention_mask = torch.cat(
