@@ -48,6 +48,7 @@ from .utils import (
     extract_commit_hash,
     is_flax_available,
     is_jax_tensor,
+    is_mlx_available,
     is_numpy_array,
     is_offline_mode,
     is_remote_url,
@@ -726,6 +727,16 @@ class BatchEncoding(UserDict):
 
             as_tensor = jnp.array
             is_tensor = is_jax_tensor
+
+        elif tensor_type == TensorType.MLX:
+            if not is_mlx_available():
+                raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
+            import mlx.core as mx
+
+            as_tensor = mx.array
+
+            def is_tensor(obj):
+                return isinstance(obj, mx.array)
         else:
 
             def as_tensor(value, dtype=None):
@@ -1583,7 +1594,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
         if self.truncation_side not in ["right", "left"]:
             raise ValueError(
-                f"Padding side should be selected between 'right' and 'left', current value: {self.truncation_side}"
+                f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
             )
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
@@ -1599,6 +1610,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
+        if isinstance(self.chat_template, (list, tuple)):
+            # Chat templates are stored as lists of dicts with fixed key names,
+            # we reconstruct that into a single dict while loading them.
+            self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
         super().__init__(**kwargs)
 
@@ -1677,7 +1692,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"],
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         tokenize: bool = True,
@@ -1686,16 +1701,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_dict: bool = False,
-        **tokenizer_kwargs,
-    ) -> Union[str, List[int]]:
+        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Union[str, List[int], List[str], List[List[int]], BatchEncoding]:
         """
-        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
         determine the format and control tokens to use when converting. When chat_template is None, it will fall back
         to the default_chat_template specified at the class level.
 
         Args:
-            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
@@ -1719,21 +1735,45 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            return_dict (`bool`, *optional*, defaults to `False`):
+            return_dict (`bool`, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+            tokenizer_kwargs (`Dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
+            **kwargs: Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
 
         Returns:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
-            output is ready to pass to the model, either directly or via methods like `generate()`.
+            `Union[List[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
+            set, will return a dict of tokenizer outputs instead.
         """
 
-        if hasattr(conversation, "messages"):
-            # Indicates it's a Conversation object
-            conversation = conversation.messages
+        if return_dict and not tokenize:
+            raise ValueError(
+                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
+                "of tokenizer outputs to return."
+            )
 
-        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
-        if chat_template is None:
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
+
+        # First, handle the cases when the model has a dict of multiple templates
+        if isinstance(self.chat_template, dict) or (
+            self.chat_template is None and isinstance(self.default_chat_template, dict)
+        ):
+            template_dict = self.chat_template or self.default_chat_template
+            if chat_template is not None and chat_template in template_dict:
+                # The user can pass the name of a template to the chat template argument instead of an entire template
+                chat_template = template_dict[chat_template]
+            elif chat_template is None and "default" in template_dict:
+                chat_template = template_dict["default"]
+            elif chat_template is None:
+                raise ValueError(
+                    "This model has multiple chat templates with no default specified! Please either pass a chat "
+                    "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                    f"template names are {sorted(template_dict.keys())}."
+                )
+        elif chat_template is None:
+            # These are the cases when the model has a single template
+            # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template
             if self.chat_template is not None:
                 chat_template = self.chat_template
             else:
@@ -1742,33 +1782,43 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
-        rendered = compiled_template.render(
-            messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
-        )
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
+        ):
+            conversations = conversation
+            is_batched = True
+        else:
+            conversations = [conversation]
+            is_batched = False
 
-        if padding is True:
-            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        rendered = []
+        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
+        for chat in conversations:
+            if hasattr(chat, "messages"):
+                # Indicates it's a Conversation object
+                chat = chat.messages
+            rendered_chat = compiled_template.render(
+                messages=chat, add_generation_prompt=add_generation_prompt, **template_kwargs
+            )
+            rendered.append(rendered_chat)
+
+        if not is_batched:
+            rendered = rendered[0]
+
         if tokenize:
+            out = self(
+                rendered,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
             if return_dict:
-                return self(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+                return out
             else:
-                return self.encode(
-                    rendered,
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    add_special_tokens=False,
-                    return_tensors=return_tensors,
-                    **tokenizer_kwargs,
-                )
+                return out["input_ids"]
         else:
             return rendered
 
@@ -1781,7 +1831,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
-        if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
+        if version.parse(jinja2.__version__) < version.parse("3.0.0"):
             raise ImportError(
                 "apply_chat_template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}."
             )
@@ -2415,7 +2465,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config.update(self.special_tokens_map)
 
         if self.chat_template is not None:
-            tokenizer_config["chat_template"] = self.chat_template
+            if isinstance(self.chat_template, dict):
+                # Chat template dicts are saved to the config as lists of dicts with fixed key names.
+                # They will be reconstructed as a single dict during loading.
+                tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+            else:
+                tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)

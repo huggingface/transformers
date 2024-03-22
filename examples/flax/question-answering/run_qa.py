@@ -42,7 +42,7 @@ from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from tqdm import tqdm
 from utils_qa import postprocess_qa_predictions
 
@@ -62,7 +62,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.40.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -493,9 +493,8 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
-        # Clone repo locally
-        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # region Load Data
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
@@ -1051,7 +1050,13 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+                        api.upload_folder(
+                            commit_message=f"Saving weights and logs of step {cur_step}",
+                            folder_path=training_args.output_dir,
+                            repo_id=repo_id,
+                            repo_type="model",
+                            token=training_args.hub_token,
+                        )
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
     # endregion
 

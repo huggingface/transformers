@@ -26,6 +26,59 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 </Tip>
 
+## Quanto
+
+<Tip>
+
+Try Quanto + transformers with this [notebook](https://colab.research.google.com/drive/16CXfVmtdQvciSh9BopZUDYcmXCDpvgrT?usp=sharing)!
+
+</Tip>
+
+
+[🤗 Quanto](https://github.com/huggingface/quanto) library is a versatile pytorch quantization toolkit. The quantization method used is the linear quantization. Quanto provides several unique features such as:
+
+- weights quantization (`float8`,`int8`,`int4`,`int2`)
+- activation quantization (`float8`,`int8`)
+- modality agnostic (e.g CV,LLM)
+- device agnostic (e.g CUDA,MPS,CPU)
+- compatibility with `torch.compile`
+- easy to add custom kernel for specific device
+- supports quantization aware training
+<!-- Add link to the blogpost -->
+
+Before you begin, make sure the following libraries are installed:
+
+```bash
+pip install quanto
+pip install git+https://github.com/huggingface/accelerate.git
+pip install git+https://github.com/huggingface/transformers.git
+```
+
+Now you can quantize a model by passing [`QuantoConfig`] object in the [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it contains `torch.nn.Linear` layers. 
+
+The integration with transformers only supports weights quantization. For the more complex use case such as activation quantization, calibration and quantization aware training, you should use [quanto](https://github.com/huggingface/quanto) library instead. 
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+
+model_id = "facebook/opt-125m"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+quantization_config = QuantoConfig(weights="int8")
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0", quantization_config=quantization_config)
+```
+
+Note that serialization is not supported yet with transformers but it is coming soon! If you want to save the model, you can use quanto library instead.
+
+Quanto library uses linear quantization algorithm for quantization. Even though this is a basic quantization technique, we get very good results! Have a look at the following becnhmark (llama-2-7b on perplexity metric). You can find more benchamarks [here](https://github.com/huggingface/quanto/tree/main/bench/generation)
+
+<div class="flex gap-4">
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/NousResearch-Llama-2-7b-hf_Perplexity.png" alt="llama-2-7b-quanto-perplexity" />
+  </div>
+</div>
+
+The library is versatible enough to be compatible with most PTQ optimization algorithms. The plan in the future is to integrate the most popular algorithms in the most seamless possible way (AWQ, Smoothquant).
+
 ## AQLM
 
 
@@ -49,7 +102,7 @@ Starting with version `aqlm 1.0.2`, AQLM supports Parameter-Efficient Fine-Tunin
 
 ### AQLM configurations
 
-AQLM quantization setpus vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
+AQLM quantization setups vary mainly on the number of codebooks used as well as codebook sizes in bits. The most popular setups, as well as inference kernels they support are:
  
 | Kernel | Number of codebooks | Codebook size, bits | Notation | Accuracy | Speedup     | Fast GPU inference | Fast CPU inference |
 |---|---------------------|---------------------|----------|-------------|-------------|--------------------|--------------------|
@@ -195,6 +248,45 @@ The parameter `modules_to_fuse` should include:
 
 </hfoption>
 </hfoptions>
+
+### Exllama-v2 support
+
+Recent versions of `autoawq` supports exllama-v2 kernels for faster prefill and decoding. To get started, first install the latest version of `autoawq` by running:
+
+```bash
+pip install git+https://github.com/casper-hansen/AutoAWQ.git
+```
+
+Get started by passing an `AwqConfig()` with `version="exllama"`.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
+
+quantization_config = AwqConfig(version="exllama")
+
+model = AutoModelForCausalLM.from_pretrained(
+    "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
+    quantization_config=quantization_config,
+    device_map="auto",
+)
+
+input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cuda")
+output = model(input_ids)
+print(output.logits)
+
+tokenizer = AutoTokenizer.from_pretrained("TheBloke/Mistral-7B-Instruct-v0.1-AWQ")
+input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(model.device)
+output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=50256)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+<Tip warning={true}>
+
+Note this feature is supported on AMD GPUs.
+
+</Tip>
+
 
 ## AutoGPTQ
 

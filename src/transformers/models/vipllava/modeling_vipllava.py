@@ -248,7 +248,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = VipLlavaMultiModalProjector(config)
-        self.vocab_size = config.vocab_size
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
@@ -280,7 +280,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 

@@ -41,6 +41,7 @@ RO_CODE = 250020
 @require_sentencepiece
 @require_tokenizers
 class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/mbart-large-en-ro"
     tokenizer_class = MBartTokenizer
     rust_tokenizer_class = MBartTokenizerFast
     test_rust_tokenizer = True
