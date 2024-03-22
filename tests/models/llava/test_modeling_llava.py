@@ -22,9 +22,9 @@ import requests
 
 from transformers import (
     AutoProcessor,
+    AutoTokenizer,
     LlavaConfig,
     LlavaForConditionalGeneration,
-    AutoTokenizer,
     is_torch_available,
     is_vision_available,
 )
@@ -535,24 +535,28 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).loss
         loss.backward()
 
-
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
         slow_tokenizer.add_tokens("<image>", True)
 
-        fast_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b",  bos_token="<|startoftext|>", eos_token ="<|endoftext|>", from_slow=True, legacy=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(
+            "liuhaotian/llava-v1.6-34b",
+            bos_token="<|startoftext|>",
+            eos_token="<|endoftext|>",
+            from_slow=True,
+            legacy=False,
+        )
         fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens. 
+        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens.
         # https://github.com/huggingface/transformers/pull/28881 is the fix for this.
         self.assertEqual(
             slow_tokenizer.tokenize(prompt),
             ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']
-        )
+        )  # fmt: skip
 
         self.assertEqual(
             fast_tokenizer.tokenize(prompt),
             ['<|im_start|>', '▁system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', '▁user', '\n', '<image>', '▁', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', '▁assistant', '\n']
-        )
-        
+        )  # fmt: skip
