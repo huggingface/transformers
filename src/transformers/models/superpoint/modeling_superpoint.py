@@ -88,8 +88,6 @@ class ImagePointDescriptionOutput(ModelOutput):
     and which are padding.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
             Relative (x, y) coordinates of predicted keypoints in a given image.
         scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
@@ -105,7 +103,6 @@ class ImagePointDescriptionOutput(ModelOutput):
             (also called feature maps) of the model at the output of each stage.
     """
 
-    last_hidden_state: torch.FloatTensor = None
     keypoints: Optional[torch.IntTensor] = None
     scores: Optional[torch.FloatTensor] = None
     descriptors: Optional[torch.FloatTensor] = None
@@ -423,7 +420,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> from transformers import AutoImageProcessor, SuperPointForKeypointDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -432,7 +429,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-        >>> model = AutoModel.from_pretrained("magic-leap-community/superpoint")
+        >>> model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -493,12 +490,9 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
-            return tuple(
-                v for v in [last_hidden_state, keypoints, scores, descriptors, mask, hidden_states] if v is not None
-            )
+            return tuple(v for v in [keypoints, scores, descriptors, mask, hidden_states] if v is not None)
 
         return ImagePointDescriptionOutput(
-            last_hidden_state=last_hidden_state,
             keypoints=keypoints,
             scores=scores,
             descriptors=descriptors,

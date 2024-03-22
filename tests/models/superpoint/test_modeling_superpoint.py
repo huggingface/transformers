@@ -85,20 +85,13 @@ class SuperPointModelTester:
             border_removal_distance=self.border_removal_distance,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_keypoint_detection(self, config, pixel_values):
         model = SuperPointForKeypointDetection(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (
-                self.batch_size,
-                self.encoder_hidden_sizes[-1],
-                self.image_height // 8,
-                self.image_width // 8,
-            ),
-        )
+        self.parent.assertEqual(result.keypoints.shape[0], self.batch_size)
+        self.parent.assertEqual(result.keypoints.shape[-1], 2)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -166,9 +159,9 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    def test_model(self):
+    def test_keypoint_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        self.model_tester.create_and_check_keypoint_detection(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
