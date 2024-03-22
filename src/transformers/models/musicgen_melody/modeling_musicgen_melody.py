@@ -952,7 +952,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
             loss = loss_fct(logits.transpose(1,3), labels)
             
-
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
         lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
 
@@ -1310,7 +1309,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
                 )
 
             # 11. run greedy search
-            outputs = self.greedy_search(
+            outputs = self._greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
@@ -1335,7 +1334,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             )
 
             # 12. run sample
-            outputs = self.sample(
+            outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
