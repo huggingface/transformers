@@ -538,17 +538,21 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
-        slow_tokenizer.add_tokens("<image>")
+        slow_tokenizer.add_tokens("<image>", True)
 
-        fast_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b",  bos_token="<|startoftext|>", eos_token ="<|endoftext|>", from_slow=True)
-        fast_tokenizer.add_tokens("<image>")
+        fast_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b",  bos_token="<|startoftext|>", eos_token ="<|endoftext|>", from_slow=True, legacy=False)
+        fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+        # If the token is added as special, it's not normalized, and the only diff is the extra space after special tokens. 
+        # https://github.com/huggingface/transformers/pull/28881 is the fix for this.
+        self.assertEqual(
+            slow_tokenizer.tokenize(prompt),
+            ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']
+        )
 
-        input_ids = slow_tokenizer(prompt).input_ids
-        fast_input_ids = fast_tokenizer(prompt).input_ids
-
-        print(input_ids)
-        print(fast_input_ids)
-
-        assert input_ids == fast_input_ids
+        self.assertEqual(
+            fast_tokenizer.tokenize(prompt),
+            ['<|im_start|>', '▁system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', '▁user', '\n', '<image>', '▁', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', '▁assistant', '\n']
+        )
+        
