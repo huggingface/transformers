@@ -61,21 +61,26 @@ MOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MixtureOfTokens models at https://huggingface.co/models?filter=mot
 ]
 
-def with_batch_size_aligment(forward_fn):
+
+def with_batch_size_alignment(forward_fn):
     def _forward(self, x):
-        ''' assumed ordering (batch, seq_len, dmodel) '''
-        batch_size = x.size(0)
-        if batch_size % self.group_size != 0:
-            new_batch_size = self.group_size * ((batch_size // self.group_size) + 1)
-            logger.debug("Artificially padding batch size from %d to %d", batch_size, new_batch_size)
-            last_embed = x[-1:, :, :]
-            x = torch.cat([x, last_embed.expand(new_batch_size - batch_size, -1, -1)], dim=0)
-            x = forward_fn(self, x)
-            return x[:batch_size, :, :]
+        """ assumed ordering (batch, seq_len, dmodel) """
+        size = x.size(self.sparsity_dim)
+        if size % self.group_size != 0:
+            if self.sparsity_dim == 1:
+                x = x.transpose(0, 1)
+
+            x = self.pad(x)
+
+            if self.sparsity_dim == 1:
+                x = forward_fn(self, x.transpose(0, 1))
+                return x[:, :size, :]
+            else:
+                x = forward_fn(self, x)
+                return x[:size, :, :]
         else:
             return forward_fn(self, x)
     return _forward
-
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2 with gpt2->mot
@@ -210,7 +215,7 @@ class MoTAttention(nn.Module):
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            causal_mask = self.bias[:, :, key_length - query_length :key_length, :key_length]
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -260,7 +265,7 @@ class MoTAttention(nn.Module):
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            causal_mask = self.bias[:, :, key_length - query_length :key_length, :key_length]
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -287,7 +292,8 @@ class MoTAttention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _split_heads(self, tensor, num_heads, attn_head_size):
+    @staticmethod
+    def _split_heads(tensor, num_heads, attn_head_size):
         """
         Splits hidden_size dim into attn_head_size and num_heads
         """
@@ -295,7 +301,8 @@ class MoTAttention(nn.Module):
         tensor = tensor.view(new_shape)
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
-    def _merge_heads(self, tensor, num_heads, attn_head_size):
+    @staticmethod
+    def _merge_heads(tensor, num_heads, attn_head_size):
         """
         Merges attn_head_size dim and num_attn_heads dim into hidden_size
         """
@@ -416,8 +423,8 @@ class MoTMLP(nn.Module):
         )
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-
-    def argmax_one_hot(self, x: torch.Tensor, dim: int):
+    @staticmethod
+    def argmax_one_hot(x: torch.Tensor, dim: int):
         max_values, _ = x.max(dim=dim, keepdim=True)
         return torch.where(
             condition=x == max_values,
@@ -438,21 +445,37 @@ class MoTMLP(nn.Module):
         else:
             raise ValueError(f"Unknown init_type: {init_type}")
 
-    def init_kaiming_uniform(self, shape, fan_in, scale, dtype=torch.float32):
+    @staticmethod
+    def init_kaiming_uniform(shape, fan_in, scale, dtype=torch.float32):
         range_ = scale * (3 / fan_in) ** 0.5
         return torch.zeros(shape, dtype=dtype).uniform_(-range_, range_)
 
-    def init_truncated_normal(self, shape, fan_in, scale, dtype=torch.float32):
+    @staticmethod
+    def init_truncated_normal(shape, fan_in, scale, dtype=torch.float32):
         std = (scale / fan_in) ** 0.5
         low = -2 * scale
         high = 2 * scale
         t = torch.zeros(shape, dtype=dtype)
         return trunc_normal_(t, mean=0.0, std=std, a=low, b=high)
 
-    def stable_softmax_temperature(self, x: torch.Tensor, temperature: float, dim: int = -1) -> torch.Tensor:
+    @staticmethod
+    def stable_softmax_temperature(x: torch.Tensor, temperature: float, dim: int = -1) -> torch.Tensor:
         return F.softmax(x / temperature, dim=dim)
 
-    @with_batch_size_aligment
+    def pad(self, x):
+        size = x.size(0)
+        ceiling = torch.ceil(torch.tensor(size / self.group_size).float())
+        new_batch_size = self.group_size * ceiling.int().item()
+        padding_size = new_batch_size - size
+        logger.debug("Padding batch size from %d to %d", size, new_batch_size)
+
+        # Create a zero sequence for padding
+        zero_sequence = torch.zeros_like(x[0:1])
+        padding_sequences = zero_sequence.repeat(padding_size, 1, 1)
+
+        return torch.cat([x, padding_sequences], dim=0)
+
+    @with_batch_size_alignment
     def forward(self, x):
         x = self.group_tokens(x)
         merge_weights, emit_weights = self.calculate_mixed_tokens_with_weights(x)

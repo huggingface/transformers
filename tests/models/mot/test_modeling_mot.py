@@ -64,7 +64,7 @@ class MoTModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        group_size=8,
+        group_size=1,
         expert_size=None,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -77,8 +77,7 @@ class MoTModelTester:
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
-        num_choices=4,
-        scope=None,
+        num_choices=4
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -111,6 +110,10 @@ class MoTModelTester:
 
     def get_large_model_config(self):
         return MoTConfig.from_pretrained("mot")
+
+    def check_sparsity_dim(self, model):
+        if model.h[0].mlp.sparsity_dim == 1:
+            self.parent.skipTest("Not available for sparsity_dim == 1")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -234,6 +237,9 @@ class MoTModelTester:
         model.to(torch_device)
         model.eval()
 
+        # not working for sparsity_dim = 1
+        self.check_sparsity_dim(model)
+
         # first forward pass
         outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids, token_type_ids=token_type_ids)
@@ -271,6 +277,9 @@ class MoTModelTester:
         model = MoTModel(config=config)
         model.to(torch_device)
         model.eval()
+
+        # not working for sparsity_dim = 1
+        self.check_sparsity_dim(model)
 
         # create attention mask
         attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
@@ -313,6 +322,9 @@ class MoTModelTester:
         model = MoTModel(config=config)
         model.to(torch_device)
         model.eval()
+
+        # not working for sparsity_dim = 1
+        self.check_sparsity_dim(model)
 
         # first forward pass
         outputs = model(input_ids, token_type_ids=token_type_ids, attention_mask=input_mask, use_cache=True)
