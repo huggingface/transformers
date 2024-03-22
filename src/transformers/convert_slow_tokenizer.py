@@ -1247,11 +1247,19 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
-        return normalizers.Replace(pattern=" ", content="▁"),
+        if self.original_tokenizer.legacy:
+            return normalizers.Sequence(
+            [
+                normalizers.Prepend(prepend="▁"),
+                normalizers.Replace(pattern=" ", content="▁"),
+            ]
+        )
         return None
 
     def post_processor(self):
         # the processor is defined in the LlamaTokenizerFast class.
+        if not self.original_tokenizer.legacy:
+            return super().post_processor()
         return None
 
 
