@@ -65,7 +65,7 @@ def get_paligemma_config(variant: str):
         config.text_config.head_dim = 256
         config.text_config.torch_dtype = "float32"
         config.text_config.hidden_size = 2048
-        config.text_config.hidden_act = "gelu_fast"
+        config.text_config.hidden_act = "gelu_pytorch_tanh"
         config.pad_token_id = 0
         config.bos_token_id = 2
         config.eos_token_id = 1
@@ -233,9 +233,11 @@ def verify_logits(model, processor):
     cow_on_beach_path = "/home/ubuntu/gvhf/cow_beach_1.png"
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    prompt = ["answer en Where is the cow standing?\n", ""]
+    prompt = ["answer en Where is the cow standing?\n", "\n"]
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="max_length", return_tensors="pt")
+
+    image_captioning_inputs = processor(text="\n", images=list_images[0], padding="do_not_pad", return_tensors="pt")
     with torch.inference_mode():
         outputs = model(**model_inputs)
 
@@ -246,6 +248,14 @@ def verify_logits(model, processor):
         else:
             print("It seems that the forward pass predicts a correct next token. Go to .generate()!")
 
+        # Test image captioning generation
+
+        captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
+        captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+        if captioning_output[0] != "\ncow standing on the beach on the sea":
+            raise ValueError("Image captioning should match.")
+        else:
+            print("Image captioning works.")
         """
         # Skipping logit verification for now as we are in a left-padding situation vs right-padding for the original repo, but it should be fine
         if not np.allclose(outputs.logits.cpu().numpy(), outputs_logits_flax, atol=5e-3):
@@ -260,7 +270,7 @@ def verify_logits(model, processor):
 
         if generated_output[0] != "answer en Where is the cow standing?\nbeach":
             raise ValueError("Generation does not match.")
-        elif generated_output[1] != "cow on the beach in the morning":
+        elif generated_output[1] != "\ncow on the beach in the sun":
             # This checks that empty prompt gets an image captioning task (in English).
             # TODO check with original team that this is intended output
             raise ValueError("Image captioning does not match.")
@@ -336,7 +346,7 @@ if __name__ == "__main__":
         help="Whether or not to run checks against original implementation.",
     )
     parser.add_argument(
-        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
+        "--do_convert_weights", action="store_false", help="Whether or not to reload and convert the weights."
     )
 
     args = parser.parse_args()
