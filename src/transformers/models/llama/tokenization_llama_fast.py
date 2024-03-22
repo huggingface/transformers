@@ -148,7 +148,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_prefix_space=None,
         **kwargs,
     ):
-        
         if legacy is None:
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
@@ -159,7 +158,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             )
             legacy = True
         self.legacy = legacy
-    
+
         if add_prefix_space is not None:
             logger.warning_once(
                 "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
