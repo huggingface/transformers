@@ -79,7 +79,7 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
 
 
 @dataclass
-class ImagePointDescriptionOutput(ModelOutput):
+class SuperPointKeypointDescriptionOutput(ModelOutput):
     """
     Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
     keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of images,
@@ -418,7 +418,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImagePointDescriptionOutput]:
+    ) -> Union[Tuple, SuperPointKeypointDescriptionOutput]:
         """
         Examples:
 
@@ -494,7 +494,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [keypoints, scores, descriptors, mask, hidden_states] if v is not None)
 
-        return ImagePointDescriptionOutput(
+        return SuperPointKeypointDescriptionOutput(
             loss=loss,
             keypoints=keypoints,
             scores=scores,
