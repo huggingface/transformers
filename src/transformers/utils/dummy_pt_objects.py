@@ -606,9 +606,6 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = None
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = None
 
 
-MODEL_FOR_KEYPOINT_DETECTION_MAPPING = None
-
-
 MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
@@ -775,13 +772,6 @@ class AutoModelForImageToImage(metaclass=DummyObject):
 
 
 class AutoModelForInstanceSegmentation(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AutoModelForKeypointDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
