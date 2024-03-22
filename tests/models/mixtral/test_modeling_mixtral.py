@@ -514,6 +514,8 @@ class MixtralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input).logits
 
+        import pdb; pdb.set_trace()
+
         torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
 
@@ -545,6 +547,8 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
+
+        import pdb; pdb.set_trace()
 
         torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
