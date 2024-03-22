@@ -531,8 +531,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
 
-@require_torch
+@require_torch_gpu
 class LlamaIntegrationTest(unittest.TestCase):
+    cuda_major_version = torch.cuda.get_device_capability()[0]
+
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_7b_logits(self):
@@ -618,7 +620,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         def decode_one_tokens(model, cur_token, input_pos, cache_position):
