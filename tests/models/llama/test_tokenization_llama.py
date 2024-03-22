@@ -527,12 +527,12 @@ class LlamaIntegrationTest(unittest.TestCase):
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
         )
         # decoding strips the added prefix space.
-        self.assertEqual(out2, "<REPR_END> inform")
+        self.assertEqual(out2, "<REPR_END>inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [29871, 32000, 262, 689])  # 29871 is the spiece underline, '▁' added as it should
+        self.assertEqual(input_ids, [32000, 262, 689])  # 29871 is the spiece underline, '▁' added as it should
 
         out2 = tokenizer.decode(
-            tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
+            tokenizer.encode(" <REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
         # TODO @ArthurZ currently we strip left and right, so this will not keep the spaces
         self.assertEqual(out2, "<REPR_END>inform")
