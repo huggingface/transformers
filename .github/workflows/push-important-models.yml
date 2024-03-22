@@ -81,6 +81,8 @@ jobs:
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
+      - name: Show installed libraries and their versions
+        run: pip freeze
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
