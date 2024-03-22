@@ -53,7 +53,6 @@ jobs:
       fail-fast: false
       matrix: 
         model-name: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
-    secrets: inherit
 
     steps:
       - name: Check out code
