@@ -51,6 +51,7 @@ if is_torch_available():
 @require_sentencepiece
 @require_tokenizers
 class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "hf-internal-testing/llama-code-tokenizer"
     tokenizer_class = CodeLlamaTokenizer
     rust_tokenizer_class = CodeLlamaTokenizerFast
     test_rust_tokenizer = False
