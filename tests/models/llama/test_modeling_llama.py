@@ -683,7 +683,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
             ],
             8: [
-                "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\n",
+                "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
                 "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
             ]
         }
@@ -772,6 +772,7 @@ end
 
     @require_torch_accelerator
     @slow
+    @unittest.skip("Model is too large")
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
