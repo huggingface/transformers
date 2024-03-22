@@ -690,10 +690,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             ]
         }
 
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-        ]
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
