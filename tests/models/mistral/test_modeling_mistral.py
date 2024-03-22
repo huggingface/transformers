@@ -518,10 +518,40 @@ class MistralIntegrationTest(unittest.TestCase):
                     -5.8781,
                 ]
             ),  # fmt: skip
-            8: torch.tensor([-5.8711, -5.8555, -0.1050, -4.7148, -5.8711, -5.8711, -5.8711, -5.8711,
-        -5.8711, -5.8711, -5.8711, -5.8711, -1.0781,  1.7568, -5.8711, -5.8711,
-        -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711,
-        -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711]),
+            8: torch.tensor(
+                [
+                    -5.8711,
+                    -5.8555,
+                    -0.1050,
+                    -4.7148,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -1.0781,
+                    1.7568,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                    -5.8711,
+                ]
+            ),
         }
 
         print(out[0, 0, :30])
@@ -628,7 +658,7 @@ class MistralIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = {
             7: "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs",
-            8: "My favourite condiment is 100% Sriracha. I love the heat, the sweetness, the tang"
+            8: "My favourite condiment is 100% Sriracha. I love the heat, the sweetness, the tang",
         }
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
