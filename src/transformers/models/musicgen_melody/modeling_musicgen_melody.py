@@ -918,7 +918,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             input_ids = shift_tokens_right(
                 labels.transpose(1, 2),
                 self.config.pad_token_id,
-                self.config.bos_token_id,  # TODO: how to make it work?
+                self.config.decoder_start_token_id,  # TODO: verify it works?
             )
 
         outputs = self.model(
@@ -941,7 +941,8 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # since encoder hidden states have concatenated to hidden states, take the last hidden states corresponding to labels
+            # since encoder hidden states have been concatenated to the decoder hidden states,
+            # we take the last timestamps corresponding to labels
             logits = lm_logits[:, :, -labels.shape[1] :]
 
             loss_fct = CrossEntropyLoss()
@@ -949,9 +950,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
 
             # per codebook cross-entropy
             # -100 labels are ignored
-            # (bsz, vocab_size, seq_len, num_codebooks), (bsz, seq_len, num_codebooks)
             labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
-            # loss = loss_fct(logits.transpose(1,3), labels)
 
             mask = labels != -100
 

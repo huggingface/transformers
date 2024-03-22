@@ -153,6 +153,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2Model"),
         ("mobilevit", "MobileViTModel"),
         ("mobilevitv2", "MobileViTV2Model"),
+        ("musicgen", "MusicgenModel"),
+        ("musicgen_melody", "MusicgenMelodyModel"),
         ("mpnet", "MPNetModel"),
         ("mpt", "MptModel"),
         ("mra", "MraModel"),
