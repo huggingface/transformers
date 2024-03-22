@@ -1331,9 +1331,9 @@ class LlamaConverter(SpmConverter):
 
     def vocab(self, proto):
         vocab = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
+            (self.original_tokenizer.unk_token, 0.0),
+            (self.original_tokenizer.bos_token, 0.0),
+            (self.original_tokenizer.eos_token, 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
@@ -1371,9 +1371,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>", normalized=False, special=True),
-                    AddedToken("<s>", normalized=False, special=True),
-                    AddedToken("</s>", normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.unk_token, normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.bos_token, normalized=False, special=True),
+                    AddedToken(self.original_tokenizer.eos_token, normalized=False, special=True),
                 ]
             )
         else:

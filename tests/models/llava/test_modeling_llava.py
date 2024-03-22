@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     LlavaConfig,
     LlavaForConditionalGeneration,
+    AutoTokenizer,
     is_torch_available,
     is_vision_available,
 )
@@ -533,3 +534,21 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             labels=input_ids,
         ).loss
         loss.backward()
+
+
+    def test_tokenizer_integration(self):
+        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
+        slow_tokenizer.add_tokens("<image>")
+
+        fast_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b",  bos_token="<|startoftext|>", eos_token ="<|endoftext|>", from_slow=True)
+        fast_tokenizer.add_tokens("<image>")
+
+        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+
+        input_ids = slow_tokenizer(prompt).input_ids
+        fast_input_ids = fast_tokenizer(prompt).input_ids
+
+        print(input_ids)
+        print(fast_input_ids)
+
+        assert input_ids == fast_input_ids
