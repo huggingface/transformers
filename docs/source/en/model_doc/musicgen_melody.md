@@ -232,7 +232,7 @@ Thus, the MusicGen model can either be used as a standalone decoder model, corre
 
 >>> # Option 1: get decoder config and pass to `.from_pretrained`
 >>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-melody").decoder
->>> decoder = MusicgenMelodyForCausalLM.from_pretrained("facebook/musicgen-melody", **decoder_config)
+>>> decoder = MusicgenMelodyForCausalLM.from_pretrained("facebook/musicgen-melody", **decoder_config.to_dict())
 
 >>> # Option 2: load the entire composite model, but only return the decoder
 >>> decoder = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody").decoder
