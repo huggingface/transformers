@@ -210,12 +210,12 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ### PyTorch scaled dot product attention
 
-Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and a C++ PyTorch implementation. SDPA chooses the most performant attention algorithm based on your hardware, but you could also explicitly enable or disable the attention algorithm you want to use.
+Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and a C++ PyTorch implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the C++ PyTorch implementation.
 
 > [!TIP]
 > SDPA supports FlashAttention-2 as long as you have the latest PyTorch version installed.
 
-Use the `torch.backends.cuda.sdp_kernel` context manager to enable or disable any of the three attention algorithms. For example, set `enable_flash=True` to enable FlashAttention.
+Use the `torch.backends.cuda.sdp_kernel` context manager to explicitly enable or disable any of the three attention algorithms. For example, set `enable_flash=True` to enable FlashAttention.
 
 ```py
 import torch
