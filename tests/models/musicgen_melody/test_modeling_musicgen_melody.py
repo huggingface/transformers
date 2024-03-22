@@ -480,7 +480,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester = MusicgenMelodyTester(self)
 
     # special case for labels
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest._prepare_for_class
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -494,7 +493,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             inputs_dict.pop("labels", None)
         return inputs_dict
 
-    # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest.check_training_gradient_checkpointing
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             return
@@ -871,6 +869,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             **process_kwargs,
             **model_kwargs,
         )
+
         return output_generate
 
     @staticmethod
