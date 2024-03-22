@@ -550,6 +550,7 @@ class WhisperGenerationMixin:
             begin_index=begin_index,  # begin index is index of first generated decoder token
             is_shortform=is_shortform,
             num_beams=kwargs.get("num_beams", 1),
+            device=next(self.parameters()).device,
         )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
@@ -1385,7 +1386,9 @@ class WhisperGenerationMixin:
 
         return max_frames, seek
 
-    def _retrieve_logit_processors(self, generation_config, logits_processor, begin_index, is_shortform, num_beams):
+    def _retrieve_logit_processors(
+        self, generation_config, logits_processor, begin_index, is_shortform, num_beams, device
+    ):
         if generation_config.return_timestamps is True:
             timestamp_processor = WhisperTimeStampLogitsProcessor(generation_config, begin_index=begin_index)
             logits_processor = (
@@ -1393,7 +1396,7 @@ class WhisperGenerationMixin:
             )
 
         if generation_config.suppress_tokens is not None:
-            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens)
+            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens, device=device)
             logits_processor = (
                 [suppress_tokens_processor]
                 if logits_processor is None
@@ -1403,7 +1406,7 @@ class WhisperGenerationMixin:
 
         if generation_config.begin_suppress_tokens is not None:
             begin_suppress_processor = SuppressTokensAtBeginLogitsProcessor(
-                generation_config.begin_suppress_tokens, begin_index=begin_index
+                generation_config.begin_suppress_tokens, begin_index=begin_index, device=device
             )
             logits_processor = (
                 [begin_suppress_processor]

@@ -137,7 +137,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, min_length: int, eos_token_id: Union[int, List[int]]):
+    def __init__(self, min_length: int, eos_token_id: Union[int, List[int]], device: str = None):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
@@ -145,15 +145,20 @@ class MinLengthLogitsProcessor(LogitsProcessor):
             eos_token_id = [eos_token_id]
         if not all(isinstance(i, int) for i in eos_token_id) or any(i < 0 for i in eos_token_id):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+        if device is None:
+            device = "cpu"
+            logger.warning(
+                "Setting the device by default to 'cpu'. If that is not the intended behavior, indicate "
+                "correct device when initializing"
+            )
 
         self.min_length = min_length
-        self.eos_token_id = eos_token_id
+        self.eos_token_id = torch.tensor(eos_token_id, dtype=torch.int32, device=device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_id = torch.tensor(self.eos_token_id, device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -195,7 +200,9 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
+    def __init__(
+        self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]], device: str = None
+    ):
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
             ("min_new_tokens", min_new_tokens),
@@ -207,18 +214,23 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             eos_token_id = [eos_token_id]
         if not all(isinstance(i, int) for i in eos_token_id) or any(i < 0 for i in eos_token_id):
             logger.warning(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+        if device is None:
+            device = "cpu"
+            logger.warning(
+                "Setting the device by default to 'cpu'. If that is not the intended behavior, indicate "
+                "correct device when initializing"
+            )
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens
-        self.eos_token_id = eos_token_id
+        self.eos_token_id = torch.tensor(eos_token_id, dtype=torch.int32, device=device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_id = torch.tensor(self.eos_token_id, device=scores.device)
-        eos_token_mask = torch.isin(vocab_tensor, eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
@@ -273,7 +285,7 @@ class TemperatureLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(self, temperature: float):
+    def __init__(self, temperature: float, device: str = None):
         if not isinstance(temperature, float) or not (temperature > 0):
             except_msg = (
                 f"`temperature` (={temperature}) has to be a strictly positive float, otherwise your next token "
@@ -328,7 +340,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, penalty: float):
+    def __init__(self, penalty: float, device: str = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
@@ -382,7 +394,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
+    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor, device: str = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
@@ -438,7 +450,9 @@ class TopPLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    def __init__(
+        self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
+    ):
         top_p = float(top_p)
         if top_p < 0 or top_p > 1.0:
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
@@ -502,7 +516,9 @@ class TopKLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    def __init__(
+        self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
+    ):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
@@ -571,7 +587,9 @@ class TypicalLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    def __init__(
+        self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
+    ):
         mass = float(mass)
         if not (mass > 0 and mass < 1):
             raise ValueError(f"`typical_p` has to be a float > 0 and < 1, but is {mass}")
@@ -644,7 +662,9 @@ class EpsilonLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    def __init__(
+        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
+    ):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
             raise ValueError(f"`epsilon_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
@@ -721,7 +741,9 @@ class EtaLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    def __init__(
+        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
+    ):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
             raise ValueError(f"`eta_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
@@ -731,14 +753,19 @@ class EtaLogitsWarper(LogitsWarper):
             raise ValueError(
                 f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
             )
+        if device is None:
+            device = "cpu"
+            logger.warning(
+                "Setting the device by default to 'cpu'. If that is not the intended behavior, indicate "
+                "correct device when initializing"
+            )
 
-        self.epsilon = torch.tensor(epsilon)
+        self.epsilon = torch.tensor(epsilon, device=device)
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Calculate the adaptive cutoff
         probabilities = scores.softmax(dim=-1)
         entropy = torch.distributions.Categorical(logits=scores).entropy()
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
@@ -861,7 +888,7 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, ngram_size: int):
+    def __init__(self, ngram_size: int, device: str = None):
         if not isinstance(ngram_size, int) or ngram_size <= 0:
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
@@ -916,7 +943,7 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, encoder_ngram_size: int, encoder_input_ids: torch.LongTensor):
+    def __init__(self, encoder_ngram_size: int, encoder_input_ids: torch.LongTensor, device: str = None):
         if not isinstance(encoder_ngram_size, int) or encoder_ngram_size <= 0:
             raise ValueError(
                 f"`encoder_ngram_size` has to be a strictly positive integer, but is {encoder_ngram_size}"
@@ -1009,7 +1036,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, sequence_bias: Dict[Tuple[int], float]):
+    def __init__(self, sequence_bias: Dict[Tuple[int], float], device: str = None):
         self.sequence_bias = sequence_bias
         self._validate_arguments()
 
@@ -1150,7 +1177,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     ```
     """
 
-    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
+    def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]], device: str = None):
         self.bad_word_ids = bad_words_ids
         self._validate_arguments()
 
@@ -1229,7 +1256,9 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
+    def __init__(
+        self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int, device: str = None
+    ):
         self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
         self._num_beams = num_beams
 
@@ -1325,7 +1354,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
+    def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int, device: str = None):
         if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
             raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
         self._diversity_penalty = diversity_penalty
@@ -1419,7 +1448,7 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, bos_token_id: int):
+    def __init__(self, bos_token_id: int, device: str = None):
         self.bos_token_id = bos_token_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -1465,7 +1494,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, max_length: int, eos_token_id: Union[int, List[int]]):
+    def __init__(self, max_length: int, eos_token_id: Union[int, List[int]], device: str = None):
         self.max_length = max_length
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -1575,6 +1604,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         exponential_decay_length_penalty: Tuple[int, float],
         eos_token_id: Union[int, List[int]],
         input_ids_seq_length: int,
+        device: str = None,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
@@ -1669,8 +1699,14 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, begin_suppress_tokens, begin_index):
-        self.begin_suppress_tokens = list(begin_suppress_tokens)
+    def __init__(self, begin_suppress_tokens, begin_index, device: str = None):
+        if device is None:
+            device = "cpu"
+            logger.warning(
+                "Setting the device by default to 'cpu'. If that is not the intended behavior, indicate "
+                "correct device when initializing"
+            )
+        self.begin_suppress_tokens = torch.tensor(list(begin_suppress_tokens), dtype=torch.int64, device=device)
         self.begin_index = begin_index
 
     def set_begin_index(self, begin_index):
@@ -1679,8 +1715,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        begin_suppress_tokens = torch.tensor(self.begin_suppress_tokens, device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, begin_suppress_tokens)
+        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens)
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -1717,16 +1752,21 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, suppress_tokens):
-        self.suppress_tokens = list(suppress_tokens)
+    def __init__(self, suppress_tokens, device: str = None):
+        if device is None:
+            device = "cpu"
+            logger.warning(
+                "Setting the device by default to 'cpu'. If that is not the intended behavior, indicate "
+                "correct device when initializing"
+            )
+        self.suppress_tokens = torch.tensor(list(suppress_tokens), dtype=torch.int64, device=device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_tokens = torch.tensor(self.suppress_tokens, device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, suppress_tokens)
-        scores = torch.where(suppress_token_mask, -float("inf"), scores)
-        return scores
+        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens)
+        scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
+        return scores_processed
 
 
 class ForceTokensLogitsProcessor(LogitsProcessor):
@@ -1767,7 +1807,7 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False):
+    def __init__(self, force_token_map: List[List[int]], _has_warned: Optional[bool] = False, device: str = None):
         self.force_token_map = dict(force_token_map)
         if not _has_warned:
             # TODO(Sanchit): remove this processor entirely in v4.40
@@ -1844,7 +1884,11 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(
-        self, generate_config, begin_index: Optional[int] = None, _detect_timestamp_from_logprob: Optional[bool] = None
+        self,
+        generate_config,
+        begin_index: Optional[int] = None,
+        _detect_timestamp_from_logprob: Optional[bool] = None,
+        device: str = None,
     ):  # support for the kwargs
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
@@ -1923,7 +1967,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 class WhisperNoSpeechDetection(LogitsProcessor):
     r"""This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits to follow the original implementation"""
 
-    def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False):
+    def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False, device: str = None):
         self.no_speech_token = no_speech_token
         # offset between <start-of-transcription> token, <SOT>, in paper and first generated token
         # is equal to the position of the first generated token index
@@ -2013,7 +2057,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, guidance_scale):
+    def __init__(self, guidance_scale, device: str = None):
         if guidance_scale > 1:
             self.guidance_scale = guidance_scale
         else:
@@ -2059,7 +2103,7 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
             Number of tokens associated to the codebook.
     """
 
-    def __init__(self, input_start_len: int, semantic_vocab_size: int, codebook_size: int):
+    def __init__(self, input_start_len: int, semantic_vocab_size: int, codebook_size: int, device: str = None):
         if not isinstance(input_start_len, int) or input_start_len < 0:
             raise ValueError(f"`input_starting_length` has to be a non-negative integer, but is {input_start_len}")
 
@@ -2142,6 +2186,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_ids: Optional[torch.LongTensor] = None,
         unconditional_attention_mask: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = True,
+        device: str = None,
     ):
         self.guidance_scale = guidance_scale
         self.model = model
@@ -2218,7 +2263,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             Minimum end of speech threshold.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int]], min_eos_p: float):
+    def __init__(self, eos_token_id: Union[int, List[int]], min_eos_p: float, device: str = None):
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id

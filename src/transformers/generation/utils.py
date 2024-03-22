@@ -755,6 +755,7 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        device: str,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
@@ -774,10 +775,13 @@ class GenerationMixin:
                     unconditional_ids=negative_prompt_ids,
                     unconditional_attention_mask=negative_prompt_attention_mask,
                     use_cache=model_kwargs["use_cache"],
+                    device=device,
                 )
             )
         if generation_config.sequence_bias is not None:
-            processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
+            processors.append(
+                SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias, device=device)
+            )
 
         if generation_config.diversity_penalty is not None and generation_config.diversity_penalty > 0.0:
             processors.append(
@@ -785,6 +789,7 @@ class GenerationMixin:
                     diversity_penalty=generation_config.diversity_penalty,
                     num_beams=generation_config.num_beams,
                     num_beam_groups=generation_config.num_beam_groups,
+                    device=device,
                 )
             )
         if (
@@ -793,30 +798,48 @@ class GenerationMixin:
         ):
             processors.append(
                 EncoderRepetitionPenaltyLogitsProcessor(
-                    penalty=generation_config.encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
+                    penalty=generation_config.encoder_repetition_penalty,
+                    encoder_input_ids=encoder_input_ids,
+                    device=device,
                 )
             )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            processors.append(
+                RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty, device=device)
+            )
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
-            processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
+            processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size, device=device))
         if (
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
             processors.append(
-                EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
+                EncoderNoRepeatNGramLogitsProcessor(
+                    generation_config.encoder_no_repeat_ngram_size,
+                    encoder_input_ids,
+                    device=device,
+                )
             )
         if generation_config.bad_words_ids is not None:
             processors.append(
-                NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
+                NoBadWordsLogitsProcessor(
+                    generation_config.bad_words_ids,
+                    generation_config.eos_token_id,
+                    device=device,
+                )
             )
         if (
             generation_config.min_length is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_length > 0
         ):
-            processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
+            processors.append(
+                MinLengthLogitsProcessor(
+                    generation_config.min_length,
+                    generation_config.eos_token_id,
+                    device=device,
+                )
+            )
         if (
             generation_config.min_new_tokens is not None
             and generation_config.eos_token_id is not None
@@ -824,20 +847,34 @@ class GenerationMixin:
         ):
             processors.append(
                 MinNewTokensLengthLogitsProcessor(
-                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
+                    input_ids_seq_length,
+                    generation_config.min_new_tokens,
+                    generation_config.eos_token_id,
+                    device=device,
                 )
             )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
                 PrefixConstrainedLogitsProcessor(
-                    prefix_allowed_tokens_fn, generation_config.num_beams // generation_config.num_beam_groups
+                    prefix_allowed_tokens_fn,
+                    generation_config.num_beams // generation_config.num_beam_groups,
+                    device=device,
                 )
             )
         if generation_config.forced_bos_token_id is not None:
-            processors.append(ForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id))
+            processors.append(
+                ForcedBOSTokenLogitsProcessor(
+                    generation_config.forced_bos_token_id,
+                    device=device,
+                )
+            )
         if generation_config.forced_eos_token_id is not None:
             processors.append(
-                ForcedEOSTokenLogitsProcessor(generation_config.max_length, generation_config.forced_eos_token_id)
+                ForcedEOSTokenLogitsProcessor(
+                    generation_config.max_length,
+                    generation_config.forced_eos_token_id,
+                    device=device,
+                )
             )
         if generation_config.remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
@@ -847,10 +884,16 @@ class GenerationMixin:
                     generation_config.exponential_decay_length_penalty,
                     generation_config.eos_token_id,
                     input_ids_seq_length,
+                    device=device,
                 )
             )
         if generation_config.suppress_tokens is not None:
-            processors.append(SuppressTokensLogitsProcessor(generation_config.suppress_tokens))
+            processors.append(
+                SuppressTokensLogitsProcessor(
+                    generation_config.suppress_tokens,
+                    device=device,
+                )
+            )
         if generation_config.begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = (
@@ -862,7 +905,11 @@ class GenerationMixin:
                 # generation starts after the last token that is forced
                 begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
-                SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
+                SuppressTokensAtBeginLogitsProcessor(
+                    generation_config.begin_suppress_tokens,
+                    begin_index,
+                    device=device,
+                )
             )
         if generation_config.forced_decoder_ids is not None:
             # TODO(Sanchit): deprecate in v4.40 by removing this logic
@@ -1474,6 +1521,7 @@ class GenerationMixin:
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            device=input_ids.device,
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,

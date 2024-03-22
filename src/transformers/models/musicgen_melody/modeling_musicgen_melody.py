@@ -1279,6 +1279,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             encoder_input_ids=input_ids,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
+            device=input_ids.device,
         )
 
         # 10. prepare stopping criteria
@@ -2266,6 +2267,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
+            device=input_ids.device,
         )
 
         # 10. prepare stopping criteria
