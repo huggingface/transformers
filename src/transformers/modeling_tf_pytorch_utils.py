@@ -249,7 +249,10 @@ def load_pytorch_weights_in_tf2_model(
         )
         raise
 
-    pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+    # Numpy doesn't understand bfloat16, so upcast to a dtype that doesn't lose precision
+    pt_state_dict = {
+        k: v.numpy() if v.dtype != torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()
+    }
     return load_pytorch_state_dict_in_tf2_model(
         tf_model,
         pt_state_dict,
