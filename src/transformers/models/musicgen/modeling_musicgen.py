@@ -974,7 +974,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             input_ids = shift_tokens_right(
                 labels.transpose(1, 2),
                 self.config.pad_token_id,
-                self.config.decoder_start_token_id,  # TODO: verify it works?
+                self.config.bos_token_id,
             )
 
         outputs = self.model(
@@ -1876,7 +1876,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             # transpose to get (bsz, num_codebooks, seq_len)
             decoder_input_ids = shift_tokens_right(
-                labels.transpose(1, 2), self.config.pad_token_id, self.config.decoder_start_token_id
+                labels.transpose(1, 2), self.config.decoder.pad_token_id, self.config.decoder.decoder_start_token_id
             )
 
         elif decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -2157,7 +2157,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels.transpose(1, 2), self.config.pad_token_id, self.config.decoder_start_token_id)
+        return shift_tokens_right(labels.transpose(1, 2), self.config.decoder.pad_token_id, self.config.decoder.bos_token_id)
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
