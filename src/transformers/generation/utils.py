@@ -743,6 +743,7 @@ class GenerationMixin:
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        eos_token_id: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -793,24 +794,20 @@ class GenerationMixin:
                 EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
             )
         if generation_config.bad_words_ids is not None:
-            processors.append(
-                NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
-            )
+            processors.append(NoBadWordsLogitsProcessor(generation_config.bad_words_ids, eos_token_id))
         if (
             generation_config.min_length is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_length > 0
         ):
-            processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
+            processors.append(MinLengthLogitsProcessor(generation_config.min_length, eos_token_id))
         if (
             generation_config.min_new_tokens is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
-                MinNewTokensLengthLogitsProcessor(
-                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
-                )
+                MinNewTokensLengthLogitsProcessor(input_ids_seq_length, generation_config.min_new_tokens, eos_token_id)
             )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
@@ -1483,6 +1480,7 @@ class GenerationMixin:
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
+            eos_token_id=eos_token_id,
         )
 
         # 9. prepare stopping criteria
@@ -1818,8 +1816,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1859,10 +1857,10 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -1920,15 +1918,17 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         sequential = sequential if sequential is not None else self.generation_config.low_memory
-        if isinstance(eos_token_id, torch.Tensor):
-            eos_token_id_tensor = eos_token_id.clone().detach()
-        else:
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
-            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -2195,9 +2195,9 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
+            if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                    next_tokens.tile(eos_token_id.shape[0], 1).ne(eos_token_id.unsqueeze(1)).prod(dim=0)
                 )
 
             # stop when each sentence is finished
@@ -2256,8 +2256,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2293,10 +2293,10 @@ class GenerationMixin:
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2372,14 +2372,16 @@ class GenerationMixin:
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, torch.Tensor):
-            eos_token_id_tensor = eos_token_id.clone().detach()
-        else:
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
-            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2475,9 +2477,9 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
+            if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                    next_tokens.tile(eos_token_id.shape[0], 1).ne(eos_token_id.unsqueeze(1)).prod(dim=0)
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -2525,8 +2527,8 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2564,10 +2566,10 @@ class GenerationMixin:
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2660,14 +2662,16 @@ class GenerationMixin:
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, torch.Tensor):
-            eos_token_id_tensor = eos_token_id.clone().detach()
-        else:
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
-            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -2766,9 +2770,9 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
+            if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                    next_tokens.tile(eos_token_id.shape[0], 1).ne(eos_token_id.unsqueeze(1)).prod(dim=0)
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -2842,8 +2846,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2880,10 +2884,10 @@ class GenerationMixin:
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2979,10 +2983,16 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -3226,8 +3236,8 @@ class GenerationMixin:
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3267,10 +3277,10 @@ class GenerationMixin:
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3367,10 +3377,16 @@ class GenerationMixin:
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -3569,8 +3585,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -3606,10 +3622,10 @@ class GenerationMixin:
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3704,10 +3720,16 @@ class GenerationMixin:
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -3966,8 +3988,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -4008,10 +4030,10 @@ class GenerationMixin:
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -4108,10 +4130,16 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -4320,8 +4348,8 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
+        pad_token_id: Optional[Union[int, torch.Tensor]] = None,
+        eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -4363,10 +4391,10 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
+            pad_token_id (`Union[int, torch.Tensor]`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -4443,16 +4471,19 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if eos_token_id is not None and pad_token_id is None:
-            raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-        if isinstance(eos_token_id, torch.Tensor):
-            eos_token_id_tensor = eos_token_id.clone().detach()
-        else:
+
+        if not isinstance(pad_token_id, torch.Tensor):
+            pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
+            pad_token_id = torch.tensor(pad_token_id).to(input_ids.device) if pad_token_id is not None else None
+        if not isinstance(eos_token_id, torch.Tensor):
+            eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
-            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+            eos_token_id = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+
+        if eos_token_id is not None and pad_token_id is None:
+            raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -4504,8 +4535,8 @@ class GenerationMixin:
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
             last_assistant_token_is_eos = (
                 ~candidate_input_ids[:, -1]
-                .tile(eos_token_id_tensor.shape[0], 1)
-                .ne(eos_token_id_tensor.unsqueeze(1))
+                .tile(eos_token_id.shape[0], 1)
+                .ne(eos_token_id.unsqueeze(1))
                 .prod(dim=0)
                 .bool()
             )
@@ -4652,12 +4683,9 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
+            if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    input_ids[:, -1]
-                    .tile(eos_token_id_tensor.shape[0], 1)
-                    .ne(eos_token_id_tensor.unsqueeze(1))
-                    .prod(dim=0)
+                    input_ids[:, -1].tile(eos_token_id.shape[0], 1).ne(eos_token_id.unsqueeze(1)).prod(dim=0)
                 )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
