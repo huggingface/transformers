@@ -139,19 +139,19 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 

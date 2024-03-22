@@ -88,6 +88,8 @@ class ImagePointDescriptionOutput(ModelOutput):
     and which are padding.
 
     Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+            Loss computed during training.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
             Relative (x, y) coordinates of predicted keypoints in a given image.
         scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
@@ -103,6 +105,7 @@ class ImagePointDescriptionOutput(ModelOutput):
             (also called feature maps) of the model at the output of each stage.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     keypoints: Optional[torch.IntTensor] = None
     scores: Optional[torch.FloatTensor] = None
     descriptors: Optional[torch.FloatTensor] = None
@@ -435,10 +438,9 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> outputs = model(**inputs)
         ```"""
 
+        loss = None
         if labels is not None:
-            raise ValueError(
-                f"SuperPoint is not trainable, no labels should be provided.Therefore, labels should be None but were {type(labels)}"
-            )
+            raise ValueError("SuperPoint does not support training for now.")
 
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -493,6 +495,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             return tuple(v for v in [keypoints, scores, descriptors, mask, hidden_states] if v is not None)
 
         return ImagePointDescriptionOutput(
+            loss=loss,
             keypoints=keypoints,
             scores=scores,
             descriptors=descriptors,
