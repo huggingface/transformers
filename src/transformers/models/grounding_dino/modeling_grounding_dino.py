@@ -439,7 +439,6 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrConvEncoder with DeformableDetr->GroundingDino
 class GroundingDinoConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
