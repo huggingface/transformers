@@ -507,8 +507,15 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
-    # 8 is for A100 / A10 and 7 for T4
-    cuda_major_version = torch.cuda.get_device_capability()[0]
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
     @require_torch_gpu
