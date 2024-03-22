@@ -465,7 +465,8 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
 
-    def setUpClass(self) -> None:        
+    @classmethod
+    def setUpClass(cls) -> None:        
         torch.cuda.empty_cache()
         gc.collect()  
 
