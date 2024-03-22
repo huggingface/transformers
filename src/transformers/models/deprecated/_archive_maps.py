@@ -26,7 +26,7 @@ class DeprecatedDict(dict):
 
     def __getitem__(self, item):
         logger.warning(
-            "Archive maps are deprecated and will be removed in version v4.39.0 as they are no longer relevant. "
+            "Archive maps are deprecated and will be removed in version v4.40.0 as they are no longer relevant. "
             "If looking to get all checkpoints for a given architecture, we recommend using `huggingface_hub` "
             "with the list_models method."
         )
