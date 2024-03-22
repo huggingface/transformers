@@ -599,6 +599,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch_gpu
 class LlamaIntegrationTest(unittest.TestCase):
+    # 8 is for A100 / A10 and 7 for T4
     cuda_major_version = torch.cuda.get_device_capability()[0]
 
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
