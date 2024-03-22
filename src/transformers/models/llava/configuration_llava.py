@@ -147,6 +147,10 @@ class LlavaConfig(PretrainedConfig):
         )
         return self._vocab_size
 
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self._vocab_size = value
+
     def to_dict(self):
         output = super().to_dict()
         output.pop("_vocab_size", None)

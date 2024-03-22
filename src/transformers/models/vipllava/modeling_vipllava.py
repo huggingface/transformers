@@ -347,6 +347,12 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
+
         if labels is None:
             final_labels = None
 
@@ -442,11 +448,11 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                     # Sum all dimensions of head_dim (-1) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
                     batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-1) == 0)
 
-                    # Get the target length
-                    target_seqlen = first_layer_past_key_value.shape[-2] + 1
+                    target_length = input_ids.shape[1]
+                    past_length = first_layer_past_key_value.shape[-1]
 
                     extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                        (attention_mask.shape[0], past_length),
                         dtype=attention_mask.dtype,
                         device=attention_mask.device,
                     )
@@ -461,7 +467,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                     # Zero-out the places where we don't need to attend
                     extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                    attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
