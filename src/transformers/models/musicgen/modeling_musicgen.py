@@ -2157,7 +2157,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels.transpose(1, 2), self.config.decoder.pad_token_id, self.config.decoder.bos_token_id)
+        return shift_tokens_right(
+            labels.transpose(1, 2), self.config.decoder.pad_token_id, self.config.decoder.bos_token_id
+        )
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
