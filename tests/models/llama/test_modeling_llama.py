@@ -663,7 +663,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         # The first sections of the Llama 2 paper. Input with >6k tokens, larger than the 4k model context window
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", use_fast=True)
-        VERY_LONG_INPUT = '''
+        VERY_LONG_INPUT = """
 You are given a partial and unparsed scientific article, please read it carefully and answer the follow up question.
 
 == BEGIN ARTICLE ==
@@ -940,13 +940,15 @@ PaLM-2-L are from Anil et al. (2023).
 
 == END ARTICLE ==
 
-'''
+"""
         question = "What is the paper about?"
         model_inputs = tokenizer(VERY_LONG_INPUT + question, return_tensors="pt").to(torch_device)
 
         # No RoPE scaling -> garbage output
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", load_in_4bit=True,
+            "meta-llama/Llama-2-7b-hf",
+            device_map="auto",
+            load_in_4bit=True,
         )
         self.assertTrue(model_inputs["input_ids"].shape[1] > model.config.max_position_embeddings)
         generate_kwargs = {"max_new_tokens": 40, "do_sample": False}
@@ -956,22 +958,36 @@ PaLM-2-L are from Anil et al. (2023).
 
         # Dynamic NTK RoPE scaling -> good output (doesn't need fine-tuning)
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", load_in_4bit=True, rope_scaling={"type": "dynamic", "factor": 2.0},
+            "meta-llama/Llama-2-7b-hf",
+            device_map="auto",
+            load_in_4bit=True,
+            rope_scaling={"type": "dynamic", "factor": 2.0},
         )
         generate_kwargs = {"max_new_tokens": 40, "do_sample": False}
         gen_out = model.generate(**model_inputs, **generate_kwargs)
         decoded_text = tokenizer.decode(gen_out[0], skip_special_tokens=True)
-        self.assertTrue(decoded_text.endswith("The paper is about the release of Llama 2, a family of pretrained and fine-tuned large language models.\nWhat is Llama 2?\n"))
+        self.assertTrue(
+            decoded_text.endswith(
+                "The paper is about the release of Llama 2, a family of pretrained and fine-tuned large language models.\nWhat is Llama 2?\n"
+            )
+        )
         # Note: the output above matches our initial release of RoPE scaling
 
         # Linear RoPE scaling -> usualy okay output (should be used with fine-tuning)
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", load_in_4bit=True, rope_scaling={"type": "linear", "factor": 2.0},
+            "meta-llama/Llama-2-7b-hf",
+            device_map="auto",
+            load_in_4bit=True,
+            rope_scaling={"type": "linear", "factor": 2.0},
         )
         generate_kwargs = {"max_new_tokens": 40, "do_sample": False}
         gen_out = model.generate(**model_inputs, **generate_kwargs)
         decoded_text = tokenizer.decode(gen_out[0], skip_special_tokens=True)
-        self.assertTrue(decoded_text.endswith("The paper is about the development of Llama 2, a large language model (LLM) family, and the release of Llama 2-Chat, a fine-"))
+        self.assertTrue(
+            decoded_text.endswith(
+                "The paper is about the development of Llama 2, a large language model (LLM) family, and the release of Llama 2-Chat, a fine-"
+            )
+        )
 
 
 @require_torch
