@@ -171,10 +171,9 @@ class InstructBlipAttention(nn.Module):
         )
         query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
+        query_states = query_states * self.scale
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
-
-        attention_scores = attention_scores * self.scale
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)

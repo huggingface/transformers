@@ -1733,10 +1733,13 @@ else:
         [
             "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Blip2ForConditionalGeneration",
+            "Blip2ForImageTextRetrieval",
             "Blip2Model",
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
+            "Blip2TextModelWithProjection",
             "Blip2VisionModel",
+            "Blip2VisionModelWithProjection",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -6642,10 +6645,13 @@ if TYPE_CHECKING:
         from .models.blip_2 import (
             BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Blip2ForConditionalGeneration,
+            Blip2ForImageTextRetrieval,
             Blip2Model,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
+            Blip2TextModelWithProjection,
             Blip2VisionModel,
+            Blip2VisionModelWithProjection,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
