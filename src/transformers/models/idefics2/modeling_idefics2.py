@@ -273,6 +273,11 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
         super().__init__(*args, **kwargs)
         self.is_causal = False  # Hack to make sure we don't use a causal mask
 
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -685,11 +690,7 @@ class Idefics2VisionTransformer(nn.Module):
         if not torch.any(~patch_attention_mask):
             attention_mask = None
         else:
-            attention_mask = (
-                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not self.config._flash_attn_2_enabled
-                else patch_attention_mask
-            )
+            attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
