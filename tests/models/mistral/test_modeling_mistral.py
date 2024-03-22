@@ -562,6 +562,7 @@ class MistralIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
+    @require_bitsandbytes
     def test_model_7b_generation(self):
         cuda_major_version = torch.cuda.get_device_capability()[0]
 
@@ -573,7 +574,7 @@ class MistralIntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1", device_map={"": torch_device}, load_in_4bit=True
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
