@@ -127,7 +127,7 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
-            {{cookiecutter.uppercase_modelname}}            {{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            {{cookiecutter.camelcase_modelname}}ForMaskedLM,
             {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
@@ -140,7 +140,7 @@
         )
 {% else %}
         from .models.{{cookiecutter.lowercase_modelname}} import (
-            {{cookiecutter.uppercase_modelname}}            {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
             {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
