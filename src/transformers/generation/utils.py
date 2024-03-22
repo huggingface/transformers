@@ -1923,9 +1923,12 @@ class GenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         sequential = sequential if sequential is not None else self.generation_config.low_memory
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
+        else:
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -2371,9 +2374,12 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
+        else:
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2656,9 +2662,12 @@ class GenerationMixin:
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
+        else:
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
@@ -4429,9 +4438,12 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if eos_token_id is not None and pad_token_id is None:
             raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        if isinstance(eos_token_id, torch.Tensor):
+            eos_token_id_tensor = eos_token_id.clone().detach()
+        else:
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_logits = output_logits if output_logits is not None else self.generation_config.output_logits
         output_attentions = (
