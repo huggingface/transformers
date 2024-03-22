@@ -62,7 +62,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    from timm import create_model
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -453,21 +453,7 @@ class GroundingDinoConvEncoder(nn.Module):
 
         self.config = config
 
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            kwargs = {}
-            if config.dilation:
-                kwargs["output_stride"] = 16
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
-                in_chans=config.num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
@@ -2259,6 +2245,12 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using [`AutoTokenizer`]. See [`GroundingDinoTokenizer.__call__`] for details.
 
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
+
         attention_mask (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -2266,12 +2258,6 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are padding (i.e. **masked**).
 
             [What are attention masks?](../glossary#attention-mask)
-
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
-
-            [What are token type IDs?](../glossary#token-type-ids)
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -3638,10 +3624,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         attention_mask: torch.LongTensor = None,
         pixel_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[Union[GroundingDinoEncoderOutput, Tuple]] = None,
-        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -3689,8 +3675,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         outputs = self.model(
             pixel_values=pixel_values,
             input_ids=input_ids,
-            attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
             pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
