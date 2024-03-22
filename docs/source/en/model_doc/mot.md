@@ -18,19 +18,30 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MixtureOfTokens model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The MixtureOfTokens model was proposed in [MIXTURE OF TOKENS: EFFICIENT LLMS THROUGH
+CROSS-EXAMPLE AGGREGATION](https://arxiv.org/pdf/2310.15961.pdf) by Szymon Antoniak, Sebastian Jaszczur, Michał Krutul, Maciej Pióro, Jakub Krajewski, Jan Ludziejewski, Tomasz Odrzygóźdź, Marek Cygan.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+Despite the promise of Mixture of Experts (MoE) models in increasing parameter counts of Transformer models while maintaining training and inference costs,
+their application carries notable drawbacks. The key strategy of these models is to,
+for each processed token, activate at most a few experts - subsets of an extensive
+feed-forward layer. But this approach is not without its challenges. The operation
+of matching experts and tokens is discrete, which makes MoE models prone to issues like training instability and uneven expert utilization. Existing techniques designed to address these concerns, such as auxiliary losses or balance-aware matching, result either in lower model performance or are more difficult to train. In response to these issues, we propose Mixture of Tokens, a fully-differentiable model
+that retains the benefits of MoE architectures while avoiding the aforementioned
+difficulties. Rather than routing tokens to experts, this approach mixes tokens from
+different examples prior to feeding them to experts, enabling the model to learn
+from all token-expert combinations. Importantly, this mixing can be disabled to
+avoid mixing of different sequences during inference. Crucially, this method is
+fully compatible with both masked and causal Large Language Model training
+and inference.
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
 This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+The original code can be found [here](https://github.com/llm-random/llm-random/blob/main/research/conditional/moe_layers/continuous_moe.py).
 
 
 ## MoTConfig
