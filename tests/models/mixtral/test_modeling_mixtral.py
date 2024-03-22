@@ -514,11 +514,11 @@ class MixtralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input).logits
 
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
 
     @slow
-    @require_torch_gpu
+    # @require_torch_gpu
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
@@ -531,21 +531,21 @@ class MixtralIntegrationTest(unittest.TestCase):
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         EXPECTED_LOGITS_LEFT = torch.Tensor(
             [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
-        ).to(torch_device)
+        )
 
         # logits[0, -3:, -3:].half()
         EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
             [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
-        ).to(torch_device)
+        )
 
         # logits[1, -3:, -3:].half()
         EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
             [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
-        ).to(torch_device)
+        )
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
 
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)

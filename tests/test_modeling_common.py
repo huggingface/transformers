@@ -3901,13 +3901,6 @@ class ModelTesterMixin:
 
                 dummy_input = inputs_dict[model.main_input_name]
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                batch_size, _ = dummy_attention_mask.shape
-
-                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
-
-                # To avoid errors with padding_side=="right"
-                if is_padding_right:
-                    dummy_attention_mask = torch.ones_like(dummy_input)
 
                 if model.config.is_encoder_decoder:
                     dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
