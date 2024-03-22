@@ -507,17 +507,23 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks impelmentation.
-        EXPECTED_LOGITS = torch.Tensor(
-            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
-        ).to(torch_device)
+        EXPECTED_LOGITS = {
+            7: torch.Tensor([[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]).to(
+                torch_device
+            ),
+            8: torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(
+                torch_device
+            ),
+        }
+
+        # 8 is for A100 / A10 and 7 for T4
+        cuda_major_version = torch.cuda.get_device_capability()[0]
 
         with torch.no_grad():
             logits = model(dummy_input).logits
 
-        import pdb; pdb.set_trace()
-
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS[cuda_major_version], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3], EXPECTED_LOGITS[cuda_major_version], atol=1e-3, rtol=1e-3)
 
     @slow
     @require_torch_gpu
@@ -531,25 +537,40 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
-        EXPECTED_LOGITS_LEFT = torch.Tensor(
-            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
-        ).to(torch_device)
+        EXPECTED_LOGITS_LEFT = {
+            7: torch.Tensor(
+                [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+            ).to(torch_device),
+            8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
+                torch_device
+            ),
+        }
 
-        # logits[0, -3:, -3:].half()
-        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
-            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
-        ).to(torch_device)
+        cuda_major_version = torch.cuda.get_device_capability()[0]
 
-        # logits[1, -3:, -3:].half()
-        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
-            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
-        ).to(torch_device)
+        EXPECTED_LOGITS_LEFT_UNPADDED = {
+            7: torch.Tensor(
+                [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+            ).to(torch_device),
+            8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
+                torch_device
+            ),
+        }
+
+        EXPECTED_LOGITS_RIGHT_UNPADDED = {
+            7: torch.Tensor([[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]).to(
+                torch_device
+            ),
+            8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
+                torch_device
+            ),
+        }
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
 
-        import pdb; pdb.set_trace()
-
-        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, :3, :3], EXPECTED_LOGITS_LEFT[cuda_major_version], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(
+            logits[0, -3:, -3:], EXPECTED_LOGITS_LEFT_UNPADDED[cuda_major_version], atol=1e-3, rtol=1e-3
+        )
         torch.testing.assert_close(logits[1, -3:, -3:], EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
