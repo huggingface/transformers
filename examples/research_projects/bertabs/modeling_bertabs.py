@@ -128,7 +128,7 @@ class Bert(nn.Module):
 
     def __init__(self):
         super().__init__()
-        config = BertConfig.from_pretrained("bert-base-uncased")
+        config = BertConfig.from_pretrained("google-bert/bert-base-uncased")
         self.model = BertModel(config)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, **kwargs):

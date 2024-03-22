@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
 
@@ -134,12 +134,17 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return torch.int8
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ):
         import bitsandbytes as bnb
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
+        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Int8Params):
             if self.pre_quantized:
                 if param_name.replace("weight", "SCB") not in state_dict.keys():
                     raise ValueError("Missing quantization component `SCB`")
@@ -157,7 +162,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: Dict[str, Any],
-        unexpected_keys: List[str],
+        unexpected_keys: Optional[List[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
@@ -190,7 +195,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
             )
 
-        # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D):
             if fp16_statistics is None:
@@ -202,10 +207,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         module._parameters[tensor_name] = new_value
         if fp16_statistics is not None:
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
-            unexpected_keys.remove(fp16_statistics_key)
+            if unexpected_keys is not None:
+                unexpected_keys.remove(fp16_statistics_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model._is_quantized_training_enabled = self.is_trainable
         model.is_loaded_in_8bit = True
         model.is_8bit_serializable = self.is_serializable
         return model

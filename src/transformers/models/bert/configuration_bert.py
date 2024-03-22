@@ -25,29 +25,29 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/config.json",
-    "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/config.json",
-    "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/config.json",
-    "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/config.json",
-    "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/config.json",
-    "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/config.json",
-    "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/config.json",
-    "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/config.json",
-    "bert-large-uncased-whole-word-masking": (
-        "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/config.json"
+    "google-bert/bert-base-uncased": "https://huggingface.co/google-bert/bert-base-uncased/resolve/main/config.json",
+    "google-bert/bert-large-uncased": "https://huggingface.co/google-bert/bert-large-uncased/resolve/main/config.json",
+    "google-bert/bert-base-cased": "https://huggingface.co/google-bert/bert-base-cased/resolve/main/config.json",
+    "google-bert/bert-large-cased": "https://huggingface.co/google-bert/bert-large-cased/resolve/main/config.json",
+    "google-bert/bert-base-multilingual-uncased": "https://huggingface.co/google-bert/bert-base-multilingual-uncased/resolve/main/config.json",
+    "google-bert/bert-base-multilingual-cased": "https://huggingface.co/google-bert/bert-base-multilingual-cased/resolve/main/config.json",
+    "google-bert/bert-base-chinese": "https://huggingface.co/google-bert/bert-base-chinese/resolve/main/config.json",
+    "google-bert/bert-base-german-cased": "https://huggingface.co/google-bert/bert-base-german-cased/resolve/main/config.json",
+    "google-bert/bert-large-uncased-whole-word-masking": (
+        "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking/resolve/main/config.json"
     ),
-    "bert-large-cased-whole-word-masking": (
-        "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/config.json"
+    "google-bert/bert-large-cased-whole-word-masking": (
+        "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking/resolve/main/config.json"
     ),
-    "bert-large-uncased-whole-word-masking-finetuned-squad": (
-        "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/config.json"
+    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": (
+        "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/config.json"
     ),
-    "bert-large-cased-whole-word-masking-finetuned-squad": (
-        "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/config.json"
+    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": (
+        "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/config.json"
     ),
-    "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/config.json",
-    "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/config.json",
-    "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/config.json",
+    "google-bert/bert-base-cased-finetuned-mrpc": "https://huggingface.co/google-bert/bert-base-cased-finetuned-mrpc/resolve/main/config.json",
+    "google-bert/bert-base-german-dbmdz-cased": "https://huggingface.co/google-bert/bert-base-german-dbmdz-cased/resolve/main/config.json",
+    "google-bert/bert-base-german-dbmdz-uncased": "https://huggingface.co/google-bert/bert-base-german-dbmdz-uncased/resolve/main/config.json",
     "cl-tohoku/bert-base-japanese": "https://huggingface.co/cl-tohoku/bert-base-japanese/resolve/main/config.json",
     "cl-tohoku/bert-base-japanese-whole-word-masking": (
         "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/config.json"
@@ -74,7 +74,7 @@ class BertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BertModel`] or a [`TFBertModel`]. It is used to
     instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the BERT
-    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -127,10 +127,10 @@ class BertConfig(PretrainedConfig):
     ```python
     >>> from transformers import BertConfig, BertModel
 
-    >>> # Initializing a BERT bert-base-uncased style configuration
+    >>> # Initializing a BERT google-bert/bert-base-uncased style configuration
     >>> configuration = BertConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the google-bert/bert-base-uncased style configuration
     >>> model = BertModel(configuration)
 
     >>> # Accessing the model configuration

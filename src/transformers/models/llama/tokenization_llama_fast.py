@@ -122,6 +122,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+            Whether or not the default system prompt for Llama should be used.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -142,8 +145,10 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token=False,
         use_default_system_prompt=False,
         legacy=None,
+        add_prefix_space=None,
         **kwargs,
     ):
+        
         if legacy is None:
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
@@ -154,6 +159,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             )
             legacy = True
         self.legacy = legacy
+    
+        if add_prefix_space is not None:
+            logger.warning_once(
+                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
+            )
+            kwargs["from_slow"] = True
 
         super().__init__(
             vocab_file=vocab_file,

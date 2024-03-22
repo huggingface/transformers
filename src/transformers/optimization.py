@@ -24,6 +24,7 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
+from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
 from .utils import logging
 from .utils.versions import require_version
@@ -317,7 +318,7 @@ def get_inverse_sqrt_schedule(
     # https://github.com/google-research/big_vision/blob/f071ce68852d56099437004fd70057597a95f6ef/big_vision/utils.py#L930
 
     if timescale is None:
-        timescale = num_warmup_steps
+        timescale = num_warmup_steps or 10_000
 
     lr_lambda = partial(_get_inverse_sqrt_schedule_lr_lambda, num_warmup_steps=num_warmup_steps, timescale=timescale)
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
@@ -362,6 +363,33 @@ def get_scheduler(
     """
     name = SchedulerType(name)
     schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
+
+    # If a `LayerWiseDummyOptimizer` is passed we extract the optimizer dict and
+    # recursively call `get_scheduler` to get the proper schedulers on each parameter
+    if optimizer is not None and isinstance(optimizer, LayerWiseDummyOptimizer):
+        optimizer_dict = optimizer.optimizer_dict
+        scheduler_dict = {}
+
+        for param in optimizer_dict.keys():
+            scheduler_dict[param] = get_scheduler(
+                name,
+                optimizer=optimizer_dict[param],
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+            )
+
+        def scheduler_hook(param):
+            # Since the optimizer hook has been already attached we only need to
+            # attach the scheduler hook
+            if param.grad is not None:
+                scheduler_dict[param].step()
+
+        for param in optimizer_dict.keys():
+            if param.requires_grad:
+                param.register_post_accumulate_grad_hook(scheduler_hook)
+
+        return LayerWiseDummyScheduler()
+
     if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
 

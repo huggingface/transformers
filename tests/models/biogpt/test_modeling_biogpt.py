@@ -17,7 +17,7 @@
 import math
 import unittest
 
-from transformers import BioGptConfig, is_torch_available
+from transformers import BioGptConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -294,7 +294,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "token-classification": BioGptForTokenClassification,
             "zero-shot": BioGptForSequenceClassification,
         }
-        if is_torch_available()
+        if is_torch_available() and is_sacremoses_available()
         else {}
     )
     test_pruning = False

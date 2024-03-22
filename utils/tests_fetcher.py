@@ -68,6 +68,10 @@ PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
 PATH_TO_TRANFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
+# The value is just a heuristic to determine if we `guess` all models are impacted.
+# This variable has effect only if `filter_models=False`.
+NUM_MODELS_TO_TRIGGER_FULL_CI = 30
+
 # List here the models to always test.
 IMPORTANT_MODELS = [
     "auto",
@@ -83,6 +87,7 @@ IMPORTANT_MODELS = [
     "wav2vec2",
     "deberta-v2",
     "layoutlm",
+    "llama",
     "opt",
     "longformer",
     "vit",
@@ -1063,8 +1068,16 @@ def infer_tests_to_run(
     impacted_files = sorted(set(impacted_files))
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
+    model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
+
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
+        test_files_to_run = ["tests", "examples"]
+        repo_utils_launch = True
+    elif not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
+        print(
+            f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
+        )
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
     else:
@@ -1231,8 +1244,9 @@ if __name__ == "__main__":
         if commit_flags["test_all"]:
             print("Force-launching all tests")
 
+        is_main_branch = not repo.head.is_detached and repo.head.ref == repo.refs.main
         diff_with_last_commit = args.diff_with_last_commit
-        if not diff_with_last_commit and not repo.head.is_detached and repo.head.ref == repo.refs.main:
+        if not diff_with_last_commit and is_main_branch:
             print("main branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
@@ -1242,7 +1256,7 @@ if __name__ == "__main__":
                     args.output_file,
                     diff_with_last_commit=diff_with_last_commit,
                     json_output_file=args.json_output_file,
-                    filter_models=not commit_flags["no_filter"],
+                    filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
                 )
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:

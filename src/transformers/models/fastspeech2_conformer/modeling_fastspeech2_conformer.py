@@ -1256,7 +1256,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
 
         if attention_mask is None:
-            attention_mask = torch.ones(input_ids.shape)
+            attention_mask = torch.ones(input_ids.shape, device=input_ids.device)
 
         has_missing_labels = (
             spectrogram_labels is None or duration_labels is None or pitch_labels is None or energy_labels is None

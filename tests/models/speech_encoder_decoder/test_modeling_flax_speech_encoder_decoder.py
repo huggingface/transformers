@@ -578,7 +578,7 @@ class FlaxEncoderDecoderMixin:
 class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-large-lv60", "gpt2-medium"
+            "facebook/wav2vec2-large-lv60", "openai-community/gpt2-medium"
         )
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], scale=1.0)
@@ -812,7 +812,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 class FlaxWav2Vec2BertModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-large-lv60", "bert-large-uncased"
+            "facebook/wav2vec2-large-lv60", "google-bert/bert-large-uncased"
         )
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)

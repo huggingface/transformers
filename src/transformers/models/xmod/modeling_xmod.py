@@ -1045,7 +1045,7 @@ class XmodForCausalLM(XmodPreTrainedModel):
         >>> from transformers import AutoTokenizer, XmodForCausalLM, AutoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
         >>> config = AutoConfig.from_pretrained("facebook/xmod-base")
         >>> config.is_decoder = True
         >>> model = XmodForCausalLM.from_pretrained("facebook/xmod-base", config=config)

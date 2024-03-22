@@ -32,6 +32,7 @@ FRAMEWORK = "pt" if is_torch_available() else "tf"
 @require_sentencepiece
 @require_tokenizers
 class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "almanach/camembert-base"
     tokenizer_class = CamembertTokenizer
     rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True
@@ -128,7 +129,7 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="camembert-base",
+            model_name="almanach/camembert-base",
             revision="3a0641d9a1aeb7e848a74299e7e4c4bca216b4cf",
             sequences=sequences,
         )

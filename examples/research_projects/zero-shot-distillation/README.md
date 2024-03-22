@@ -21,7 +21,7 @@ classification performance to the original zero-shot model
 
 A teacher NLI model can be distilled to a more efficient student model by running [`distill_classifier.py`](https://github.com/huggingface/transformers/blob/main/examples/research_projects/zero-shot-distillation/distill_classifier.py):
 
-```
+```bash
 python distill_classifier.py \
 --data_file <unlabeled_data.txt> \
 --class_names_file <class_names.txt> \

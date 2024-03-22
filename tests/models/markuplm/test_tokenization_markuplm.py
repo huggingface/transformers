@@ -41,6 +41,7 @@ logger = logging.get_logger(__name__)
 
 @require_tokenizers
 class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/markuplm-base"
     tokenizer_class = MarkupLMTokenizer
     rust_tokenizer_class = MarkupLMTokenizerFast
     test_rust_tokenizer = True
@@ -99,6 +100,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
 
         return questions, nodes, xpaths
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"
@@ -1373,7 +1378,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         inputs = new_tokenizer(text, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        expected_result = (  # original expected result "this is the" seems contradicts to roberta-based tokenizer
+        expected_result = (  # original expected result "this is the" seems contradicts to FacebookAI/roberta-based tokenizer
             "thisisthe"
         )
 

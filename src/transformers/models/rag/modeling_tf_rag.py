@@ -248,7 +248,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,
-                      `bert-base-uncased`.
+                      `google-bert/bert-base-uncased`.
                     - A string with the *identifier name* of a pretrained model that was user-uploaded to our S3, e.g.,
                       `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
@@ -260,7 +260,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                 Information necessary to initiate the generator. Can be either:
 
                     - A string with the *shortcut name* of a pretrained model to load from cache or download, e.g.,
-                      `t5-small`.
+                      `google-t5/t5-small`.
                     - A string with the *identifier name* of a pretrained model that was user-uploaded to our S3, e.g.,
                       `facebook/bart-base`.
                     - A path to a *directory* containing model weights saved using
@@ -290,7 +290,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         >>> # initialize a RAG from two pretrained models.
         >>> model = TFRagModel.from_pretrained_question_encoder_generator(
-        ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
+        ...     "facebook/dpr-question_encoder-single-nq-base", "google-t5/t5-small"
         ... )
         >>> # alternatively, initialize from pytorch pretrained models can also be done
         >>> model = TFRagModel.from_pretrained_question_encoder_generator(

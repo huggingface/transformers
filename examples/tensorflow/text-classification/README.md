@@ -36,7 +36,7 @@ may not always be what you want, especially if you have more than two fields!
 
 Here is a snippet of a valid input JSON file, though note that your texts can be much longer than these, and are not constrained
 (despite the field name) to being single grammatical sentences:
-```
+```json
 {"sentence1": "COVID-19 vaccine updates: How is the rollout proceeding?", "label": "news"}
 {"sentence1": "Manchester United celebrates Europa League success", "label": "sports"}
 ```
@@ -69,13 +69,16 @@ README, but for more information you can see the 'Input Datasets' section of
 [this document](https://www.tensorflow.org/guide/tpu).
 
 ### Example command
-```
+```bash
 python run_text_classification.py \
---model_name_or_path distilbert-base-cased \
+--model_name_or_path distilbert/distilbert-base-cased \
 --train_file training_data.json \
 --validation_file validation_data.json \
 --output_dir output/ \
---test_file data_to_predict.json
+--test_file data_to_predict.json \
+--do_train \
+--do_eval \
+--do_predict
 ```
 
 ## run_glue.py
@@ -101,9 +104,9 @@ README, but for more information you can see the 'Input Datasets' section of
 [this document](https://www.tensorflow.org/guide/tpu).
 
 ### Example command
-```
+```bash
 python run_glue.py \
---model_name_or_path distilbert-base-cased \
+--model_name_or_path distilbert/distilbert-base-cased \
 --task_name mnli \
 --do_train \
 --do_eval \

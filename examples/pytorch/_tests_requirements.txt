@@ -15,13 +15,13 @@ nltk
 pandas
 datasets >= 1.13.3
 fire
-pytest
+pytest<8.0.1
 conllu
 sentencepiece != 0.1.92
 protobuf
-torch<2.2.0
-torchvision<0.17
-torchaudio<2.2.0
+torch
+torchvision
+torchaudio
 jiwer
 librosa
 evaluate >= 0.2.0

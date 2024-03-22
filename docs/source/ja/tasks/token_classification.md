@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [WNUT 17](https://huggingface.co/datasets/wnut_17) データセットで [DistilBERT](https://huggingface.co/distilbert-base-uncased) を微調整して、新しいエンティティを検出します。
+1. [WNUT 17](https://huggingface.co/datasets/wnut_17) データセットで [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) を微調整して、新しいエンティティを検出します。
 2. 微調整されたモデルを推論に使用します。
 
 <Tip>
@@ -107,7 +107,7 @@ pip install transformers datasets evaluate seqeval
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 上の `tokens`フィールドの例で見たように、入力はすでにトークン化されているようです。しかし、実際には入力はまだトークン化されていないため、単語をサブワードにトークン化するには`is_split_into_words=True` を設定する必要があります。例えば：
@@ -270,7 +270,7 @@ pip install transformers datasets evaluate seqeval
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForTokenClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -340,7 +340,7 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 >>> from transformers import TFAutoModelForTokenClassification
 
 >>> model = TFAutoModelForTokenClassification.from_pretrained(
-...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
 [`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。

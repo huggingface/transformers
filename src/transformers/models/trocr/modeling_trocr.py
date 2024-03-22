@@ -875,7 +875,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> text = "industry, ' Mr. Brown commented icily. ' Let us have a"
 
         >>> # training
-        >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+        >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
         >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
         >>> model.config.vocab_size = model.config.decoder.vocab_size
 

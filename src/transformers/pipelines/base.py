@@ -41,6 +41,7 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
+    is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
@@ -852,6 +853,8 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device("cpu")
             elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
+            elif is_torch_npu_available():
+                self.device = torch.device(f"npu:{device}")
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
             else:
@@ -881,6 +884,16 @@ class Pipeline(_ScikitCompat):
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
+
+        # Pipelines calling `generate`: if the tokenizer has a pad token but the model doesn't, set it in the
+        # forward params so that `generate` is aware of the pad token.
+        if (
+            self.tokenizer is not None
+            and self.model.can_generate()
+            and self.tokenizer.pad_token_id is not None
+            and self.model.generation_config.pad_token_id is None
+        ):
+            self._forward_params["pad_token_id"] = self.tokenizer.pad_token_id
 
         if self.image_processor is None and self.feature_extractor is not None:
             if isinstance(self.feature_extractor, BaseImageProcessor):
@@ -1045,9 +1058,9 @@ class Pipeline(_ScikitCompat):
     def _sanitize_parameters(self, **pipeline_parameters):
         """
         _sanitize_parameters will be called with any excessive named arguments from either `__init__` or `__call__`
-        methods. It should return 3 dictionnaries of the resolved parameters used by the various `preprocess`,
-        `forward` and `postprocess` methods. Do not fill dictionnaries if the caller didn't specify a kwargs. This
-        let's you keep defaults in function signatures, which is more "natural".
+        methods. It should return 3 dictionaries of the resolved parameters used by the various `preprocess`,
+        `forward` and `postprocess` methods. Do not fill dictionaries if the caller didn't specify a kwargs. This
+        lets you keep defaults in function signatures, which is more "natural".
 
         It is not meant to be called directly, it will be automatically called and the final parameters resolved by
         `__init__` and `__call__`
@@ -1151,7 +1164,7 @@ class Pipeline(_ScikitCompat):
 
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
-            warnings.warn(
+            logger.warning_once(
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
                 " dataset",
                 UserWarning,

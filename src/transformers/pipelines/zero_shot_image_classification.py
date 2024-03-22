@@ -40,7 +40,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="openai/clip-vit-large-patch14")
+    >>> classifier = pipeline(model="google/siglip-so400m-patch14-384")
     >>> classifier(
     ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
     ...     candidate_labels=["animals", "humans", "landscape"],

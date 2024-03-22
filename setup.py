@@ -175,9 +175,9 @@ _deps = [
     "timeout-decorator",
     "timm",
     "tokenizers>=0.14,<0.19",
-    "torch<2.2.0",
-    "torchaudio<2.2.0",
-    "torchvision<0.17.0",
+    "torch",
+    "torchaudio",
+    "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
@@ -321,6 +321,7 @@ extras["testing"] = (
         "beautifulsoup4",
         "tensorboard",
         "pydantic",
+        "sentencepiece",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -428,7 +429,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.38.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.40.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

@@ -52,7 +52,7 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
     >>> config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & bert-base-uncased style configurations
+    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & google-bert/bert-base-uncased style configurations
     >>> model = SpeechEncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration

@@ -39,7 +39,7 @@ pipelines是使用模型进行推理的一种简单方法。这些pipelines是�
 如果您想使用 [hub](https://huggingface.co) 上的特定模型，可以忽略任务，如果hub上的模型已经定义了该任务：
 
 ```python
->>> pipe = pipeline(model="roberta-large-mnli")
+>>> pipe = pipeline(model="FacebookAI/roberta-large-mnli")
 >>> pipe("This restaurant is awesome")
 [{'label': 'NEUTRAL', 'score': 0.7313136458396912}]
 ```

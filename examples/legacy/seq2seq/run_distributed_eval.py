@@ -124,7 +124,7 @@ def run_generate():
     parser.add_argument(
         "--model_name",
         type=str,
-        help="like facebook/bart-large-cnn,t5-base, etc.",
+        help="like facebook/bart-large-cnn,google-t5/t5-base, etc.",
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")

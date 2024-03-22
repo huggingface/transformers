@@ -277,7 +277,7 @@ language or concept the adapter layers shall be trained. The adapter weights wil
 accordingly be called `adapter.{<target_language}.safetensors`.
 
 Let's run an example script. Make sure to be logged in so that your model can be directly uploaded to the Hub.
-```
+```bash
 huggingface-cli login
 ```
 

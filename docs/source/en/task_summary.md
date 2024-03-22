@@ -268,7 +268,7 @@ In the early days, translation models were mostly monolingual, but recently, the
 >>> from transformers import pipeline
 
 >>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="t5-small")
+>>> translator = pipeline(task="translation", model="google-t5/t5-small")
 >>> translator(text)
 [{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
 ```
