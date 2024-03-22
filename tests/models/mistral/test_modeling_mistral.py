@@ -472,8 +472,15 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
-    # 8 is for A100 / A10 and 7 for T4
-    cuda_major_version = torch.cuda.get_device_capability()[0]
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_major_version = torch.cuda.get_device_capability()[0]
 
     def tearDown(self):
         torch.cuda.empty_cache()
@@ -481,8 +488,6 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_7b_logits(self):
-        
-
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = MistralForCausalLM.from_pretrained(
             "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
