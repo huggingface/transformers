@@ -677,6 +677,17 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
+        EXPECTED_TEXT_COMPLETION = {
+            7: [
+                "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            8: [
+                "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\n",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ]
+        }
+
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
             "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
@@ -720,7 +731,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 cache_position += 1
 
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_major_version], text)
 
 
 @require_torch
