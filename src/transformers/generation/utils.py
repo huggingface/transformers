@@ -456,24 +456,26 @@ class GenerationMixin:
     def _prepare_attention_mask_for_generation(
         self,
         inputs: torch.Tensor,
-        pad_token_id: Optional[Optional[torch.Tensor]],
-        eos_token_id: Optional[Optional[torch.Tensor]],
+        pad_token_id: Optional[torch.Tensor],
+        eos_token_id: Optional[torch.Tensor],
     ) -> torch.LongTensor:
         # No information for attention mask inference -> return default attention mask
         default_attention_mask = torch.ones(inputs.shape[:2], dtype=torch.long, device=inputs.device)
         if pad_token_id is None:
             return default_attention_mask
 
-        # Otherwise we have may have information -> try to infer the attention mask
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
+        if not is_input_ids:
+            return default_attention_mask
+
+        # Otherwise we have may have information -> try to infer the attention mask
         is_pad_token_in_inputs = (pad_token_id is not None) and (
             torch.isin(elements=inputs, test_elements=pad_token_id).any()
         )
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
             torch.isin(elements=eos_token_id, test_elements=pad_token_id).any()
         )
-
-        can_infer_attention_mask = is_input_ids * is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
+        can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
         attention_mask_from_padding = inputs.ne(pad_token_id).long()
         attention_mask = (
             attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
