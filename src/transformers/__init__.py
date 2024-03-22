@@ -1433,7 +1433,6 @@ else:
             "WhisperTimeStampLogitsProcessor",
         ]
     )
-    _import_structure["generation_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
@@ -3871,7 +3870,6 @@ else:
             "TFTopPLogitsWarper",
         ]
     )
-    _import_structure["generation_tf_utils"] = []
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
@@ -4638,7 +4636,6 @@ else:
             "FlaxWhisperTimeStampLogitsProcessor",
         ]
     )
-    _import_structure["generation_flax_utils"] = []
     _import_structure["modeling_flax_outputs"] = []
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.albert"].extend(
