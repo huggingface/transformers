@@ -1332,9 +1332,9 @@ class LlamaConverter(SpmConverter):
 
     def vocab(self, proto):
         vocab = [
-            (self.original_tokenizer.unk_token, 0.0),
-            (self.original_tokenizer.bos_token, 0.0),
-            (self.original_tokenizer.eos_token, 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
