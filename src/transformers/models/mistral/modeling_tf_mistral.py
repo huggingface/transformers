@@ -150,6 +150,19 @@ class TFMistralMLP(tf.keras.layers.Layer):
     def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
+    # def build(self, input_shape=None):
+    #     if self.built:
+    #         return
+    #     if getattr(self, "gate_proj", None) is not None:
+    #         with tf.name_scope(self.gate_proj.name):
+    #             self.gate_proj.build(None)
+    #     if getattr(self, "up_proj", None) is not None:
+    #         with tf.name_scope(self.up_proj.name):
+    #             self.up_proj.build(None)
+    #     if getattr(self, "down_proj", None) is not None:
+    #         with tf.name_scope(self.down_proj.name):
+    #             self.down_proj.build(None)
+
 
 def repeat_kv(hidden_states: tf.Tensor, n_rep: int) -> tf.Tensor:
     """
@@ -300,10 +313,21 @@ class TFMistralAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
-
-TF_MISTRAL_ATTENTION_CLASSES = {
-    "eager": TFMistralAttention,
-}
+    # def build(self, input_shape=None):
+    #     if self.built:
+    #         return
+    #     if getattr(self, "q_proj", None) is not None:
+    #         with tf.name_scope(self.q_proj.name):
+    #             self.q_proj.build(None)
+    #     if getattr(self, "k_proj", None) is not None:
+    #         with tf.name_scope(self.k_proj.name):
+    #             self.k_proj.build(None)
+    #     if getattr(self, "v_proj", None) is not None:
+    #         with tf.name_scope(self.v_proj.name):
+    #             self.v_proj.build(None)
+    #     if getattr(self, "o_proj", None) is not None:
+    #         with tf.name_scope(self.o_proj.name):
+    #             self.o_proj.build(None)
 
 
 class TFMistralDecoderLayer(tf.keras.layers.Layer):
@@ -311,7 +335,7 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.hidden_size = config.hidden_size
 
-        self.self_attn = TF_MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.self_attn = TFMistralAttention(config, layer_idx, name="self_attn")
 
         self.mlp = TFMistralMLP(config, name="mlp")
         self.input_layernorm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
@@ -378,6 +402,23 @@ class TFMistralDecoderLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "input_layernorm", None) is not None:
+            with tf.name_scope(self.input_layernorm.name):
+                self.input_layernorm.build(None)
+        if getattr(self, "post_attention_layernorm", None) is not None:
+            with tf.name_scope(self.post_attention_layernorm.name):
+                self.post_attention_layernorm.build(None)
+
 
 @keras_serializable
 class TFMistralMainLayer(tf.keras.layers.Layer):
@@ -394,12 +435,13 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
 
         self.embed_tokens = tf.keras.layers.Embedding(
             input_dim=config.vocab_size, output_dim=config.hidden_size, mask_zero=True, name="embed_tokens"
         )
         self.layers = [
-            TFMistralDecoderLayer(config, layer_idx, name=f"layer.{layer_idx}")
+            TFMistralDecoderLayer(config, layer_idx, name=f"layers.{layer_idx}")
             for layer_idx in range(config.num_hidden_layers)
         ]
         self._attn_implementation = config._attn_implementation
@@ -508,6 +550,21 @@ class TFMistralMainLayer(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_tokens", None) is not None:
+            with tf.name_scope(self.embed_tokens.name):
+                self.embed_tokens.build(None)
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build(None)
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 MISTRAL_START_DOCSTRING = r"""
@@ -752,12 +809,12 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         if self.built:
             return
         self.built = True
-        if getattr(self, "transformer", None) is not None:
-            with tf.name_scope(self.transformer.name):
-                self.transformer.build(None)
-        if getattr(self, "lm_head", None) is not None:
-            with tf.name_scope(self.lm_head.name):
-                self.lm_head.build([None, None, self.config.n_embd])
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+        # if getattr(self, "lm_head", None) is not None:
+        #     with tf.name_scope(self.lm_head.name):
+        #         self.lm_head.build([None, None, self.config.vocab_size])
 
 
 @add_start_docstrings(
@@ -875,9 +932,9 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         if self.built:
             return
         self.built = True
-        if getattr(self, "transformer", None) is not None:
-            with tf.name_scope(self.transformer.name):
-                self.transformer.build(None)
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
-                self.score.build([None, None, self.config.n_embd])
+                self.score.build(None)
