@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -153,7 +154,7 @@ class VipLlavaVisionText2TextModelTester:
 
 @require_torch
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest with Llava->VipLlava
-class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `VipLlavaForConditionalGeneration`.
     """

@@ -284,17 +284,18 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     input_name = "input_features"
 
-    def _get_input_ids_and_config(self, batch_size=2):
-        config, input_ids, attention_mask, max_length = GenerationTesterMixin._get_input_ids_and_config(self)
+    def _get_input_ids_and_config(self, model_class, batch_size=2):
+        config, model_kwargs, max_length = GenerationTesterMixin._get_input_ids_and_config(self, model_class)
 
         # `input_ids` is actually `input_features` which is a 3D tensor.
         # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
         # attention mask of the same shape as `input_ids`.
-        if len(attention_mask.shape) > 2:
-            sequence_length = input_ids.shape[1]
-            attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
+        if len(model_kwargs["attention_mask"].shape) > 2:
+            sequence_length = model_kwargs["input_ids"].shape[1]
+            attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+            model_kwargs["attention_mask"] = attention_mask
 
-        return config, input_ids, attention_mask, max_length
+        return config, model_kwargs, max_length
 
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
@@ -649,7 +650,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
+    def _check_outputs(self, output, input_ids, config, is_vision_model, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape[:2]
         subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
         num_sequences_in_output = batch_size * num_return_sequences

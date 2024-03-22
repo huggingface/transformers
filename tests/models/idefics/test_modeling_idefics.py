@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -321,7 +322,7 @@ class IdeficsModelTester:
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
-class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
     test_pruning = False

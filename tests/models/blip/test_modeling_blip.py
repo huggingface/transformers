@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -427,7 +428,7 @@ class BlipModelTester:
 
 
 @require_torch
-class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
