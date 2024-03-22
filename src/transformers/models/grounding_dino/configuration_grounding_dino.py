@@ -331,8 +331,10 @@ class GroundingDinoConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
+        if not use_timm_backbone and use_pretrained_backbone:
+            raise ValueError(
+                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
+            )
 
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
@@ -347,11 +349,10 @@ class GroundingDinoConfig(PretrainedConfig):
                 num_heads=[3, 6, 12, 24],
                 out_indices=[2, 3, 4],
             )
-        else:
-            if isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.pop("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")

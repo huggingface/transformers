@@ -51,6 +51,20 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_grounding_dino import GroundingDinoConfig, GroundingDinoTextConfig
 
 
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+if is_timm_available():
+    from timm import create_model
+
+
 logger = logging.get_logger(__name__)
 
 MultiScaleDeformableAttention = None
@@ -85,14 +99,6 @@ def load_cuda_kernels():
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ],
     )
-
-
-if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
@@ -153,12 +159,6 @@ GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "IDEA-Research/grounding-dino-tiny",
     # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
 ]
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-if is_timm_available():
-    from timm import create_model
 
 
 @dataclass
