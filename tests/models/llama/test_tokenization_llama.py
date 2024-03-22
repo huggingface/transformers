@@ -516,9 +516,13 @@ class LlamaIntegrationTest(unittest.TestCase):
         # the word inform should be split as ['in', 'form']
         tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b", legacy=False, from_slow=True)
         tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
-        
-        new_test = tokenizer.tokenize("<REPR_END>inform<s>. Hey.       .") # the spaces need to be merged. They are not.
-        
+
+        example_inputs = tokenizer.tokenize("<REPR_END>inform<s>. Hey.       .")
+        self.assertEqual(example_inputs, ["<REPR_END>", "in", "form", "<s>", ".", "▁Hey", ".", "▁▁▁▁▁▁", "▁."])
+
+        # Make sure dummy space is added if it is indeed the first word
+        example_inputs = tokenizer.tokenize("inform<s>. Hey.       .")
+        self.assertEqual(example_inputs, ["▁inform", "<s>", ".", "▁Hey", "<unk>", ".", "▁▁▁▁▁▁", "▁."])
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
