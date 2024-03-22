@@ -1221,12 +1221,12 @@ class GenerationMixin:
         bos_token_id = _tensor_or_none(generation_config.bos_token_id)
         eos_token_id = _tensor_or_none(generation_config.eos_token_id)
         pad_token_id = _tensor_or_none(generation_config.pad_token_id)
-        decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id) or bos_token_id
+        decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id)
+        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
-        if self.config.is_encoder_decoder and decoder_start_token_id is None:
-            raise ValueError(
-                "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
-            )
+        # We can have more than one eos token. Always treat it as a 1D tensor (when it exists).
+        if eos_token_id is not None and eos_token_id.ndim == 0:
+            eos_token_id = eos_token_id.unsqueeze(0)
 
         # Set pad token if unset (and there are conditions to do so)
         if pad_token_id is None and eos_token_id is not None:
@@ -1235,10 +1235,14 @@ class GenerationMixin:
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
-            pad_token_id = eos_token_id
-            if eos_token_id.ndim == 1:
-                pad_token_id = pad_token_id[0]
+            pad_token_id = eos_token_id[0]
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_id} for open-end generation.")
+
+        # Sanity checks
+        if self.config.is_encoder_decoder and decoder_start_token_id is None:
+            raise ValueError(
+                "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+            )
 
         return bos_token_id, eos_token_id, pad_token_id, decoder_start_token_id
 
