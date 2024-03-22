@@ -464,15 +464,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
-
-    # @classmethod
-    # def setUpClass(cls) -> None:        
-    #     torch.cuda.empty_cache()
-    #     gc.collect()  
-
-    # def tearDown(self):
-    #     torch.cuda.empty_cache()
-    #     gc.collect()
+    def tearDown(self):
+        torch.cuda.empty_cache()
+        gc.collect()
 
     @slow
     def test_model_7b_logits(self):
@@ -524,40 +518,10 @@ class MistralIntegrationTest(unittest.TestCase):
                     -5.8781,
                 ]
             ),  # fmt: skip
-            8: torch.tensor(
-                [
-                    -5.8750,
-                    -5.8594,
-                    -0.1049,
-                    -4.7188,
-                    -5.8750,
-                    -5.8711,
-                    -5.8711,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -1.0781,
-                    1.7578,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                    -5.8750,
-                ]
-            ),
+            8: torch.tensor([-5.8711, -5.8555, -0.1050, -4.7148, -5.8711, -5.8711, -5.8711, -5.8711,
+        -5.8711, -5.8711, -5.8711, -5.8711, -1.0781,  1.7568, -5.8711, -5.8711,
+        -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711,
+        -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711]),
         }
 
         print(out[0, 0, :30])
@@ -570,9 +534,7 @@ class MistralIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_generation(self):
-        # print
         cuda_major_version = torch.cuda.get_device_capability()[0]
-        print(cuda_major_version)
 
         EXPECTED_TEXT_COMPLETION = {
             7: "My favourite condiment is 100% ketchup. I love it on everything. I'm not a big",
@@ -662,9 +624,12 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
-        )
+        cuda_major_version = torch.cuda.get_device_capability()[0]
+
+        EXPECTED_TEXT_COMPLETION = {
+            7: "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs",
+            8: "My favourite condiment is 100% Sriracha. I love the heat, the sweetness, the tang"
+        }
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         model = MistralForCausalLM.from_pretrained(
@@ -678,7 +643,7 @@ class MistralIntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[cuda_major_version], text)
 
         del model
         backend_empty_cache(torch_device)
