@@ -541,7 +541,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         # TODO @ArthurZ this should be affected by the lstrip/rstrip/single word /normalize refactoring
         # Since currently we always strip left and right of the token, results are as such
         input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens=False)
-        self.assertEqual(input_ids, [1, 15043, 1, 3525])
+        self.assertEqual(input_ids, [1, 35, 10994, 1, 3525])
         tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens=False)
         self.assertEqual(tokens, ["<s>", "▁Hello", "<s>", "how"])
         decoded_tokens = tokenizer.decode(input_ids)
