@@ -3339,3 +3339,15 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     @unittest.skip("The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
         pass
+
+    @unittest.skip("Duplicated test with WhisperModelTester")
+    def test_flash_attn_2_generate_padding_right(self):
+        pass
+
+    @unittest.skip("Duplicated test with WhisperModelTester")
+    def test_flash_attn_2_inference(self):
+        pass
+
+    @unittest.skip("Duplicated test with WhisperModelTester")
+    def test_flash_attn_2_inference_padding_right(self):
+        pass
