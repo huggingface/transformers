@@ -257,6 +257,31 @@ class StopStringCriteria(StoppingCriteria):
         stop_strings (`Union[str, List[str]]`):
             A list of strings that should end generation. If a string is passed, it will be treated like a
             list with a single element.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
+    >>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
+    >>> inputs = tokenizer("The biggest states in the USA by land area:", return_tensors="pt")
+
+    >>> gen_out = model.generate(**inputs)
+    >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
+    The biggest states in the USA by land area:
+    - Alaska
+    - Texas
+    - California
+
+    >>> # Passing one or more stop strings will halt generation after those strings are emitted
+    >>> # Note that generating with stop strings requires you to pass the tokenizer too
+    >>> gen_out = model.generate(**inputs, stop_strings=["Texas"], tokenizer=tokenizer)
+    >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
+    The biggest states in the USA by land area:
+    - Alaska
+    - Texas
+    ```
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):

@@ -901,14 +901,14 @@ class GenerationMixin:
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
         if generation_config.stop_strings is not None:
-            if "tokenizer" not in kwargs:
+            if tokenizer is None:
                 raise ValueError(
                     "There are one or more stop strings, either in the arguments to `generate` or in the "
                     "model's generation config, but we could not locate a tokenizer. When generating with "
                     "stop strings, you must pass the model's tokenizer to the `tokenizer` argument of `generate`."
                 )
             criteria.append(
-                StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=kwargs["tokenizer"])
+                StopStringCriteria(stop_strings=generation_config.stop_strings, tokenizer=tokenizer)
             )
         if generation_config.eos_token_id is not None:
             criteria.append(EosTokenCriteria(eos_token_id=generation_config.eos_token_id))
@@ -1392,6 +1392,7 @@ class GenerationMixin:
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
+        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
 
@@ -1401,7 +1402,7 @@ class GenerationMixin:
                 synced_gpus = True
             else:
                 synced_gpus = False
-        tokenizer = kwargs.pop("tokenizer", None)
+
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
