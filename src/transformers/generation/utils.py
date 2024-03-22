@@ -1212,7 +1212,7 @@ class GenerationMixin:
         return generation_config, model_kwargs
 
     def _prepare_special_tokens(
-        self, generation_config: GenerationConfig, kwargs_has_attention_mask: bool
+        self, generation_config: GenerationConfig, kwargs_has_attention_mask: Optional[bool] = None
     ) -> Tuple[Optional[torch.Tensor]]:
         """Prepares the special tokens for generation."""
 
@@ -1232,7 +1232,7 @@ class GenerationMixin:
 
         # Set pad token if unset (and there are conditions to do so)
         if pad_token_id is None and eos_token_id is not None:
-            if not kwargs_has_attention_mask:
+            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
                 logger.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."

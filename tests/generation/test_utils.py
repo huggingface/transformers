@@ -176,7 +176,8 @@ class GenerationTesterMixin:
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
-        input_ids = torch.zeros_like(input_ids[:, :1]) + model._get_decoder_start_token_id()
+        _, _, _, decoder_start_token_id = model._prepare_special_tokens(model.generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1]) + decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
