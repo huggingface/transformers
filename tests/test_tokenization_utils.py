@@ -108,10 +108,6 @@ class TokenizerUtilTester(unittest.TestCase):
         finally:
             os.remove("tokenizer.json")
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = AlbertTokenizer.from_pretrained("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model")
-
 
 @is_staging_test
 class TokenizerPushToHubTester(unittest.TestCase):

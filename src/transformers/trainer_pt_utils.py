@@ -34,6 +34,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
@@ -1248,3 +1249,47 @@ class AcceleratorConfig:
 
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
+
+
+class LayerWiseDummyOptimizer(torch.optim.Optimizer):
+    """
+    For Layer-wise optimizers such as GaLoRE optimizer, the optimization
+    step is already done through the post gradient hooks. Therefore
+    the trick is to create a dummy optimizer that can take arbitrary
+    args and kwargs and return a no-op during training.
+
+    Initial idea from @hiyouga in LLaMA-Factory:
+    https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
+    """
+
+    def __init__(self, optimizer_dict=None, *args, **kwargs):
+        dummy_tensor = torch.randn(1, 1)
+        self.optimizer_dict = optimizer_dict
+        super().__init__([dummy_tensor], {"lr": 1e-03})
+
+    def zero_grad(self, set_to_none: bool = True) -> None:
+        pass
+
+    def step(self, closure=None) -> Optional[float]:
+        pass
+
+
+class LayerWiseDummyScheduler(LRScheduler):
+    """
+    For Layer-wise optimizers such as GaLoRE optimizer, the optimization and scheduling step
+    are already done through the post gradient hooks. Therefore
+    the trick is to create a dummy scheduler that can take arbitrary
+    args and kwargs and return a no-op during training.
+    """
+
+    def __init__(self, *args, **kwargs):
+        optimizer = LayerWiseDummyOptimizer()
+        last_epoch = -1
+        verbose = False
+        super().__init__(optimizer, last_epoch, verbose)
+
+    def get_lr(self):
+        return [group["lr"] for group in self.optimizer.param_groups]
+
+    def _get_closed_form_lr(self):
+        return self.base_lrs
