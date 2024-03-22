@@ -130,7 +130,7 @@ if is_torch_available():
         import safetensors.torch
 
 # for version specific tests in TrainerIntegrationTest
-require_accelerate_version = partial(require_accelerate, min_version="0.28")
+require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -2905,7 +2905,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
-    @require_accelerate_version
+    @require_accelerate_version_min_0_28
     def test_accelerate_config_from_dataclass_grad_accum(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively
@@ -3005,7 +3005,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
                 self.assertEqual(trainer.accelerator.split_batches, True)
 
-    @require_accelerate_version
+    @require_accelerate_version_min_0_28
     def test_accelerator_config_from_dict_grad_accum_num_steps(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = RegressionModelConfig(a=1.5, b=2.5)
