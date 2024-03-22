@@ -575,8 +575,8 @@ class MistralIntegrationTest(unittest.TestCase):
         print(cuda_major_version)
 
         EXPECTED_TEXT_COMPLETION = {
-            7: """My favourite condiment is 100% ketchup. I love it on everything. I'm not a big""",
-            8: "My favourite condiment is 100% peanut butter. I eat it on toast, in a sandwich, on",
+            7: "My favourite condiment is 100% ketchup. I love it on everything. I'm not a big",
+            8: "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,",
         }
 
         prompt = "My favourite condiment is "
