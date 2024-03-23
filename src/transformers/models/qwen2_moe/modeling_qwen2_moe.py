@@ -56,11 +56,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen1.5-MoE-A2.7B"
 _CONFIG_FOR_DOC = "Qwen2MoeConfig"
 
-QWEN2MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Qwen/Qwen1.5-MoE-A2.7B",
-    # See all Qwen2 models at https://huggingface.co/models?filter=qwen2
-]
-
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
@@ -1492,6 +1487,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
     """,
     QWEN2MOE_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
