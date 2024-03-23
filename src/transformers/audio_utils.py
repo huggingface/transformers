@@ -580,8 +580,6 @@ def spectrogram(
     return spectrogram
 
 
-# This version of the spectrogram function is specifically optimized for batch processing.
-# It leverages broadcasting to efficiently handle multiple inputs simultaneously.
 def spectrogram_batch(
     waveform_list: List[np.ndarray],
     window: np.ndarray,
@@ -602,6 +600,80 @@ def spectrogram_batch(
     remove_dc_offset: Optional[bool] = None,
     dtype: np.dtype = np.float32,
 ) -> List[np.ndarray]:
+    """
+    Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.
+    This function extends the capabilities of the `spectrogram` function to handle multiple waveforms efficiently by leveraging broadcasting.
+
+    It supports generating various types of spectrograms:
+
+        - amplitude spectrogram (`power = 1.0`)
+        - power spectrogram (`power = 2.0`)
+        - complex-valued spectrogram (`power = None`)
+        - log spectrogram (use `log_mel` argument)
+        - mel spectrogram (provide `mel_filters`)
+        - log-mel spectrogram (provide `mel_filters` and `log_mel`)
+
+    How this works:
+
+        1. The input waveform is split into frames of size `frame_length` that are partially overlapping by `frame_length
+            - hop_length` samples.
+        2. Each frame is multiplied by the window and placed into a buffer of size `fft_length`.
+        3. The DFT is taken of each windowed frame.
+        4. The results are stacked into a spectrogram.
+
+    We make a distinction between the following "blocks" of sample data, each of which may have a different lengths:
+
+      - The analysis frame. This is the size of the time slices that the input waveform is split into.
+      - The window. Each analysis frame is multiplied by the window to avoid spectral leakage.
+      - The FFT input buffer. The length of this determines how many frequency bins are in the spectrogram.
+
+    In this implementation, the window is assumed to be zero-padded to have the same size as the analysis frame. A
+    padded window can be obtained from `window_function()`. The FFT input buffer may be larger than the analysis frame,
+    typically the next power of two.
+
+    Note: This function is designed for efficient batch processing of multiple waveforms but retains compatibility with individual waveform processing methods like `librosa.stft`.
+
+    Args:
+        waveform_list (List[`np.ndarray` of shape `(length,)`]):
+            The list of input waveforms, each a single-channel (mono) signal.
+        window (`np.ndarray` of shape `(frame_length,)`):
+            The windowing function to apply, including zero-padding if necessary.
+        frame_length (`int`):
+            The length of each frame for analysis.
+        hop_length (`int`):
+            The step size between successive frames.
+        fft_length (`int`, optional):
+            The size of the FFT buffer, defining frequency bin resolution.
+        power (`float`, optional, default=1.0):
+            Determines the type of spectrogram: 1.0 for amplitude, 2.0 for power, None for complex.
+        center (`bool`, optional, default=True):
+            Whether to center-pad the waveform frames.
+        pad_mode (`str`, optional, default="reflect"):
+            The padding strategy when `center` is True.
+        onesided (`bool`, optional, default=True):
+            If True, returns a one-sided spectrogram for real input signals.
+        preemphasis (`float`, optional):
+            Applies a pre-emphasis filter to each frame.
+        mel_filters (`np.ndarray`, optional):
+            Mel filter bank for converting to mel spectrogram.
+        mel_floor (`float`, optional, default=1e-10):
+            Floor value for mel spectrogram to avoid log(0).
+        log_mel (`str`, optional):
+            Specifies log scaling strategy; options are None, "log", "log10", "dB".
+        reference (`float`, optional, default=1.0):
+            Reference value for dB conversion in log_mel.
+        min_value (`float`, optional, default=1e-10):
+            Minimum floor value for log scale conversions.
+        db_range (`float`, optional):
+            Dynamic range for dB scale spectrograms.
+        remove_dc_offset (`bool`, optional):
+            Whether to remove the DC offset from each frame.
+        dtype (`np.dtype`, optional, default=np.float32):
+            Data type of the output spectrogram.
+
+    Returns:
+        List[`np.ndarray`]: A list of spectrogram arrays, one for each input waveform.
+    """
     window_length = len(window)
 
     if fft_length is None:
