@@ -34,6 +34,10 @@ class BaseStreamer:
         """Function that is called by `.generate()` to signal the end of generation"""
         raise NotImplementedError()
 
+    def is_running(self) -> bool:
+        """Function that is called by `.generate()` to check if the streamer has ended"""
+        raise NotImplementedError()
+
 
 class TextStreamer(BaseStreamer):
     """
@@ -69,7 +73,9 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+    def __init__(
+        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs
+    ):
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
         self.decode_kwargs = decode_kwargs
@@ -203,18 +209,30 @@ class TextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+        self,
+        tokenizer: "AutoTokenizer",
+        skip_prompt: bool = False,
+        timeout: Optional[float] = None,
+        **decode_kwargs
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
         self.stop_signal = None
         self.timeout = timeout
+        self.stopped = False
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
         self.text_queue.put(text, timeout=self.timeout)
         if stream_end:
             self.text_queue.put(self.stop_signal, timeout=self.timeout)
+
+    def end(self):
+        self.stopped = True
+        self.on_finalized_text("", stream_end=True)
+
+    def is_running(self) -> bool:
+        return not self.stopped
 
     def __iter__(self):
         return self
