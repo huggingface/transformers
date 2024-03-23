@@ -668,7 +668,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
     is_parallelizable = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     supports_gradient_checkpointing = True
 
     def __init__(self, *inputs, **kwargs):
