@@ -525,7 +525,7 @@ def spectrogram_batch(
     # Center pad the waveform
     if center:
         padding = [(int(frame_length // 2), int(frame_length // 2))]
-        padded_waveform_list = [
+        waveform_list = [
             np.pad(
                 waveform,
                 padding,
@@ -534,7 +534,7 @@ def spectrogram_batch(
             for waveform in waveform_list
         ]
     original_waveform_lengths = [
-        len(waveform) for waveform in padded_waveform_list
+        len(waveform) for waveform in waveform_list
     ]  # these lengths will be used to remove padding later
 
     # Batch pad the waveform
@@ -542,7 +542,7 @@ def spectrogram_batch(
     padded_waveform_batch = np.array(
         [
             np.pad(waveform, (0, max_length - len(waveform)), mode="constant", constant_values=0)
-            for waveform in padded_waveform_list
+            for waveform in waveform_list
         ],
         dtype=dtype,
     )
@@ -597,15 +597,15 @@ def spectrogram_batch(
             spectrogram = np.log10(spectrogram)
         elif log_mel == "dB":
             if power == 1.0:
-                spectrogram = amplitude_to_db(spectrogram, reference, min_value, db_range)
+                spectrogram = amplitude_to_db_batch(spectrogram, reference, min_value, db_range)
             elif power == 2.0:
-                spectrogram = power_to_db(spectrogram, reference, min_value, db_range)
+                spectrogram = power_to_db_batch(spectrogram, reference, min_value, db_range)
             else:
                 raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
-    spectrogram = np.asarray(spectrogram, dtype)
+        spectrogram = np.asarray(spectrogram, dtype)
 
     spectrogram_list = [spectrogram[i, : true_num_frames[i], :].T for i in range(len(true_num_frames))]
 
