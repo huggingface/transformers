@@ -71,7 +71,7 @@ class GroundingDinoModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=2,
         num_channels=3,
-        image_size=10,
+        image_size=196,
         n_targets=8,
         num_labels=3,
         num_feature_levels=4,
@@ -137,7 +137,7 @@ class GroundingDinoModelTester:
     def get_config(self):
         swin_config = SwinConfig(
             window_size=7,
-            embed_dim=16,
+            embed_dim=8,
             depths=[1, 1, 1, 1],
             num_heads=[1, 1, 1, 1],
             image_size=self.image_size,
