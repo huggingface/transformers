@@ -651,7 +651,7 @@ class AutoModel:
 class AutoModelForPreTraining:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with the
-    architecture used for pretraining this model---when created with the when created with the
+    architecture used for pretraining this model---when created with the
     :meth:`~transformers.AutoModelForPreTraining.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForPreTraining.from_config` class method.
 
@@ -745,7 +745,7 @@ class AutoModelForPreTraining:
 class AutoModelWithLMHead:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    language modeling head---when created with the when created with the
+    language modeling head---when created with the
     :meth:`~transformers.AutoModelWithLMHead.from_pretrained` class method or the
     :meth:`~transformers.AutoModelWithLMHead.from_config` class method.
 
@@ -857,7 +857,7 @@ class AutoModelWithLMHead:
 class AutoModelForCausalLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a causal
-    language modeling head---when created with the when created with the
+    language modeling head---when created with the
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForCausalLM.from_config` class method.
 
@@ -951,7 +951,7 @@ class AutoModelForCausalLM:
 class AutoModelForMaskedLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
-    language modeling head---when created with the when created with the
+    language modeling head---when created with the
     :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForMaskedLM.from_config` class method.
 
@@ -1045,7 +1045,7 @@ class AutoModelForMaskedLM:
 class AutoModelForSeq2SeqLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence-to-sequence language modeling head---when created with the when created with the
+    sequence-to-sequence language modeling head---when created with the
     :meth:`~transformers.AutoModelForSeq2SeqLM.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForSeq2SeqLM.from_config` class method.
 
@@ -1143,7 +1143,7 @@ class AutoModelForSeq2SeqLM:
 class AutoModelForSequenceClassification:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence classification head---when created with the when created with the
+    sequence classification head---when created with the
     :meth:`~transformers.AutoModelForSequenceClassification.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForSequenceClassification.from_config` class method.
 
@@ -1241,7 +1241,7 @@ class AutoModelForSequenceClassification:
 class AutoModelForQuestionAnswering:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    question answering head---when created with the when created with the
+    question answering head---when created with the
     :meth:`~transformers.AutoModeForQuestionAnswering.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForQuestionAnswering.from_config` class method.
 
@@ -1340,7 +1340,7 @@ class AutoModelForQuestionAnswering:
 class AutoModelForTokenClassification:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a token
-    classification head---when created with the when created with the
+    classification head---when created with the
     :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForTokenClassification.from_config` class method.
 
@@ -1439,7 +1439,7 @@ class AutoModelForTokenClassification:
 class AutoModelForMultipleChoice:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the when created with the
+    multiple choice classification head---when created with the
     :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForMultipleChoice.from_config` class method.
 
@@ -1539,7 +1539,7 @@ class AutoModelForMultipleChoice:
 class AutoModelForNextSentencePrediction:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the when created with the
+    multiple choice classification head---when created with the
     :meth:`~transformers.AutoModelForNextSentencePrediction.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForNextSentencePrediction.from_config` class method.
 
