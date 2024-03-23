@@ -62,7 +62,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
-    pass
+    from timm import create_model
 
 
 logger = logging.get_logger(__name__)
@@ -452,7 +452,16 @@ class GroundingDinoConvEncoder(nn.Module):
 
         self.config = config
 
-        backbone = load_backbone(config)
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                **config.backbone_kwargs,
+            )
+        else:
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():

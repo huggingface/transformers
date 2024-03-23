@@ -478,6 +478,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config.backbone = "tf_mobilenetv3_small_075"
         config.use_timm_backbone = True
         config.backbone_config = None
+        config.backbone_kwargs = {"in_chans": 3, "out_indices": (2, 3, 4)}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
